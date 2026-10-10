@@ -1,6 +1,6 @@
 # Roadmap
 
-Last updated: 2026-10-08 · **v0.9.73 released · M0–M4 built.** The React client executes the design
+Last updated: 2026-10-10 · **v0.9.74 released · M0–M4 built.** The React client executes the design
 system and the client-UX backlog is closed. Observability (match, review, scan
 diagnostics), an audit log and CI are in place. Transport security (TLS) and
 multi-user accounts (admin/member roles) are built, and branding & splash shipped.
@@ -20,7 +20,7 @@ on v0.8.18–v0.8.22, and its claims had gone stale: Epic was listed as
 deferred six releases after it shipped, and ADR 0048 as unbuilt a month after
 v0.8.24. The release-by-release record is the [Releases](#releases) table.*
 
-**Nothing sits unreleased.** v0.9.73 is current. Since v0.9.54:
+**Nothing sits unreleased.** v0.9.74 is current. Since v0.9.54:
 - **v0.9.56:** an episode counts as watched at its credits, not at 90%.
 - **v0.9.60:** night mode for music, and faces found in HEIC and portrait photos.
 - **v0.9.63:** GOG and EA app games, games opening on the chosen screen, and
@@ -46,6 +46,8 @@ v0.8.24. The release-by-release record is the [Releases](#releases) table.*
   and a pause reaches them within about a second.
 - **v0.9.73:** gapless music, night mode included, and an album or a session
   that fades in and out.
+- **v0.9.74:** crossfade between albums, an equaliser for music, photo places,
+  and a library of 40,000 items within its performance budgets.
 
 v0.9.55, 57–59, 61 and 62 were tagged and never published; each one's changes
 went out in the next published release. Audio pass Phase 2 is built: night
@@ -129,7 +131,7 @@ it works.
 native desktop client, which plays through libmpv. The media types are films,
 TV, music, pictures and live TV, with live TV parked. On top of that sit
 federation between servers, Watch Together, installed games, plugins and
-semantic photo search, and retro games. The schema is at **revision 66**. The [Areas](#areas)
+semantic photo search, and retro games. The schema is at **revision 69**. The [Areas](#areas)
 tables hold the status of each piece, and the [Releases](#releases) table records
 when each one landed. What is left is breadth, and it is listed in the
 [Feature backlog](#feature-backlog).
@@ -138,6 +140,7 @@ when each one landed. What is left is breadth, and it is listed in the
 
 | Version | Date | What shipped |
 |---|---|---|
+| **v0.9.74** | 2026-10-10 | **Crossfade, an equaliser, photo places, and the 40,000-item budgets met.** **Crossfade (#817):** per device, Off to 12 s, blending only where the album changes — two tracks of one album always join gaplessly, as decided; heard on shuffle. **An equaliser for music (#818, audio pass Phase 3):** presets and five bands (60 Hz, 230 Hz, 910 Hz, 3.6 kHz, 14 kHz, ±12 dB) before night mode, on the element and the gapless deck. A pre-cut keeps a boost from clipping; the first version cut by the largest boost in any band, which made the treble preset sound like a quieter bass boost, so the cut is now weighted by each band's share of a track's peaks, and treble and vocal presence were retuned by ear. **Photo places (#820, [ADR 0078](adr/0078-a-place-is-the-town-a-photo-was-taken-in.md), amending ADR 0028's "GPS is not read"):** a picture library by the town each photo was taken in, from an embedded GeoNames gazetteer (CC BY 4.0) with no lookup online; off by default, and turning it off deletes every location read; no coordinate ever leaves the server; marked folders excluded. On the real library 460 of 3,073 photos placed in ten towns. **Performance (#819, [ADR 0057](adr/0057-what-a-forty-thousand-item-library-may-cost.md) accepted):** the September benchmarks had measured a query the grid never sends; measured properly, the filter bar, deep grid pages, Recently Added and the home page's Unwatched shelf (16.5 s at 6,000 items, quadratic) all missed. Rewritten and indexed, guarded on the query plan; on the household library the Unwatched shelf went from 9.9 s to 5 ms. Verified before release on a copy of the live database: it migrates 66→69 in 113 ms, and every library returns the same totals and filter bars as v0.9.73. **Schema revisions 67–69**: one-way, so back up before installing if a rollback might be wanted |
 | **v0.9.73** | 2026-10-09 | **Gapless music.** The music player's last open item, built from a measurement rather than a guess ([plan](gapless-plan.md)). **Measured first (#811):** on a live MP3 album the player added 70–90 ms between tracks, half its own work and half the browser loading the next file, on top of the encoder padding inside every MP3, so no faster switch could remove it. **The deck (#813):** music played directly goes through two audio elements behind the existing `MediaBackend` seam; the next track is loaded 20 s before the end and started 60 ms early, the deck reports the old track's end as an element would, and the provider adopts the track already playing instead of reloading it. Only when the queue really will advance (Auto play on, not repeat one, no still-watching prompt) and the next track starts from zero; anything else takes the old path. Listened to on two live albums: seamless. **Night mode too (#815):** the deck's two elements share one context, one night-mode graph and one volume gain, so gapless no longer steps aside for night mode or a chosen output device. The first night-mode test fell back silently, so the client log now says which path each track took and why the next track was or was not queued; that log found a join where the clock still read the previous track and asked for the following track five minutes early, now fixed. **Fade in and out (#814, from Chris's notes):** a listening session fades in over 1.5 s from play, and the queue's last track fades out over its final 4 s; per device, on by default. Crossfade is planned (Off to 12 s, never between consecutive tracks of one album) and not in this release. No schema change |
 | **v0.9.72** | 2026-10-09 | **A guest watches with the host, not eight seconds behind.** Found testing v0.9.71 between two real servers: Georgia's converted stream started once (#807 held — one `transcode started`, no restarts, a picture in about four seconds) and then sat **about eight seconds behind for the whole film**, because her first seek had no measured lead and eight seconds is inside the converted tolerance. **The lead is learned from where a start lands (#809)** — the gap between the host and the stream when it starts playing covers start-up, an old poll and the keyframe the conversion began at, so the next lead is the last plus that gap, starting at four seconds — and a gap over three seconds is closed with **at most two** more seeks. **A pause reached the guest about two seconds late**: the host reported on a three-second beat and a peer guest polled every two, so up to five. The host now reports a pause, play or jump within 250 ms, and a guest on another server polls every second. Simulated for both evenings (the restart loop and the eight-second lag reproduce under the old rules as positive controls); not yet seen between the two machines. Both servers need it: the guest's half runs in the guest's server's page, the host's in the host's. No schema change |
 | **v0.9.71** | 2026-10-09 | **Two servers that could not see each other for nine days, and the first real evening of asking to join.** **A dead address first blocked everything (#804):** a peer's addresses were tried in order under one 3 s budget, and each server held the other's old ZeroTier address first — an address that neither connects nor refuses — so the LAN address that answers in 10 ms was reached with no time left. Presence, sharing and Watch Together were dead both ways while every LAN address worked, and the log named the wrong address ("192.168.1.73 … context deadline exceeded"). `peer.Reach` now races pinned TLS handshakes, Happy Eyeballs style, and only reorders, so a POST is never sent twice; a two-server test with a silent address ahead of the real one passes in 0.78 s and fails with the production 502 after 3.0 s on the old loop. Updating one server healed both directions, because the other learns the working address from the first call that gets through. **Asking to join (#805):** an ask can be cancelled (a withdraw starts no cooldown, and reveals nothing about the request), and the host's prompt moved to the top centre — it sat in the corner where a docked film's native picture covers the page, so it was drawn and never seen; each prompt shown is now in the client log. **A guest's converted film restarted over and over (#807):** the far server took longer than the 8 s settle to start a conversion, so the guest seeked again into another start, at 94, 104 and 114 s with nothing served. A converted follower now waits for the picture before judging drift and aims ahead by the start it measured; a simulation with a 12 s start settles in two seeks, the old rule loops. **Ratings (#806):** every game is offered ESRB KA, ESRB's name for E from 1994 to 1998 and the mark on most SNES boxes. No schema change |
@@ -908,8 +911,9 @@ group is not priority.
 - **Photos need more than a grid.** **Built so far:** people (face grouping and
   naming, in a native sidecar, [ADR 0052](adr/0052-face-grouping-runs-in-a-native-sidecar.md)),
   semantic search ([ADR 0060](adr/0060-semantic-photo-search-is-a-second-model-in-the-sidecar.md)),
-  the Timeline, exact duplicates and near copies (v0.9.63). **Still open:**
-  places, bursts and RAW, described below. The original entry
+  the Timeline, exact duplicates and near copies (v0.9.63), and **places**
+  (v0.9.74, [ADR 0078](adr/0078-a-place-is-the-town-a-photo-was-taken-in.md)).
+  **Still open:** bursts and RAW, described below. The original entry
   follows, starting with people. Face grouping is the
   feature Google Photos used to justify reading every family album ever uploaded,
   which makes doing it **entirely on the box** the sharpest available statement
