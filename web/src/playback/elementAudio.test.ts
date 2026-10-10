@@ -204,6 +204,12 @@ describe("the equaliser (Phase 3)", () => {
   it("cuts ahead of the bands by the largest boost, so a boost cannot clip", () => {
     expect(eqPreampGain(bass)).toBeCloseTo(Math.pow(10, -6 / 20));
     expect(eqPreampGain([-6, -3, 0, 0, 0])).toBe(1);
+    // Weighted by where a track's peaks are: a treble boost needs far less
+    // room than the same boost in the bass, or the preset is heard as quieter
+    // rather than brighter.
+    expect(eqPreampGain([0, 0, 0, 0, 6])).toBeGreaterThan(eqPreampGain([6, 0, 0, 0, 0]));
+    const treble = EQ_PRESETS.find((p) => p.id === "treble")!.gains;
+    expect(-20 * Math.log10(eqPreampGain(treble))).toBeLessThan(3);
     const { g, ctx } = graph();
     g.set({ night: false, eq: bass });
     const pre = ctx.made.filter((n) => n.kind === "gain").at(-1)!;

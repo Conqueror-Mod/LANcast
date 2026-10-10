@@ -51,8 +51,10 @@ export const EQ_FLAT = [0, 0, 0, 0, 0];
 export const EQ_PRESETS: { id: string; label: string; gains: number[] }[] = [
   { id: "flat", label: "Flat", gains: EQ_FLAT },
   { id: "bass", label: "Bass boost", gains: [6, 3, 0, 0, 0] },
-  { id: "treble", label: "Treble boost", gains: [0, 0, 0, 3, 6] },
-  { id: "vocal", label: "Vocal presence", gains: [-2, 0, 2, 4, 1] },
+  // Retuned after the first listening test (2026-10-09): "not enough
+  // difference from bass boost" (treble) and "could use adjusting" (vocal).
+  { id: "treble", label: "Treble boost", gains: [0, 0, 1, 4, 7] },
+  { id: "vocal", label: "Vocal presence", gains: [-3, -1, 3, 5, 1] },
   // Ears lose the extremes first as the level drops (equal-loudness curves),
   // so quiet listening gets both ends back.
   { id: "loudness", label: "Loud at low volume", gains: [6, 2, 0, 1, 5] },
@@ -68,13 +70,25 @@ export function clampGain(g: number): number {
 }
 
 /*
- * The cut in front of the bands: the largest boost, so a boosted band cannot
- * push a full-scale track past 0 dBFS. Without night mode nothing downstream
- * catches a peak, and a +12 dB shelf on a mastered track would clip at once.
- * Cuts need no room, so only boosts count.
+ * The cut in front of the bands, so a boosted band cannot push a full-scale
+ * track past 0 dBFS. Without night mode nothing downstream catches a peak,
+ * and a +12 dB shelf on a mastered track would clip at once. Cuts need no
+ * room, so only boosts count.
+ *
+ * **Weighted by where a track's peaks are.** The first version cut by the
+ * largest boost, whatever band it was in. Music carries most of its energy,
+ * and so its peaks, low down, and falls away with frequency, so a +6 dB
+ * treble shelf adds little to a peak while a +6 dB bass shelf adds nearly all
+ * of it. Cutting 6 dB for both left the treble preset back where it started
+ * and everything below it 6 dB down: heard as "not enough difference between
+ * it and bass boost" (2026-10-09). Each band's boost now counts for its share
+ * of the peak (EQ_PEAK_SHARE), an estimate from that spectral tilt rather
+ * than a measurement of any one track.
  */
+export const EQ_PEAK_SHARE = [1, 1, 0.75, 0.5, 0.35];
+
 export function eqPreampGain(eq?: number[]): number {
-  const boost = Math.max(0, ...(eq ?? []).map((g) => clampGain(g)));
+  const boost = Math.max(0, ...(eq ?? []).map((g, i) => clampGain(g) * (EQ_PEAK_SHARE[i] ?? 1)));
   return Math.pow(10, -boost / 20);
 }
 
