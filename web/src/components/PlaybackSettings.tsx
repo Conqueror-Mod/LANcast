@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { outputsWithheld, routableOutputs } from "./audioOutputs";
 import { usePlayback } from "@/playback/PlaybackProvider";
-import { QUALITIES, DEFAULTS, DIALOGUE_LEVELS, type SubFont } from "@/playback/prefs";
+import { QUALITIES, DEFAULTS, DIALOGUE_LEVELS, CROSSFADES, type SubFont } from "@/playback/prefs";
 import {
   canBoostDialogue,
   canNightFilm,
@@ -359,6 +359,27 @@ export function PlaybackSettings({ onClose }: { onClose: () => void }) {
               </select>
             </Row>
           </>
+        )}
+
+        {/* Blending one track into the next (docs/gapless-plan.md, step 3).
+            Between albums only: tracks of one album always join gaplessly. */}
+        {pb.isAudio && (
+          <Row label="Crossfade">
+            <select
+              className="pbset__select"
+              value={String(prefs.crossfade)}
+              onChange={(e) => setPrefs({ crossfade: Number(e.target.value) })}
+            >
+              {CROSSFADES.map((s) => (
+                <option key={s} value={s}>
+                  {s === 0 ? "Off" : `${s} s`}
+                </option>
+              ))}
+            </select>
+          </Row>
+        )}
+        {pb.isAudio && prefs.crossfade > 0 && (
+          <p className="pbset__note">Tracks from the same album always play straight through.</p>
         )}
 
         {/* The queue's start and end (lib/taper.ts). Any music, any channel
