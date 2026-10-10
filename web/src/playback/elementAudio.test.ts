@@ -8,7 +8,16 @@
  * measured with.
  */
 import { describe, it, expect } from "vitest";
-import { buildGraph, fxApplies, softCeiling, NIGHT } from "./elementAudio";
+import {
+  buildGraph,
+  fxApplies,
+  fxActive,
+  softCeiling,
+  eqPreampGain,
+  NIGHT,
+  EQ_BANDS,
+  EQ_PRESETS,
+} from "./elementAudio";
 
 /** A node that records where it is connected. Enough of AudioNode for the graph. */
 class FakeNode {
@@ -23,6 +32,9 @@ class FakeNode {
   channelCountMode = "explicit";
   curve: Float32Array | null = null;
   oversample = "none";
+  type = "";
+  frequency = { value: 0 };
+  Q = { value: 0 };
   constructor(public kind: string) {}
   connect(n: FakeNode) {
     this.out.push(n);
@@ -45,6 +57,7 @@ function fakeContext() {
     createGain: mk("gain"),
     createDynamicsCompressor: mk("comp"),
     createWaveShaper: mk("shaper"),
+    createBiquadFilter: mk("eq"),
   };
 }
 
@@ -145,5 +158,63 @@ describe("softCeiling", () => {
 
   it("is odd-symmetric, so it adds no offset", () => {
     expect(at(-0.9)).toBeCloseTo(-at(0.9), 6);
+  });
+});
+
+describe("the equaliser (Phase 3)", () => {
+  const bass = EQ_PRESETS.find((p) => p.id === "bass")!.gains;
+
+  it("makes no filters, and stays a straight wire, while flat", () => {
+    const { g, input, output, ctx } = graph();
+    g.set({ night: false, eq: [0, 0, 0, 0, 0] });
+    expect(input.out).toEqual([output]);
+    expect(ctx.made.filter((n) => n.kind === "eq")).toHaveLength(0);
+  });
+
+  it("puts a pre-cut and five bands between input and output", () => {
+    const { g, input } = graph();
+    g.set({ night: false, eq: bass });
+    expect(path(input)).toEqual(["gain", "gain", "eq", "eq", "eq", "eq", "eq", "gain"]);
+  });
+
+  it("sits before night mode when both are on", () => {
+    const { g, input } = graph();
+    g.set({ night: true, eq: bass });
+    expect(path(input)).toEqual(["gain", "gain", "eq", "eq", "eq", "eq", "eq", "comp", "gain", "shaper", "gain"]);
+  });
+
+  it("returns to a straight wire when flattened, with the last band let go", () => {
+    const { g, input, output, ctx } = graph();
+    g.set({ night: false, eq: bass });
+    g.set({ night: false, eq: [0, 0, 0, 0, 0] });
+    expect(input.out).toEqual([output]);
+    const bands = ctx.made.filter((n) => n.kind === "eq");
+    expect(bands.at(-1)!.out).toEqual([]);
+  });
+
+  it("sets each band's shape, frequency and gain, clamped to twelve decibels", () => {
+    const { g, ctx } = graph();
+    g.set({ night: false, eq: [20, -3, 0, 4, -20] });
+    const bands = ctx.made.filter((n) => n.kind === "eq");
+    expect(bands.map((b) => b.type)).toEqual(EQ_BANDS.map((b) => b.type));
+    expect(bands.map((b) => b.frequency.value)).toEqual(EQ_BANDS.map((b) => b.hz));
+    expect(bands.map((b) => b.gain.value)).toEqual([12, -3, 0, 4, -12]);
+  });
+
+  it("cuts ahead of the bands by the largest boost, so a boost cannot clip", () => {
+    expect(eqPreampGain(bass)).toBeCloseTo(Math.pow(10, -6 / 20));
+    expect(eqPreampGain([-6, -3, 0, 0, 0])).toBe(1);
+    const { g, ctx } = graph();
+    g.set({ night: false, eq: bass });
+    const pre = ctx.made.filter((n) => n.kind === "gain").at(-1)!;
+    expect(pre.gain.value).toBeCloseTo(Math.pow(10, -6 / 20));
+  });
+
+  it("counts as an effect on its own, and is not held to stereo as night mode is", () => {
+    expect(fxActive({ night: false, eq: bass })).toBe(true);
+    expect(fxActive({ night: false, eq: [0, 0, 0, 0, 0] })).toBe(false);
+    const six = fxApplies({ night: true, eq: bass }, 6);
+    expect(six.night).toBe(false);
+    expect(six.eq).toEqual(bass);
   });
 });

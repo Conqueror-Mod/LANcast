@@ -102,6 +102,10 @@ export interface Prefs {
    * into a live or continuous recording (docs/gapless-plan.md, decided).
    */
   crossfade: number;
+  /** Decibels per equaliser band, music only (elementAudio.ts EQ_BANDS). */
+  eq: number[];
+  /** Which preset the bands came from, or "custom" once a slider moved. */
+  eqPreset: string;
 }
 
 /** The crossfade lengths offered, in seconds; 0 is Off. */
@@ -124,6 +128,8 @@ export const DEFAULTS: Prefs = {
   nightMusic: false,
   taper: true,
   crossfade: 0,
+  eq: [0, 0, 0, 0, 0],
+  eqPreset: "flat",
 };
 
 const KEY = "lancast:playback-prefs";

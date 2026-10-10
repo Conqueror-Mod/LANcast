@@ -268,7 +268,7 @@ describe("with night mode on", () => {
     connect() {}
     disconnect() {}
   }
-  const contexts: { sources: number; level?: FakeNode }[] = [];
+  const contexts: { sources: number; biquads: number; level?: FakeNode }[] = [];
   class FakeContext {
     state = "running";
     destination = { channelCount: 2, maxChannelCount: 2 };
@@ -286,8 +286,30 @@ describe("with night mode on", () => {
     createChannelMerger = () => new FakeNode();
     createDynamicsCompressor = () => new FakeNode();
     createWaveShaper = () => new FakeNode();
+    biquads = 0;
+    createBiquadFilter = () => {
+      this.biquads++;
+      return Object.assign(new FakeNode(), { type: "", frequency: { value: 0 }, Q: { value: 0 } });
+    };
     setSinkId = async () => {};
   }
+
+  it("routes the deck through the equaliser alone, with night mode off", async () => {
+    contexts.length = 0;
+    vi.stubGlobal("AudioContext", FakeContext);
+    setPrefs({ nightMusic: false, taper: false, eq: [6, 3, 0, 0, 0], eqPreset: "bass" });
+    try {
+      await render();
+      await act(async () => pb.play(1, [1, 2]));
+      await settle(80);
+      expect(notes).toContain("music on deck");
+      const deck = contexts.filter((c) => c.sources === 2);
+      expect(deck, "the deck was not routed for the equaliser").toHaveLength(1);
+      expect(deck[0].biquads).toBe(5);
+    } finally {
+      resetPrefs();
+    }
+  });
 
   it("still plays music on the deck, through one graph for both elements, and joins gaplessly", async () => {
     contexts.length = 0;

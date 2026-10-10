@@ -9,6 +9,8 @@ import {
   filmNightBlockedBySurround,
 } from "@/playback/soundControls";
 import { FONTS } from "@/playback/cueVars";
+import { EQ_BANDS, EQ_LIMIT_DB, EQ_PRESETS } from "@/playback/elementAudio";
+import { elementFXSupported } from "@/playback/elementEngine";
 import { SubtitleMenu } from "./SubtitleMenu";
 import { audioLabel } from "./QueuePanel";
 import "./PlaybackSettings.css";
@@ -358,6 +360,54 @@ export function PlaybackSettings({ onClose }: { onClose: () => void }) {
                 <option value="on">On</option>
               </select>
             </Row>
+          </>
+        )}
+
+        {/* The equaliser (audio-pass-plan.md, Phase 3), music only. A preset
+            sets all five bands; moving a band makes it Custom. Offered
+            wherever music can be routed through Web Audio. */}
+        {pb.isAudio && elementFXSupported() && (
+          <>
+            <Row label="Equaliser">
+              <select
+                className="pbset__select"
+                value={prefs.eqPreset}
+                onChange={(e) => {
+                  const p = EQ_PRESETS.find((x) => x.id === e.target.value);
+                  if (p) setPrefs({ eqPreset: p.id, eq: [...p.gains] });
+                }}
+              >
+                {EQ_PRESETS.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.label}
+                  </option>
+                ))}
+                {prefs.eqPreset === "custom" && <option value="custom">Custom</option>}
+              </select>
+            </Row>
+            {EQ_BANDS.map((b, i) => (
+              <Row key={b.hz} label={b.label}>
+                <span className="pbset__slider">
+                  <input
+                    type="range"
+                    min={-EQ_LIMIT_DB}
+                    max={EQ_LIMIT_DB}
+                    step={1}
+                    value={prefs.eq[i] ?? 0}
+                    onChange={(e) => {
+                      const eq = [...prefs.eq];
+                      eq[i] = Number(e.target.value);
+                      setPrefs({ eq, eqPreset: "custom" });
+                    }}
+                    aria-label={`Equaliser ${b.label}`}
+                  />
+                  <span className="pbset__value">
+                    {(prefs.eq[i] ?? 0) > 0 ? "+" : ""}
+                    {prefs.eq[i] ?? 0} dB
+                  </span>
+                </span>
+              </Row>
+            ))}
           </>
         )}
 
