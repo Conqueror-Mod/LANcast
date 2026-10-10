@@ -837,9 +837,13 @@ group is not priority.
   amendments hold the decisions; [the build plan](retro-games-plan.md) opens
   with where it stands. Played on real cores in the window: NES, SNES, GBA,
   Mega Drive, N64 and PlayStation. Not yet played: Game Boy, Game Boy Color
-  and Master System, for want of dumps. **Still open:** a browser player,
-  which needs its own ADR, because the cores' licences and which clients may
-  run them are decisions rather than engineering.
+  and Master System, for want of dumps. **Still open:** a browser player.
+  [ADR 0077](adr/0077-a-browser-can-play-a-game.md) decided it on 2026-10-10,
+  and it is not built yet. The server fetches libretro's web cores. The
+  browser plays NES, the Game Boy family, Master System and Mega Drive. SNES,
+  N64 and PlayStation stay desktop-only, SNES because its only web core
+  forbids commercial use. Phones get on-screen controls with the mobile layout
+  work.
 
   Original entry, kept for the reasoning: the request was to play old
   console games, N64 first, inside LANcast without keeping a separate emulator
