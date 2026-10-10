@@ -96,6 +96,10 @@ export type Encoder = components["schemas"]["Encoder"];
 
 export type Settings = components["schemas"]["Settings"];
 
+/** A picture library grouped by town (ADR 0078): names and counts only. */
+export type PhotoPlaces = components["schemas"]["PhotoPlaces"];
+export type PhotoPlace = components["schemas"]["PhotoPlace"];
+
 export type SettingsUpdate = components["schemas"]["SettingsUpdate"];
 
 export type ScanIssue = components["schemas"]["ScanIssue"];

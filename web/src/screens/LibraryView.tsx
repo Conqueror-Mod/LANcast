@@ -475,6 +475,17 @@ export function LibraryView({
             Timeline
           </button>
         )}
+        {/* And by where they were taken (ADR 0078). Offered whether or not
+            reading locations is on: the page explains the switch, which is
+            where somebody looking for the feature will look. */}
+        {isPictures && (
+          <button
+            className="browse__playall-btn"
+            onClick={() => navigate(`/library/${libraryID}/places`)}
+          >
+            Places
+          </button>
+        )}
         {/* Photos that are the same file (ADR 0075). Offered on every picture
             library: the page says so when there are none, which is an answer. */}
         {isPictures && (

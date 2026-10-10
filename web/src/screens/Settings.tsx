@@ -2756,6 +2756,23 @@ function PicturesSection() {
             It covers again when you leave. Turning this off stops the covering
             and keeps the marks.
           </p>
+
+          <label className="set-toggle">
+            <input
+              type="checkbox"
+              checked={settings.photo_places}
+              onChange={(e) =>
+                update.mutate({ photo_places: e.target.checked })
+              }
+            />
+            Read where photos were taken
+          </label>
+          <p className="set-row__sub">
+            Groups a picture library by the town each photograph was taken in,
+            from the location a phone or camera writes into it. The towns come
+            from a list built into LANcast, so nothing is looked up online.
+            Turning this off deletes every location it read.
+          </p>
         </>
       )}
 
