@@ -25,7 +25,7 @@ declare global {
 }
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
-const lengths: Record<string, number> = { "/api/stream/1": 30, "/api/stream/2": 40 };
+const lengths: Record<string, number> = { "/api/stream/1": 30, "/api/stream/2": 40, "/api/stream/3": 50 };
 
 class FakeAudio extends EventTarget {
   static made: FakeAudio[] = [];
@@ -318,6 +318,26 @@ describe("with night mode on", () => {
     } finally {
       resetPrefs();
     }
+  });
+});
+
+describe("asking for the next track", () => {
+  it("does not ask for the one after next at the moment of a join", async () => {
+    // Seen in the log: "deck queued" for track 3 at the instant track 2 was
+    // adopted, five minutes early, because the clock still read track 1's end.
+    await render();
+    await act(async () => pb.play(1, [1, 2, 3]));
+    await settle(80);
+    const one = playingOn("/api/stream/1")!;
+    await act(async () => one.at(15));
+    await settle(80);
+    await act(async () => one.at(29.7));
+    await settle(400);
+    await act(async () => one.end());
+    await settle(150);
+    expect(pb.itemID).toBe(2);
+    expect(notes).toContain("deck queued 2");
+    expect(notes, "track 3 was asked for at the join").not.toContain("deck queued 3");
   });
 });
 

@@ -1481,8 +1481,19 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
    * The item and the server's decision are fetched here, early; the item lands
    * in the query cache, so the advance after the join finds it at once.
    */
+  /*
+   * The clock must be this track's own. When a track ends the queue moves on
+   * at once, while `current` still reads the old track's last seconds; judged
+   * then, the new track looked near its end and its successor was asked for
+   * five minutes early (seen in the log as "deck queued" at the moment of a
+   * join). clockItem moves to the new source on its loadedmetadata.
+   */
   const nearEnd =
-    isAudio && totalDuration > 0 && totalDuration - current < PRELOAD_LEAD_S && !loading;
+    isAudio &&
+    clockItem.current === itemID &&
+    totalDuration > 0 &&
+    totalDuration - current < PRELOAD_LEAD_S &&
+    !loading;
   const deckViewRef = useRef({ nearEnd, loading, current, total: totalDuration, next: nextItemID });
   deckViewRef.current = { nearEnd, loading, current, total: totalDuration, next: nextItemID };
   useEffect(() => {
