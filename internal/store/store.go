@@ -1498,15 +1498,25 @@ func (s *Store) ListItems(ctx context.Context, f ItemFilter) ([]Item, int, error
 		 *
 		 * A position past zero or a watched flag counts as started; a row with
 		 * neither is a film opened and closed at once, which did not begin it.
+		 *
+		 * Asked upwards, from what this person has played, rather than downwards
+		 * from each candidate (ADR 0057). Downwards it searched the whole table
+		 * for each row's children, through an OR no index can answer: a scan per
+		 * row, quadratic in the library, for a home-page shelf. Upwards it is one
+		 * small set — every played item, its parent and its grandparent — built
+		 * once and looked up per row. The NULLs are kept out because a single
+		 * NULL in a NOT IN list makes it true of nothing.
 		 */
-		where += ` AND NOT EXISTS (
-			SELECT 1 FROM playback_state ps
-			WHERE ps.user_id = ? AND (ps.position_ms > 0 OR ps.watched = 1)
-			  AND (ps.item_id = media_item.id OR ps.item_id IN (
-			      SELECT c.id FROM media_item c
-			      LEFT JOIN media_item p ON p.id = c.parent_id
-			      WHERE c.parent_id = media_item.id OR p.parent_id = media_item.id)))`
-		args = append(args, f.UserID)
+		played := `FROM playback_state ps
+			CROSS JOIN media_item c ON c.id = ps.item_id`
+		begun := ` WHERE ps.user_id = ? AND (ps.position_ms > 0 OR ps.watched = 1)`
+		where += ` AND media_item.id NOT IN (
+			SELECT c.id ` + played + begun + `
+			UNION SELECT c.parent_id ` + played + begun + ` AND c.parent_id IS NOT NULL
+			UNION SELECT p.parent_id ` + played + `
+				CROSS JOIN media_item p ON p.id = c.parent_id` + begun + `
+				AND p.parent_id IS NOT NULL)`
+		args = append(args, f.UserID, f.UserID, f.UserID)
 	}
 	if f.Unmatched {
 		// 'unmatched' is meta.StateUnmatched; spelled literally because store

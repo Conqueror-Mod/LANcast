@@ -272,6 +272,22 @@ func BenchmarkScaleContinueWatching(b *testing.B) {
 	}
 }
 
+// The home page's Unwatched shelf: a library's top level that this person has
+// not begun, shuffled. Not begun is a question about every row's children.
+func BenchmarkScaleUnwatchedShelf(b *testing.B) {
+	st, lib := scaleStore(b, scaleItems)
+	ctx := context.Background()
+	scaleProgress(b, st, lib)
+	f := gridFilter(lib, "random", 0)
+	f.Seed, f.Unstarted, f.UserID, f.Limit = 3, true, "local", 21
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		if _, _, err := st.ListItems(ctx, f); err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
 // scaleProgress gives the shared fixture a hundred part-watched films, which
 // is far more than anyone has, once.
 var scaleProgressOnce sync.Once
@@ -413,3 +429,56 @@ func TestTheFilterBarWalksTheLibraryAboutOnce(t *testing.T) {
 	}
 }
 
+/*
+ * The home page's Unwatched shelf is linear in the library.
+ *
+ * "Not begun" is a question about each row's children, and it was asked that
+ * way: a search of the whole table for every candidate's children, through an
+ * OR no index can answer — quadratic in the library, for a shelf with a 50ms
+ * budget. At 40,000 items a single call ran for minutes. It is now asked from
+ * what this person has played, which is one set built once (ADR 0057), and at
+ * any size that is within a few walks of the library; quadratic is thousands.
+ */
+func TestTheUnwatchedShelfIsLinearInTheLibrary(t *testing.T) {
+	st, lib := guardStore(t)
+	ctx := context.Background()
+	guardProgressOnce.Do(func() {
+		for i := 0; i < 50; i++ {
+			var id int64
+			if err := st.db.QueryRowContext(ctx,
+				`SELECT id FROM media_item WHERE library_id = ? LIMIT 1 OFFSET ?`,
+				lib, i*97).Scan(&id); err != nil {
+				t.Fatal(err)
+			}
+			if err := st.SaveProgress(ctx, id, "local", 600_000, i%2 == 0); err != nil {
+				t.Fatal(err)
+			}
+		}
+	})
+
+	walk := fastest(t, func() error {
+		var d sql.NullInt64
+		return st.db.QueryRowContext(ctx,
+			`SELECT MAX(duration_ms) FROM media_item WHERE library_id = ? AND missing = 0`,
+			lib).Scan(&d)
+	})
+	f := gridFilter(lib, "random", 0)
+	f.Seed, f.Unstarted, f.UserID, f.Limit = 3, true, "local", 21
+	var items []Item
+	shelf := fastest(t, func() error {
+		var err error
+		items, _, err = st.ListItems(ctx, f)
+		return err
+	})
+	t.Logf("unwatched shelf %v, one walk %v (%d items)", shelf, walk, guardItems)
+
+	if len(items) != 21 {
+		t.Fatalf("the shelf holds %d items, want 21", len(items))
+	}
+	if shelf > walk*20 && shelf > 5*time.Millisecond {
+		t.Errorf("the unwatched shelf costs %v, %.0f walks of the library — "+
+			"\"not begun\" is being asked per row again", shelf, float64(shelf)/float64(walk))
+	}
+}
+
+var guardProgressOnce sync.Once
