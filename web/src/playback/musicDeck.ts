@@ -104,6 +104,12 @@ export class MusicDeck extends EventTarget implements MediaBackend {
   private readonly clock: DeckClock;
   /** Called when the provider adopts a track that was already playing. */
   onAdopt?: (overlapS: number) => void;
+  /**
+   * Called once per track when it is within two seconds of its end with
+   * nothing queued: the join that follows will not be gapless.
+   */
+  onUnqueuedEnd?: () => void;
+  private warnedFor = "";
   private adoptedOverlap = 0;
 
   constructor(a: DeckElement, b: DeckElement, clock: DeckClock = realClock) {
@@ -206,7 +212,13 @@ export class MusicDeck extends EventTarget implements MediaBackend {
 
   private fromElement(el: DeckElement, name: string): void {
     if (el === this.active) {
-      if (name === "timeupdate") this.scheduleStart();
+      if (name === "timeupdate") {
+        this.scheduleStart();
+        if (!this.queued && !this.adopting && this.remaining() < 2 && this.warnedFor !== this.active.src) {
+          this.warnedFor = this.active.src;
+          this.onUnqueuedEnd?.();
+        }
+      }
       if (name === "ended" && this.started) return this.handOver();
       // While adopting, the active element is the next track and the provider
       // has not asked for it yet: nothing it says belongs to the old one.

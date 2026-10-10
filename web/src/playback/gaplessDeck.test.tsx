@@ -25,7 +25,7 @@ declare global {
 }
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
-const lengths: Record<string, number> = { "/api/stream/1": 30, "/api/stream/2": 40 };
+const lengths: Record<string, number> = { "/api/stream/1": 30, "/api/stream/2": 40, "/api/stream/3": 50 };
 
 class FakeAudio extends EventTarget {
   static made: FakeAudio[] = [];
@@ -249,6 +249,95 @@ describe("the taper on the queue's start and end", () => {
     } finally {
       resetPrefs();
     }
+  });
+});
+
+describe("with night mode on", () => {
+  class FakeNode {
+    channelCountMode = "explicit";
+    channelCount = 2;
+    gain = { value: 1 };
+    threshold = { value: 0 };
+    knee = { value: 0 };
+    ratio = { value: 0 };
+    attack = { value: 0 };
+    release = { value: 0 };
+    curve: unknown = null;
+    oversample = "none";
+    connect() {}
+    disconnect() {}
+  }
+  const contexts: { sources: number; level?: FakeNode }[] = [];
+  class FakeContext {
+    state = "running";
+    destination = { channelCount: 2, maxChannelCount: 2 };
+    sources = 0;
+    constructor() {
+      contexts.push(this);
+    }
+    resume = async () => {};
+    createMediaElementSource() {
+      this.sources++;
+      return new FakeNode();
+    }
+    createGain = () => new FakeNode();
+    createChannelSplitter = () => new FakeNode();
+    createChannelMerger = () => new FakeNode();
+    createDynamicsCompressor = () => new FakeNode();
+    createWaveShaper = () => new FakeNode();
+    setSinkId = async () => {};
+  }
+
+  it("still plays music on the deck, through one graph for both elements, and joins gaplessly", async () => {
+    contexts.length = 0;
+    vi.stubGlobal("AudioContext", FakeContext);
+    setPrefs({ nightMusic: true, taper: false });
+    try {
+      await render();
+      await act(async () => pb.play(1, [1, 2]));
+      await settle(80);
+      expect(notes).toContain("music on deck");
+      expect(notes.some((n) => n.startsWith("music on element"))).toBe(false);
+      // Both deck elements feed the same context.
+      const deckContexts = contexts.filter((c) => c.sources === 2);
+      expect(deckContexts).toHaveLength(1);
+      // Held at full level before the graph; the slider lives after it.
+      const one = playingOn("/api/stream/1")!;
+      expect(one.volume).toBe(1);
+
+      await act(async () => one.at(15));
+      await settle(80);
+      const two = playingOn("/api/stream/2")!;
+      await act(async () => one.at(29.7));
+      await settle(400);
+      await act(async () => one.end());
+      await settle(120);
+      expect(pb.itemID).toBe(2);
+      expect(two.pauses).toBe(0);
+      expect(notes.some((n) => n.startsWith("track join gapless"))).toBe(true);
+    } finally {
+      resetPrefs();
+    }
+  });
+});
+
+describe("asking for the next track", () => {
+  it("does not ask for the one after next at the moment of a join", async () => {
+    // Seen in the log: "deck queued" for track 3 at the instant track 2 was
+    // adopted, five minutes early, because the clock still read track 1's end.
+    await render();
+    await act(async () => pb.play(1, [1, 2, 3]));
+    await settle(80);
+    const one = playingOn("/api/stream/1")!;
+    await act(async () => one.at(15));
+    await settle(80);
+    await act(async () => one.at(29.7));
+    await settle(400);
+    await act(async () => one.end());
+    await settle(150);
+    expect(pb.itemID).toBe(2);
+    expect(notes).toContain("deck queued 2");
+    expect(notes, "track 3 was asked for at the join").not.toContain("deck queued 3");
   });
 });
 

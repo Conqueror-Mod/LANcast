@@ -7,6 +7,7 @@
  */
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import {
+  applyDeckFX,
   applyElementFX,
   engineFor,
   outputChannels,
@@ -188,5 +189,39 @@ describe("the player's volume", () => {
     setElementVolume(el, 0.25);
     expect(el.volume).toBe(1);
     expect(engine.level.gain.value).toBeCloseTo(0.25);
+  });
+});
+
+describe("applyDeckFX, for the music deck's two elements", () => {
+  it("leaves both alone until something is asked of them", () => {
+    const a = document.createElement("audio");
+    const b = document.createElement("audio");
+    expect(applyDeckFX([a, b], FX_OFF, "", 2)).toBeUndefined();
+    expect(made).toHaveLength(0);
+  });
+
+  it("routes both into one context and one graph, once, whichever order they come in", () => {
+    const a = document.createElement("audio");
+    const b = document.createElement("audio");
+    a.volume = 0.4;
+    const e1 = applyDeckFX([a, b], NIGHT_ON, "", 2)!;
+    // The deck swaps which element is active; the pair is the same pair.
+    const e2 = applyDeckFX([b, a], NIGHT_ON, "", 2)!;
+    expect(e2).toBe(e1);
+    expect(made).toHaveLength(1);
+    expect(made[0].sources).toBe(2);
+    expect(engineFor(a)).toBe(e1);
+    expect(engineFor(b)).toBe(e1);
+    // The slider moved after the graph, both elements at full level before it.
+    expect(e1.level.gain.value).toBe(0.4);
+    expect(a.volume).toBe(1);
+    expect(b.volume).toBe(1);
+  });
+
+  it("sends the shared context to the chosen device", () => {
+    const a = document.createElement("audio");
+    const b = document.createElement("audio");
+    applyDeckFX([a, b], NIGHT_ON, "speakers-2", 2);
+    expect(made[0].sinks).toContain("speakers-2");
   });
 });
