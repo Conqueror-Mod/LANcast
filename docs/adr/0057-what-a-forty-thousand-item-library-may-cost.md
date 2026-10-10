@@ -207,8 +207,40 @@ shelf, which are not one query each, are guarded as ratios to a single walk
 of the library measured in the same moment: about 8 walks against about 30
 for the old filter bar, and about 8 against about 11,000 for the old shelf.
 
-**Not measured, still:** write throughput, transcode start-up, memory —
-unchanged from the original — and **a real library**. Every number here is
-from the synthetic fixture, whose rows carry no overviews and so are
-narrower than real ones. That makes full-walk costs optimistic, which is the
-same direction the original table was wrong in.
+**On a real library.** The same comparison, old code against new on two
+copies of the household's own database: 20,117 items, a film library of
+1,529, a music library of 1,372 artists over its albums and tracks, a retro
+library of 91, and an account with 430 plays.
+
+| | old | new |
+|---|---|---|
+| **home: Unwatched, films** | **9.9s** | 5.2ms |
+| filter bar: films / music / retro | 14.6 / 130 / 1.6ms | 6.4 / 23 / 2.6ms |
+| grid pages, films (any sort, any depth) | 3–8ms | 1–3ms |
+| grid pages, music | 20–24ms | 1–2ms (rating: 19ms, unchanged) |
+| home: Recently Added | 7.8ms | 2.1ms |
+| home: Continue Watching | 7.2ms | 7.1ms |
+| search box | 34–37ms | 42ms |
+
+The headline is the first row. The quadratic shelf was not a problem waiting
+at forty thousand items: it was ten seconds of server time on every visit to
+the home page, today, for a library of fifteen hundred films. Nothing
+reported it, because the shelf is the last thing on the page and loads on
+its own — the shape of the failure this project keeps meeting, where the
+request succeeds and only the picture is late.
+
+**Two things got slower, both recorded.** Search is about 20% slower, 34 to
+42ms: a substring search now reads the table straight through, where it
+used to come in through two indexes, one of which the grid's date index now
+outbids and reads in random order. Restoring the old plan would mean
+splitting the search into a two-branch union, which is not worth 8ms against
+a 100ms budget and is superseded by a full-text index if one is ever built.
+And a small library's filter bar is about a millisecond dearer, 1.6 to
+2.6ms for the retro library, because genres are now asked per genre: the
+genre table is shared, so a small library has to rule out every other
+library's genres, and that costs the server's genre rows (3,562 here) rather
+than the library's. It does not grow with the library, which is the trade
+being made.
+
+**Not measured, still:** write throughput, transcode start-up and memory,
+unchanged from the original.
