@@ -464,6 +464,23 @@ with a preset per content type. It comes last because it is the control fewest
 people use, and because Phases 1 and 2 will have settled the preference model
 it sits in.
 
+**Built for music (2026-10-09; Chris chose music only, presets plus five
+bands).** Films keep night mode and dialogue boost.
+- **Bands** (`elementAudio.ts` `EQ_BANDS`): a low shelf at 60 Hz, peaking at
+  230 Hz, 910 Hz and 3.6 kHz (Q 1), and a high shelf at 14 kHz. Each is
+  ±12 dB.
+- **Placement in the graph:** the bands come before night mode, so night mode
+  evens out the shape that was asked for.
+- **Clipping:** a pre-cut equal to the largest boost stops a boost clipping,
+  because nothing downstream catches a peak while night mode is off.
+- **Bypass:** the filters are only made the first time the equaliser is used.
+  A flat setting is the straight wire it always was.
+- **Presets:** Flat, Bass boost, Treble boost, Vocal presence and Loud at low
+  volume. These are starting points to be tuned by ear, not measurements.
+  Moving a band makes the setting Custom.
+- **Scope:** per device, in `prefs.eq` and `prefs.eqPreset`, and on both music
+  paths: the single element, and the gapless deck's shared graph.
+
 ## Not in scope
 
 - **Loudness normalisation across a library** (ReplayGain-style). That is a

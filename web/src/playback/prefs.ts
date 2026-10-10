@@ -96,7 +96,20 @@ export interface Prefs {
   nightMusic: boolean;
   /** Fade a listening session in, and the queue's last track out (lib/taper.ts). */
   taper: boolean;
+  /**
+   * Seconds to blend one track into the next, 0 for none. Never between two
+   * tracks of the same album, which always join gaplessly: a fade would cut
+   * into a live or continuous recording (docs/gapless-plan.md, decided).
+   */
+  crossfade: number;
+  /** Decibels per equaliser band, music only (elementAudio.ts EQ_BANDS). */
+  eq: number[];
+  /** Which preset the bands came from, or "custom" once a slider moved. */
+  eqPreset: string;
 }
+
+/** The crossfade lengths offered, in seconds; 0 is Off. */
+export const CROSSFADES = [0, 2, 5, 8, 12] as const;
 
 /** The dialogue-boost levels, in order. The index is what the player is sent. */
 export const DIALOGUE_LEVELS = ["Off", "Low", "High"] as const;
@@ -114,6 +127,9 @@ export const DEFAULTS: Prefs = {
   dialogueVideo: 0,
   nightMusic: false,
   taper: true,
+  crossfade: 0,
+  eq: [0, 0, 0, 0, 0],
+  eqPreset: "flat",
 };
 
 const KEY = "lancast:playback-prefs";

@@ -1424,7 +1424,7 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
     // (the same one mpv applies on the desktop). A film in mpv, or anything
     // else, gets a straight wire.
     const fx = isAudio
-      ? fxApplies({ night: prefs.nightMusic }, musicChannels)
+      ? fxApplies({ night: prefs.nightMusic, eq: prefs.eq }, musicChannels)
       : filmChannels > 0
         ? fxApplies({ night: prefs.nightVideo }, filmChannels)
         : FX_OFF;
@@ -1435,7 +1435,7 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
     // (applyDeckFX); anything else leaves it on a straight wire.
     applyDeckFX(
       deckPair(),
-      isAudio ? fxApplies({ night: prefs.nightMusic }, musicChannels) : FX_OFF,
+      isAudio ? fxApplies({ night: prefs.nightMusic, eq: prefs.eq }, musicChannels) : FX_OFF,
       prefs.audioDevice,
       musicChannels,
     );
@@ -1445,6 +1445,7 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
     filmChannels,
     sourceChannels,
     prefs.nightMusic,
+    prefs.eq,
     prefs.nightVideo,
     prefs.audioDevice,
   ]);
@@ -1494,6 +1495,9 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
     totalDuration > 0 &&
     totalDuration - current < PRELOAD_LEAD_S &&
     !loading;
+  // The playing track's album, to tell a crossfade from a gapless join.
+  const albumOfRef = useRef<number | null>(null);
+  albumOfRef.current = item?.parent_id ?? null;
   const deckViewRef = useRef({ nearEnd, loading, current, total: totalDuration, next: nextItemID });
   deckViewRef.current = { nearEnd, loading, current, total: totalDuration, next: nextItemID };
   useEffect(() => {
@@ -1554,7 +1558,12 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
         );
         if (cancelled) return;
         const direct = pb.decision.method === "direct";
-        deck.queue(direct ? { url: `/api/stream/${nextItemID}`, overlap: GAPLESS_OVERLAP_S } : null);
+        // A crossfade only between albums (docs/gapless-plan.md): two tracks
+        // of one album always join gaplessly.
+        const fade = prefsRef.current.crossfade;
+        const sameAlbum = next.parent_id != null && next.parent_id === albumOfRef.current;
+        const overlap = fade > 0 && !sameAlbum ? fade : GAPLESS_OVERLAP_S;
+        deck.queue(direct ? { url: `/api/stream/${nextItemID}`, overlap } : null);
         clientNote("info", "playback", direct ? `deck queued ${nextItemID}` : "deck not queued: next is converted");
       } catch (e) {
         if (!cancelled) {
@@ -1567,7 +1576,7 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [nearEnd, nextItemID, repeat, itemID]);
+  }, [nearEnd, nextItemID, repeat, itemID, prefs.crossfade]);
 
   /*
    * The silence between two tracks, written to the desktop log (lib/trackGap.ts).
@@ -1612,7 +1621,13 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
     // A join the deck made has no gap to measure: say so instead.
     deck.onAdopt = (overlap) => {
       meter.reset();
-      clientNote("info", "playback", `track join gapless (overlap ${Math.round(overlap * 1000)} ms)`);
+      clientNote(
+        "info",
+        "playback",
+        overlap > GAPLESS_OVERLAP_S
+          ? `track join crossfade (${overlap} s)`
+          : `track join gapless (overlap ${Math.round(overlap * 1000)} ms)`,
+      );
     };
     const targets: EventTarget[] = [v, deck];
     for (const t of targets) {

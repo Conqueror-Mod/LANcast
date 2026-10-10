@@ -107,7 +107,8 @@ const track = (id: number) => ({
   id,
   title: `Track ${id}`,
   kind: "track",
-  parent_id: 50,
+  // Tracks 1 and 2 are one album; track 3 is another.
+  parent_id: id === 3 ? 60 : 50,
   series: "Live: Beside You in Time",
   duration_ms: (lengths[`/api/stream/${id}`] ?? 30) * 1000,
   progress: { position_ms: 0, watched: false },
@@ -267,7 +268,7 @@ describe("with night mode on", () => {
     connect() {}
     disconnect() {}
   }
-  const contexts: { sources: number; level?: FakeNode }[] = [];
+  const contexts: { sources: number; biquads: number; level?: FakeNode }[] = [];
   class FakeContext {
     state = "running";
     destination = { channelCount: 2, maxChannelCount: 2 };
@@ -285,8 +286,30 @@ describe("with night mode on", () => {
     createChannelMerger = () => new FakeNode();
     createDynamicsCompressor = () => new FakeNode();
     createWaveShaper = () => new FakeNode();
+    biquads = 0;
+    createBiquadFilter = () => {
+      this.biquads++;
+      return Object.assign(new FakeNode(), { type: "", frequency: { value: 0 }, Q: { value: 0 } });
+    };
     setSinkId = async () => {};
   }
+
+  it("routes the deck through the equaliser alone, with night mode off", async () => {
+    contexts.length = 0;
+    vi.stubGlobal("AudioContext", FakeContext);
+    setPrefs({ nightMusic: false, taper: false, eq: [6, 3, 0, 0, 0], eqPreset: "bass" });
+    try {
+      await render();
+      await act(async () => pb.play(1, [1, 2]));
+      await settle(80);
+      expect(notes).toContain("music on deck");
+      const deck = contexts.filter((c) => c.sources === 2);
+      expect(deck, "the deck was not routed for the equaliser").toHaveLength(1);
+      expect(deck[0].biquads).toBe(5);
+    } finally {
+      resetPrefs();
+    }
+  });
 
   it("still plays music on the deck, through one graph for both elements, and joins gaplessly", async () => {
     contexts.length = 0;
@@ -338,6 +361,63 @@ describe("asking for the next track", () => {
     expect(pb.itemID).toBe(2);
     expect(notes).toContain("deck queued 2");
     expect(notes, "track 3 was asked for at the join").not.toContain("deck queued 3");
+  });
+});
+
+describe("crossfade", () => {
+  it("blends into a track from another album, at constant power, and says so", async () => {
+    setPrefs({ crossfade: 2, taper: false });
+    try {
+      await render();
+      await act(async () => pb.play(1, [1, 3]));
+      await settle(80);
+      const one = playingOn("/api/stream/1")!;
+      await act(async () => one.at(15));
+      await settle(80);
+      const three = playingOn("/api/stream/3")!;
+      expect(three, "track 3 was not loaded ahead").toBeDefined();
+      // Two and a half seconds from the end, a two-second fade is half a second off.
+      await act(async () => one.at(27.5));
+      await settle(1500);
+      expect(three.paused, "the crossfade did not start").toBe(false);
+      expect(one.volume).toBeLessThan(1);
+      expect(three.volume).toBeGreaterThan(0);
+      expect(one.volume ** 2 + three.volume ** 2).toBeCloseTo(1, 1);
+      await act(async () => one.end());
+      await settle(150);
+      expect(pb.itemID).toBe(3);
+      expect(three.pauses).toBe(0);
+      expect(three.volume).toBeCloseTo(1, 2);
+      expect(notes).toContain("track join crossfade (2 s)");
+    } finally {
+      resetPrefs();
+    }
+  });
+
+  it("never crossfades two tracks of the same album: those still join gaplessly", async () => {
+    setPrefs({ crossfade: 2, taper: false });
+    try {
+      await render();
+      await act(async () => pb.play(1, [1, 2]));
+      await settle(80);
+      const one = playingOn("/api/stream/1")!;
+      await act(async () => one.at(15));
+      await settle(80);
+      const two = playingOn("/api/stream/2")!;
+      await act(async () => one.at(27.5));
+      await settle(600);
+      // A crossfade would have started by now; a gapless join waits for the end.
+      expect(two.paused).toBe(true);
+      await act(async () => one.at(29.7));
+      await settle(400);
+      await act(async () => one.end());
+      await settle(150);
+      expect(pb.itemID).toBe(2);
+      expect(notes.some((n) => n.startsWith("track join gapless"))).toBe(true);
+      expect(notes.some((n) => n.startsWith("track join crossfade"))).toBe(false);
+    } finally {
+      resetPrefs();
+    }
   });
 });
 
