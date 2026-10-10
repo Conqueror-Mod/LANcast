@@ -88,6 +88,13 @@ func TestAPlainGridPageIsAWalkAlongAnIndex(t *testing.T) {
 		{"by the default", plainGrid(lib, ""), "idx_item_grid_title"},
 		{"by year", plainGrid(lib, "year"), "idx_item_grid_year"},
 		{"by date added", plainGrid(lib, "added"), "idx_item_grid_added"},
+		// The home page's Unwatched shelf: "not begun" is checked against a
+		// set built from the person's plays, so the walk needs only ids.
+		{"not begun, shuffled", func() ItemFilter {
+			f := plainGrid(lib, "random")
+			f.Unstarted, f.UserID, f.Seed = true, "u", 3
+			return f
+		}(), "idx_item_grid_"},
 		// The home page's Recently Added shelf, across every library.
 		{"recently added everywhere", ItemFilter{TopLevel: true, ExcludeMissing: true,
 			ExcludeKinds: []string{"artist", "album", "track", "gallery", "photo"},
@@ -98,7 +105,8 @@ func TestAPlainGridPageIsAWalkAlongAnIndex(t *testing.T) {
 			if !strings.Contains(plan, "COVERING INDEX "+c.index) {
 				t.Errorf("not read from %s alone: %s", c.index, plan)
 			}
-			if strings.Contains(plan, "TEMP B-TREE FOR ORDER BY") {
+			// A shuffle sorts by its nature; what it must not do is visit rows.
+			if c.f.Sort != "random" && strings.Contains(plan, "TEMP B-TREE FOR ORDER BY") {
 				t.Errorf("sorts the whole grid to return one page: %s", plan)
 			}
 		})

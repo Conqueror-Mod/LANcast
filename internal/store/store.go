@@ -1759,6 +1759,9 @@ var gridColumns = map[string]bool{
 	"LibraryID": true, "Kind": true, "TopLevel": true, "ExcludeMissing": true,
 	"ExcludeKinds": true, "Scoped": true, "Scope": true, "UserID": true,
 	"Sort": true, "Seed": true, "Limit": true, "Offset": true,
+	// "Not begun" reads only the row's id; the set it is checked against is
+	// built from the person's plays, not from this walk.
+	"Unstarted": true,
 }
 
 // gridSorts are the orders the grid indexes hold (title, year, added) or can
