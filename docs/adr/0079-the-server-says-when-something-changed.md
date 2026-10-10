@@ -29,7 +29,7 @@ hour, and each one looked like a broken feature rather than a stale picture:
   was forced to refetch.
 - **Promotion itself** runs only from `GET /api/people/peers` — that is, only
   while somebody has the People page open. A pairing nobody looks at from that
-  page never becomes mutual. That is a separate bug (fixed alongside this ADR),
+  page never becomes mutual. That is a separate bug (§5 moves it into the server),
   but it is the same shape: the server's state moving was tied to a picture
   being drawn.
 
