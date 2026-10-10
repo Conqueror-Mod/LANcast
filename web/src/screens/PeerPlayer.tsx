@@ -134,6 +134,115 @@ export function PeerPlayer() {
   const [elapsed, setElapsed] = useState(0);
   const [paused, setPaused] = useState(true);
   /*
+   * Volume is the viewer's, not the film's.
+   *
+   * Shared with the household player through the same key, so a friend's film
+   * starts as loud as your own did rather than at whatever the element
+   * defaults to — which is full, and a jump in level nobody asked for.
+   */
+  const [volume, setVolume] = useState(() => {
+    try {
+      const raw = localStorage.getItem("lancast:volume");
+      const saved = raw === null ? NaN : Number(raw);
+      return saved >= 0 && saved <= 1 ? saved : 1;
+    } catch {
+      return 1;
+    }
+  });
+  const [muted, setMuted] = useState(false);
+  const [fullscreen, setFullscreen] = useState(false);
+
+  // Applied on every new source too: a converted seek swaps `src`, and the
+  // element goes back to its defaults when it loads one.
+  useEffect(() => {
+    const el = video;
+    if (!el) return;
+    const apply = () => {
+      el.volume = volume;
+      el.muted = muted;
+    };
+    apply();
+    el.addEventListener("loadedmetadata", apply);
+    return () => el.removeEventListener("loadedmetadata", apply);
+  }, [video, volume, muted]);
+
+  const changeVolume = (next: number) => {
+    const v = Math.min(1, Math.max(0, next));
+    setVolume(v);
+    // Raising the level unmutes, which is what dragging the slider up means.
+    if (v > 0) setMuted(false);
+    try {
+      localStorage.setItem("lancast:volume", String(v));
+    } catch {
+      // A private window may refuse storage; the level still applies now.
+    }
+  };
+
+  // Unmuting from a level of zero would be silent anyway, so it restores one.
+  const toggleMute = () => {
+    if (muted) setMuted(false);
+    else if (volume === 0) changeVolume(1);
+    else setMuted(true);
+  };
+
+  /*
+   * Fullscreen is the window's job in the desktop client, as in the household
+   * player: WebView2 hands requestFullscreen to its host and changes nothing
+   * itself, so the host's binding is asked when it exists. In a browser the
+   * Fullscreen API is right.
+   *
+   * Either way the *screen* also has to become the whole viewport — the
+   * window filling the monitor does nothing for a video laid out inside the
+   * page beside the rail. That is the `--fullscreen` class.
+   */
+  const toggleFullscreen = () => {
+    const bound = (
+      window as { lancastToggleFullscreen?: () => Promise<boolean> }
+    ).lancastToggleFullscreen;
+    if (bound) {
+      void bound().then((on) => setFullscreen(Boolean(on)));
+      return;
+    }
+    if (document.fullscreenElement) {
+      void document.exitFullscreen().catch(() => {});
+      setFullscreen(false);
+      return;
+    }
+    void document.documentElement.requestFullscreen().catch(() => {});
+    setFullscreen(true);
+  };
+  const toggleFullscreenRef = useRef(toggleFullscreen);
+  toggleFullscreenRef.current = toggleFullscreen;
+
+  // The browser's own exits (Escape, F11) happen without asking us.
+  useEffect(() => {
+    const sync = () => {
+      if (!(window as { lancastToggleFullscreen?: unknown })
+        .lancastToggleFullscreen)
+        setFullscreen(Boolean(document.fullscreenElement));
+    };
+    document.addEventListener("fullscreenchange", sync);
+    return () => document.removeEventListener("fullscreenchange", sync);
+  }, []);
+
+  // Escape leaves, and leaving the screen never strands the window full.
+  useEffect(() => {
+    if (!fullscreen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") toggleFullscreenRef.current();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [fullscreen]);
+  const fullscreenRef = useRef(fullscreen);
+  fullscreenRef.current = fullscreen;
+  useEffect(
+    () => () => {
+      if (fullscreenRef.current) toggleFullscreenRef.current();
+    },
+    [],
+  );
+  /*
    * Resumed once, and only once.
    *
    * The position arrives with the item information, after the first render, so
@@ -478,7 +587,9 @@ export function PeerPlayer() {
   convertingRef.current = converting;
 
   return (
-    <div className="peer-player">
+    <div
+      className={`peer-player${fullscreen ? " peer-player--fullscreen" : ""}`}
+    >
       <header className="peer-player__head">
         <Link to="/people" className="peer-player__back">
           On another server
@@ -539,6 +650,13 @@ export function PeerPlayer() {
           else el.pause();
         }}
         onSeek={member ? () => {} : seek}
+        following={member}
+        volume={volume}
+        muted={muted}
+        onVolume={changeVolume}
+        onToggleMute={toggleMute}
+        fullscreen={fullscreen}
+        onToggleFullscreen={toggleFullscreen}
       />
 
       {/*
