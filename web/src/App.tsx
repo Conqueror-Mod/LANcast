@@ -35,6 +35,7 @@ import { PlaybackProvider } from "@/playback/PlaybackProvider";
 import { TogetherProvider } from "@/playback/TogetherProvider";
 import { JoinRequestPrompt } from "@/components/JoinRequestPrompt";
 import { useAuthStatus } from "@/api/hooks";
+import { ServerEvents } from "@/api/serverEvents";
 import { DesignBench } from "@/screens/DesignBench";
 import "@/playback/playback.css";
 
@@ -72,6 +73,9 @@ export function App() {
   return (
     <PlaybackProvider>
       <TogetherProvider>
+      {/* One stream for the signed-in window (ADR 0079). Outside the router's
+          routes so it lives as long as the session does, not a screen. */}
+      <ServerEvents />
       <AppShell>
         <Routes>
           <Route path="/" element={<Home />} />
