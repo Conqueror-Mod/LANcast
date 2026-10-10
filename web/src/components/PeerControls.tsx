@@ -1,3 +1,4 @@
+import { VolumeGlyph, FullscreenGlyph } from "./PlayerGlyphs";
 import "./PeerControls.css";
 
 /*
@@ -18,7 +19,16 @@ import "./PeerControls.css";
  * (ADR 0071 §5, §4). Borrowing it would mean drawing furniture over state
  * nothing is keeping, which is the merging §5 forbids done with CSS.
  *
- * So: the four things that are true here and nothing else.
+ * So: the things that are true here and nothing else. Volume and fullscreen
+ * belong on that list because they are about the person watching, not about
+ * the film — they are true on any film, in any room, whoever drives.
+ *
+ * # In a room
+ *
+ * The host drives (ADR 0046 §9), so play and the scrubber are shown disabled
+ * rather than live-but-ignored: a button that looks pressable and does nothing
+ * reads as broken. Volume, mute and fullscreen stay live — nobody else's
+ * evening is affected by how loud yours is.
  */
 export function PeerControls({
   paused,
@@ -27,6 +37,13 @@ export function PeerControls({
   converting,
   onPlayPause,
   onSeek,
+  following = false,
+  volume,
+  muted,
+  onVolume,
+  onToggleMute,
+  fullscreen,
+  onToggleFullscreen,
 }: {
   paused: boolean;
   at: number;
@@ -34,8 +51,17 @@ export function PeerControls({
   converting: boolean;
   onPlayPause: () => void;
   onSeek: (to: number) => void;
+  /** In a room as a guest: the host drives play and position. */
+  following?: boolean;
+  volume: number;
+  muted: boolean;
+  onVolume: (v: number) => void;
+  onToggleMute: () => void;
+  fullscreen: boolean;
+  onToggleFullscreen: () => void;
 }) {
-  const seekable = total > 0;
+  const seekable = total > 0 && !following;
+  const silent = muted || volume === 0;
 
   return (
     <div className="peer-controls">
@@ -43,6 +69,8 @@ export function PeerControls({
         type="button"
         className="peer-controls__play"
         onClick={onPlayPause}
+        disabled={following}
+        title={following ? "The host controls playback" : undefined}
         aria-label={paused ? "Play" : "Pause"}
       >
         {paused ? "▶" : "❚❚"}
@@ -63,15 +91,15 @@ export function PeerControls({
         className="peer-controls__bar"
         type="range"
         min={0}
-        max={seekable ? Math.floor(total) : 0}
-        value={Math.floor(Math.min(at, seekable ? total : at))}
+        max={total > 0 ? Math.floor(total) : 0}
+        value={Math.floor(Math.min(at, total > 0 ? total : at))}
         disabled={!seekable}
         onChange={(e) => onSeek(Number(e.currentTarget.value))}
         aria-label="Position"
       />
 
       <span className="peer-controls__time">
-        {seekable ? clock(total) : "--:--"}
+        {total > 0 ? clock(total) : "--:--"}
       </span>
 
       {/*
@@ -86,6 +114,36 @@ export function PeerControls({
           converting
         </span>
       )}
+
+      <button
+        type="button"
+        className="peer-controls__button peer-controls__mute"
+        onClick={onToggleMute}
+        aria-label={silent ? "Unmute" : "Mute"}
+        aria-pressed={silent}
+      >
+        <VolumeGlyph muted={silent} />
+      </button>
+      <input
+        className="peer-controls__volume"
+        type="range"
+        min={0}
+        max={100}
+        // Shows zero while muted, so the slider and the button never disagree
+        // about whether anything is coming out.
+        value={silent ? 0 : Math.round(volume * 100)}
+        onChange={(e) => onVolume(Number(e.currentTarget.value) / 100)}
+        aria-label="Volume"
+      />
+      <button
+        type="button"
+        className="peer-controls__button"
+        onClick={onToggleFullscreen}
+        aria-label={fullscreen ? "Exit fullscreen" : "Fullscreen"}
+        aria-pressed={fullscreen}
+      >
+        <FullscreenGlyph />
+      </button>
     </div>
   );
 }

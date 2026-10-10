@@ -57,6 +57,31 @@
   flex-shrink: 0;
 }
 
+/*
+ * Filling the screen. The window going fullscreen does nothing for a video laid
+ * out beside the rail, so the screen itself covers the viewport — above the
+ * rail, as the household player's overlay does.
+ */
+.peer-player--fullscreen {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  padding: 12px 24px 16px;
+  background: #000;
+}
+
+.peer-player--fullscreen .peer-player__head,
+.peer-player--fullscreen .peer-player__note {
+  display: none;
+}
+
+.peer-player--fullscreen .peer-player__video {
+  flex: 1 1 auto;
+  min-height: 0;
+  max-height: none;
+  border-radius: 0;
+}
+
 @media (max-width: 767px) {
   .peer-player {
     padding: 16px;

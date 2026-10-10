@@ -47,6 +47,38 @@
   accent-color: var(--gold, #c9a227);
 }
 
+.peer-controls__play:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.peer-controls__button {
+  width: 36px;
+  height: 36px;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  color: var(--text-dim);
+  background: none;
+  border: none;
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+.peer-controls__button:hover,
+.peer-controls__button:focus-visible {
+  color: var(--text-primary);
+  background: var(--surface-2, rgba(255, 255, 255, 0.06));
+}
+
+.peer-controls__volume {
+  flex: 0 0 96px;
+  min-width: 0;
+  accent-color: var(--text-primary);
+}
+
 .peer-controls__bar:disabled {
   opacity: 0.4;
 }
@@ -66,5 +98,13 @@
   .peer-controls__bar {
     order: 10;
     flex-basis: 100%;
+  }
+  /* A phone's own buttons set the level, and iOS ignores a page setting
+     element.volume at all, so the slider is noise there. Mute stays. */
+  .peer-controls__volume {
+    display: none;
+  }
+  .peer-controls__mute {
+    margin-left: auto;
   }
 }
