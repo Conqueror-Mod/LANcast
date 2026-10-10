@@ -1073,3 +1073,40 @@ func TestSmartCollectionMembershipIsIdempotent(t *testing.T) {
 		t.Errorf("three passes produced %d memberships, want 1", len(cols))
 	}
 }
+
+/*
+ * A batch that advanced tells the server, which tells open windows (ADR 0079).
+ * Without it a grid filled by a scan shows filenames until somebody refetches.
+ * A pass with nothing to enrich must stay quiet, or every idle pass would make
+ * every window refetch for nothing.
+ */
+func TestEnrichReportsProgressOnlyWhenABatchAdvances(t *testing.T) {
+	ctx := context.Background()
+	st, lib := harness(t)
+	addItem(t, st, lib, `C:\m\arrival.mkv`, "Arrival", 2016)
+
+	reg := meta.NewRegistry()
+	reg.AddProvider(&fakeProvider{
+		id:     "fake",
+		cands:  []meta.Candidate{{Provider: "fake", ExternalID: "329865", Kind: meta.KindMovie, Title: "Arrival", Year: 2016, Popularity: 40}},
+		record: arrivalRecord(),
+	})
+	w := New(st, reg, &fakeArt{}, quietLog())
+	calls := 0
+	w.OnProgress = func() { calls++ }
+
+	if err := w.Run(ctx); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if calls == 0 {
+		t.Fatal("a pass that enriched an item reported no progress")
+	}
+
+	before := calls
+	if err := w.Run(ctx); err != nil {
+		t.Fatalf("second Run: %v", err)
+	}
+	if calls != before {
+		t.Fatalf("an empty pass reported progress %d time(s)", calls-before)
+	}
+}

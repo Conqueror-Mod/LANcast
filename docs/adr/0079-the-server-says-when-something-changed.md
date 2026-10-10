@@ -156,9 +156,9 @@ above:
   household of two with one window open costs one call per peer per 10 s, the
   same as the People page it replaces.
 - **Topics are `peers`, `presence`, `libraries` and `items`.** There is no
-  `library:{id}` yet. A scan finishing publishes `libraries` and `items`.
-  Enrichment landing (new posters and titles after a scan) publishes nothing
-  yet, so a grid still shows those on its next refetch rather than at once.
+  `library:{id}` yet. A scan finishing publishes `libraries` and `items`, and
+  each enrichment batch that advances publishes `items`, so a grid filled by a
+  scan fills in with titles and posters as they land.
 - **A peer calling in while still `added` here triggers an immediate roster
   fetch.** A peer only calls servers it holds, so that call is the moment the
   pairing became mutual on the far side. Adding a peer does the same.
