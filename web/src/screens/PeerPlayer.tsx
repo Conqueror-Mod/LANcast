@@ -203,12 +203,22 @@ export function PeerPlayer() {
       void bound().then((on) => setFullscreen(Boolean(on)));
       return;
     }
-    if (document.fullscreenElement) {
-      void document.exitFullscreen().catch(() => {});
+    /*
+     * Which way to go is decided by this screen's own state, not by asking the
+     * document. The browser may refuse fullscreen (an embedded frame, a
+     * policy) while the screen still covers the window, and then
+     * `document.fullscreenElement` says "not fullscreen" forever — so Escape,
+     * which calls this, went *in* again instead of out. Found by looking.
+     */
+    if (fullscreen) {
+      if (document.fullscreenElement)
+        void Promise.resolve(document.exitFullscreen()).catch(() => {});
       setFullscreen(false);
       return;
     }
-    void document.documentElement.requestFullscreen().catch(() => {});
+    void Promise.resolve(
+      document.documentElement.requestFullscreen?.(),
+    ).catch(() => {});
     setFullscreen(true);
   };
   const toggleFullscreenRef = useRef(toggleFullscreen);

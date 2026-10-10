@@ -235,6 +235,31 @@ describe("following a room on their server", () => {
     expect(full.disabled).toBe(false);
   });
 
+  /*
+   * Escape leaves, even when the browser refused real fullscreen.
+   *
+   * jsdom has no Fullscreen API, which is the refused case exactly: the screen
+   * covers the window while the document says nothing is fullscreen. The first
+   * version asked the document which way to toggle, so Escape went in again.
+   */
+  it("leaves fullscreen on Escape when the browser never granted it", async () => {
+    mockServer({ route: joined(room(0, true)) });
+    await render(`/peers/${FP}/item/42?room=${ROOM}`);
+    const player = () => host.querySelector(".peer-player")!;
+
+    await act(async () => {
+      host
+        .querySelector<HTMLButtonElement>('button[aria-label="Fullscreen"]')!
+        .dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    expect(player().classList.contains("peer-player--fullscreen")).toBe(true);
+
+    await act(async () => {
+      window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
+    });
+    expect(player().classList.contains("peer-player--fullscreen")).toBe(false);
+  });
+
   it("says when the room has ended", async () => {
     mockServer({ route: () => undefined }); // every together call is a 404
     await render(`/peers/${FP}/item/42?room=${ROOM}`);

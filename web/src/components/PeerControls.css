@@ -99,4 +99,12 @@
     order: 10;
     flex-basis: 100%;
   }
+  /* A phone's own buttons set the level, and iOS ignores a page setting
+     element.volume at all, so the slider is noise there. Mute stays. */
+  .peer-controls__volume {
+    display: none;
+  }
+  .peer-controls__mute {
+    margin-left: auto;
+  }
 }

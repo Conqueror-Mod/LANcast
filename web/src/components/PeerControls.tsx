@@ -117,7 +117,7 @@ export function PeerControls({
 
       <button
         type="button"
-        className="peer-controls__button"
+        className="peer-controls__button peer-controls__mute"
         onClick={onToggleMute}
         aria-label={silent ? "Unmute" : "Mute"}
         aria-pressed={silent}
