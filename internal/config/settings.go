@@ -105,6 +105,20 @@ type Settings struct {
 	 */
 	RetroArtwork bool `json:"retro_artwork"`
 
+	/*
+	 * PhotoPlaces reads where photographs were taken and groups a picture
+	 * library by town (ADR 0078).
+	 *
+	 * Off by default, and turning it off **deletes** every location read —
+	 * the opposite of DetectMarkers, deliberately. That switch keeps what it
+	 * found because a switch that discards work is one nobody can try out,
+	 * and markers cost hours to find. A location costs a read of a file's
+	 * first few kilobytes, so trying this out again is seconds, and what it
+	 * holds is where a family goes. Off has to mean what ADR 0028 meant by
+	 * never reading it.
+	 */
+	PhotoPlaces bool `json:"photo_places"`
+
 	// ---- library and playback rules -------------------------------------
 	//
 	// These four are the server's opinion about what a client shows, and they

@@ -146,6 +146,7 @@ var wireTypes = []struct {
 
 	// Reports.
 	{"GET /api/libraries/{id}/timeline · buckets", store.TimelineBucket{}},
+	{"GET /api/libraries/{id}/places · places", store.PhotoPlace{}},
 	{"GET /api/libraries/{id}/duplicates · groups", store.DuplicateGroup{}},
 	{"GET /api/libraries/{id}/near-copies", store.NearCopies{}},
 	{"GET /api/libraries/{id}/near-copies · groups", store.NearCopyGroup{}},

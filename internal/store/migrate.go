@@ -6,7 +6,7 @@ import (
 )
 
 // CurrentSchemaVersion is the revision this build expects.
-const CurrentSchemaVersion = 68
+const CurrentSchemaVersion = 69
 
 // migration is one forward step. There are deliberately no down migrations:
 // rolling a media library's schema backwards loses data that a rescan cannot
@@ -125,6 +125,7 @@ var migrations = []migration{
 	{version: 66, sql: schemaRevision66},
 	{version: 67, sql: schemaRevision67},
 	{version: 68, sql: schemaRevision68},
+	{version: 69, sql: schemaRevision69},
 }
 
 // migrate brings the database up to CurrentSchemaVersion.
@@ -2202,8 +2203,49 @@ WHERE kind = 'rom' AND COALESCE(match_state, '') != 'locked' AND (
 );
 `
 
+// showOf finds an episode's show, whether the episode hangs from a season or
+// straight from the show. It reads `mi` as the episode.
+const showOf = `SELECT id FROM media_item WHERE kind = 'show' AND (
+        id = mi.parent_id OR
+        id = (SELECT parent_id FROM media_item WHERE id = mi.parent_id))`
+
 /*
- * Revision 67 changes no shape. It indexes item_genre from the genre side
+ * Revision 67 — where a photograph was taken (ADR 0078).
+ *
+ * `photo_location` holds one row for every photo the location pass has read,
+ * and the row is the pass's stamp: lat, lon and place_id are NULL when the
+ * photo carries no position, so "read and found nothing" is told apart from
+ * "not read yet" without a column on media_item. A side table like
+ * photo_hash, because only that pass writes it and nothing that lists items
+ * wants a coordinate.
+ *
+ * `photo_place` is the towns photographs were filed under, keyed by GeoNames
+ * id, with their names copied in. Listing places then never needs the
+ * gazetteer in memory; it is loaded only while the pass runs.
+ *
+ * Nothing is queued by this revision. The pass reads nothing until the
+ * `photo_places` setting is turned on, which it is not by default.
+ */
+const schemaRevision67 = `
+CREATE TABLE IF NOT EXISTS photo_place (
+    id           INTEGER PRIMARY KEY,
+    name         TEXT NOT NULL,
+    region       TEXT NOT NULL DEFAULT '',
+    country_code TEXT NOT NULL DEFAULT '',
+    country      TEXT NOT NULL DEFAULT ''
+);
+CREATE TABLE IF NOT EXISTS photo_location (
+    item_id  INTEGER PRIMARY KEY REFERENCES media_item(id) ON DELETE CASCADE,
+    lat      REAL,
+    lon      REAL,
+    place_id INTEGER REFERENCES photo_place(id),
+    read_at  INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_photo_location_place ON photo_location(place_id);
+`
+
+/*
+ * Revision 68 changes no shape. It indexes item_genre from the genre side
  * (ADR 0057).
  *
  * The filter bar asks "which genres does this library have", and the only way
@@ -2213,12 +2255,12 @@ WHERE kind = 'rom' AND COALESCE(match_state, '') != 'locked' AND (
  * by every library, so in a film library each music genre is a miss, and
  * without this index a miss means walking the whole library again.
  */
-const schemaRevision67 = `
+const schemaRevision68 = `
 CREATE INDEX IF NOT EXISTS idx_item_genre_genre ON item_genre(genre_id, item_id);
 `
 
 /*
- * Revision 68 changes no shape. It indexes the browse grid in the orders it is
+ * Revision 69 changes no shape. It indexes the browse grid in the orders it is
  * read in (ADR 0057).
  *
  * The grid is every present top-level row of a library, sorted. With only a
@@ -2236,7 +2278,7 @@ CREATE INDEX IF NOT EXISTS idx_item_genre_genre ON item_genre(genre_id, item_id)
  * and their pages near the end of a 40,000-item library are not, which
  * ADR 0057 records rather than adding an index per sort.
  */
-const schemaRevision68 = `
+const schemaRevision69 = `
 CREATE INDEX IF NOT EXISTS idx_item_grid_title
     ON media_item(library_id, parent_id, missing, sort_title, season, episode, kind);
 CREATE INDEX IF NOT EXISTS idx_item_grid_year
@@ -2244,9 +2286,3 @@ CREATE INDEX IF NOT EXISTS idx_item_grid_year
 CREATE INDEX IF NOT EXISTS idx_item_grid_added
     ON media_item(parent_id, missing, added_at DESC, library_id, sort_title, kind);
 `
-
-// showOf finds an episode's show, whether the episode hangs from a season or
-// straight from the show. It reads `mi` as the episode.
-const showOf = `SELECT id FROM media_item WHERE kind = 'show' AND (
-        id = mi.parent_id OR
-        id = (SELECT parent_id FROM media_item WHERE id = mi.parent_id))`

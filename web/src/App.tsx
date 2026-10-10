@@ -7,6 +7,7 @@ import { Browse } from "@/screens/Browse";
 import { Playlists } from "@/screens/Playlists";
 import { Collections } from "@/screens/Collections";
 import { Timeline } from "@/screens/Timeline";
+import { Places } from "@/screens/Places";
 import { Duplicates } from "@/screens/Duplicates";
 import { RateUnrated } from "@/screens/RateUnrated";
 import { FacePeople } from "@/screens/FacePeople";
@@ -107,6 +108,7 @@ export function App() {
           <Route path="/library/:id/collections" element={<Collections />} />
           {/* A picture library by capture date, beside its folder grid. */}
           <Route path="/library/:id/timeline" element={<Timeline />} />
+          <Route path="/library/:id/places" element={<Places />} />
           <Route path="/library/:id/duplicates" element={<Duplicates />} />
           {/* What a ceiling hides for want of a rating, to rate by hand. */}
           <Route path="/library/:id/unrated" element={<RateUnrated />} />

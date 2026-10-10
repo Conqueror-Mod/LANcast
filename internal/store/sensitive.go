@@ -77,6 +77,14 @@ func (s *Store) SetSensitive(ctx context.Context, id int64, on bool) error {
 	if _, err := s.DeletePhotoEmbeddingsUnderSensitive(ctx, libraryID); err != nil {
 		return err
 	}
+	/*
+	 * And where they were taken (ADR 0078). A covered photograph filed under
+	 * a town says where the marked folder was, which is much of what marking
+	 * it is trying not to say.
+	 */
+	if _, err := s.DeleteLocationsUnderSensitive(ctx, libraryID); err != nil {
+		return err
+	}
 	return nil
 }
 

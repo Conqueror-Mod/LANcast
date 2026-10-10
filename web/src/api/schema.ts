@@ -963,6 +963,58 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/libraries/{id}/places": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The library's id. */
+                id: components["parameters"]["LibraryId"];
+            };
+            cookie?: never;
+        };
+        /**
+         * A picture library's photographs counted by the town they were taken in
+         * @description Most photographed first (ADR 0078). Reading where photographs were taken is the `photo_places` setting, **off by default**; while it is off nothing has been read, the lists are empty and `unread` holds every photograph.
+         *
+         *     **No coordinate is ever returned.** Names come from a gazetteer built into the server; nothing is looked up online. Marked folders are excluded, as on the timeline.
+         *
+         *     Open a place with `GET /api/libraries/{id}/places/{place}`.
+         */
+        get: operations["getLibraryPlaces"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/libraries/{id}/places/{place}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The library's id. */
+                id: components["parameters"]["LibraryId"];
+                /** @description A place `id` from `GET /api/libraries/{id}/places`, or `elsewhere` for photographs with a position and no town within 50 km. */
+                place: string;
+            };
+            cookie?: never;
+        };
+        /**
+         * One place's photographs, newest first
+         * @description The same exclusions as the counts, so a place always opens onto exactly the number it showed.
+         */
+        get: operations["getLibraryPlacePhotos"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/libraries/{id}/duplicates": {
         parameters: {
             query?: never;
@@ -5498,6 +5550,8 @@ export interface components {
             detect_markers: boolean;
             /** @description Fetch box art and a screenshot for each identified ROM from libretro-thumbnails (ADR 0073). **Off by default**: it is a network fetch per game. Identifying ROMs is offline and does not depend on it. Turning it on re-queues identified ROMs so their art arrives now. */
             retro_artwork: boolean;
+            /** @description Read where photographs were taken and group picture libraries by town (ADR 0078). **Off by default.** Turning it on starts the location pass at once; **turning it off deletes every location and place read**, rather than hiding them. */
+            photo_places: boolean;
             auto_enrich: boolean;
             update_check: boolean;
             /** @description Raises the server's log level to debug. Takes effect on the next line logged — **no restart** — and is persisted, because the faults worth turning it on for are the intermittent ones and losing the toggle on restart is how somebody reproduces a bug three times. */
@@ -5599,6 +5653,8 @@ export interface components {
             detect_markers?: boolean;
             /** @description Fetch box art and a screenshot for each identified ROM from libretro-thumbnails (ADR 0073). **Off by default**: it is a network fetch per game. Identifying ROMs is offline and does not depend on it. Turning it on re-queues identified ROMs so their art arrives now. */
             retro_artwork?: boolean;
+            /** @description Read where photographs were taken and group picture libraries by town (ADR 0078). **Off by default.** Turning it on starts the location pass at once; **turning it off deletes every location and place read**, rather than hiding them. */
+            photo_places?: boolean;
             hardware_encoder?: string;
             debug_logging?: boolean;
             watched_threshold?: number;
@@ -5786,6 +5842,35 @@ export interface components {
             month?: number;
             /** @description Its own bucket, and it sorts last. **Not an error** — on a real library 5% of photographs carry no capture time, and dropping them would lose them silently. */
             undated?: boolean;
+            count: number;
+        };
+        /** @description A picture library's photographs grouped by the town they were taken in (ADR 0078). Names and counts only; no coordinate is ever returned. */
+        PhotoPlaces: {
+            /** @description The `photo_places` setting. A client shows the switch, not "no places", when this is false. */
+            enabled: boolean;
+            /** @description A location pass is running now; look again when it ends. */
+            reading: boolean;
+            places: components["schemas"]["PhotoPlace"][];
+            /** @description Photographs with a position and no town within 50 km of it. */
+            elsewhere: number;
+            /** @description Photographs read that carry no position — most of any library. */
+            unlocated: number;
+            /** @description Photographs the location pass has not read yet. */
+            unread: number;
+        };
+        /** @description One town photographs were filed under: the nearest town of 1,000 people or more, weighted by its size so a city claims its own streets. */
+        PhotoPlace: {
+            /**
+             * Format: int64
+             * @description The GeoNames id of the town.
+             */
+            id: number;
+            name: string;
+            /** @description First-level region, such as a state. Absent when GeoNames has none. */
+            region?: string;
+            /** @description ISO 3166-1 alpha-2. */
+            country_code: string;
+            country?: string;
             count: number;
         };
         /**
@@ -6102,7 +6187,7 @@ export interface components {
         };
         /** @description One thing the server is doing, normalised across workers. */
         ActivityTask: {
-            /** @description `scan`, `enrich`, `probe`, `coverart` or `transcode`. **New workers add new values**; a client that does not recognise one still has a title and a progress pair, which is the point of normalising. */
+            /** @description `scan`, `enrich`, `probe`, `coverart`, `places` or `transcode`. **New workers add new values**; a client that does not recognise one still has a title and a progress pair, which is the point of normalising. */
             kind: string;
             /** @description Stable for the task's lifetime, so a list can be keyed by it. */
             id: string;
@@ -9293,6 +9378,81 @@ export interface operations {
                 };
             };
             /** @description `wrong_kind` on any library that is not a picture library — a timeline of a film library would be a list of release months, which answers a different question quietly. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    getLibraryPlaces: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The library's id. */
+                id: components["parameters"]["LibraryId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Every place with its count, and the photographs in none of them. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PhotoPlaces"];
+                };
+            };
+            /** @description `wrong_kind` on any library that is not a picture library. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    getLibraryPlacePhotos: {
+        parameters: {
+            query?: {
+                /** @description Page size; default 500, at most 1000. */
+                limit?: number;
+                /** @description Rows to skip. */
+                offset?: number;
+            };
+            header?: never;
+            path: {
+                /** @description The library's id. */
+                id: components["parameters"]["LibraryId"];
+                /** @description A place `id` from `GET /api/libraries/{id}/places`, or `elsewhere` for photographs with a position and no town within 50 km. */
+                place: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A page of photographs, plus the total before paging. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ItemsPage"];
+                };
+            };
+            /** @description `wrong_kind` on any library that is not a picture library, or `bad_request` when `{place}` is neither a place id nor `elsewhere`. */
             400: {
                 headers: {
                     [name: string]: unknown;

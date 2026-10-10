@@ -2484,7 +2484,8 @@ poll each one — including `/api/libraries/{id}/scan` once per library. This
 answers the question without that knowledge, in one shape:
 
 - `kind` is `scan`, `enrich`, `probe`, `coverart`, `retro` (identifying
-  ROMs, ADR 0073), or `transcode`. New workers
+  ROMs, ADR 0073), `places` (reading where photos were taken, ADR 0078), or
+  `transcode`. New workers
   add new values; a client that does not recognise one still has a title and a
   progress pair, which is the point of normalizing.
 - `id` is stable for the task's lifetime, so a list can be keyed by it.
@@ -3422,6 +3423,54 @@ Open a bucket through the ordinary item listing:
 Either parameter also excludes marked folders, so a listing always agrees with
 the count above it. That exclusion is derived from the parameters and is not
 itself a parameter — whether covered content appears is the server's decision.
+
+### `GET /api/libraries/{id}/places`
+
+A picture library's photographs counted by the **town they were taken in**
+(ADR 0078), most photographed first. `400 wrong_kind` on any other library
+kind, as the timeline does.
+
+```json
+{ "enabled": true,
+  "reading": false,
+  "places": [
+    { "id": 9000001, "name": "Alphaville", "region": "Somewhere",
+      "country_code": "ZZ", "country": "Testland", "count": 2 }
+  ],
+  "elsewhere": 1,
+  "unlocated": 2612,
+  "unread": 0 }
+```
+
+- `enabled` is the `photo_places` setting. **Off by default**, and while it is
+  off nothing has been read, so the lists are empty and `unread` holds every
+  photograph. A client shows the switch, not "no places".
+- `reading` is a location pass running now; look again when it ends.
+- `places[].id` is the GeoNames id of the town. Names come from a gazetteer
+  built into the server; nothing is looked up online.
+- `elsewhere` counts photographs with a position and **no town within 50 km**
+  of it — at sea, on a mountain. `unlocated` counts photographs that were read
+  and carry no position, which is most of any library. `unread` counts those
+  not read yet.
+
+**No coordinate is ever returned**, here or anywhere. Nothing in a client needs
+one without a map, and a field that is not sent cannot be scraped. (The
+original-file route serves a photograph's bytes as they are, so its own EXIF
+travels with it; this route does not add to that.)
+
+**Marked folders are excluded** (ADR 0051, amended), for the timeline's reason,
+and their locations are deleted when they are marked.
+
+Not on the federation guest allow-list: a library shared with a paired server
+shares its photographs, not an index of where they were taken.
+
+### `GET /api/libraries/{id}/places/{place}`
+
+One place's photographs, newest first: `{ "items": [...], "total": 2 }`, the
+same item shape as `GET /api/items`. `{place}` is a place `id` from the list
+above, or `elsewhere`; anything else is `400`. `limit` (default 500, at most
+1000) and `offset` page it. The same exclusions as the counts apply, so a place
+always opens onto exactly the number it showed.
 
 
 ### `GET /api/libraries/{id}/duplicates`
@@ -4412,6 +4461,7 @@ to "have I watched this".
 | `scan_interval_hours` | `0` | 0–168 | Rescan every library on a timer. **0 is off**, the default. Takes effect without a restart; a library already scanning is skipped rather than queued |
 | `detect_markers` | `false` | — | Run the credits detector over the library (ADR 0054). **Off by default, and the default is the decision**: it decodes the last quarter of every film and episode — a second full pass over media that probing only read the header of — and nothing yet reads a marker to make a decision, so leaving it on would spend hours of CPU populating a table that changes nothing anyone can see. Turning it off does not delete what was already found, the same shape `sensitive_marking` has. Only **probed** items are examined: detection needs the file's real duration, and before v0.8.51 `duration_ms` was the provider's runtime. **Switching it on starts a pass immediately** rather than waiting for the next scan — it did wait, and a setting whose effect arrives hours later cannot be told apart from one that does nothing |
 | `retro_artwork` | `false` | — | Fetch box art and a screenshot for each identified ROM from libretro-thumbnails (ADR 0073). **Off by default**: it is a network fetch per game, and no phone-home has no convenience exception. Identifying ROMs is offline and does not depend on it. **Switching it on re-queues identified ROMs** so their pictures arrive now, by lookup against hashes already stored rather than by reading every file again |
+| `photo_places` | `false` | — | Read where photographs were taken and group picture libraries by town (ADR 0078). **Off by default.** Turning it on starts the location pass at once. **Turning it off deletes every location and place read** — not hides them — so off means nothing is held, as before the feature existed. Reading again costs seconds: the pass reads only the start of each file |
 | `certification_country` | `""` | one of `certification_countries` | Whose certificate to prefer on films and programmes, as an ISO 3166-1 alpha-2 code. Empty is the default order: the US certificate, falling back to the British one. A chosen country is placed **in front of** that default rather than replacing it — TMDB's coverage is uneven, and narrowing would strip the label off every title the chosen country has no entry for, which a rating ceiling then reads as unrated and **blocks**. The offered list is **served by `GET /api/settings`, not known by the client**: what may be offered is a fact about the server's rating ladder, and a country whose labels the ladder cannot place would populate `content_rating` with strings every ceiling treats as unrated. France is the worked example — `Tous publics` is a real certificate with no rung on the ladder. A code outside the list is **rejected with 400** rather than stored and ignored. Takes effect on the next metadata fetch and does **not** rewrite certificates already stored; a metadata refresh does that |
 | `artwork_cache_mb` | `0` | 0 or more | A cap on the artwork cache, in megabytes. **0 is no limit**, the default. A *target* rather than a guarantee: a daily pass removes things in the order of what can be recovered — **orphans** (artwork nothing references) at any setting, then **derived sizes** oldest-first to meet the cap, and **never a live original**. An original is the only copy that cannot be rebuilt without going back to a provider, so a cap that could remove one would turn a disk-space setting into "some of your posters are gone now". A library whose live originals alone exceed the cap keeps them and says so in the log rather than meeting the number. Orphans are removed even at 0, because they are waste under every policy and removing one cannot cost a visible picture. No upper bound: a large array may reasonably hold a great deal of artwork, and an invented ceiling would be wrong with no way to say so |
 | `max_transcodes` | `3` | 1 to 64 | How many conversions may run at once. Each is a whole ffmpeg, so this is a statement about the machine rather than a preference. A **ceiling, not a queue**: past it a request is refused and the client reports a busy server, which is honest — admitting everybody and letting every stream stutter is not. **Direct play does not count**; a file sent as it is costs no session however many people are watching. Applied live, so an operator relieving a struggling server does not have to restart it and drop the sessions they are trying to help; those already running are left alone and the ceiling decides what is admitted next |

@@ -11,9 +11,13 @@ import (
 // The alternative was a library, and the cost/benefit did not survive contact
 // with the requirement. LANcast wants orientation and capture time; a general
 // EXIF package brings a tag dictionary, maker notes, GPS parsing and a decade of
-// camera quirks, and the GPS part is data ADR 0028 says explicitly must never be
-// loaded. Not having a parser for it is a stronger guarantee than choosing not
-// to call it.
+// camera quirks.
+//
+// This reader still never touches GPS. ADR 0028 refused location outright, and
+// ADR 0078 later allowed it behind a switch that is off until somebody turns it
+// on — so the GPS parser lives in location.go and is called only by the
+// location pass. The thumbnail pass reading a photograph does not learn where
+// it was taken.
 //
 // This is the same reasoning as the vendored WebView2 binding and the refusal to
 // ship hls.js: a dependency is a permanent liability, and a hundred lines that

@@ -218,3 +218,58 @@ describe("PlaybackSettings music rows", () => {
     expect(pb.setPrefs).toHaveBeenLastCalledWith({ nightMusic: true });
   });
 });
+
+/*
+ * The equaliser (audio-pass-plan.md Phase 3): music only, a preset that sets
+ * all five bands, and a band that once moved makes the setting Custom.
+ */
+describe("PlaybackSettings equaliser", () => {
+  beforeEach(() => {
+    Object.assign(pb, { isAudio: true, native: false, audioFX: false, musicChannels: 2 });
+    vi.stubGlobal("AudioContext", class {});
+  });
+  afterEach(() => vi.unstubAllGlobals());
+
+  const slider = (label: string) =>
+    host.querySelector(`input[aria-label="Equaliser ${label}"]`) as HTMLInputElement;
+
+  it("offers a preset and five bands for music, and nothing for a film", () => {
+    render();
+    expect(labels()).toEqual(expect.arrayContaining(["Equaliser", "60 Hz", "230 Hz", "910 Hz", "3.6 kHz", "14 kHz"]));
+    act(() => root.unmount());
+    root = createRoot(host);
+    pb.isAudio = false;
+    render();
+    expect(labels()).not.toContain("Equaliser");
+  });
+
+  it("sets all five bands from a preset", () => {
+    render();
+    const sel = selectFor("Equaliser");
+    act(() => {
+      sel.value = "bass";
+      sel.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+    expect(pb.setPrefs).toHaveBeenLastCalledWith({ eqPreset: "bass", eq: [6, 3, 0, 0, 0] });
+  });
+
+  it("makes it Custom when one band moves, keeping the others", () => {
+    pb.prefs = { ...DEFAULTS, eq: [6, 3, 0, 0, 0], eqPreset: "bass" };
+    render();
+    const s = slider("14 kHz");
+    act(() => {
+      const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!;
+      set.call(s, "4");
+      s.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    expect(pb.setPrefs).toHaveBeenLastCalledWith({ eq: [6, 3, 0, 0, 4], eqPreset: "custom" });
+  });
+
+  it("shows each band's level with its sign", () => {
+    pb.prefs = { ...DEFAULTS, eq: [6, -3, 0, 0, 0], eqPreset: "custom" };
+    render();
+    const values = [...host.querySelectorAll(".pbset__value")].map((v) => v.textContent);
+    expect(values).toEqual(expect.arrayContaining(["+6 dB", "-3 dB", "0 dB"]));
+    expect(selectFor("Equaliser").value).toBe("custom");
+  });
+});

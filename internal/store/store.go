@@ -743,6 +743,11 @@ func (s *Store) UpsertItem(ctx context.Context, f ScanFile) (int64, error) {
 		if _, err := s.db.ExecContext(ctx, `DELETE FROM photo_hash WHERE item_id = ?`, id); err != nil {
 			return 0, fmt.Errorf("upsert item %q: clear hash: %w", f.Path, err)
 		}
+		// Where it was taken is a fact about the bytes too (ADR 0078): an
+		// edited photo may have had its location stripped or added.
+		if _, err := s.db.ExecContext(ctx, `DELETE FROM photo_location WHERE item_id = ?`, id); err != nil {
+			return 0, fmt.Errorf("upsert item %q: clear location: %w", f.Path, err)
+		}
 		if _, err := s.db.ExecContext(ctx,
 			`UPDATE media_item SET cover_checked_at = NULL WHERE id = ?`, id); err != nil {
 			return 0, fmt.Errorf("upsert item %q: requeue photo: %w", f.Path, err)

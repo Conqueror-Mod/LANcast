@@ -152,11 +152,11 @@ with the machine quieter, and is the one to compare a future run against.
   and watched checks probed the user's table once per item. It is now one
   pass for every column facet (`json_group_array(DISTINCT …) FILTER`, each
   facet keeping its own rule), genres asked per genre from the genre's side
-  (revision 67 indexes `item_genre(genre_id)`, because the genre table is
+  (revision 68 indexes `item_genre(genre_id)`, because the genre table is
   shared and a music genre is a miss in a film library), and the per-person
   checks start from that person's rows.
 - *A page sorted every column of every row to return sixty.* A page is now
-  chosen by id and its rows read afterwards; revision 68 indexes the grid in
+  chosen by id and its rows read afterwards; revision 69 indexes the grid in
   the three orders the video libraries default to or offer first — title,
   year, added — so a plain page is a walk along an index with no sort and no
   row visits at all.

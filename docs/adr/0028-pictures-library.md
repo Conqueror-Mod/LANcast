@@ -90,6 +90,11 @@ rather than the copy, and it is the natural sort for a photo library.
 it here, and the safest way to never leak it is to never load it. Reading it
 later is a decision with its own consequences; not reading it costs nothing now.
 
+> **Amended 2026-10-09 by [ADR 0078](0078-a-place-is-the-town-a-photo-was-taken-in.md):**
+> GPS may be read, behind a server setting that is off until an administrator
+> turns it on, by a parser the thumbnail pass never calls. Turning it off
+> deletes what was read.
+
 Schema revision 16 adds `width`, `height` and `taken_at` as **nullable
 columns** — additive, no reshaping of the model.
 

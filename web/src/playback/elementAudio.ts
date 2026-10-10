@@ -23,6 +23,73 @@
 export interface ElementFX {
   /** Compress the dynamic range, and sit lower: night listening. */
   night: boolean;
+  /** Decibels per EQ_BANDS band; absent or all zero is flat (Phase 3). */
+  eq?: number[];
+}
+
+/*
+ * The equaliser (docs/audio-pass-plan.md, Phase 3; music only, decided
+ * 2026-10-09). Five bands: shelves at the ends, so "more bass" lifts
+ * everything below rather than a hump at one frequency, and peaking bands
+ * an octave-and-more apart in between, at Q 1 so neighbours overlap smoothly.
+ */
+export const EQ_BANDS: { hz: number; type: BiquadFilterType; label: string }[] = [
+  { hz: 60, type: "lowshelf", label: "60 Hz" },
+  { hz: 230, type: "peaking", label: "230 Hz" },
+  { hz: 910, type: "peaking", label: "910 Hz" },
+  { hz: 3600, type: "peaking", label: "3.6 kHz" },
+  { hz: 14000, type: "highshelf", label: "14 kHz" },
+];
+export const EQ_Q = 1;
+export const EQ_LIMIT_DB = 12;
+export const EQ_FLAT = [0, 0, 0, 0, 0];
+
+/*
+ * Starting points, not measurements: a preset is a shape somebody asked for
+ * by name, and the sliders are there to correct it by ear.
+ */
+export const EQ_PRESETS: { id: string; label: string; gains: number[] }[] = [
+  { id: "flat", label: "Flat", gains: EQ_FLAT },
+  { id: "bass", label: "Bass boost", gains: [6, 3, 0, 0, 0] },
+  // Retuned after the first listening test (2026-10-09): "not enough
+  // difference from bass boost" (treble) and "could use adjusting" (vocal).
+  { id: "treble", label: "Treble boost", gains: [0, 0, 1, 4, 7] },
+  { id: "vocal", label: "Vocal presence", gains: [-3, -1, 3, 5, 1] },
+  // Ears lose the extremes first as the level drops (equal-loudness curves),
+  // so quiet listening gets both ends back.
+  { id: "loudness", label: "Loud at low volume", gains: [6, 2, 0, 1, 5] },
+];
+
+/** Whether an equaliser setting changes anything at all. */
+export function eqActive(eq?: number[]): boolean {
+  return !!eq && eq.some((g) => Math.abs(g) >= 0.05);
+}
+
+export function clampGain(g: number): number {
+  return Math.max(-EQ_LIMIT_DB, Math.min(EQ_LIMIT_DB, Number.isFinite(g) ? g : 0));
+}
+
+/*
+ * The cut in front of the bands, so a boosted band cannot push a full-scale
+ * track past 0 dBFS. Without night mode nothing downstream catches a peak,
+ * and a +12 dB shelf on a mastered track would clip at once. Cuts need no
+ * room, so only boosts count.
+ *
+ * **Weighted by where a track's peaks are.** The first version cut by the
+ * largest boost, whatever band it was in. Music carries most of its energy,
+ * and so its peaks, low down, and falls away with frequency, so a +6 dB
+ * treble shelf adds little to a peak while a +6 dB bass shelf adds nearly all
+ * of it. Cutting 6 dB for both left the treble preset back where it started
+ * and everything below it 6 dB down: heard as "not enough difference between
+ * it and bass boost" (2026-10-09). Each band's boost now counts for its share
+ * of the peak (EQ_PEAK_SHARE), an estimate from that spectral tilt rather
+ * than a measurement of any one track.
+ */
+export const EQ_PEAK_SHARE = [1, 1, 0.75, 0.5, 0.35];
+
+export function eqPreampGain(eq?: number[]): number {
+  const boost = Math.max(0, ...(eq ?? []).map((g, i) => clampGain(g) * (EQ_PEAK_SHARE[i] ?? 1)));
+  return Math.pow(10, -boost / 20);
 }
 
 export const FX_OFF: ElementFX = { night: false };
@@ -34,11 +101,13 @@ export const FX_OFF: ElementFX = { night: false };
  * not known yet; nothing engages on a guess.
  */
 export function fxApplies(fx: ElementFX, channels: number): ElementFX {
-  return { night: fx.night && channels >= 1 && channels <= 2 };
+  // The equaliser is filters, which carry any channel count unchanged; only
+  // the compressor folds, so only night mode is held to mono or stereo.
+  return { night: fx.night && channels >= 1 && channels <= 2, eq: fx.eq };
 }
 
 export function fxActive(fx: ElementFX): boolean {
-  return fx.night;
+  return fx.night || eqActive(fx.eq);
 }
 
 /*
@@ -113,13 +182,50 @@ export function buildGraph(ctx: BaseAudioContext, night: NightParams = NIGHT): F
   comp.connect(trim);
   trim.connect(ceiling);
 
+  /*
+   * The equaliser: a pre-cut and five filters in a fixed chain, made the first
+   * time somebody asks for it, so a graph nobody equalises is exactly the
+   * graph it was before Phase 3. It sits before night mode, so night mode
+   * evens out the shape that was asked for rather than the other way round.
+   */
+  let eq: { pre: GainNode; bands: BiquadFilterNode[] } | null = null;
+  const ensureEq = () => {
+    if (eq) return eq;
+    const pre = ctx.createGain();
+    pre.channelCountMode = "max";
+    const bands = EQ_BANDS.map((b) => {
+      const f = ctx.createBiquadFilter();
+      f.type = b.type;
+      f.frequency.value = b.hz;
+      f.Q.value = EQ_Q;
+      f.channelCountMode = "max";
+      return f;
+    });
+    let prev: AudioNode = pre;
+    for (const f of bands) {
+      prev.connect(f);
+      prev = f;
+    }
+    eq = { pre, bands };
+    return eq;
+  };
+
   const set = (fx: ElementFX) => {
     for (const n of [input, ceiling]) n.disconnect();
+    if (eq) eq.bands[eq.bands.length - 1].disconnect();
+    let head: AudioNode = input;
+    if (eqActive(fx.eq)) {
+      const e = ensureEq();
+      e.pre.gain.value = eqPreampGain(fx.eq);
+      e.bands.forEach((f, i) => (f.gain.value = clampGain(fx.eq?.[i] ?? 0)));
+      head.connect(e.pre);
+      head = e.bands[e.bands.length - 1];
+    }
     if (fx.night) {
-      input.connect(comp);
+      head.connect(comp);
       ceiling.connect(output);
     } else {
-      input.connect(output);
+      head.connect(output);
     }
   };
   set(FX_OFF);
