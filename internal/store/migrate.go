@@ -6,7 +6,7 @@ import (
 )
 
 // CurrentSchemaVersion is the revision this build expects.
-const CurrentSchemaVersion = 67
+const CurrentSchemaVersion = 69
 
 // migration is one forward step. There are deliberately no down migrations:
 // rolling a media library's schema backwards loses data that a rescan cannot
@@ -124,6 +124,8 @@ var migrations = []migration{
 	{version: 65, sql: schemaRevision65},
 	{version: 66, sql: schemaRevision66},
 	{version: 67, sql: schemaRevision67},
+	{version: 68, sql: schemaRevision68},
+	{version: 69, sql: schemaRevision69},
 }
 
 // migrate brings the database up to CurrentSchemaVersion.
@@ -2240,4 +2242,47 @@ CREATE TABLE IF NOT EXISTS photo_location (
     read_at  INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_photo_location_place ON photo_location(place_id);
+`
+
+/*
+ * Revision 68 changes no shape. It indexes item_genre from the genre side
+ * (ADR 0057).
+ *
+ * The filter bar asks "which genres does this library have", and the only way
+ * in was from the item: walk every item in the library and look up its genres.
+ * At 40,000 items that was 128ms of a 250ms budget for one row of chips. Asked
+ * per genre instead, it stops at the first hit — but the genre table is shared
+ * by every library, so in a film library each music genre is a miss, and
+ * without this index a miss means walking the whole library again.
+ */
+const schemaRevision68 = `
+CREATE INDEX IF NOT EXISTS idx_item_genre_genre ON item_genre(genre_id, item_id);
+`
+
+/*
+ * Revision 69 changes no shape. It indexes the browse grid in the orders it is
+ * read in (ADR 0057).
+ *
+ * The grid is every present top-level row of a library, sorted. With only a
+ * (library_id, missing) index, SQLite read every one of those rows and sorted
+ * them to hand back sixty: a first page cost 85ms at 40,000 items and a page
+ * near the end 140-250ms, against a 150ms budget. Each index here is the
+ * grid's own equality columns followed by one sort, so a page is a walk along
+ * an index with no sort at all, and it carries `kind` so the walk never has
+ * to visit the row to apply the grouping-kind exclusion.
+ *
+ * Title is the default; year and added are the other two sorts every video
+ * library offers. Added leads with parent_id rather than library_id because
+ * the home page's Recently Added shelf asks across every library at once.
+ * Rating and running time are not indexed: their first page is within budget,
+ * and their pages near the end of a 40,000-item library are not, which
+ * ADR 0057 records rather than adding an index per sort.
+ */
+const schemaRevision69 = `
+CREATE INDEX IF NOT EXISTS idx_item_grid_title
+    ON media_item(library_id, parent_id, missing, sort_title, season, episode, kind);
+CREATE INDEX IF NOT EXISTS idx_item_grid_year
+    ON media_item(library_id, parent_id, missing, year DESC, sort_title, kind);
+CREATE INDEX IF NOT EXISTS idx_item_grid_added
+    ON media_item(parent_id, missing, added_at DESC, library_id, sort_title, kind);
 `
