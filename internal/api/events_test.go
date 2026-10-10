@@ -268,6 +268,42 @@ func TestTheWatcherPublishesOnlyAChangeInPresence(t *testing.T) {
 	}
 }
 
+/*
+ * A friend's server going quiet reaches People too. People draws "not
+ * answering" differently from "idle", and without a notice it would go on
+ * showing a film for up to a minute after the far machine went off.
+ */
+func TestThePeerGoingQuietIsAChangeInPresence(t *testing.T) {
+	x := newTwoServers(t)
+	ctx := context.Background()
+	r := stream(t, x.guest)
+
+	x.guest.srvAPI.peerTick(ctx)
+	if got := nextTopics(t, r); !has(got, TopicPresence) {
+		t.Fatalf("first tick: heard %v, want %q", got, TopicPresence)
+	}
+
+	// Point the guest's record of the host at a port nobody listens on, and
+	// forget the address that last answered, which would be tried first.
+	if err := x.guest.st.AddPeer(ctx, store.Peer{
+		Fingerprint: x.hostFP, Name: "Chris's", Addrs: []string{"127.0.0.1:1"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	x.guest.srvAPI.rosterMu.Lock()
+	delete(x.guest.srvAPI.goodAddr, x.hostFP)
+	x.guest.srvAPI.rosterMu.Unlock()
+	// AddPeer itself announces peers; read past it.
+	if got := nextTopics(t, r); !has(got, TopicPeers) {
+		t.Fatalf("repointing: heard %v", got)
+	}
+
+	x.guest.srvAPI.peerTick(ctx)
+	if got := nextTopics(t, r); !has(got, TopicPresence) {
+		t.Fatalf("after the peer went quiet: heard %v, want %q", got, TopicPresence)
+	}
+}
+
 // A call in from a peer still marked `added` asks for its roster at once.
 func TestACallFromAnAddedPeerKicksTheWatcher(t *testing.T) {
 	x := newTwoServers(t)

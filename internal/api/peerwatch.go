@@ -139,6 +139,14 @@ func (s *Server) watchPeer(ctx context.Context, p store.Peer, users []string) {
 		seen, err := s.askPeerPresence(ctx, p, user)
 		if err != nil {
 			s.peerSilent(p, err)
+			// Gone quiet is a change too: People draws a peer that is not
+			// answering differently from one whose people are idle, and
+			// without this it would go on showing a film for a minute.
+			for _, u := range users {
+				if s.notePresenceGone(p.Fingerprint, u) {
+					s.events.PublishTo(u, TopicPresence)
+				}
+			}
 			return
 		}
 		s.peerAnswered(p)
@@ -182,6 +190,18 @@ func (s *Server) notePresence(fingerprint, user string, seen []visible) bool {
 	before, had := s.presenceSeen[key]
 	s.presenceSeen[key] = now
 	return !had || before != now
+}
+
+// notePresenceGone records that a peer stopped answering for user, and
+// reports whether that differs from the last view recorded.
+func (s *Server) notePresenceGone(fingerprint, user string) bool {
+	const gone = "\x02not answering"
+	key := fingerprint + "\x00" + user
+	s.rosterMu.Lock()
+	defer s.rosterMu.Unlock()
+	before, had := s.presenceSeen[key]
+	s.presenceSeen[key] = gone
+	return had && before != gone
 }
 
 // forgetPresenceOf drops remembered views for people with no window open, so

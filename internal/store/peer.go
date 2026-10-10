@@ -279,6 +279,32 @@ func (s *Store) ReplaceRemotePeople(ctx context.Context, fingerprint string, peo
 		return ErrNotFound
 	}
 
+	// What was there before, so an unchanged roster announces nothing. The
+	// watcher and the People page both re-fetch rosters on a timer, and an
+	// announcement makes every open window refetch the peer lists, some of
+	// which call the peer.
+	before := map[string]string{}
+	rows, err := tx.QueryContext(ctx,
+		`SELECT id, name FROM remote_person WHERE fingerprint = ?`, fingerprint)
+	if err != nil {
+		return fmt.Errorf("replace remote people: %w", err)
+	}
+	for rows.Next() {
+		var id, name string
+		if err := rows.Scan(&id, &name); err != nil {
+			rows.Close()
+			return fmt.Errorf("replace remote people: %w", err)
+		}
+		before[id] = name
+	}
+	rows.Close()
+	changed := len(before) != len(people)
+	for _, p := range people {
+		if name, ok := before[p.ID]; !ok || name != p.Name {
+			changed = true
+		}
+	}
+
 	now := time.Now().Unix()
 	keep := make([]any, 0, len(people)+1)
 	keep = append(keep, fingerprint)
@@ -305,7 +331,9 @@ func (s *Store) ReplaceRemotePeople(ctx context.Context, fingerprint string, peo
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("replace remote people: commit: %w", err)
 	}
-	s.announce(ChangePeers)
+	if changed {
+		s.announce(ChangePeers)
+	}
 	return nil
 }
 
