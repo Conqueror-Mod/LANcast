@@ -1,6 +1,8 @@
 # Gapless and crossfade for music — plan
 
-**Status: proposed (2026-10-09).** The music player's last open item from the
+**Status: steps 0–3 built (2026-10-09).** Step 0 is #811, step 1 is #813, step 2 is #815 and step 3 is the crossfade PR; #814 added the start/end taper. Gapless was heard as seamless, with night mode on as well (v0.9.73). The original proposal follows.
+
+The music player's last open item from the
 Lyrics entry in the roadmap backlog. This is the work breakdown; nothing here is
 built except the measurement in step 0.
 
