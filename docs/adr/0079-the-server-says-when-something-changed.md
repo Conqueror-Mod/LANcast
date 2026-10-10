@@ -145,6 +145,27 @@ continuously that the screen wants at a fixed rate, which is what polling is
 for. An event at every percent would be a poll with extra steps. The stream
 announces that a job *started* and *finished*, and the poll runs in between.
 
+## As built (2026-10-10)
+
+Three places where the build is narrower than, or differs from, the text
+above:
+
+- **Presence is asked per person, not per peer.** The far server decides what
+  each asker may see (ADR 0045 §6), so one answer cannot serve two people. The
+  watcher asks for each person here who has a stream open, and nobody else. A
+  household of two with one window open costs one call per peer per 10 s, the
+  same as the People page it replaces.
+- **Topics are `peers`, `presence`, `libraries` and `items`.** There is no
+  `library:{id}` yet. A scan finishing publishes `libraries` and `items`.
+  Enrichment landing (new posters and titles after a scan) publishes nothing
+  yet, so a grid still shows those on its next refetch rather than at once.
+- **A peer calling in while still `added` here triggers an immediate roster
+  fetch.** A peer only calls servers it holds, so that call is the moment the
+  pairing became mutual on the far side. Adding a peer does the same.
+
+`peerwatch.go` and `internal/events` hold the server half;
+`web/src/api/serverEvents.ts` holds the client table.
+
 ## Consequences
 
 - Stale-until-remount stops being the default. A server-side change reaches

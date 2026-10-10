@@ -839,6 +839,9 @@ func run(ctx context.Context, addr, dataDir string, log *slog.Logger) error {
 		// about itself rather than a race worth engineering around — nothing
 		// waits on a marker.
 		markerSoon()
+		// And every open window: what the libraries hold has just changed,
+		// and a grid on screen has no other way to hear it (ADR 0079).
+		apiSrv.Publish(api.TopicLibraries, api.TopicItems)
 	})
 
 	// The persisted level. Only ever raises here: -v already set debug on the
@@ -854,6 +857,11 @@ func run(ctx context.Context, addr, dataDir string, log *slog.Logger) error {
 	// Guides go stale by themselves; libraries do not. Always on, and not a
 	// setting, because a server with no channel sources does no work here.
 	go periodicGuideRefresh(ctx, apiSrv)
+
+	// Paired servers are asked by the server, on one schedule, rather than by
+	// whichever pages happen to be open (ADR 0079 §5). This is also what makes
+	// a pairing mutual without anybody opening People.
+	go apiSrv.WatchPeers(ctx)
 
 	// Records whose relevance is their age, dropped once a day.
 	go periodicPrune(ctx, st, settings, filepath.Join(cfg.DataDir, "artwork"), log)
@@ -1012,6 +1020,10 @@ func run(ctx context.Context, addr, dataDir string, log *slog.Logger) error {
 	 * its way out, and a restart that overlaps that window has two of them.
 	 */
 	faceTool.StopText()
+
+	// Event streams never finish by themselves, so a graceful close would
+	// wait its whole grace period on every open window. End them first.
+	apiSrv.CloseEvents()
 
 	if err := srv.Shutdown(shutdownCtx); err != nil {
 		log.Warn("graceful shutdown did not finish; closing connections",

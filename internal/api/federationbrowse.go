@@ -56,6 +56,12 @@ func (s *Server) federationPeer(w http.ResponseWriter, r *http.Request) (string,
 		return "", false
 	}
 	s.notePeerAddress(r, known)
+	// A peer only calls servers it holds, so a call from one still marked
+	// `added` here proves the pairing is mutual now. Fetch its roster rather
+	// than wait out the watcher's schedule (ADR 0079 §5).
+	if known.State != store.PeerPaired {
+		s.kickPeer(fingerprint)
+	}
 	return fingerprint, true
 }
 

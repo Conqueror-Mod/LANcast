@@ -26,6 +26,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Names of things that changed, as server-sent events
+         * @description A `text/event-stream` that stays open. Each event is `event: changed` with `data` a JSON object `{"topics": [...]}` naming what changed. It never carries the changed data: a client refetches through the routes it already uses, with their usual checks (ADR 0079).
+         *
+         *     Topics: `peers` (a pairing added, removed or made mutual, a roster or a share changed), `presence` (what a paired server lets *this* person see changed; sent only to that person's streams), `libraries` (a library added, removed, renamed or rescanned), `items` (what a library holds changed).
+         *
+         *     Topics published within about 250 ms of each other arrive as one event. An idle stream sends a `: ping` comment every 25 s. The stream opens with `retry: 3000`. Events sent while a client was disconnected are not replayed, so a client should refetch everything it shows when it reconnects. A client that ignores this route and polls loses nothing but freshness.
+         */
+        get: operations["streamEvents"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/auth/status": {
         parameters: {
             query?: never;
@@ -7501,6 +7525,27 @@ export interface operations {
                     "application/json": components["schemas"]["Health"];
                 };
             };
+        };
+    };
+    streamEvents: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The stream. Never completes on its own; it ends when the client disconnects or the server shuts down. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/event-stream": string;
+                };
+            };
+            401: components["responses"]["Unauthorized"];
         };
     };
     getAuthStatus: {

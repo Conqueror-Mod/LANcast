@@ -604,6 +604,47 @@ contract revision and changes only when a new `/api/vN` prefix ships.
 
 ---
 
+## Events
+
+### `GET /api/events`
+
+A server-sent event stream (`text/event-stream`) that stays open and names what
+changed, so a client showing it can ask again
+([ADR 0079](adr/0079-the-server-says-when-something-changed.md)). Any signed-in
+account may open one.
+
+```
+retry: 3000
+: connected
+
+event: changed
+data: {"topics":["libraries","items"]}
+
+: ping
+```
+
+**Topics, never data.** An event says *ask again*; the answer comes from the
+route that always served it, with its usual checks. So a topic discloses
+nothing a refetch would not, and a missed event can leave a client holding old
+data but never wrong data.
+
+| topic | means |
+|---|---|
+| `peers` | a pairing was added, removed or became mutual, a peer's roster changed, or what is shared with a peer changed |
+| `presence` | what a paired server lets **this** person see changed. Sent only to that person's streams |
+| `libraries` | a library was added, removed, renamed or rescanned |
+| `items` | what a library holds changed |
+
+- Topics published within about 250 ms of each other arrive as one event, so a
+  scan touching thousands of files is one `items`, not thousands.
+- An idle stream sends a `: ping` comment every 25 s. EventSource ignores it.
+- Nothing is replayed after a disconnect. **Refetch everything you show when
+  the stream reconnects**; that is what the LANcast client does.
+- A client that never opens the stream loses nothing but freshness. Every route
+  answers exactly as before.
+
+---
+
 ## Browse
 
 ### `GET /api/browse?path=`

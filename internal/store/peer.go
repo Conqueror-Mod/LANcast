@@ -100,6 +100,7 @@ func (s *Store) AddPeer(ctx context.Context, p Peer) error {
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("add peer: commit: %w", err)
 	}
+	s.announce(ChangePeers)
 	return nil
 }
 
@@ -205,6 +206,7 @@ func (s *Store) RemovePeer(ctx context.Context, fingerprint string) error {
 	if n, _ := res.RowsAffected(); n == 0 {
 		return ErrNotFound
 	}
+	s.announce(ChangePeers)
 	return nil
 }
 
@@ -219,6 +221,7 @@ func (s *Store) SetPeerState(ctx context.Context, fingerprint, state string) err
 	if n, _ := res.RowsAffected(); n == 0 {
 		return ErrNotFound
 	}
+	s.announce(ChangePeers)
 	return nil
 }
 
@@ -302,6 +305,7 @@ func (s *Store) ReplaceRemotePeople(ctx context.Context, fingerprint string, peo
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("replace remote people: commit: %w", err)
 	}
+	s.announce(ChangePeers)
 	return nil
 }
 

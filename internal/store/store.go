@@ -13,6 +13,7 @@ import (
 	"reflect"
 	"slices"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"lancast/internal/media"
@@ -27,7 +28,11 @@ var schemaSQL string
 var ErrNotFound = errors.New("not found")
 
 // Store is a handle on the LANcast database.
-type Store struct{ db *sql.DB }
+type Store struct {
+	db *sql.DB
+	// changed hears what the store's writes change (changes.go, ADR 0079).
+	changed atomic.Pointer[changeHook]
+}
 
 // Open connects to the database at path and applies the schema. Schema
 // application is idempotent, so this is safe on every start.
@@ -176,6 +181,7 @@ func (s *Store) CreateLibrary(ctx context.Context, name, kind, path string) (*Li
 	if err := tx.Commit(); err != nil {
 		return nil, fmt.Errorf("create library: %w", err)
 	}
+	s.announce(ChangeLibraries)
 	return &Library{ID: id, Name: name, Kind: kind, Path: path, CreatedAt: now}, nil
 }
 
@@ -356,6 +362,7 @@ func (s *Store) DeleteLibrary(ctx context.Context, id int64) error {
 	if n == 0 {
 		return ErrNotFound
 	}
+	s.announce(ChangeLibraries)
 	return nil
 }
 
@@ -3319,6 +3326,7 @@ func (s *Store) RenameLibrary(ctx context.Context, id int64, name string) error 
 	if n, _ := res.RowsAffected(); n == 0 {
 		return ErrNotFound
 	}
+	s.announce(ChangeLibraries)
 	return nil
 }
 
