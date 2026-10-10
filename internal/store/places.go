@@ -146,6 +146,9 @@ func (s *Store) PlacePhotos(ctx context.Context, libraryID, placeID int64, limit
 	if err != nil {
 		return nil, 0, fmt.Errorf("place photos: %w", err)
 	}
+	if items == nil {
+		items = []Item{}
+	}
 	return items, total, nil
 }
 

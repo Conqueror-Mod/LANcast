@@ -78,6 +78,7 @@ func (s *Server) getSettings(w http.ResponseWriter, r *http.Request) {
 		}(),
 		"detect_markers": cur.DetectMarkers,
 		"retro_artwork":  cur.RetroArtwork,
+		"photo_places":   cur.PhotoPlaces,
 		// Whether the server can actually inspect and convert media. Reported so
 		// the UI can say so plainly: without these, every file is direct-played
 		// and anything the browser cannot decode fails with no explanation — the
@@ -110,6 +111,7 @@ func (s *Server) putSettings(w http.ResponseWriter, r *http.Request) {
 		SensitiveMarking *bool    `json:"sensitive_marking"`
 		DetectMarkers    *bool    `json:"detect_markers"`
 		RetroArtwork     *bool    `json:"retro_artwork"`
+		PhotoPlaces      *bool    `json:"photo_places"`
 		HardwareEncoder  *string  `json:"hardware_encoder"`
 
 		CertificationCountry *string `json:"certification_country"`
@@ -175,6 +177,9 @@ func (s *Server) putSettings(w http.ResponseWriter, r *http.Request) {
 	}
 	if req.DetectMarkers != nil {
 		next.DetectMarkers = *req.DetectMarkers
+	}
+	if req.PhotoPlaces != nil {
+		next.PhotoPlaces = *req.PhotoPlaces
 	}
 	if req.RetroArtwork != nil {
 		next.RetroArtwork = *req.RetroArtwork
@@ -363,6 +368,27 @@ func (s *Server) putSettings(w http.ResponseWriter, r *http.Request) {
 	if next.RetroArtwork && !prev.RetroArtwork {
 		s.requeueROMs(r.Context())
 	}
+	/*
+	 * Photo places (ADR 0078): on starts the location pass now, for the
+	 * reason marker detection does; off deletes everything it read.
+	 *
+	 * The order matters and is the reason this is not two lines in either
+	 * branch. The setting is already saved, so a pass in flight sees it off
+	 * at its next photograph and stops; Forget waits for that before
+	 * deleting, so nothing is written back behind it.
+	 */
+	if next.PhotoPlaces != prev.PhotoPlaces && s.locations != nil {
+		if next.PhotoPlaces {
+			if s.placesSoon != nil {
+				s.placesSoon()
+			}
+		} else if n, err := s.locations.Forget(r.Context()); err != nil {
+			s.writeInternal(w, err, "forget photo locations")
+			return
+		} else {
+			s.log.Info("forgot where photos were taken", "photos", n)
+		}
+	}
 
 	s.getSettings(w, r)
 }
@@ -389,6 +415,7 @@ func changedSettings(prev, next config.Settings) []string {
 	add("max_quality", prev.MaxQuality != next.MaxQuality)
 	add("detect_markers", prev.DetectMarkers != next.DetectMarkers)
 	add("retro_artwork", prev.RetroArtwork != next.RetroArtwork)
+	add("photo_places", prev.PhotoPlaces != next.PhotoPlaces)
 	add("auto_enrich", prev.AutoEnrich != next.AutoEnrich)
 	add("update_check", prev.UpdateCheck != next.UpdateCheck)
 	add("hardware_encoder", prev.HardwareEncoder != next.HardwareEncoder)

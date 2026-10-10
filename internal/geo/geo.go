@@ -256,3 +256,11 @@ func haversineKm(lat1, lon1, lat2, lon2 float64) float64 {
 		math.Cos(lat1*rad)*math.Cos(lat2*rad)*math.Sin(dLon/2)*math.Sin(dLon/2)
 	return 2 * earthKm * math.Asin(math.Min(1, math.Sqrt(a)))
 }
+
+// Synthetic is a gazetteer of one town, for tests elsewhere that need a place
+// to file photographs under without decompressing the real tables.
+func Synthetic(name string, lat, lon float64, population int64) *Gazetteer {
+	g := &Gazetteer{cells: map[cell][]int32{}, regions: map[string]string{}, countries: map[string]string{}}
+	g.add(point{lat: lat, lon: lon, reach: reachKm(population), id: 1, name: name, cc: "ZZ"})
+	return g
+}

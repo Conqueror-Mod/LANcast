@@ -486,6 +486,9 @@ func run(ctx context.Context, addr, dataDir string, log *slog.Logger) error {
 	// run. ffmpeg is handed over for HEIC, which nothing in the standard
 	// library can read and which a phone backup is mostly made of.
 	photos := photo.NewWorker(st, art, &photo.Decoder{FFmpeg: photo.NewFFmpeg()}, log)
+	// Where photos were taken (ADR 0078). Reads nothing while the setting is
+	// off, which it is by default.
+	locations := photo.NewLocationWorker(st, func() bool { return settings.Get().PhotoPlaces }, log)
 	// ROMs are named by their own worker, against DAT files fetched on
 	// request (ADR 0073). It reads every file, so like the two above it runs
 	// behind a scan rather than inside one. With no DATs installed it still
@@ -605,6 +608,22 @@ func run(ctx context.Context, addr, dataDir string, log *slog.Logger) error {
 			defer photoMu.Unlock()
 			if err := photos.Run(enrichCtx); err != nil && !errors.Is(err, context.Canceled) {
 				log.Warn("photo thumbnail pass failed", "error", err)
+			}
+		}()
+	}
+
+	// The worker serialises its own passes (Forget must wait for one), so
+	// there is no mutex here; a pass started while another runs waits for it
+	// and then finds the queue empty.
+	placesSoon := func() {
+		if !settings.Get().PhotoPlaces {
+			return
+		}
+		workers.Add(1)
+		go func() {
+			defer workers.Done()
+			if err := locations.Run(enrichCtx); err != nil && !errors.Is(err, context.Canceled) {
+				log.Warn("photo location pass failed", "error", err)
 			}
 		}()
 	}
@@ -760,6 +779,7 @@ func run(ctx context.Context, addr, dataDir string, log *slog.Logger) error {
 		LANBound: lanBound, RestartWidens: restartWidens,
 		Store: st, Scanner: scanner, Registry: reg, Artwork: art,
 		Worker: worker, Probes: probes, Markers: markers, Covers: covers, Photos: photos,
+		Locations: locations, PlacesSoon: placesSoon,
 		Retro: roms, RetroDB: retroDB, RetroSoon: romSoon,
 		Faces: faceWorker, FaceTool: faceTool, Embedder: embedder,
 		ServiceManaged: serviceManaged, Trans: trans, Subs: subs,
@@ -811,6 +831,7 @@ func run(ctx context.Context, addr, dataDir string, log *slog.Logger) error {
 		enrichSoon()
 		coverSoon()
 		photoSoon()
+		placesSoon()
 		romSoon()
 		// Last, and it will mostly find nothing to do on this pass: the items
 		// this scan added are not probed yet, so they become eligible on the
@@ -869,6 +890,9 @@ func run(ctx context.Context, addr, dataDir string, log *slog.Logger) error {
 	// And ROMs, for the same reason: revision 64 adds the queue, and a
 	// library scanned before it would otherwise wait for the next scan.
 	romSoon()
+	// And places: unmarking a folder, or a pass cut short by a restart,
+	// leaves photos unread with no scan coming (ADR 0078).
+	placesSoon()
 
 	// Bind before serving so a port clash is a clear startup failure rather
 	// than a background error nobody sees. An older instance still holding the

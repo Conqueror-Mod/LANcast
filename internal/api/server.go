@@ -68,6 +68,10 @@ type Deps struct {
 	Embedder *faces.Indexer
 	Covers   *coverart.Worker
 	Photos   *photo.Worker
+	// Locations reads where photos were taken (ADR 0078); PlacesSoon
+	// triggers a pass.
+	Locations  *photo.LocationWorker
+	PlacesSoon func()
 	// Retro identifies ROMs (ADR 0073), and RetroDB holds the DAT index it
 	// reads. RetroSoon triggers a pass.
 	Retro     *identify.Worker
@@ -162,6 +166,8 @@ type Server struct {
 	faceTool         *faces.Tool
 	covers           *coverart.Worker
 	photos           *photo.Worker
+	locations        *photo.LocationWorker
+	placesSoon       func()
 	retro            *identify.Worker
 	retroDB          *retrodb.Cache
 	retroSoon        func()
@@ -279,6 +285,7 @@ func New(d Deps) *Server {
 		rebuild:    d.Rebuild, reloadPlugins: d.ReloadPlugins, enrich: d.Enrich,
 		probe: d.Probe, detectMarkers: d.DetectMarkers, coversSoon: d.Cover,
 		retro: d.Retro, retroDB: d.RetroDB, retroSoon: d.RetroSoon, retroInstall: &retroJob{},
+		locations: d.Locations, placesSoon: d.PlacesSoon,
 		lanBound: d.LANBound, restartWidens: d.RestartWidens,
 		throttle: auth.NewThrottle(),
 		crashes:  crashlog.New(d.DataDir, Version),
@@ -333,6 +340,9 @@ func (s *Server) Handler() http.Handler {
 	// Before the {id} form only for readability; the patterns do not overlap.
 	mux.HandleFunc("POST /api/libraries/scan", s.adminOnly(s.scanAll))
 	mux.HandleFunc("GET /api/libraries/{id}/timeline", s.photoTimeline)
+	// Places (ADR 0078): names and counts, never a coordinate.
+	mux.HandleFunc("GET /api/libraries/{id}/places", s.photoPlaces)
+	mux.HandleFunc("GET /api/libraries/{id}/places/{place}", s.placePhotos)
 	mux.HandleFunc("GET /api/libraries/{id}/duplicates", s.photoDuplicates)
 	mux.HandleFunc("GET /api/libraries/{id}/near-copies", s.photoNearCopies)
 
