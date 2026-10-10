@@ -12,6 +12,7 @@ import type {
   BackupsResponse,
   Duplicates,
   NearCopies,
+  PhotoPlaces,
   RetroDatabase,
 } from "./types";
 import { isContainer } from "@/lib/kind";
@@ -269,7 +270,21 @@ export function useUpdateSettings() {
   return useMutation({
     mutationFn: (update: SettingsUpdate) =>
       apiSend("/api/settings", "PUT", update),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["settings"] }),
+    onSuccess: (_data, update) => {
+      qc.invalidateQueries({ queryKey: ["settings"] });
+      /*
+       * Photo places (ADR 0078): off deletes every location the server held,
+       * so any places list on screen is now wrong, and so is any place's grid.
+       * Named here because the toggle lives on Settings while the list lives
+       * on another screen, and a cached list outliving the data it showed is
+       * exactly the stale picture nobody reports until it has been there a
+       * while.
+       */
+      if (update.photo_places !== undefined) {
+        qc.invalidateQueries({ queryKey: ["places"] });
+        qc.invalidateQueries({ queryKey: ["items", "place"] });
+      }
+    },
   });
 }
 
@@ -498,6 +513,8 @@ function useBackgroundLibraryJob(path: (libraryID: number) => string) {
 const workFinishedKeys = [
   "libraries",
   "items",
+  // A location pass is seconds long, so it usually finishes between polls.
+  "places",
   "item",
   "facets",
   "recently-added",
@@ -1402,6 +1419,46 @@ export function usePhotosInMonth(
     queryFn: ({ signal }) =>
       apiGet<ItemsPage>(`/api/items?${params.toString()}`, signal),
     enabled: libraryID > 0 && bucket !== null,
+  });
+}
+
+/*
+ * Places — a picture library by the town each photograph was taken in (ADR
+ * 0078). The same shape as the timeline: every place and its count in one
+ * small response, then a place's photographs when it is opened.
+ *
+ * Polled only while a pass is reading, so the list fills in as it goes and
+ * stops asking once it is done.
+ */
+export function usePhotoPlaces(libraryID: number) {
+  return useQuery({
+    queryKey: ["places", libraryID],
+    queryFn: ({ signal }) =>
+      apiGet<PhotoPlaces>(`/api/libraries/${libraryID}/places`, signal),
+    enabled: libraryID > 0,
+    refetchInterval: (q) => (q.state.data?.reading ? 2000 : false),
+  });
+}
+
+/*
+ * One place, opened. `place` is a place id or "elsewhere".
+ *
+ * Keyed under ["items", ...] so every invalidation of items reaches it — a
+ * deleted photo must leave this grid too — and not as a sibling key, which
+ * nothing would ever invalidate.
+ */
+export function usePhotosInPlace(
+  libraryID: number,
+  place: number | "elsewhere" | null,
+) {
+  return useQuery({
+    queryKey: ["items", "place", libraryID, place],
+    queryFn: ({ signal }) =>
+      apiGet<ItemsPage>(
+        `/api/libraries/${libraryID}/places/${place}?limit=500`,
+        signal,
+      ),
+    enabled: libraryID > 0 && place !== null,
   });
 }
 

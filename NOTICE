@@ -46,6 +46,15 @@ In the desktop client only, to unpack the emulator cores it fetches:
   go4.org                             Apache License 2.0
   golang.org/x/text                   BSD 3-Clause
 
+Data built into the server:
+
+  GeoNames place names               Creative Commons Attribution 4.0
+                                     (CC BY 4.0), https://www.geonames.org/
+                                     third_party/geonames/PROVENANCE.md
+
+    The towns photo places are named after (ADR 0078), trimmed to the fields
+    LANcast uses and embedded so that naming a place asks nobody's server.
+
 Built by this project and shipped beside the client:
 
   libmpv (mpv, FFmpeg, libplacebo,   GNU Lesser General Public License v2.1

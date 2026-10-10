@@ -56,6 +56,7 @@ type snapshot struct {
 	covers   coverart.Stats
 	retro    identify.Stats
 	photos   photo.Stats
+	places   photo.LocationStats
 	faces    faces.Stats
 	semantic faces.EmbedStats
 	sessions []transcode.SessionInfo
@@ -92,6 +93,9 @@ func (s *Server) activity(w http.ResponseWriter, r *http.Request) {
 	}
 	if s.photos != nil {
 		snap.photos = s.photos.Stats()
+	}
+	if s.locations != nil {
+		snap.places = s.locations.Stats()
 	}
 	if s.covers != nil {
 		snap.covers = s.covers.Stats()
@@ -254,6 +258,12 @@ func buildActivity(snap snapshot) []Activity {
 			Detail: photoDetail(st),
 		})
 	}
+	if st := snap.places; st.Running {
+		tasks = append(tasks, Activity{
+			Kind: "places", ID: "places", Title: "Reading where photos were taken",
+			State: "running", Done: st.Done, Total: st.Total,
+		})
+	}
 	// Listed before live work: it is the one row that asks something of the
 	// reader rather than reporting progress, and burying it under three
 	// scanning rows would make it the thing nobody sees.
@@ -328,6 +338,11 @@ func lastCompleted(snap snapshot) int64 {
 	}
 	if snap.retro.FinishedAt > latest {
 		latest = snap.retro.FinishedAt
+	}
+	// A pass is often a few seconds — shorter than the client's poll — so
+	// without this a library's places would stay as they were before it.
+	if snap.places.FinishedAt > latest {
+		latest = snap.places.FinishedAt
 	}
 	return latest
 }

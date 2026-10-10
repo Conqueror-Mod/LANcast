@@ -1,0 +1,31 @@
+/*
+ * Places borrows the timeline's layout whole (Timeline.css); these are the few
+ * things a town has that a month does not.
+ */
+
+/* Region and country, after the town and quieter than it. */
+.places__where {
+  margin-left: 10px;
+  font-weight: 400;
+  color: var(--text-muted);
+}
+
+.places__off {
+  max-width: 60ch;
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+
+.places__off p {
+  margin: 0 0 12px;
+}
+
+.places__hint,
+.places__foot {
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.places__foot {
+  margin-top: 24px;
+}

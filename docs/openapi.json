@@ -2659,6 +2659,121 @@
         }
       }
     },
+    "/libraries/{id}/places": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/LibraryId"
+        }
+      ],
+      "get": {
+        "operationId": "getLibraryPlaces",
+        "tags": [
+          "libraries"
+        ],
+        "summary": "A picture library's photographs counted by the town they were taken in",
+        "description": "Most photographed first (ADR 0078). Reading where photographs were taken is the `photo_places` setting, **off by default**; while it is off nothing has been read, the lists are empty and `unread` holds every photograph.\n\n**No coordinate is ever returned.** Names come from a gazetteer built into the server; nothing is looked up online. Marked folders are excluded, as on the timeline.\n\nOpen a place with `GET /api/libraries/{id}/places/{place}`.",
+        "responses": {
+          "200": {
+            "description": "Every place with its count, and the photographs in none of them.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PhotoPlaces"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`wrong_kind` on any library that is not a picture library.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/libraries/{id}/places/{place}": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/LibraryId"
+        },
+        {
+          "name": "place",
+          "in": "path",
+          "required": true,
+          "description": "A place `id` from `GET /api/libraries/{id}/places`, or `elsewhere` for photographs with a position and no town within 50 km.",
+          "schema": {
+            "type": "string"
+          }
+        }
+      ],
+      "get": {
+        "operationId": "getLibraryPlacePhotos",
+        "tags": [
+          "libraries"
+        ],
+        "summary": "One place's photographs, newest first",
+        "description": "The same exclusions as the counts, so a place always opens onto exactly the number it showed.",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Page size; default 500, at most 1000.",
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "description": "Rows to skip.",
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A page of photographs, plus the total before paging.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ItemsPage"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`wrong_kind` on any library that is not a picture library, or `bad_request` when `{place}` is neither a place id nor `elsewhere`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
     "/libraries/{id}/duplicates": {
       "parameters": [
         {
@@ -12695,6 +12810,7 @@
           "sensitive_marking",
           "detect_markers",
           "retro_artwork",
+          "photo_places",
           "auto_enrich",
           "update_check",
           "debug_logging",
@@ -12804,6 +12920,10 @@
           "retro_artwork": {
             "type": "boolean",
             "description": "Fetch box art and a screenshot for each identified ROM from libretro-thumbnails (ADR 0073). **Off by default**: it is a network fetch per game. Identifying ROMs is offline and does not depend on it. Turning it on re-queues identified ROMs so their art arrives now."
+          },
+          "photo_places": {
+            "type": "boolean",
+            "description": "Read where photographs were taken and group picture libraries by town (ADR 0078). **Off by default.** Turning it on starts the location pass at once; **turning it off deletes every location and place read**, rather than hiding them."
           },
           "auto_enrich": {
             "type": "boolean"
@@ -12961,6 +13081,10 @@
           "retro_artwork": {
             "type": "boolean",
             "description": "Fetch box art and a screenshot for each identified ROM from libretro-thumbnails (ADR 0073). **Off by default**: it is a network fetch per game. Identifying ROMs is offline and does not depend on it. Turning it on re-queues identified ROMs so their art arrives now."
+          },
+          "photo_places": {
+            "type": "boolean",
+            "description": "Read where photographs were taken and group picture libraries by town (ADR 0078). **Off by default.** Turning it on starts the location pass at once; **turning it off deletes every location and place read**, rather than hiding them."
           },
           "hardware_encoder": {
             "type": "string"
@@ -13371,6 +13495,80 @@
           "undated": {
             "type": "boolean",
             "description": "Its own bucket, and it sorts last. **Not an error** — on a real library 5% of photographs carry no capture time, and dropping them would lose them silently."
+          },
+          "count": {
+            "type": "integer"
+          }
+        }
+      },
+      "PhotoPlaces": {
+        "type": "object",
+        "description": "A picture library's photographs grouped by the town they were taken in (ADR 0078). Names and counts only; no coordinate is ever returned.",
+        "required": [
+          "enabled",
+          "reading",
+          "places",
+          "elsewhere",
+          "unlocated",
+          "unread"
+        ],
+        "properties": {
+          "enabled": {
+            "type": "boolean",
+            "description": "The `photo_places` setting. A client shows the switch, not \"no places\", when this is false."
+          },
+          "reading": {
+            "type": "boolean",
+            "description": "A location pass is running now; look again when it ends."
+          },
+          "places": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PhotoPlace"
+            }
+          },
+          "elsewhere": {
+            "type": "integer",
+            "description": "Photographs with a position and no town within 50 km of it."
+          },
+          "unlocated": {
+            "type": "integer",
+            "description": "Photographs read that carry no position — most of any library."
+          },
+          "unread": {
+            "type": "integer",
+            "description": "Photographs the location pass has not read yet."
+          }
+        }
+      },
+      "PhotoPlace": {
+        "type": "object",
+        "description": "One town photographs were filed under: the nearest town of 1,000 people or more, weighted by its size so a city claims its own streets.",
+        "required": [
+          "id",
+          "name",
+          "country_code",
+          "count"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "format": "int64",
+            "description": "The GeoNames id of the town."
+          },
+          "name": {
+            "type": "string"
+          },
+          "region": {
+            "type": "string",
+            "description": "First-level region, such as a state. Absent when GeoNames has none."
+          },
+          "country_code": {
+            "type": "string",
+            "description": "ISO 3166-1 alpha-2."
+          },
+          "country": {
+            "type": "string"
           },
           "count": {
             "type": "integer"
@@ -14226,7 +14424,7 @@
         "properties": {
           "kind": {
             "type": "string",
-            "description": "`scan`, `enrich`, `probe`, `coverart` or `transcode`. **New workers add new values**; a client that does not recognise one still has a title and a progress pair, which is the point of normalising."
+            "description": "`scan`, `enrich`, `probe`, `coverart`, `places` or `transcode`. **New workers add new values**; a client that does not recognise one still has a title and a progress pair, which is the point of normalising."
           },
           "id": {
             "type": "string",
