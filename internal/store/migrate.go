@@ -6,7 +6,7 @@ import (
 )
 
 // CurrentSchemaVersion is the revision this build expects.
-const CurrentSchemaVersion = 66
+const CurrentSchemaVersion = 67
 
 // migration is one forward step. There are deliberately no down migrations:
 // rolling a media library's schema backwards loses data that a rescan cannot
@@ -123,6 +123,7 @@ var migrations = []migration{
 	}},
 	{version: 65, sql: schemaRevision65},
 	{version: 66, sql: schemaRevision66},
+	{version: 67, sql: schemaRevision67},
 }
 
 // migrate brings the database up to CurrentSchemaVersion.
@@ -2198,6 +2199,21 @@ WHERE kind = 'rom' AND COALESCE(match_state, '') != 'locked' AND (
     COALESCE(match_state, '') != 'matched'
     OR id NOT IN (SELECT item_id FROM item_artwork WHERE kind = 'poster')
 );
+`
+
+/*
+ * Revision 67 changes no shape. It indexes item_genre from the genre side
+ * (ADR 0057).
+ *
+ * The filter bar asks "which genres does this library have", and the only way
+ * in was from the item: walk every item in the library and look up its genres.
+ * At 40,000 items that was 128ms of a 250ms budget for one row of chips. Asked
+ * per genre instead, it stops at the first hit — but the genre table is shared
+ * by every library, so in a film library each music genre is a miss, and
+ * without this index a miss means walking the whole library again.
+ */
+const schemaRevision67 = `
+CREATE INDEX IF NOT EXISTS idx_item_genre_genre ON item_genre(genre_id, item_id);
 `
 
 // showOf finds an episode's show, whether the episode hangs from a season or

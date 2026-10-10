@@ -6,9 +6,11 @@ import (
 	"context"
 	"database/sql"
 	_ "embed"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 
@@ -1776,41 +1778,115 @@ func (s *Store) LibraryFacets(ctx context.Context, libraryID int64, userID strin
 		return f, fmt.Errorf("library facets (tags): %w", err)
 	}
 
+	/*
+	 * Everything below that is about *this person* starts from this person's
+	 * rows, never from the library's (ADR 0057).
+	 *
+	 * Left to itself the planner walks the library and probes the user's table
+	 * once per item, because media_item is the side it has a library index on.
+	 * That is 40,000 probes to answer "is there one?" — about 35ms each time.
+	 * A person's favourites and plays are a few hundred rows that each find
+	 * their item by primary key, so CROSS JOIN pins that order: in SQLite it is
+	 * the one join the planner may not reorder.
+	 */
 	if err := s.db.QueryRowContext(ctx, `
 		SELECT EXISTS (
 			SELECT 1 FROM user_favourite uf
-			JOIN media_item ON media_item.id = uf.item_id
+			CROSS JOIN media_item ON media_item.id = uf.item_id
 			WHERE uf.user_id = ? AND media_item.library_id = ?
 			  AND `+topLevelPredicate+`)`,
 		userID, libraryID).Scan(&f.HasFavourites); err != nil {
 		return f, fmt.Errorf("library facets (favourites): %w", err)
 	}
 
-	// The initials present, computed the same way InitialFilter selects on so
-	// the rail can never offer a letter the filter then finds nothing for.
-	irows, err := s.db.QueryContext(ctx, `
-		SELECT DISTINCT UPPER(SUBSTR(sort_title, 1, 1)) AS initial
+	if err := s.db.QueryRowContext(ctx, `
+		SELECT
+			EXISTS (SELECT 1 FROM playback_state ps
+				CROSS JOIN media_item m ON m.id = ps.item_id
+				WHERE ps.user_id = ? AND ps.watched = 0 AND ps.position_ms > 0
+				  AND m.library_id = ? AND m.missing = 0),
+			-- Whether the unwatched-only toggle is worth offering: true when
+			-- this user has finished at least one top-level item, so filtering
+			-- them out removes something rather than being a silent no-op.
+			EXISTS (SELECT 1 FROM playback_state ps
+				CROSS JOIN media_item m ON m.id = ps.item_id
+				WHERE ps.user_id = ? AND ps.watched = 1
+				  AND m.library_id = ? AND m.parent_id IS NULL AND m.missing = 0)`,
+		userID, libraryID, userID, libraryID).Scan(&f.HasInProgress, &f.HasWatched); err != nil {
+		return f, fmt.Errorf("library facets (watched): %w", err)
+	}
+
+	/*
+	 * Every facet that is a column of the item, in one pass over the library.
+	 *
+	 * These were seven queries, and each one walked all of the library's rows
+	 * to read a single column: about 40ms apiece at 40,000 items, which is how
+	 * the filter bar came to cost twice its budget (ADR 0057). The walk is the
+	 * cost and the column is nearly free, so this walks once and lets each
+	 * facet keep its own rule as a FILTER on its own aggregate. The rules are
+	 * not all the same and must not be made the same: resolution and the
+	 * highest rating count episodes, because a show's own row has neither,
+	 * while the others are about what the grid shows.
+	 *
+	 * json_group_array because a DISTINCT aggregate takes one argument, so
+	 * group_concat cannot be given a separator — and a comma is not something
+	 * a content rating can be promised never to contain.
+	 */
+	var years, ratings, widths, initials string
+	if err := s.db.QueryRowContext(ctx, `
+		SELECT
+			json_group_array(DISTINCT year)
+				FILTER (WHERE parent_id IS NULL AND year IS NOT NULL),
+			json_group_array(DISTINCT content_rating)
+				FILTER (WHERE parent_id IS NULL AND content_rating != ''),
+			-- Unprobed rows have no width and are skipped rather than
+			-- counted as SD.
+			json_group_array(DISTINCT width) FILTER (WHERE width > 0),
+			-- The initials, computed the way InitialFilter selects on, so the
+			-- rail can never offer a letter the filter then finds nothing for.
+			json_group_array(DISTINCT UPPER(SUBSTR(sort_title, 1, 1)))
+				FILTER (WHERE sort_title != '' AND `+topLevelPredicate+`),
+			-- COALESCE so a library with no ratings answers 0 rather than
+			-- NULL, which the client reads as "offer no rating filter at all".
+			COALESCE(MAX(rating), 0),
+			-- 'unmatched' is meta.StateUnmatched, spelled out as ListItems does.
+			COALESCE(MAX(parent_id IS NULL
+				AND (match_state IS NULL OR match_state = 'unmatched')), 0)
 		FROM media_item
-		WHERE library_id = ? AND missing = 0 AND `+topLevelPredicate+`
-		  AND sort_title != ''
-		ORDER BY initial`, libraryID)
-	if err != nil {
-		return f, fmt.Errorf("library facets (initials): %w", err)
+		WHERE library_id = ? AND missing = 0`, libraryID).Scan(
+		&years, &ratings, &widths, &initials, &f.MaxRating, &f.HasUnmatched); err != nil {
+		return f, fmt.Errorf("library facets (columns): %w", err)
 	}
-	defer irows.Close()
+
+	var yearList, widthList []int
+	var initialList []string
+	for _, d := range []struct {
+		src string
+		dst any
+	}{{years, &yearList}, {ratings, &f.ContentRatings}, {widths, &widthList}, {initials, &initialList}} {
+		if err := json.Unmarshal([]byte(d.src), d.dst); err != nil {
+			return f, fmt.Errorf("library facets (columns): %w", err)
+		}
+	}
+
+	// Years present newest first, and the decades they fall in. A year of 0
+	// is "unknown" written as a number and was always kept out of the year
+	// list, while its decade was always offered; both rules stand as they were.
+	slices.Sort(yearList)
+	slices.Reverse(yearList)
+	for _, y := range yearList {
+		if y > 0 {
+			f.Years = append(f.Years, y)
+		}
+		if d := (y / 10) * 10; len(f.Decades) == 0 || f.Decades[len(f.Decades)-1] != d {
+			f.Decades = append(f.Decades, d)
+		}
+	}
+	slices.Sort(f.ContentRatings)
+
 	seen := map[string]bool{}
-	for irows.Next() {
-		var c string
-		if err := irows.Scan(&c); err != nil {
-			return f, fmt.Errorf("library facets (initials): %w", err)
-		}
-		key := bucketInitial(c)
-		if !seen[key] {
-			seen[key] = true
-		}
-	}
-	if err := irows.Err(); err != nil {
-		return f, err
+	for _, c := range initialList {
+		seen[bucketInitial(c)] = true
 	}
 	if seen["#"] {
 		f.Initials = append(f.Initials, "#")
@@ -1821,11 +1897,50 @@ func (s *Store) LibraryFacets(ctx context.Context, libraryID int64, userID strin
 		}
 	}
 
+	/*
+	 * Resolution tiers present.
+	 *
+	 * The widths are bucketed in Go rather than in SQL — a CASE expression here
+	 * would be a second copy of the boundaries in browsefilter.go, and two
+	 * copies of a threshold is how a library offers "4K" that the filter then
+	 * cannot find.
+	 *
+	 * Episodes carry the file, so this deliberately does not restrict to
+	 * top-level items the way the other facets do: a show's own row has no
+	 * width, and filtering a show library by resolution has to mean "has an
+	 * episode at this resolution".
+	 */
+	present := map[string]bool{}
+	for _, w := range widthList {
+		if b, ok := resolutionBucket(w); ok {
+			present[b.Key] = true
+		}
+	}
+	// Emitted in table order, so the tiers read widest-first however the widths
+	// happened to come back.
+	for _, b := range ResolutionBuckets {
+		if present[b.Key] {
+			f.Resolutions = append(f.Resolutions, b)
+		}
+	}
+
+	/*
+	 * Genres, asked one genre at a time, from the genre's side.
+	 *
+	 * Asked from the item's side — every item, then its genres — this was the
+	 * single dearest facet: 128ms at 40,000 items. A genre is present the
+	 * moment one item has it, so asking per genre stops at the first hit. The
+	 * genre table is shared by every library, though, and in a film library
+	 * every music genre is a miss; idx_item_genre_genre is what makes a miss
+	 * cost that genre's own members rather than the whole library again.
+	 */
 	grows, err := s.db.QueryContext(ctx, `
-		SELECT DISTINCT g.name FROM genre g
-		JOIN item_genre ig ON ig.genre_id = g.id
-		JOIN media_item m ON m.id = ig.item_id
-		WHERE m.library_id = ? AND m.parent_id IS NULL AND m.missing = 0
+		SELECT g.name FROM genre g
+		WHERE EXISTS (
+			SELECT 1 FROM item_genre ig
+			CROSS JOIN media_item m ON m.id = ig.item_id
+			WHERE ig.genre_id = g.id
+			  AND m.library_id = ? AND m.parent_id IS NULL AND m.missing = 0)
 		ORDER BY g.name`, libraryID)
 	if err != nil {
 		return f, fmt.Errorf("library facets (genres): %w", err)
@@ -1842,132 +1957,16 @@ func (s *Store) LibraryFacets(ctx context.Context, libraryID int64, userID strin
 		return f, err
 	}
 
-	drows, err := s.db.QueryContext(ctx, `
-		SELECT DISTINCT (year / 10) * 10 AS decade FROM media_item
-		WHERE library_id = ? AND parent_id IS NULL AND missing = 0 AND year IS NOT NULL
-		ORDER BY decade DESC`, libraryID)
-	if err != nil {
-		return f, fmt.Errorf("library facets (decades): %w", err)
-	}
-	defer drows.Close()
-	for drows.Next() {
-		var d int
-		if err := drows.Scan(&d); err != nil {
-			return f, fmt.Errorf("library facets (decades): %w", err)
-		}
-		f.Decades = append(f.Decades, d)
-	}
-	if err := drows.Err(); err != nil {
-		return f, err
-	}
-
-	crows, err := s.db.QueryContext(ctx, `
-		SELECT DISTINCT content_rating FROM media_item
-		WHERE library_id = ? AND parent_id IS NULL AND missing = 0
-			AND content_rating IS NOT NULL AND content_rating != ''
-		ORDER BY content_rating`, libraryID)
-	if err != nil {
-		return f, fmt.Errorf("library facets (content ratings): %w", err)
-	}
-	defer crows.Close()
-	for crows.Next() {
-		var cr string
-		if err := crows.Scan(&cr); err != nil {
-			return f, fmt.Errorf("library facets (content ratings): %w", err)
-		}
-		f.ContentRatings = append(f.ContentRatings, cr)
-	}
-	if err := crows.Err(); err != nil {
-		return f, err
-	}
-
-	yrows, err := s.db.QueryContext(ctx, `
-		SELECT DISTINCT year FROM media_item
-		WHERE library_id = ? AND parent_id IS NULL AND missing = 0
-			AND year IS NOT NULL AND year > 0
-		ORDER BY year DESC`, libraryID)
-	if err != nil {
-		return f, fmt.Errorf("library facets (years): %w", err)
-	}
-	defer yrows.Close()
-	for yrows.Next() {
-		var y int
-		if err := yrows.Scan(&y); err != nil {
-			return f, fmt.Errorf("library facets (years): %w", err)
-		}
-		f.Years = append(f.Years, y)
-	}
-	if err := yrows.Err(); err != nil {
-		return f, err
-	}
-
 	/*
-	 * Resolution tiers present.
-	 *
-	 * The widths are bucketed in Go rather than in SQL — a CASE expression here
-	 * would be a second copy of the boundaries in browsefilter.go, and two
-	 * copies of a threshold is how a library offers "4K" that the filter then
-	 * cannot find. Unprobed rows have no width and are skipped rather than
-	 * counted as SD.
-	 *
-	 * Episodes carry the file, so this deliberately does not restrict to
-	 * top-level items the way the other facets do: a show's own row has no
-	 * width, and filtering a show library by resolution has to mean "has an
-	 * episode at this resolution".
+	 * Collections, from their memberships. Started from the collection rows it
+	 * walked the library to find them, since nothing indexes an item's kind
+	 * within a library; membership rows are a few per collection.
 	 */
-	wrows, err := s.db.QueryContext(ctx, `
-		SELECT DISTINCT width FROM media_item
-		WHERE library_id = ? AND missing = 0 AND width IS NOT NULL AND width > 0`,
-		libraryID)
-	if err != nil {
-		return f, fmt.Errorf("library facets (resolutions): %w", err)
-	}
-	defer wrows.Close()
-	present := map[string]bool{}
-	for wrows.Next() {
-		var w int
-		if err := wrows.Scan(&w); err != nil {
-			return f, fmt.Errorf("library facets (resolutions): %w", err)
-		}
-		if b, ok := resolutionBucket(w); ok {
-			present[b.Key] = true
-		}
-	}
-	if err := wrows.Err(); err != nil {
-		return f, err
-	}
-	// Emitted in table order, so the tiers read widest-first however the widths
-	// happened to come back.
-	for _, b := range ResolutionBuckets {
-		if present[b.Key] {
-			f.Resolutions = append(f.Resolutions, b)
-		}
-	}
-
-	if err := s.db.QueryRowContext(ctx, `
-		SELECT EXISTS (
-			SELECT 1 FROM media_item m
-			JOIN playback_state ps ON ps.item_id = m.id
-			WHERE m.library_id = ? AND m.missing = 0
-				AND ps.user_id = ? AND ps.watched = 0 AND ps.position_ms > 0)`,
-		libraryID, userID).Scan(&f.HasInProgress); err != nil {
-		return f, fmt.Errorf("library facets (in progress): %w", err)
-	}
-
-	if err := s.db.QueryRowContext(ctx, `
-		SELECT EXISTS (
-			SELECT 1 FROM media_item
-			WHERE library_id = ? AND parent_id IS NULL AND missing = 0
-				AND (match_state IS NULL OR match_state = 'unmatched'))`,
-		libraryID).Scan(&f.HasUnmatched); err != nil {
-		return f, fmt.Errorf("library facets (unmatched): %w", err)
-	}
-
-	crows2, err := s.db.QueryContext(ctx, `
+	crows, err := s.db.QueryContext(ctx, `
 		SELECT c.id, c.title, COUNT(ic.item_id) AS members
-		FROM media_item c
-		JOIN item_collection ic ON ic.collection_id = c.id
-		JOIN media_item m ON m.id = ic.item_id AND m.missing = 0
+		FROM item_collection ic
+		CROSS JOIN media_item c ON c.id = ic.collection_id
+		CROSS JOIN media_item m ON m.id = ic.item_id AND m.missing = 0
 		WHERE c.library_id = ? AND c.kind = 'collection' AND c.missing = 0
 		GROUP BY c.id, c.title
 		-- The same rule the Collections listing applies, and it has to be here
@@ -1975,42 +1974,22 @@ func (s *Store) LibraryFacets(ctx context.Context, libraryID int64, userID strin
 		-- filter that returns a grid you cannot get back to. The count is of
 		-- present films for the same reason.
 		HAVING members > 1
-		ORDER BY members DESC, c.title`, libraryID)
+		-- And by id last, so two collections sharing a name and a size do not
+		-- swap places with the plan.
+		ORDER BY members DESC, c.title, c.id`, libraryID)
 	if err != nil {
 		return f, fmt.Errorf("library facets (collections): %w", err)
 	}
-	defer crows2.Close()
-	for crows2.Next() {
+	defer crows.Close()
+	for crows.Next() {
 		var c CollectionFacet
-		if err := crows2.Scan(&c.ID, &c.Name, &c.Members); err != nil {
+		if err := crows.Scan(&c.ID, &c.Name, &c.Members); err != nil {
 			return f, fmt.Errorf("library facets (collections): %w", err)
 		}
 		f.Collections = append(f.Collections, c)
 	}
-	if err := crows2.Err(); err != nil {
+	if err := crows.Err(); err != nil {
 		return f, err
-	}
-
-	// COALESCE so a library with no ratings answers 0 rather than NULL, which
-	// the client reads as "offer no rating filter at all".
-	if err := s.db.QueryRowContext(ctx, `
-		SELECT COALESCE(MAX(rating), 0) FROM media_item
-		WHERE library_id = ? AND missing = 0 AND rating IS NOT NULL`,
-		libraryID).Scan(&f.MaxRating); err != nil {
-		return f, fmt.Errorf("library facets (max rating): %w", err)
-	}
-
-	// Whether the unwatched-only toggle is worth offering: true when this user
-	// has finished at least one top-level item, so filtering them out removes
-	// something rather than being a silent no-op.
-	if err := s.db.QueryRowContext(ctx, `
-		SELECT EXISTS (
-			SELECT 1 FROM media_item m
-			JOIN playback_state ps ON ps.item_id = m.id
-			WHERE m.library_id = ? AND m.parent_id IS NULL AND m.missing = 0
-				AND ps.user_id = ? AND ps.watched = 1)`,
-		libraryID, userID).Scan(&f.HasWatched); err != nil {
-		return f, fmt.Errorf("library facets (has watched): %w", err)
 	}
 	return f, nil
 }
