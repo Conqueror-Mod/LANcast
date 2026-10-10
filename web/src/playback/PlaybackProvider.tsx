@@ -1424,7 +1424,7 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
     // (the same one mpv applies on the desktop). A film in mpv, or anything
     // else, gets a straight wire.
     const fx = isAudio
-      ? fxApplies({ night: prefs.nightMusic }, musicChannels)
+      ? fxApplies({ night: prefs.nightMusic, eq: prefs.eq }, musicChannels)
       : filmChannels > 0
         ? fxApplies({ night: prefs.nightVideo }, filmChannels)
         : FX_OFF;
@@ -1435,7 +1435,7 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
     // (applyDeckFX); anything else leaves it on a straight wire.
     applyDeckFX(
       deckPair(),
-      isAudio ? fxApplies({ night: prefs.nightMusic }, musicChannels) : FX_OFF,
+      isAudio ? fxApplies({ night: prefs.nightMusic, eq: prefs.eq }, musicChannels) : FX_OFF,
       prefs.audioDevice,
       musicChannels,
     );
@@ -1445,6 +1445,7 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
     filmChannels,
     sourceChannels,
     prefs.nightMusic,
+    prefs.eq,
     prefs.nightVideo,
     prefs.audioDevice,
   ]);
