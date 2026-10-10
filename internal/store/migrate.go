@@ -6,7 +6,7 @@ import (
 )
 
 // CurrentSchemaVersion is the revision this build expects.
-const CurrentSchemaVersion = 66
+const CurrentSchemaVersion = 67
 
 // migration is one forward step. There are deliberately no down migrations:
 // rolling a media library's schema backwards loses data that a rescan cannot
@@ -123,6 +123,7 @@ var migrations = []migration{
 	}},
 	{version: 65, sql: schemaRevision65},
 	{version: 66, sql: schemaRevision66},
+	{version: 67, sql: schemaRevision67},
 }
 
 // migrate brings the database up to CurrentSchemaVersion.
@@ -2205,3 +2206,38 @@ WHERE kind = 'rom' AND COALESCE(match_state, '') != 'locked' AND (
 const showOf = `SELECT id FROM media_item WHERE kind = 'show' AND (
         id = mi.parent_id OR
         id = (SELECT parent_id FROM media_item WHERE id = mi.parent_id))`
+
+/*
+ * Revision 67 — where a photograph was taken (ADR 0078).
+ *
+ * `photo_location` holds one row for every photo the location pass has read,
+ * and the row is the pass's stamp: lat, lon and place_id are NULL when the
+ * photo carries no position, so "read and found nothing" is told apart from
+ * "not read yet" without a column on media_item. A side table like
+ * photo_hash, because only that pass writes it and nothing that lists items
+ * wants a coordinate.
+ *
+ * `photo_place` is the towns photographs were filed under, keyed by GeoNames
+ * id, with their names copied in. Listing places then never needs the
+ * gazetteer in memory; it is loaded only while the pass runs.
+ *
+ * Nothing is queued by this revision. The pass reads nothing until the
+ * `photo_places` setting is turned on, which it is not by default.
+ */
+const schemaRevision67 = `
+CREATE TABLE IF NOT EXISTS photo_place (
+    id           INTEGER PRIMARY KEY,
+    name         TEXT NOT NULL,
+    region       TEXT NOT NULL DEFAULT '',
+    country_code TEXT NOT NULL DEFAULT '',
+    country      TEXT NOT NULL DEFAULT ''
+);
+CREATE TABLE IF NOT EXISTS photo_location (
+    item_id  INTEGER PRIMARY KEY REFERENCES media_item(id) ON DELETE CASCADE,
+    lat      REAL,
+    lon      REAL,
+    place_id INTEGER REFERENCES photo_place(id),
+    read_at  INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_photo_location_place ON photo_location(place_id);
+`
