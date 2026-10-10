@@ -75,6 +75,7 @@ func (s *Store) ShareLibrary(ctx context.Context, fingerprint string, libraryID 
 	if err != nil {
 		return fmt.Errorf("share library %d with %s: %w", libraryID, fingerprint, err)
 	}
+	s.announce(ChangePeers)
 	return nil
 }
 
@@ -87,6 +88,7 @@ func (s *Store) UnshareLibrary(ctx context.Context, fingerprint string, libraryI
 	if err != nil {
 		return fmt.Errorf("unshare library %d from %s: %w", libraryID, fingerprint, err)
 	}
+	s.announce(ChangePeers)
 	return nil
 }
 

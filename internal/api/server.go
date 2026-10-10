@@ -22,6 +22,7 @@ import (
 	"lancast/internal/coverart"
 	"lancast/internal/crashlog"
 	"lancast/internal/enrich"
+	"lancast/internal/events"
 	"lancast/internal/faces"
 	"lancast/internal/guestticket"
 	"lancast/internal/identity"
@@ -258,6 +259,14 @@ type Server struct {
 	 * retry for hours, while this one has six seconds and a viewer waiting.
 	 */
 	prober *probe.Prober
+	// events fans "this changed" out to open windows (ADR 0079). In memory and
+	// created here, for the same reason as together.
+	events *events.Hub
+	// peerKick asks the peer watcher to fetch one roster now (peerwatch.go).
+	peerKick chan string
+	// presenceSeen is the last presence answer per peer and person, so the
+	// watcher publishes only a change. Guarded by rosterMu.
+	presenceSeen map[string]string
 }
 
 func New(d Deps) *Server {
@@ -291,6 +300,15 @@ func New(d Deps) *Server {
 		crashes:  crashlog.New(d.DataDir, Version),
 		together: together.New(),
 		prober:   probe.New(),
+		events:   events.New(0),
+
+		peerKick:     make(chan string, 16),
+		presenceSeen: map[string]string{},
+	}
+	// The store announces what its writes change; every open window hears it
+	// (ADR 0079). Registered here so no caller can forget to wire it.
+	if d.Store != nil {
+		d.Store.OnChange(func(topic string) { s.events.Publish(topic) })
 	}
 	// The sweep drops people who closed the laptop and ends rooms whose host
 	// went quiet, with nobody pressing anything; this is how that reaches the
@@ -314,6 +332,11 @@ func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 
 	mux.HandleFunc("GET /api/health", s.health)
+
+	// The event stream (ADR 0079): names of things that changed, so an open
+	// window can ask again. Any signed-in account; what each topic makes stale
+	// is still fetched through its own route and its own checks.
+	mux.HandleFunc("GET /api/events", s.eventStream)
 
 	mux.HandleFunc("GET /api/auth/status", s.authStatus)
 	mux.HandleFunc("POST /api/auth/setup", s.authSetup)

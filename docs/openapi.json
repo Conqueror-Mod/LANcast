@@ -30,6 +30,10 @@
       "description": "Liveness and contract revision."
     },
     {
+      "name": "events",
+      "description": "The event stream: names of things that changed, so an open client can ask again (ADR 0079)."
+    },
+    {
       "name": "auth",
       "description": "Sessions, first-run setup, and passwords."
     },
@@ -134,6 +138,31 @@
                 }
               }
             }
+          }
+        }
+      }
+    },
+    "/events": {
+      "get": {
+        "operationId": "streamEvents",
+        "tags": [
+          "events"
+        ],
+        "summary": "Names of things that changed, as server-sent events",
+        "description": "A `text/event-stream` that stays open. Each event is `event: changed` with `data` a JSON object `{\"topics\": [...]}` naming what changed. It never carries the changed data: a client refetches through the routes it already uses, with their usual checks (ADR 0079).\n\nTopics: `peers` (a pairing added, removed or made mutual, a roster or a share changed), `presence` (what a paired server lets *this* person see changed; sent only to that person's streams), `libraries` (a library added, removed, renamed or rescanned), `items` (what a library holds changed).\n\nTopics published within about 250 ms of each other arrive as one event. An idle stream sends a `: ping` comment every 25 s. The stream opens with `retry: 3000`. Events sent while a client was disconnected are not replayed, so a client should refetch everything it shows when it reconnects. A client that ignores this route and polls loses nothing but freshness.",
+        "responses": {
+          "200": {
+            "description": "The stream. Never completes on its own; it ends when the client disconnects or the server shuts down.",
+            "content": {
+              "text/event-stream": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
           }
         }
       }

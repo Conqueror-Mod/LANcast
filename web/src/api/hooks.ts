@@ -3757,7 +3757,13 @@ export function usePeerPresence() {
     queryKey: ["peer-presence"],
     queryFn: ({ signal }) =>
       apiGet<{ peers: PeerPresence[] }>("/api/people/peers", signal),
-    refetchInterval: 10_000,
+    /*
+     * The server watches its peers and says when an answer changes (ADR 0079
+     * §5), so this no longer polls at the rate presence moves. The slow
+     * interval is a floor for a window whose event stream is down, not the
+     * mechanism.
+     */
+    refetchInterval: 60_000,
     staleTime: 5_000,
   });
 }

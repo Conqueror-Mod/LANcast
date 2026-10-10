@@ -174,6 +174,10 @@ func (s *Server) addPeer(w http.ResponseWriter, r *http.Request) {
 	s.audit(r, "peer.add", "peer", in.Fingerprint,
 		"Added peer "+in.Name, map[string]any{"name": in.Name, "addrs": in.Addrs})
 
+	// Ask it straight away. If it already holds this server, the pairing
+	// becomes mutual within a second instead of at the next scheduled check.
+	s.kickPeer(in.Fingerprint)
+
 	p, err := s.st.PeerByFingerprint(r.Context(), in.Fingerprint)
 	if err != nil {
 		s.writeInternal(w, err, "add peer")
