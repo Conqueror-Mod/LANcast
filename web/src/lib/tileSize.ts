@@ -39,8 +39,30 @@ export function tileWidth(step: unknown): string {
   return `${TILE_STEPS[clampStep(step)]}px`;
 }
 
+/*
+ * What an unset preference means on this screen.
+ *
+ * The desktop default is 160px, and on a phone that is one poster per row:
+ * the content area is about 320px, and two tiles plus a gap need 338. So a
+ * narrow screen starts at the smallest step, which with the phone gap
+ * (Browse.css) is three across. Only the default moves: somebody who picks a
+ * larger size on their phone keeps it, because it is their device.
+ */
+export const PHONE_MAX_WIDTH = 600;
+
+export function defaultStep(): number {
+  if (
+    typeof window !== "undefined" &&
+    typeof window.matchMedia === "function" &&
+    window.matchMedia(`(max-width: ${PHONE_MAX_WIDTH}px)`).matches
+  ) {
+    return 0;
+  }
+  return TILE_DEFAULT_STEP;
+}
+
 /** The grid tile size as React state. Writes persist and update every reader. */
 export function useTileSize(): [number, (step: number) => void] {
-  const [raw, set] = useDevice<number>(TILE_SIZE_KEY, TILE_DEFAULT_STEP);
+  const [raw, set] = useDevice<number>(TILE_SIZE_KEY, defaultStep());
   return [clampStep(raw), (step: number) => set(clampStep(step))];
 }

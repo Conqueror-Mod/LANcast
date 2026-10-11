@@ -546,7 +546,13 @@ export function Player() {
               </span>
             )}
           </span>
-          {pb.note && <span className="player__note">{pb.note}</span>}
+          {/* While loading, the same note is the centre of the screen
+              (player__loading above); saying it twice crowded the title off a
+              phone. Once playing, this is the only place it appears, and it
+              still says why this file took the route it did. */}
+          {pb.note && !pb.loading && (
+            <span className="player__note">{pb.note}</span>
+          )}
           {/*
             The prompt states what happened and offers the one action that
             answers it. Not a modal: the film is already stopped, so there is

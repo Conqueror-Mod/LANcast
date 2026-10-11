@@ -125,3 +125,35 @@ button {
   font: inherit;
   color: inherit;
 }
+
+/*
+ * Touch targets.
+ *
+ * The secondary controls are sized for a mouse: 25px tall, where a thumb
+ * needs about 44 (design.md, Phone). Raised wherever the pointer is coarse or
+ * the screen is narrow, and left alone on a desktop with a mouse, where 25px
+ * is a deliberate, quiet size.
+ *
+ * Listed here rather than in each component so a phone pass has one place to
+ * look. A control that joins this list should be one a finger actually aims
+ * at; tiles and rows are already large.
+ */
+@media (pointer: coarse), (max-width: 720px) {
+  .detail__fix,
+  .rating-pick__choice,
+  .rate__notebtn,
+  .browse__search {
+    min-height: 40px;
+  }
+  /* Centred in the taller box, and kept on one line: a label that breaks
+     into "Fix / match" reads as two controls. */
+  .detail__fix,
+  .rate__notebtn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    white-space: nowrap;
+    padding-left: 12px;
+    padding-right: 12px;
+  }
+}

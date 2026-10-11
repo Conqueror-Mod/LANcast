@@ -1,9 +1,11 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  PHONE_MAX_WIDTH,
   TILE_DEFAULT_STEP,
   TILE_SIZE_KEY,
   TILE_STEPS,
   clampStep,
+  defaultStep,
   tileWidth,
 } from "./tileSize";
 import { readDevice, writeDevice } from "./device";
@@ -61,5 +63,30 @@ describe("persistence", () => {
     writeDevice(TILE_SIZE_KEY, 4);
     expect(JSON.parse(localStorage.getItem(TILE_SIZE_KEY)!)).toBe(4);
     expect(readDevice(TILE_SIZE_KEY, TILE_DEFAULT_STEP)).toBe(4);
+  });
+});
+
+/*
+ * The phone default. At 160px a phone showed one poster per row and the
+ * first one below the fold; an unset preference on a narrow screen starts at
+ * the smallest step instead. jsdom has no matchMedia, so it is stubbed with
+ * the answer each case needs.
+ */
+describe("the default on a phone", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  const screen = (narrow: boolean) =>
+    vi.stubGlobal("matchMedia", (q: string) => ({
+      matches: narrow && q === `(max-width: ${PHONE_MAX_WIDTH}px)`,
+    }));
+
+  it("starts a narrow screen at the smallest tiles", () => {
+    screen(true);
+    expect(TILE_STEPS[defaultStep()]).toBe(96);
+  });
+
+  it("leaves a wide screen at the historical default", () => {
+    screen(false);
+    expect(defaultStep()).toBe(TILE_DEFAULT_STEP);
   });
 });
