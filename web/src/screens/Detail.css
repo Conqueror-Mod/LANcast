@@ -1,7 +1,7 @@
 .detail {
   position: relative;
   /* Pull out of the app-shell padding so fanart is truly full-bleed. */
-  margin: -8px -28px 0;
+  margin: -8px calc(-1 * var(--main-pad)) 0;
   min-height: calc(100vh - 60px);
 }
 
@@ -10,7 +10,7 @@
   flex-direction: column;
   align-items: flex-start;
   gap: 20px;
-  padding: 60px 28px;
+  padding: 60px var(--main-pad);
 }
 
 /*

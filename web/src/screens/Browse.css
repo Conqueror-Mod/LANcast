@@ -253,7 +253,7 @@
   /* Under the shell bar, not behind it. */
   top: var(--topbar-h);
   z-index: 5;
-  margin: 0 -28px;
+  margin: 0 calc(-1 * var(--main-pad));
   padding: 4px 28px 2px;
   background: rgba(7, 11, 24, 0.92);
   backdrop-filter: blur(10px);
@@ -301,8 +301,8 @@
   position: sticky;
   top: var(--topbar-h);
   z-index: 5;
-  margin: 0 -28px;
-  padding: 6px 28px;
+  margin: 0 calc(-1 * var(--main-pad));
+  padding: 6px var(--main-pad);
   background: rgba(7, 11, 24, 0.92);
   backdrop-filter: blur(10px);
 }

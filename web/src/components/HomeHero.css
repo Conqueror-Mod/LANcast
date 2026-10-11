@@ -7,7 +7,7 @@
 .hero {
   position: relative;
   /* Out of the app-shell padding, so the backdrop is genuinely full-bleed. */
-  margin: -8px -28px 20px;
+  margin: -8px calc(-1 * var(--main-pad)) 20px;
   min-height: var(--hero-height);
   display: flex;
   align-items: flex-end;
@@ -356,7 +356,7 @@
  */
 @media (max-width: 860px) {
   .hero {
-    margin: -8px -20px 22px;
+    margin: -8px calc(-1 * var(--main-pad)) 22px;
     min-height: clamp(280px, max(34vh, 40vw), 420px);
   }
 
