@@ -17,7 +17,7 @@ ADR 0014 rejected ACME for two reasons:
 
 Three things have changed since then.
 
-**The first reason has been overtaken by events.** Aither has been publicly
+**The first reason has been overtaken by events.** The operator's server has been publicly
 reachable since 2026-10-10, on purpose, so that friends' servers can federate
 with it. Exposure was decided by the operator. LANcast's job now is to make
 that exposure as safe as it can, and its strongest available tool is
@@ -29,7 +29,7 @@ any certificate error since M110). No amount of LANcast code works around
 either. With the self-signed certificate, passkeys can never work in a phone's
 browser.
 
-**There is now a name.** Aither has a free DuckDNS name, under a domain on the
+**There is now a name.** The server has a free name (DuckDNS at first, dynv6 in the end), under a domain on the
 Public Suffix List, and it already resolves and hairpins from inside the house
 (measured 2026-10-11). The missing piece is a certificate a browser trusts for
 that name. The reverse proxy ADR 0014 pointed to is a second program to

@@ -26,7 +26,7 @@ processes, and it went this way:
 **Rejected: the Plex model** (one process in the user's session, no service).
 It is the only option that makes ffmpeg's GPU work without care (see
 CLAUDE.md on session 0), and it collapses everything into one process. It was
-rejected because Aither is publicly reachable and friends depend on it: under
+rejected because the household server is publicly reachable and friends depend on it: under
 that model the server is down after every reboot until somebody signs in.
 The data directory would also have to leave `ProgramData`.
 
@@ -187,7 +187,7 @@ Two ways across:
   "LANcast"; the desktop shortcut and `DisplayIcon` are retargeted.
 - **Installer `taskkill` lines** keep the *old* names too, so an upgrade kills
   stray processes from the previous layout.
-- **Firewall: check this before shipping.** Aither's inbound rule for 8080
+- **Firewall: check this before shipping.** The server's inbound rule for 8080
   must be port-scoped, not program-scoped. A rule bound to
   `LANcast-Server.exe` would silently cut friends off the moment the file is
   renamed, and nothing in LANcast would report it.
@@ -236,4 +236,4 @@ Two ways across:
 - Update libraries from the tray starts a scan visible in the app. Cancel is
   greyed except during a scan.
 - After a reboot with nobody signed in, a friend's server can still reach
-  Aither.
+  this one.
