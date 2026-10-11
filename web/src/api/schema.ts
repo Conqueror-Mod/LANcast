@@ -103,7 +103,7 @@ export interface paths {
         put?: never;
         /**
          * Exchange a username and password for a session
-         * @description Throttled per client IP. **A wrong username and a wrong password are reported identically** as `401 unauthorized`, deliberately: distinguishing them tells an attacker which half they got right.
+         * @description Throttled per client IP, and per account name from outside the local network (a growing wait, never a lockout). **A wrong username and a wrong password are reported identically** as `401 unauthorized`, deliberately: distinguishing them tells an attacker which half they got right.
          */
         post: operations["postAuthLogin"];
         delete?: never;

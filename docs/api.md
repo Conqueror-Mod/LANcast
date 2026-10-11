@@ -101,7 +101,7 @@ the server still held its session.
 |---|---|
 | `GET /api/auth/status` | `{configured, authenticated, lan_enabled, restart_required, can_convert, user?}`; `user` carries `sharing` |
 | `POST /api/auth/setup` | `{username, password, install_media_tools?}` → creates the first admin; only while unconfigured. Answers `media_tools_installing` |
-| `POST /api/auth/login` | `{username, password}` → session cookie. Throttled per IP |
+| `POST /api/auth/login` | `{username, password}` → session cookie. Throttled per IP, and per account from outside the local network — see below |
 
 **`can_convert` says whether ffmpeg is present**, and it is reported to every
 caller rather than only to administrators
@@ -144,6 +144,16 @@ already present.
 address, decaying on their own, with no lockout — a lockout is a denial of
 service an attacker can aim at the owner. A correct password clears the counter
 on either route, because it is the same proof.
+
+Failures are **also counted per account name** when they come from outside the
+local network, so guessing spread across many addresses is slowed too. The
+first five are free; then each further failure doubles a wait (30 seconds, then
+a minute, up to fifteen minutes), and attempts during the wait answer `429`
+without the password being checked. A wait is not a lockout: retrying does not
+lengthen it, an hour without failures forgets it, a correct password clears it,
+and it never applies from loopback or a private address, so the owner can
+always sign in from home. Names that match no account wait exactly like real
+ones, so the `429` reveals nothing about which accounts exist.
 
 Both are throttled for the same reason, and it is not only guessing. Each
 verifies a password with bcrypt before doing anything else, so an unbounded

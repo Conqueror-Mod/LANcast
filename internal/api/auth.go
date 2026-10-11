@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"net/http"
 	"strings"
+	"time"
 
 	"lancast/internal/auth"
 	"lancast/internal/store"
@@ -619,6 +620,21 @@ func (s *Server) authLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Per account as well as per address, so many addresses cannot share out
+	// the guessing. Checked before the lookup and before bcrypt: the name is
+	// tracked whether or not it is an account, so this answer reveals nothing,
+	// and a refused attempt costs the machine nothing. Not from inside the
+	// house, so an attack can never lock the owner out at home.
+	inside := auth.InsideNetwork(r)
+	if !inside {
+		if ok, left := s.accountWait.Allow(req.Username); !ok {
+			s.log.Warn("login refused", "reason", "account waiting", "wait", left.Round(time.Second), "client", key)
+			writeError(w, http.StatusTooManyRequests, "too_many_requests",
+				"too many attempts; wait a few minutes")
+			return
+		}
+	}
+
 	u, err := s.st.UserByName(r.Context(), strings.TrimSpace(req.Username))
 	if err != nil && !errors.Is(err, store.ErrNotFound) {
 		s.writeInternal(w, err, "lookup user")
@@ -641,10 +657,14 @@ func (s *Server) authLogin(w http.ResponseWriter, r *http.Request) {
 		} else {
 			s.log.Warn("login refused", "reason", "wrong password", "account", u.Name, "client", key)
 		}
+		if !inside {
+			s.accountWait.Fail(req.Username)
+		}
 		writeError(w, http.StatusUnauthorized, "unauthorized", "incorrect username or password")
 		return
 	}
 	s.throttle.Reset(key)
+	s.accountWait.Reset(req.Username)
 
 	if err := s.issueSession(w, r, u.ID); err != nil {
 		return
@@ -719,13 +739,28 @@ func (s *Server) authChangePassword(w http.ResponseWriter, r *http.Request) {
 		s.writeInternal(w, err, "load user")
 		return
 	}
+	// The same per-account wait as login, for the reason the per-address
+	// counter is shared: a stolen session must not be a fresh budget for
+	// learning the password from many addresses.
+	inside := auth.InsideNetwork(r)
+	if !inside {
+		if ok, _ := s.accountWait.Allow(u.Name); !ok {
+			writeError(w, http.StatusTooManyRequests, "too_many_requests",
+				"too many attempts; wait a few minutes")
+			return
+		}
+	}
 	if !auth.CheckPassword(u.PasswordHash, req.Current) {
+		if !inside {
+			s.accountWait.Fail(u.Name)
+		}
 		writeError(w, http.StatusUnauthorized, "unauthorized", "current password is incorrect")
 		return
 	}
 	// Knowing the current password is the same proof a login gives, so it earns
 	// the same clean slate.
 	s.throttle.Reset(key)
+	s.accountWait.Reset(u.Name)
 
 	hash, err := auth.HashPassword(req.New)
 	if errors.Is(err, auth.ErrWeakPassword) {
