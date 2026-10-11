@@ -17,6 +17,7 @@ import {
 import { useEffect, useState, type ReactNode } from "react";
 import type { Library } from "@/api/types";
 import { ActivityPanel } from "./ActivityPanel";
+import { MobileNav } from "./MobileNav";
 import { KeyHelp } from "./KeyHelp";
 import { plainVersion } from "./UpdateSettings";
 import { clientIsStale, type DesktopVersion } from "@/lib/clientVersion";
@@ -405,6 +406,10 @@ export function AppShell({ children }: { children: ReactNode }) {
           </div>
         </div>
       </aside>
+
+      {/* The phone's navigation. Hidden by CSS above the shell breakpoint,
+          where the rail above is the navigation instead. */}
+      <MobileNav />
 
       <div className="app-shell__body">
         <header className="app-shell__top">

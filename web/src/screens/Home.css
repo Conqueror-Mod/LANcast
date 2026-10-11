@@ -13,7 +13,7 @@
   content: "";
   position: absolute;
   /* Wider than the content, to cover the app-shell padding the hero escapes. */
-  inset: -24px -28px auto;
+  inset: -24px calc(-1 * var(--main-pad)) auto;
   height: 260px;
   z-index: -1;
   background: linear-gradient(
@@ -32,6 +32,6 @@
 
 @media (max-width: 860px) {
   .home__shelves::before {
-    inset: -24px -20px auto;
+    inset: -24px calc(-1 * var(--main-pad)) auto;
   }
 }

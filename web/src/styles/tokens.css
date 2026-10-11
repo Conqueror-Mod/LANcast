@@ -151,6 +151,11 @@
    * controls, and the cover's clearance stayed at the old number.
    */
   --mini-inset: 18px; /* gap from the window edge */
+  /* The phone tab bar's height (MobileNav.css). Zero where there is no tab
+     bar, so anything pinned to the bottom can add it unconditionally. */
+  --tabbar-h: 0px;
+  /* The page's side padding, and how far full-bleed pieces step out of it. */
+  --main-pad: 28px;
   --mini-gap: 10px; /* gap between the strip and the picture */
   --mini-strip-w: 236px;
   --mini-strip-h: 46px; /* one line of title over one row of icons */
@@ -235,5 +240,15 @@
 @media (max-width: 600px) {
   :root {
     --tile-grid: 90px;
+  }
+}
+
+@media (max-width: 860px) {
+  :root {
+    --tabbar-h: 56px;
+    /* No rail is drawn here (MobileNav replaces it), so nothing that offsets
+       itself by the rail's width should keep doing so. */
+    --rail-collapsed: 0px;
+    --main-pad: 16px;
   }
 }

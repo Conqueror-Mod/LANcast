@@ -297,7 +297,10 @@
 
 .app-shell__main {
   flex: 1;
-  padding: 8px 28px 48px;
+  /* --main-pad, not a number: the full-bleed pieces (the Home hero, the detail
+     backdrop, the browse bars) step out of this padding by exactly as much,
+     and a phone narrows it. */
+  padding: 8px var(--main-pad) 48px;
 }
 
 /*
@@ -361,65 +364,24 @@
  * — which is what it was before, and still the right answer when there is no
  * horizontal room to give away.
  */
+/*
+ * Below the breakpoint the rail is not shown at all: MobileNav's tab bar and
+ * sheets replace it (docs/design.md, Phone). The rail used to turn into one
+ * row of fifteen links here, and its groups drew over each other — the
+ * libraries group shrank to nothing and its links spilled across the rest.
+ */
 @media (max-width: 860px) {
-  .app-shell {
-    flex-direction: column;
-  }
-
   .app-shell__rail {
-    width: auto;
-  }
-
-  .app-shell__rail-inner {
-    position: static;
-    width: auto;
-    flex-direction: row;
-    align-items: center;
-    gap: 16px;
-    padding: 12px 20px 0;
-    border-right: none;
-    overflow-x: auto;
-    background: transparent;
-    box-shadow: none;
-  }
-
-  /* Nothing is collapsed here, so nothing is hidden. */
-  .app-shell__label,
-  .app-shell__rail-label {
-    opacity: 1;
-  }
-
-  .app-shell__rail-inner:hover,
-  .app-shell__rail-inner:focus-within {
-    width: auto;
-    background: transparent;
-    box-shadow: none;
-  }
-
-  .app-shell__libs {
-    flex-direction: row;
-    align-items: center;
-    gap: 6px;
-  }
-
-  /* The heading has no room to sit above a row, and the row is self-evident. */
-  .app-shell__rail-label {
     display: none;
   }
 
-  .app-shell__lib {
-    border-left: none;
-    border-bottom: 2px solid transparent;
-    padding: 6px 8px;
-  }
-
-  .app-shell__lib.is-active {
-    border-left-color: transparent;
-    border-bottom-color: var(--gold);
-  }
-
   .app-shell__top {
-    padding: 8px 20px 12px;
+    padding: 8px 16px 10px;
+  }
+
+  /* Room for the tab bar, so the last row of a page is not under it. */
+  .app-shell__main {
+    padding-bottom: calc(var(--tabbar-h) + env(safe-area-inset-bottom, 0px) + 24px);
   }
 }
 
