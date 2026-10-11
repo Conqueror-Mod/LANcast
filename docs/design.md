@@ -238,6 +238,38 @@ marked: gold on the leading edge, and nothing else uses gold. A category is
 offered only where its pane can act — "This app" is absent in a browser tab,
 because the desktop settings behind it have nothing to say there.
 
+## Phone
+
+Decided 2026-10-10, after an audit at 375px found the client had never been
+laid out for a phone: the top bar overlapped itself, every detail page was
+1,754px wide, library grids showed one poster per row, and seven player
+controls sat off the right edge where nothing could reach them. None of it
+failed a test, because jsdom performs no layout. Look at a screen at 375px
+before calling it done.
+
+- **Navigation is a bottom tab bar with a More sheet**, not the desktop rail
+  squeezed into a row. Home, Search, Libraries and People sit under the thumb;
+  everything else opens from More. One row of fifteen links that scrolls
+  sideways hides most of them.
+- **The player keeps the essentials in its bar** (play, skip, the timeline,
+  fullscreen) and puts the rest behind a "⋯" menu. Fourteen buttons do not fit
+  375px, and a second row covers the picture.
+- **Library filters open from one Filters button** that says how many are
+  active. On a desktop they stay laid out, because there they cost nothing.
+- **Three posters across.** The tile-size setting starts a narrow screen at its
+  smallest step, and grids that do not use it fall back to a 90px minimum. Only
+  the default moves; a size somebody picks on their phone is kept.
+- **Touch targets are about 40px or more** wherever the pointer is coarse or
+  the screen is narrow. A 25px control is a deliberate quiet size on a desktop
+  and a near miss under a thumb. The list lives in `styles/global.css` under
+  "Touch targets".
+- **Nothing large is pinned.** On a phone a sticky block costs a fraction of the
+  screen for as long as you scroll; only the slim top bar stays.
+
+The phone breakpoint is `max-width: 600px` (`PHONE_MAX_WIDTH` in
+`lib/tileSize.ts`). The shell's own breakpoint, where the rail stops being a
+rail, stays at 860px.
+
 ## Keyboard model
 
 Full keyboard navigation, built from the first component rather than bolted on.

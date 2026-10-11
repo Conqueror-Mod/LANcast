@@ -133,9 +133,6 @@ export function FilterBar({
           facets?.has_unmatched ||
           facets?.has_watched
         );
-      case "actor":
-      case "director":
-        return true;
       default:
         return false;
     }

@@ -306,3 +306,31 @@
   background: rgba(7, 11, 24, 0.92);
   backdrop-filter: blur(10px);
 }
+
+/*
+ * A phone has no room for a heading and a 240px search box side by side: the
+ * box squeezed the heading until its count was drawn underneath the input and
+ * "TV SHOWS" broke onto two lines. The search takes its own full-width row.
+ */
+@media (max-width: 600px) {
+  .browse__header {
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+  .browse__search {
+    flex: 1 1 100%;
+    width: auto;
+  }
+  /* Three of the smallest tiles (96px) need the gap to come in from 18px. */
+  .browse__grid {
+    gap: 18px 12px;
+  }
+  /*
+   * Pinned, the controls are 315px of a phone's ~760: four tenths of the
+   * screen standing over the grid it is meant to steer. They scroll away with
+   * the page here.
+   */
+  .browse__controls {
+    position: static;
+  }
+}

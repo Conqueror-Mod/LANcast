@@ -411,6 +411,22 @@
   .detail__hero {
     flex-direction: column;
   }
+  /*
+   * Stretched to the screen once the hero stacks. The hero keeps
+   * align-items: flex-start for the side-by-side layout, and in a column that
+   * sized this block to its own content instead, which is the whole overview
+   * on one line: every detail page was 1,754px wide on a phone.
+   */
+  .detail__info {
+    align-self: stretch;
+  }
+  /* Play, Trailer, Download and the rest do not fit one row on a phone,
+     nor do Fix match, Refresh metadata and Re-detect credits. */
+  .detail__actions,
+  .detail__metafix {
+    flex-wrap: wrap;
+    gap: 8px 12px;
+  }
   .detail__poster {
     max-width: 60vw;
   }

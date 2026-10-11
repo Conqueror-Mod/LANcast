@@ -224,3 +224,16 @@
 :root[data-bigscreen] {
   --hero-height: clamp(207px, max(21vh, 16vw), 359px);
 }
+
+/*
+ * A phone's content area is about 320px. At the 160px minimum two tiles and a
+ * gap need 338, so every grid showed one poster per row and the first one
+ * started below the fold. 90px fits three across even with the widest grid gap
+ * (22px). Library grids set their own value from the tile-size setting, whose
+ * phone default is chosen in lib/tileSize.ts; this covers every other grid.
+ */
+@media (max-width: 600px) {
+  :root {
+    --tile-grid: 90px;
+  }
+}
