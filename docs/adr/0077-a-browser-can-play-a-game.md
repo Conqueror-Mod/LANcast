@@ -234,7 +234,46 @@ cores. **Not yet seen:** a physical controller, a television browser, a real
 phone, and Game Boy, Game Boy Color and Master System, for which the household
 library has no games.
 
-Part c (saves, then Master System and Mega Drive) is next.
+## As built: part c, saves (2026-10-11)
+
+Decision 3 is built for the game's own save, and narrowed for states, on
+measurement.
+
+**The game's own save (`sram`) is shared with the desktop.** It is the raw
+save memory every core reads. Before Start the page writes it where RetroArch
+reads it. While playing, RetroArch's autosave writes it every ten seconds and
+the page stores it when it changes, every fifteen. Leaving stores it too.
+
+**States do not cross between players.** Measured on 2026-10-11: the browser's
+RetroArch writes states RZIP-compressed (`#RZIPv1#`), and the desktop stores a
+core's raw serialization under the core's own name and version. Neither can
+load the other's. So the browser stores its state on leaving, in the `auto`
+slot, labelled `retroarch-web/<core>` with the RetroArch release. Each player
+offers Continue only from a state it can load. The `auto` slot is shared, so
+whichever player was used last owns it, and the server keeps the one it
+replaced. This narrows "states carry where the core is the same" from
+Decision 3: even mGBA and Gearsystem write different formats in the two
+players, so nothing carries yet. Carrying them would need the browser to
+unwrap RetroArch's container and the two builds to report one version.
+
+Also measured, and why the paths are what they are:
+- RetroArch names saves after the content file as LANcast cleaned its name,
+  and by default sorts them into a folder per core (`saves/mGBA/`). The config
+  turns sorting off, so the paths are predictable.
+- This web build exports its commands as functions (`_cmd_savefiles`,
+  `_cmd_save_state`, …). Saving a state runs across frames, so the page waits
+  for the file to change.
+
+**Seen working on the installed service.** *Fire Emblem* (GBA) went through
+the whole round trip:
+1. the save was stored while playing (32 KB);
+2. leaving stored an auto state (48 KB, `retroarch-web/mgba`);
+3. the game's page offered Continue and Start over;
+4. Continue restored both, and two seconds after Start the game was back
+   mid-intro where it had been left.
+
+**Still to come:** numbered states in the browser, a save list that shows which
+player made each state, and phone on-screen controls (Decision 6).
 
 ## Questions this does not answer
 

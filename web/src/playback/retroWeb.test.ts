@@ -1,7 +1,10 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
 import type { WebCores } from "@/api/types";
 import {
-  RETROARCH_CONFIG,
+  WEB_STATE_PREFIX,
+  retroarchConfig,
+  savePaths,
+  webStateCore,
   bootWebCore,
   contentName,
   coreURL,
@@ -77,6 +80,10 @@ describe("a game file's name inside the module", () => {
   });
 });
 
+const sramPath = "/home/web_user/retroarch/userdata/saves/Zelda.srm";
+const statePath = "/home/web_user/retroarch/userdata/states/Zelda.state";
+let stateWrites = 0;
+
 function fakeCore() {
   const files = new Map<string, Uint8Array | string>();
   const dirs: string[] = [];
@@ -86,11 +93,22 @@ function fakeCore() {
   const module: CoreModule = {
     FS: {
       mkdirTree: (p) => void dirs.push(p),
-      writeFile: (p, d) => void files.set(p, d),
+      writeFile: (p, d) => void files.set(p, d as Uint8Array),
+      readFile: (p) => {
+        const d = files.get(p);
+        if (d === undefined) throw new Error("ENOENT");
+        return typeof d === "string" ? new TextEncoder().encode(d) : d;
+      },
+      readdir: () => [],
     },
     ENV: {},
     callMain: (args) => void calls.push(args),
     EmscriptenSendCommand: (m) => void sent.push(m),
+    // RetroArch writing the game's save and a state, as its web build does.
+    _cmd_savefiles: () => void files.set(sramPath, new Uint8Array([7, 7, 7])),
+    _cmd_save_state: () => {
+      setTimeout(() => files.set(statePath, new Uint8Array([9, (stateWrites += 1)])), 20);
+    },
   };
   const imported: string[] = [];
   const importCore = vi.fn(async (url: string) => {
@@ -124,9 +142,9 @@ describe("booting a web core", () => {
     expect(f.module.ENV.LIBRARY_PATH).toBe(corePath);
     expect(f.files.has(corePath)).toBe(true);
     expect(f.files.get("/home/web_user/retroarch/userdata/content/Zelda.gba")).toEqual(rom.bytes);
-    expect(f.files.get("/home/web_user/retroarch/userdata/retroarch.cfg")).toBe(RETROARCH_CONFIG);
+    expect(f.files.get("/home/web_user/retroarch/userdata/retroarch.cfg")).toBe(retroarchConfig(false));
     // RGUI needs no asset bundle; the default menu does.
-    expect(RETROARCH_CONFIG).toContain('menu_driver = "rgui"');
+    expect(retroarchConfig(false)).toContain('menu_driver = "rgui"');
   });
 
   // A browser keeps a page silent until somebody interacts, so the game
@@ -175,5 +193,72 @@ describe("retroAvailability outside the desktop app", () => {
     const a = await retroAvailability("nes");
     expect(a.available).toBe(false);
     expect(a.reason).toBe("Plays in the LANcast desktop app.");
+  });
+});
+
+/*
+ * Saves (ADR 0077 part c). The paths are the ones RetroArch was measured
+ * writing on 2026-10-11, with sorting turned off: flat, named after the
+ * content file as contentName left it.
+ */
+describe("saves in the browser", () => {
+  const rom = { name: "Zelda.gba", bytes: new Uint8Array([1, 2, 3]) };
+
+  it("names a game's save and states after its cleaned content name", () => {
+    const p = savePaths("Fire Emblem (USA, Australia).zip");
+    expect(p.sram).toBe("/home/web_user/retroarch/userdata/saves/Fire Emblem (USA_ Australia).srm");
+    expect(p.state).toBe("/home/web_user/retroarch/userdata/states/Fire Emblem (USA_ Australia).state");
+    expect(p.autoLoad).toBe("/home/web_user/retroarch/userdata/states/Fire Emblem (USA_ Australia).state.auto");
+  });
+
+  it("keeps saves flat and auto-loads only when continuing", () => {
+    for (const k of ["sort_savefiles_enable", "sort_savestates_enable"]) {
+      expect(retroarchConfig(false)).toContain(`${k} = "false"`);
+    }
+    expect(retroarchConfig(false)).toContain('savestate_auto_load = "false"');
+    expect(retroarchConfig(true)).toContain('savestate_auto_load = "true"');
+  });
+
+  it("puts the game's save and a state to continue from where RetroArch reads them", async () => {
+    const f = fakeCore();
+    const sram = new Uint8Array([5, 5]);
+    const state = new Uint8Array([6, 6]);
+    await bootWebCore({ core: "mgba", canvas: document.createElement("canvas"), rom, sram, resume: state, importCore: f.importCore });
+    expect(f.files.get(sramPath)).toEqual(sram);
+    expect(f.files.get("/home/web_user/retroarch/userdata/states/Zelda.state.auto")).toEqual(state);
+    expect(f.files.get("/home/web_user/retroarch/userdata/retroarch.cfg")).toBe(retroarchConfig(true));
+  });
+
+  // Play, not Continue: nothing to auto-load, and no auto-load switched on.
+  it("starts fresh when not continuing", async () => {
+    const f = fakeCore();
+    await bootWebCore({ core: "mgba", canvas: document.createElement("canvas"), rom, importCore: f.importCore });
+    expect(f.files.has("/home/web_user/retroarch/userdata/states/Zelda.state.auto")).toBe(false);
+    expect(f.files.get("/home/web_user/retroarch/userdata/retroarch.cfg")).toBe(retroarchConfig(false));
+  });
+
+  it("asks RetroArch for the current save, and only once the game is running", async () => {
+    const f = fakeCore();
+    const b = await bootWebCore({ core: "mgba", canvas: document.createElement("canvas"), rom, importCore: f.importCore });
+    expect(b.readSRAM()).toBeNull();
+    b.start();
+    expect(b.readSRAM()).toEqual(new Uint8Array([7, 7, 7]));
+  });
+
+  // State saving runs across frames: the call returns at once, the file comes later.
+  it("waits for a new state to be written", async () => {
+    const f = fakeCore();
+    const b = await bootWebCore({ core: "mgba", canvas: document.createElement("canvas"), rom, importCore: f.importCore });
+    b.start();
+    const first = await b.saveState(1000);
+    const second = await b.saveState(1000);
+    expect(first).not.toBeNull();
+    expect(second).not.toBeNull();
+    expect(second).not.toEqual(first);
+  });
+
+  it("labels a browser state so no desktop core will take it", () => {
+    expect(webStateCore("mgba")).toBe("retroarch-web/mgba");
+    expect(webStateCore("mgba").startsWith(WEB_STATE_PREFIX)).toBe(true);
   });
 });
