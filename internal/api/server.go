@@ -204,6 +204,9 @@ type Server struct {
 	// accountWait slows guessing at one account from many addresses; throttle
 	// only sees one address at a time.
 	accountWait *auth.AccountBackoff
+	// publicCert is the opt-in public certificate (ADR 0081); nil on a
+	// loopback-only server. Set by SetPublicCert after TLS is prepared.
+	publicCert PublicCertManager
 	// presence is who is watching what, right now. In memory and never
 	// persisted, which is ADR 0045 §4 and not an optimisation.
 	presence *presence.Tracker
@@ -761,6 +764,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/artwork/{hash}", s.serveArtwork)
 
 	mux.HandleFunc("GET /api/settings", s.adminOnly(s.getSettings))
+	mux.HandleFunc("GET /api/settings/public-certificate", s.adminOnly(s.getPublicCert))
+	mux.HandleFunc("PUT /api/settings/public-certificate", s.adminOnly(s.putPublicCert))
 	mux.HandleFunc("PUT /api/settings", s.adminOnly(s.putSettings))
 	mux.HandleFunc("POST /api/settings/reset", s.adminOnly(s.resetSettings))
 	mux.HandleFunc("POST /api/cache/clear", s.adminOnly(s.clearCache))

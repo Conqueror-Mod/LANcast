@@ -4480,6 +4480,66 @@ would lock the operator out of their own server and wiping the others would
 break metadata and HTTPS — none of which is what anybody means by "reset
 settings", and none of which a reset can restore. What resets is behaviour.
 
+### `GET /api/settings/public-certificate` · `PUT /api/settings/public-certificate`
+
+The opt-in public certificate ([ADR 0081](adr/0081-a-public-name-can-earn-a-public-certificate.md)).
+**Admin only.** Both return the same body:
+
+```json
+{
+  "available": true,
+  "enabled": true,
+  "hostname": "example.duckdns.org",
+  "ca": "letsencrypt",
+  "email": "",
+  "agreed_at": "2026-10-11T20:00:00Z",
+  "cas": [
+    { "id": "letsencrypt", "name": "Let's Encrypt",
+      "terms_url": "https://letsencrypt.org/repository/", "trusted": true },
+    { "id": "letsencrypt-staging", "name": "Let's Encrypt (staging, for testing)",
+      "terms_url": "https://letsencrypt.org/repository/", "trusted": false }
+  ],
+  "status": {
+    "state": "active",
+    "hostname": "example.duckdns.org",
+    "ca": "letsencrypt",
+    "not_after": "2027-01-09T20:00:00Z",
+    "last_attempt": "2026-10-11T20:00:05Z"
+  }
+}
+```
+
+`available` is `false` on a loopback-only server, which serves no HTTPS, and
+`PUT` there answers `409`. `status.state` is `off`, `pending` (on, first
+certificate not yet issued), `active`, or `failing`. When failing,
+`last_error` carries the CA's or the network's own words and `next_attempt`
+says when it will try again: an hour after the first failure, doubling to a
+day. A failed renewal **keeps serving the current certificate**; an expired
+one is never served, and the name falls back to the self-signed certificate.
+
+`PUT` takes `{enabled, hostname, ca, email, agree_terms}`:
+
+- **Off by default, and nothing is contacted while off.** Turning it off
+  deletes the certificate and the ACME account key, keeps the name for next
+  time, and forgets the agreement.
+- `hostname` is one DNS name. An IP address, a URL, a port, a wildcard or
+  `localhost` is a `400` saying which.
+- `ca` must be an `id` from `cas`. **The CA's directory URL cannot be set
+  through the API**; a private CA is `acme_directory_url` in the settings file.
+- `email` is optional and empty by default. An ACME account needs none.
+- `agree_terms` must be `true` to turn it on, unless the terms were already
+  agreed for the same CA. LANcast does not agree on anybody's behalf, and a
+  different CA is a different agreement.
+- **Saving again is "try now"**: it clears the backoff and starts an attempt.
+
+Only a client that asks for `hostname` (TLS SNI) gets the public certificate.
+Connections by IP or `localhost`, and peer servers, keep the certificate they
+had. The public certificate is issued for the server's existing serving key, so
+the fingerprint in `GET /api/settings` is the same for both, and a client that
+pinned it keeps trusting the server across renewals. Proving the name needs
+**inbound port 443** reaching LANcast (TLS-ALPN-01); forward it to LANcast's
+port on the router.
+
 ### `POST /api/cache/clear`
 
 Throws away something the server can make again. **Admin only.**

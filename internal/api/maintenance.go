@@ -83,6 +83,10 @@ func (s *Server) resetSettings(w http.ResponseWriter, r *http.Request) {
 	next.OMDbKey = prev.OMDbKey
 	next.TLSCertFile = prev.TLSCertFile
 	next.TLSKeyFile = prev.TLSKeyFile
+	// The public certificate is HTTPS too (ADR 0081): a reset that quietly
+	// turned it off would put the warning back in front of every friend.
+	next.PublicCert = prev.PublicCert
+	next.ACMEDirectoryURL = prev.ACMEDirectoryURL
 	// Where ffmpeg is, is a fact about this machine that `service install`
 	// discovered — not a preference, and re-discovering it is not something a
 	// reset can do.

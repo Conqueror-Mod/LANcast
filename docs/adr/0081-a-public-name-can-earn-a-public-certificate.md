@@ -1,10 +1,10 @@
 # ADR 0081 — A public name can earn a public certificate
 
-Date: 2026-10-11 · Status: **proposed** · **amends [ADR 0014](0014-transport-security.md)**
+Date: 2026-10-11 · Status: **accepted** 2026-10-11 · **amends [ADR 0014](0014-transport-security.md)**
 
 The plan is [passkeys-plan.md](../passkeys-plan.md), Part 1. Chris decided on
-2026-10-11 to revisit ADR 0014's "no ACME" as an opt-in. This record is the
-shape of that opt-in, and it is not accepted yet.
+2026-10-11 to revisit ADR 0014's "no ACME" as an opt-in, and accepted this
+record as written the same day.
 
 ## Context
 
@@ -157,15 +157,22 @@ compromise the other.
 
 ### 6. Where the settings live
 
-The hostname, CA choice, agreement, optional email and on/off go in
-`config.Settings` and through `GET/PUT /api/settings`, admin-only like every
-other field there. `acme_directory_url` is file-only (§1). Certificate state
-(expiry, last error) is reported by a new read-only
-`GET /api/settings/public-certificate`. That is an API contract change, so
-`docs/api.md` and `docs/openapi.json` change in the same commit.
+The hostname, CA choice, agreement time, optional email and on/off are stored
+in `config.Settings` (`public_cert`). They are read and written through **one
+dedicated admin-only resource**, `GET/PUT /api/settings/public-certificate`,
+not through `/api/settings`. Its body includes the CAs on offer and the live
+status (expiry, last attempt, last error, next attempt). *Amended while
+building, 2026-10-11:* this was going to be fields on `/api/settings` plus a
+read-only status route. One resource is simpler, because turning this on needs
+the agreement in the same request and "save again" doubles as "try now". That
+behaviour does not fit the general settings route, where omitted fields are
+left alone.
+
+`acme_directory_url` is file-only (§1). A server that serves no HTTPS reports
+the feature as unavailable and refuses `PUT` with `409`.
 
 No schema change: the certificate, chain and account key are files under
-`<data>/tls/`, like the self-signed ones.
+`<data>/tls/acme/`, beside the self-signed ones.
 
 ## Consequences
 
