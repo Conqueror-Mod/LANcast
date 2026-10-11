@@ -183,6 +183,17 @@ describe("the event stream", () => {
     root = createRoot(host);
   });
 
+  /*
+   * A detail page, a season list and the filter counts change with a scan
+   * too. The activity poll used to be the only thing that refreshed them, and
+   * only when it happened to see the job end.
+   */
+  it("reaches detail pages, children and facets when items change", () => {
+    invalidateTopics(qc, ["items"]);
+    for (const key of [["item"], ["children"], ["facets"], ["review"]])
+      expect(invalidated()).toContainEqual({ queryKey: key });
+  });
+
   it("every topic the server publishes has a row", () => {
     for (const topic of ["peers", "presence", "libraries", "items"])
       expect(topicKeys[topic], topic).toBeDefined();

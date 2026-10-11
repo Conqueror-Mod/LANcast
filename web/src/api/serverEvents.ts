@@ -27,7 +27,23 @@ export const topicKeys: Record<string, readonly (readonly string[])[]> = {
   peers: [["peers"], ["peer-presence"], ["peer-shares"], ["peer-libraries"]],
   presence: [["peer-presence"]],
   libraries: [["libraries"], ["items"], ["recently-added"], ["continue"]],
-  items: [["items"], ["recently-added"], ["continue"], ["recent-photos"]],
+  /*
+   * The same lists `workFinishedKeys` in hooks.ts refreshes when the activity
+   * poll sees a job end, plus the photo shelf. That poll only catches an end
+   * it happens to be polling for, at 8 s while idle, so a sub-second scan
+   * started from another window slipped past it. The event does not.
+   */
+  items: [
+    ["items"],
+    ["item"],
+    ["children"],
+    ["facets"],
+    ["places"],
+    ["review"],
+    ["recently-added"],
+    ["continue"],
+    ["recent-photos"],
+  ],
 };
 
 /** Invalidates what each named topic makes stale. Unknown topics are ignored:
