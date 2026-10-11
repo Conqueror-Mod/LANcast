@@ -336,6 +336,17 @@ export function LibraryView({
     return m;
   }, [facePeople.data]);
 
+  /*
+   * How many filters are on, for the phone's Filters button (docs/design.md,
+   * Phone). Search is not counted: the box stays on screen and shows what it
+   * holds. The letter from the A-Z rail is, because the rail is folded away
+   * with the rest.
+   */
+  const activeFilters =
+    FACET_KEYS.reduce((n, k) => n + params.getAll(k).length, 0) + (initial ? 1 : 0);
+  // Folded on a phone until asked for; ignored by the desktop stylesheet.
+  const [filtersOpen, setFiltersOpen] = useState(false);
+
   const filtered =
     !!q ||
     genres.length > 0 ||
@@ -407,7 +418,7 @@ export function LibraryView({
         <TileSizeSlider />
       </div>
 
-      <div className="browse__controls">
+      <div className={"browse__controls" + (filtersOpen ? " is-open" : "")}>
       {facets?.initials && (
         <AlphabetRail
           initials={facets.initials}
@@ -527,6 +538,17 @@ export function LibraryView({
             Playlists
           </button>
         )}
+        {/* Phones only (Browse.css). A-Z and the filter chips fill a phone's
+            first screen, so they wait behind this, which says how many are
+            on so a filtered grid never looks like a short library. */}
+        <button
+          type="button"
+          className={"browse__playall-btn browse__filters-toggle" + (activeFilters > 0 ? " is-on" : "")}
+          onClick={() => setFiltersOpen((o) => !o)}
+          aria-expanded={filtersOpen}
+        >
+          Filters{activeFilters > 0 ? ` · ${activeFilters}` : ""}
+        </button>
         <label className="browse__filter">
           <span>Sort</span>
           <select

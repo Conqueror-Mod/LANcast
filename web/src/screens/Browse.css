@@ -307,6 +307,13 @@
   backdrop-filter: blur(10px);
 }
 
+/* The phone's Filters button. On a desktop everything is laid out, so there
+   is nothing to unfold; the phone block below shows it. Kept above that block
+   so the phone rule wins by order. */
+.browse__filters-toggle {
+  display: none;
+}
+
 /*
  * A phone has no room for a heading and a 240px search box side by side: the
  * box squeezed the heading until its count was drawn underneath the input and
@@ -332,5 +339,18 @@
    */
   .browse__controls {
     position: static;
+  }
+
+  /*
+   * The A-Z rail and the filter chips wait behind the Filters button
+   * (docs/design.md, Phone). Folded, the controls are the actions, Sort and
+   * the button: the first poster is on the first screen.
+   */
+  .browse__controls:not(.is-open) .browse__az,
+  .browse__controls:not(.is-open) .fbar {
+    display: none;
+  }
+  .browse__filters-toggle {
+    display: inline-flex;
   }
 }
