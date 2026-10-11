@@ -57,12 +57,33 @@ make it a choice the operator makes, not something LANcast does unasked:
 
 ### The name
 
-A static public address means no dynamic DNS is needed: a domain the operator
-owns (around $10 a year) with an `A` record (and `AAAA` if IPv6 is reachable)
-pointing at Aither. Free dynamic-DNS names also work, but they add a third
-party that controls the name, and passkeys break the day that name changes
-hands. **Recommend an owned domain.** The RP ID is permanent: changing it
-orphans every registered passkey.
+*Revised 2026-10-11.* The first recommendation was a domain the operator owns.
+That is still the strongest choice, but it costs money every year, and the
+free route turned out to be good enough, with one rule:
+
+**A free name must be under a domain on the Public Suffix List.** The PSL is
+how browsers and Let's Encrypt decide where one site ends. Under an unlisted
+shared domain (sslip.io, nip.io, most afraid.org domains), every user of the
+provider is one "site": they share one Let's Encrypt rate limit, and any of
+them can set cookies on the parent domain. Checked against the list on
+2026-10-11:
+
+| On the PSL | Notes |
+|---|---|
+| `duckdns.org` | **chosen for Aither.** A/AAAA/TXT only, so no CAA record |
+| `dynv6.net` | more record types |
+| `dynu.net`, `freeddns.org` | fine |
+| `ddns.net` (No-IP) | free names must be reconfirmed every 30 days or they are lost; avoid |
+| `dedyn.io` (deSEC) | new registrations suspended as of 2026-10 |
+
+**Losing a free name is an inconvenience, not a lockout.** The RP ID is
+permanent, so passkeys made under a name die with it. But the password stays
+as the recovery path, so the remedy is to sign in with it and register
+passkeys under the new name. A later move to an owned domain is the same
+re-registration.
+
+**No CAA on DuckDNS.** The "only Let's Encrypt may issue for this name" lock
+is lost. It is a hardening step, not a requirement.
 
 ### The challenge type
 
@@ -96,7 +117,9 @@ A phone on the LAN must also reach the server *by name*, or it gets a
 certificate for a name it did not ask for, and no passkey. Three options:
 
 - **Hairpin NAT** on the AT&T gateway, so the public `A` record works from
-  inside. Unknown whether it does: see the spikes.
+  inside. **Measured 2026-10-11: it does, over IPv4.** From Aither itself, the
+  public name answered `/api/health` with the same serving key as loopback.
+  IPv6 is untested, because there is no `AAAA` record yet.
 - **IPv6:** with no NAT, an `AAAA` record that resolves to Aither's global
   address works on the LAN as-is, if the gateway is not filtering it.
 - **Split DNS:** the router or a hosts entry maps the name to the LAN address.
@@ -202,15 +225,15 @@ small.
 2. **Does the client's pinned self-signed certificate count as a certificate
    error** for WebAuthn? It uses `--ignore-certificate-errors-spki-list`. This
    decides whether passkeys could ever work on the LAN without a public name.
-3. **Does the AT&T gateway hairpin**, on IPv4 and IPv6? This decides the
-   "inside the house" answer.
+3. **Does the AT&T gateway hairpin?** IPv4: **yes** (2026-10-11). IPv6:
+   untested until an `AAAA` record exists.
 4. **The module graph of go-webauthn.**
 
 ## Build order
 
 1. Per-account throttle (independent, ship now).
-2. Register the domain; point `A`/`AAAA` at Aither; forward 443 → 8080.
-   *Chris's side; nothing to build.*
+2. ~~Get a name pointing at Aither~~ (done 2026-10-11: a free DuckDNS name,
+   `A` only). Still to do: forward 443 → 8080, once ACME exists.
 3. ADR 0081 + opt-in ACME (TLS-ALPN-01, stable serving key, Settings with the
    CA named, renewal logged). Verify **as the installed service**, from a phone
    on cellular.
