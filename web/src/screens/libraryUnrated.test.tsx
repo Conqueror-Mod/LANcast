@@ -60,7 +60,7 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-async function render(kind: string) {
+async function render(kind: string, at = "/library/9") {
   const library = { id: 9, name: "Library", kind, path: "D:/x", created_at: 1, scanned_at: 2, item_count: 1, media_count: 1 };
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   await act(async () => {
@@ -68,7 +68,7 @@ async function render(kind: string) {
       <QueryClientProvider client={client}>
         <FocusProvider>
           <PlaybackProvider>
-            <MemoryRouter initialEntries={["/library/9"]}>
+            <MemoryRouter initialEntries={[at]}>
               <LibraryView library={library as never} config={configForKind(kind as never)} />
             </MemoryRouter>
           </PlaybackProvider>
@@ -105,5 +105,43 @@ describe("the not-rated button", () => {
     role = "member";
     await render("retro");
     expect(notRated()).toBeUndefined();
+  });
+});
+
+/*
+ * The phone's Filters button (docs/design.md, Phone). The stylesheet decides
+ * that it shows and that the A-Z rail and chips fold away behind it; what is
+ * checked here is what the button says and that it unfolds the controls.
+ * Its count is the guard against a filtered grid passing for a short library.
+ */
+describe("the Filters button", () => {
+  const toggle = () => host.querySelector<HTMLButtonElement>(".browse__filters-toggle")!;
+
+  it("says nothing more than Filters when nothing is on", async () => {
+    await render("movie");
+    expect(toggle().textContent).toBe("Filters");
+    expect(toggle().classList.contains("is-on")).toBe(false);
+  });
+
+  it("counts the filters that are on, the letter included", async () => {
+    await render("movie", "/library/9?genre=Horror&genre=Comedy&initial=T");
+    expect(toggle().textContent).toBe("Filters · 3");
+    expect(toggle().classList.contains("is-on")).toBe(true);
+  });
+
+  it("does not count the search box, which stays on screen", async () => {
+    await render("movie", "/library/9?q=ghost");
+    expect(toggle().textContent).toBe("Filters");
+  });
+
+  it("unfolds and folds the controls", async () => {
+    await render("movie");
+    const controls = host.querySelector(".browse__controls")!;
+    expect(controls.classList.contains("is-open")).toBe(false);
+    await act(async () => toggle().click());
+    expect(controls.classList.contains("is-open")).toBe(true);
+    expect(toggle().getAttribute("aria-expanded")).toBe("true");
+    await act(async () => toggle().click());
+    expect(controls.classList.contains("is-open")).toBe(false);
   });
 });
