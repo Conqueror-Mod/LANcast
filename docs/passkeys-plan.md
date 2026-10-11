@@ -70,8 +70,8 @@ them can set cookies on the parent domain. Checked against the list on
 
 | On the PSL | Notes |
 |---|---|
-| `duckdns.org` | **chosen for Aither.** A/AAAA/TXT only, so no CAA record |
-| `dynv6.net` | more record types |
+| `duckdns.org` | **failed in practice (2026-10-11):** Let's Encrypt's secondary validation could not resolve the name, four times in a row. A/AAAA/TXT only, so no CAA record |
+| `dynv6.net` | **chosen for Aither.** Supports CAA; production issued on the first attempt |
 | `dynu.net`, `freeddns.org` | fine |
 | `ddns.net` (No-IP) | free names must be reconfirmed every 30 days or they are lost; avoid |
 | `dedyn.io` (deSEC) | new registrations suspended as of 2026-10 |
@@ -117,9 +117,12 @@ A phone on the LAN must also reach the server *by name*, or it gets a
 certificate for a name it did not ask for, and no passkey. Three options:
 
 - **Hairpin NAT** on the AT&T gateway, so the public `A` record works from
-  inside. **Measured 2026-10-11: it does, over IPv4.** From Aither itself, the
-  public name answered `/api/health` with the same serving key as loopback.
-  IPv6 is untested, because there is no `AAAA` record yet.
+  inside. **Measured 2026-10-11: it does, over IPv4, but unreliably.** From
+  Aither itself the public name answered with the same serving key as
+  loopback, but only 3 of 8 attempts succeeded on either port, against 8 of 8
+  on loopback. The gateway's NAT loopback is flaky, so **split DNS (the name
+  pointing at the LAN address inside the house) is the real answer** for
+  passkeys at home. IPv6 is untested, because there is no `AAAA` record yet.
 - **IPv6:** with no NAT, an `AAAA` record that resolves to Aither's global
   address works on the LAN as-is, if the gateway is not filtering it.
 - **Split DNS:** the router or a hosts entry maps the name to the LAN address.
@@ -232,11 +235,14 @@ small.
 ## Build order
 
 1. Per-account throttle (independent, ship now).
-2. ~~Get a name pointing at Aither~~ (done 2026-10-11: a free DuckDNS name,
-   `A` only). Still to do: forward 443 → 8080, once ACME exists.
-3. ADR 0081 + opt-in ACME (TLS-ALPN-01, stable serving key, Settings with the
-   CA named, renewal logged). Verify **as the installed service**, from a phone
-   on cellular.
+2. ~~Get a name pointing at Aither and forward 443 → 8080~~ (done
+   2026-10-11: a free dynv6 name with CAA, `A` only).
+3. ~~ADR 0081 + opt-in ACME~~ (built; **verified as the installed service**
+   2026-10-11: production issued for the dynv6 name; SNI selection, the
+   unchanged SPKI and the peer path all checked). Let's Encrypt **staging**
+   failed secondary validation for three unrelated free DNS providers while
+   production succeeded, so staging is not a reliable rehearsal for names on
+   shared DNS hosts.
 4. Run spikes 1–3 against the real certificate.
 5. ADR 0082 + migration + passkey package + API + spec.
 6. Login and Account UI, with feature detection.

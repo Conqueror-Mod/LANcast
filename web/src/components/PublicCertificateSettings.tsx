@@ -162,6 +162,13 @@ function PublicCertificateForm({ data }: { data: PublicCertificate }) {
           </button>
         ) : null}
       </div>
+      {!agreed && !agree && chosen ? (
+        // Said, because a disabled button reads as plain text and the reason
+        // it is disabled is one line further up.
+        <div className="set-row__sub">
+          Tick the agreement above to turn this on.
+        </div>
+      ) : null}
       {update.isError ? (
         <div className="set-row__sub" role="alert">
           {errorMessage(update.error)}

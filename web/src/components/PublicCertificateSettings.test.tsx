@@ -107,6 +107,7 @@ describe("public certificate settings", () => {
     const name = host.querySelector('input[aria-label="Public name"]') as HTMLInputElement;
     await act(async () => type(name, "Example.DuckDNS.org"));
     expect(button("Turn on")!.disabled).toBe(true);
+    expect(host.textContent).toContain("Tick the agreement above");
 
     const tick = host.querySelector('input[type="checkbox"]') as HTMLInputElement;
     await act(async () => tick.click());
