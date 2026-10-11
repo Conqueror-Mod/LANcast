@@ -10564,6 +10564,146 @@
         }
       }
     },
+    "/retro/web-cores": {
+      "get": {
+        "operationId": "getWebCores",
+        "tags": [
+          "retro"
+        ],
+        "summary": "Which consoles the browser can play here, and the core download",
+        "description": "Any signed-in account: a game page needs to know whether to offer play in the browser (ADR 0077).\n\nNames every core, its licence, its source and its size, and the archive they come from, **before anything is fetched**. Four cores, one per console the browser plays: FCEUmm (NES), mGBA (Game Boy, Color and Advance), Gearsystem (Master System) and ClownMDEmu (Mega Drive). SNES, N64 and PlayStation have none, by decision.",
+        "responses": {
+          "200": {
+            "description": "The cores, the archive, and any running job.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WebCores"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      }
+    },
+    "/retro/web-cores/install": {
+      "post": {
+        "operationId": "installWebCores",
+        "tags": [
+          "retro"
+        ],
+        "summary": "Start the browser core download",
+        "description": "Administrators only. Asynchronous; progress is polled from `GET /api/retro/web-cores`.\n\n**The archive and every file in it are pinned in the server and never taken from the request.** The archive is checked against its SHA-256 before it is opened, each core file against its own as it comes out, and the archive is deleted afterwards. Only the listed cores are extracted. A core already in place and correct is not fetched again.\n\nPressing it twice while it runs returns the same snapshot.",
+        "responses": {
+          "202": {
+            "description": "The download has started, or was already running.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WebCoresJob"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          }
+        }
+      }
+    },
+    "/retro/web-cores/install/cancel": {
+      "post": {
+        "operationId": "cancelWebCoresInstall",
+        "tags": [
+          "retro"
+        ],
+        "summary": "Stop a running browser core download",
+        "description": "Administrators only. Nothing partial is left.",
+        "responses": {
+          "200": {
+            "description": "The job as it stands.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WebCoresJob"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          }
+        }
+      }
+    },
+    "/retro/web-cores/{core}/{kind}": {
+      "get": {
+        "operationId": "getWebCoreFile",
+        "tags": [
+          "retro"
+        ],
+        "summary": "One installed core file",
+        "description": "Any signed-in account. `core` is a name from `GET /api/retro/web-cores` and `kind` is `js` (the loader, `text/javascript`) or `wasm` (the module, `application/wasm`). Anything else, or a core that is not installed, is `404`; no request can name a file outside the pinned list.\n\nThe `ETag` is the file's pinned SHA-256 and `Cache-Control` is `private, no-cache`, so a browser revalidates cheaply and picks up a new build when a release moves the pin.",
+        "parameters": [
+          {
+            "name": "core",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "kind",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "js",
+                "wasm"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The file.",
+            "content": {
+              "text/javascript": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "application/wasm": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "304": {
+            "description": "The browser's copy is current."
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
     "/retro/database": {
       "get": {
         "operationId": "getRetroDatabase",
@@ -17380,6 +17520,122 @@
             "items": {
               "$ref": "#/components/schemas/ROMSave"
             }
+          }
+        }
+      },
+      "WebCoresJob": {
+        "type": "object",
+        "required": [
+          "running",
+          "stage",
+          "done",
+          "total"
+        ],
+        "properties": {
+          "running": {
+            "type": "boolean"
+          },
+          "stage": {
+            "type": "string",
+            "description": "`download` (done and total in bytes), then `unpack` (done and total in files), then `done`; empty before the first install."
+          },
+          "done": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "total": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "error": {
+            "type": "string",
+            "description": "Why the last install stopped; `cancelled` when it was cancelled."
+          },
+          "finished_at": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
+      "WebCores": {
+        "type": "object",
+        "required": [
+          "cores",
+          "archive",
+          "job"
+        ],
+        "properties": {
+          "cores": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "name",
+                "display",
+                "licence",
+                "source_url",
+                "consoles",
+                "size_bytes",
+                "installed"
+              ],
+              "properties": {
+                "name": {
+                  "type": "string",
+                  "description": "libretro's name, used in the file route: `fceumm`, `mgba`, `gearsystem`, `clownmdemu`."
+                },
+                "display": {
+                  "type": "string"
+                },
+                "licence": {
+                  "type": "string",
+                  "description": "SPDX identifier."
+                },
+                "source_url": {
+                  "type": "string",
+                  "description": "Where the core's source is published."
+                },
+                "consoles": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  },
+                  "description": "Media platform values this core plays in the browser."
+                },
+                "size_bytes": {
+                  "type": "integer",
+                  "format": "int64",
+                  "description": "On disk once installed: the loader and the module together."
+                },
+                "installed": {
+                  "type": "boolean"
+                }
+              }
+            }
+          },
+          "archive": {
+            "type": "object",
+            "required": [
+              "url",
+              "size_bytes",
+              "version"
+            ],
+            "properties": {
+              "url": {
+                "type": "string",
+                "description": "Display only. The server fetches the pinned address whatever a client sends."
+              },
+              "size_bytes": {
+                "type": "integer",
+                "format": "int64"
+              },
+              "version": {
+                "type": "string",
+                "description": "The RetroArch release the archive is."
+              }
+            }
+          },
+          "job": {
+            "$ref": "#/components/schemas/WebCoresJob"
           }
         }
       }

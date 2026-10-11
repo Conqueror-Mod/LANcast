@@ -4726,6 +4726,94 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/retro/web-cores": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Which consoles the browser can play here, and the core download
+         * @description Any signed-in account: a game page needs to know whether to offer play in the browser (ADR 0077).
+         *
+         *     Names every core, its licence, its source and its size, and the archive they come from, **before anything is fetched**. Four cores, one per console the browser plays: FCEUmm (NES), mGBA (Game Boy, Color and Advance), Gearsystem (Master System) and ClownMDEmu (Mega Drive). SNES, N64 and PlayStation have none, by decision.
+         */
+        get: operations["getWebCores"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/retro/web-cores/install": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Start the browser core download
+         * @description Administrators only. Asynchronous; progress is polled from `GET /api/retro/web-cores`.
+         *
+         *     **The archive and every file in it are pinned in the server and never taken from the request.** The archive is checked against its SHA-256 before it is opened, each core file against its own as it comes out, and the archive is deleted afterwards. Only the listed cores are extracted. A core already in place and correct is not fetched again.
+         *
+         *     Pressing it twice while it runs returns the same snapshot.
+         */
+        post: operations["installWebCores"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/retro/web-cores/install/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Stop a running browser core download
+         * @description Administrators only. Nothing partial is left.
+         */
+        post: operations["cancelWebCoresInstall"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/retro/web-cores/{core}/{kind}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * One installed core file
+         * @description Any signed-in account. `core` is a name from `GET /api/retro/web-cores` and `kind` is `js` (the loader, `text/javascript`) or `wasm` (the module, `application/wasm`). Anything else, or a core that is not installed, is `404`; no request can name a file outside the pinned list.
+         *
+         *     The `ETag` is the file's pinned SHA-256 and `Cache-Control` is `private, no-cache`, so a browser revalidates cheaply and picks up a new build when a release moves the pin.
+         */
+        get: operations["getWebCoreFile"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/retro/database": {
         parameters: {
             query?: never;
@@ -7365,6 +7453,47 @@ export interface components {
         };
         ROMSaves: {
             saves: components["schemas"]["ROMSave"][];
+        };
+        WebCoresJob: {
+            running: boolean;
+            /** @description `download` (done and total in bytes), then `unpack` (done and total in files), then `done`; empty before the first install. */
+            stage: string;
+            /** Format: int64 */
+            done: number;
+            /** Format: int64 */
+            total: number;
+            /** @description Why the last install stopped; `cancelled` when it was cancelled. */
+            error?: string;
+            /** Format: int64 */
+            finished_at?: number;
+        };
+        WebCores: {
+            cores: {
+                /** @description libretro's name, used in the file route: `fceumm`, `mgba`, `gearsystem`, `clownmdemu`. */
+                name: string;
+                display: string;
+                /** @description SPDX identifier. */
+                licence: string;
+                /** @description Where the core's source is published. */
+                source_url: string;
+                /** @description Media platform values this core plays in the browser. */
+                consoles: string[];
+                /**
+                 * Format: int64
+                 * @description On disk once installed: the loader and the module together.
+                 */
+                size_bytes: number;
+                installed: boolean;
+            }[];
+            archive: {
+                /** @description Display only. The server fetches the pinned address whatever a client sends. */
+                url: string;
+                /** Format: int64 */
+                size_bytes: number;
+                /** @description The RetroArch release the archive is. */
+                version: string;
+            };
+            job: components["schemas"]["WebCoresJob"];
         };
     };
     responses: {
@@ -14862,6 +14991,104 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["ErrorEnvelope"];
                 };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    getWebCores: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The cores, the archive, and any running job. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WebCores"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+        };
+    };
+    installWebCores: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The download has started, or was already running. */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WebCoresJob"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    cancelWebCoresInstall: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The job as it stands. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WebCoresJob"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    getWebCoreFile: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                core: string;
+                kind: "js" | "wasm";
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The file. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/javascript": string;
+                    "application/wasm": string;
+                };
+            };
+            /** @description The browser's copy is current. */
+            304: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             401: components["responses"]["Unauthorized"];
             404: components["responses"]["NotFound"];

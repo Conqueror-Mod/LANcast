@@ -175,6 +175,33 @@ module the way libretro's own web player does.
    native player is faster, has OpenGL for N64, uses the more accurate cores,
    and is what was tested.
 
+## As built: part a, the server half (2026-10-11)
+
+The server fetch (Decision 1) is built in `internal/retro/webcores`, on the
+desktop's fetcher, generalised in `internal/retro/cores` to pinned files rather
+than one DLL per core. Where it refines the text above:
+
+- **The pinned archive holds all four cores.** This closes the last open
+  question below. `stable/1.22.2/emscripten/RetroArch.7z` is 749,072,539 bytes
+  (SHA-256 `00e17fda…`), and every `{core}_libretro.js` and `.wasm` sits under
+  `retroarch/`. The eight files were hashed from it on 2026-10-11. None of them
+  uses threads, so the stable builds agree with the nightly check in §Verified.
+- **The real archive installs through the Go code.** An opt-in test
+  (`LANCAST_WEBCORES_ARCHIVE`, `real_test.go`) serves a downloaded copy and
+  installs from it with the real pins: 42 s locally, most of it the solid 7z.
+  Run it again whenever the pin moves.
+- **Cores are served at `/api/retro/web-cores/{core}/{kind}`**, not `/cores/`,
+  so the API's session gate covers them with no second mechanism. The name and
+  kind only select from the pinned list. The ETag is the pin, so a browser
+  revalidates cheaply and picks up a new build when a release moves it.
+- **About 13 MB is kept** of the 749 MB download.
+- **Status is for every signed-in account and installing is an
+  administrator's**, because a game page needs to know which consoles play in
+  the browser.
+
+Parts b (the page-side player) and c (saves, then Master System and Mega
+Drive) are next.
+
 ## Questions this does not answer
 
 - **A television browser's Gamepad API.** Whether an LG or Samsung TV browser
@@ -185,9 +212,8 @@ module the way libretro's own web player does.
   measurement, not a guess. ClownMDEmu is also younger than BlastEm, so its
   compatibility on the household's own Mega Drive set is measured at the same
   time.
-- **The pinned archive's exact contents.** The table is from libretro's
-  nightly web player. If 1.22.2 lacks one of the five cores, that console is
-  desktop-only in the browser until the pin moves.
+- ~~**The pinned archive's exact contents.**~~ Answered when part a was
+  built: 1.22.2 holds all four cores (§As built).
 
 ## Alternatives considered
 

@@ -55,6 +55,9 @@ import {
   useCancelFaceModels,
   useServerIdentity,
   useRetroDatabase,
+  useWebCores,
+  useInstallWebCores,
+  useCancelWebCores,
   useInstallRetroDatabase,
   useCancelRetroDatabase,
 } from "@/api/hooks";
@@ -2686,6 +2689,8 @@ function RetroSection() {
         </p>
       )}
 
+      <WebCoresBlock />
+
       {settings && (
         <>
           <label className="set-toggle">
@@ -2707,6 +2712,93 @@ function RetroSection() {
         </>
       )}
     </section>
+  );
+}
+
+/*
+ * The browser's emulator cores (ADR 0077).
+ *
+ * What would be fetched, from where, how big and under which licences, all
+ * said before the button, because a download somebody cannot identify is not
+ * consent. The licences are listed per core rather than summarised: they are
+ * not all the same, and two of them are the GPL.
+ */
+function WebCoresBlock() {
+  const { data } = useWebCores();
+  const install = useInstallWebCores();
+  const cancel = useCancelWebCores();
+  if (!data) return null;
+
+  const job = data.job;
+  const running = job.running;
+  const missing = data.cores.filter((c) => !c.installed);
+  const pct = job.total > 0 ? Math.min(100, Math.round((job.done / job.total) * 100)) : 0;
+
+  return (
+    <>
+      <div className="set-row">
+        <div className="set-row__main">
+          <div className="set-row__title">Play in a browser</div>
+          <div className="set-row__sub">
+            Lets a browser or a television play NES, Game Boy, Game Boy Color,
+            Game Boy Advance, Master System and Mega Drive games without the
+            desktop app. SNES, N64 and PlayStation stay in the desktop app.
+          </div>
+        </div>
+      </div>
+
+      {missing.length > 0 && !running && (
+        <>
+          <p className="set-row__sub">
+            This server downloads the emulator cores from libretro once:{" "}
+            <strong>{formatBytes(data.archive.size_bytes)}</strong>, RetroArch{" "}
+            {data.archive.version}, checked against pinned checksums. About{" "}
+            {formatBytes(missing.reduce((n, c) => n + c.size_bytes, 0))} is kept and
+            the rest deleted. LANcast does not ship them; they are only served to
+            people signed in here. Nothing is fetched until you press the button.
+          </p>
+          <ul className="set-row__sub">
+            {data.cores.map((c) => (
+              <li key={c.name}>
+                {c.display} ({c.licence},{" "}
+                <a href={c.source_url} target="_blank" rel="noreferrer">
+                  source
+                </a>
+                ){c.installed ? " — installed" : ""}
+              </li>
+            ))}
+          </ul>
+          <button className="set-btn" onClick={() => install.mutate()} disabled={install.isPending}>
+            {install.isPending ? "Starting…" : "Download the browser cores"}
+          </button>
+        </>
+      )}
+
+      {running && (
+        <>
+          <p className="set-row__sub">
+            {job.stage === "unpack"
+              ? `Taking the cores out — ${job.done} of ${job.total}`
+              : `Downloading — ${pct}%`}
+          </p>
+          <button className="set-btn" onClick={() => cancel.mutate()}>
+            Cancel
+          </button>
+        </>
+      )}
+
+      {job.error && !running && (
+        <p className="set-row__sub set-row__sub--warn">
+          The download did not finish: {job.error}
+        </p>
+      )}
+
+      {missing.length === 0 && (
+        <p className="set-row__sub">
+          The browser cores are installed (RetroArch {data.archive.version}).
+        </p>
+      )}
+    </>
   );
 }
 

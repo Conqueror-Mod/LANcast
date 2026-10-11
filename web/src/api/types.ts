@@ -88,6 +88,7 @@ export type ResolutionBucket = components["schemas"]["ResolutionBucket"];
 
 /** The ROM database and how identification is going (ADR 0073). */
 export type RetroDatabase = components["schemas"]["RetroDatabase"];
+export type WebCores = components["schemas"]["WebCores"];
 
 /** One credited person, with how much of the library they are in. */
 export type CastMember = components["schemas"]["CastMember"];
