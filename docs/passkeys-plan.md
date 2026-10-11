@@ -6,7 +6,7 @@ passkeys. Decided so far: revisit ACME, opt-in. Nothing is built yet.*
 
 ## Why now
 
-Aither is publicly reachable. Every account on it is now one password away from
+The household server is publicly reachable. Every account on it is now one password away from
 anybody on the internet, and the only brake is a per-IP throttle
 ([`auth.ClientKey`](../internal/auth/auth.go)). An attacker with many
 addresses does not slow down. Passkeys remove the guessable secret entirely,
@@ -33,7 +33,7 @@ nowhere except the desktop client (if at all; see the spikes). That is why this
 plan is two ADRs and the certificate comes first.
 
 **ACME alone is not enough.** It provides the trusted certificate, but the
-passkey still needs a *name*. Aither needs a DNS name pointing at its static
+passkey still needs a *name*. The server needs a DNS name pointing at its static
 address before any of this works.
 
 ## Part 1: a name and a certificate (ADR 0081, revisits 0014)
@@ -71,7 +71,7 @@ them can set cookies on the parent domain. Checked against the list on
 | On the PSL | Notes |
 |---|---|
 | `duckdns.org` | **failed in practice (2026-10-11):** Let's Encrypt's secondary validation could not resolve the name, four times in a row. A/AAAA/TXT only, so no CAA record |
-| `dynv6.net` | **chosen for Aither.** Supports CAA; production issued on the first attempt |
+| `dynv6.net` | **chosen.** Supports CAA; production issued on the first attempt |
 | `dynu.net`, `freeddns.org` | fine |
 | `ddns.net` (No-IP) | free names must be reconfirmed every 30 days or they are lost; avoid |
 | `dedyn.io` (deSEC) | new registrations suspended as of 2026-10 |
@@ -118,12 +118,12 @@ certificate for a name it did not ask for, and no passkey. Three options:
 
 - **Hairpin NAT** on the AT&T gateway, so the public `A` record works from
   inside. **Measured 2026-10-11: it does, over IPv4, but unreliably.** From
-  Aither itself the public name answered with the same serving key as
+  the server itself the public name answered with the same serving key as
   loopback, but only 3 of 8 attempts succeeded on either port, against 8 of 8
   on loopback. The gateway's NAT loopback is flaky, so **split DNS (the name
   pointing at the LAN address inside the house) is the real answer** for
   passkeys at home. IPv6 is untested, because there is no `AAAA` record yet.
-- **IPv6:** with no NAT, an `AAAA` record that resolves to Aither's global
+- **IPv6:** with no NAT, an `AAAA` record that resolves to the server's global
   address works on the LAN as-is, if the gateway is not filtering it.
 - **Split DNS:** the router or a hosts entry maps the name to the LAN address.
 
@@ -235,7 +235,7 @@ small.
 ## Build order
 
 1. Per-account throttle (independent, ship now).
-2. ~~Get a name pointing at Aither and forward 443 → 8080~~ (done
+2. ~~Get a name pointing at the server and forward 443 → 8080~~ (done
    2026-10-11: a free dynv6 name with CAA, `A` only).
 3. ~~ADR 0081 + opt-in ACME~~ (built; **verified as the installed service**
    2026-10-11: production issued for the dynv6 name; SNI selection, the
