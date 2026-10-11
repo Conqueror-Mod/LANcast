@@ -1271,7 +1271,9 @@ function RetroActions({ item }: { item: Item }) {
     queryFn: () => retroAvailability(item.platform),
     staleTime: 30_000,
   });
-  const { data: saves } = useGameSaves(item.id, !!can?.available);
+  // In a browser (ADR 0077) saves are not wired yet, so there is nothing to
+  // continue from there: a desktop save is a different player's.
+  const { data: saves } = useGameSaves(item.id, !!can?.available && !can?.web);
   if (!can) return null;
   if (!can.available) {
     return (
