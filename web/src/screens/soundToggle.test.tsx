@@ -234,3 +234,37 @@ describe("the sound toggles in the control bar", () => {
     }
   });
 });
+
+/*
+ * The phone's overflow (docs/design.md, Phone). Which controls are *visible*
+ * is the stylesheet's job and is checked at 375px in the running app; what
+ * jsdom can prove is the structure the stylesheet relies on: the options sit
+ * in the group "⋯" opens, and fullscreen stays out of it, in the bar.
+ */
+describe("the phone's More controls", () => {
+  it("opens and closes the options group", async () => {
+    await playing();
+    const more = button(/^More controls$/);
+    const options = host.querySelector(".player__options")!;
+    expect(more?.getAttribute("aria-expanded")).toBe("false");
+    expect(options.classList.contains("is-open")).toBe(false);
+
+    await press(more);
+    expect(options.classList.contains("is-open")).toBe(true);
+    expect(more?.getAttribute("aria-expanded")).toBe("true");
+
+    await press(more);
+    expect(options.classList.contains("is-open")).toBe(false);
+  });
+
+  it("holds the options, and leaves fullscreen in the bar", async () => {
+    await playing();
+    const options = host.querySelector(".player__options")!;
+    for (const name of [/^Night mode$/, /^Playback settings$/, /^Watch together$/]) {
+      expect(options.contains(button(name)!), String(name)).toBe(true);
+    }
+    const full = button(/^Fullscreen$/)!;
+    expect(full).toBeDefined();
+    expect(options.contains(full)).toBe(false);
+  });
+});

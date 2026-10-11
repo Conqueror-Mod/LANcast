@@ -217,6 +217,14 @@ export function Player() {
         (pb.audioTracks.find((t) => t.default) ?? pb.audioTracks[0])?.index);
   const [queueOpen, setQueueOpen] = useState(false);
   const [togetherOpen, setTogetherOpen] = useState(false);
+  /*
+   * The phone's overflow (docs/design.md, Phone). Fourteen controls do not fit
+   * 375px, and seven of them sat off the right edge where nothing could reach
+   * them. On a phone the options group is hidden until "⋯" opens it as a panel
+   * above the bar; on a desktop the button is not drawn and the group is
+   * always laid out, so this state means nothing there.
+   */
+  const [moreOpen, setMoreOpen] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
   const [pipAvailable, setPipAvailable] = useState(false);
 
@@ -700,7 +708,17 @@ export function Player() {
             </span>
 
             <div className="player__spacer" />
-            <div className="player__options">
+            {/* Phones only (Player.css): the way into the options below. */}
+            <button
+              className={"player__icon player__more" + (moreOpen ? " is-on" : "")}
+              onClick={() => setMoreOpen((o) => !o)}
+              aria-label="More controls"
+              aria-expanded={moreOpen}
+              title="More controls"
+            >
+              ⋯
+            </button>
+            <div className={"player__options" + (moreOpen ? " is-open" : "")}>
               {/* Shuffle and repeat are queue controls, so they appear wherever
                 there is a queue — which in practice is music, but a Play-all
                 over a season is the same thing and gets them too. An engaged
@@ -983,18 +1001,20 @@ export function Player() {
                   <PipGlyph />
                 </button>
               )}
-              {!pb.isAudio && (
-                <button
-                  className="player__icon"
-                  onClick={pb.toggleFullscreen}
-                  aria-label={pb.fullscreen ? "Leave fullscreen" : "Fullscreen"}
-                  aria-pressed={pb.fullscreen}
-                  title={pb.fullscreen ? "Leave fullscreen" : "Fullscreen"}
-                >
-                  <FullscreenGlyph />
-                </button>
-              )}
             </div>
+            {/* Outside the options group so a phone keeps it in the bar: it is
+                the one option somebody reaches for the moment a film starts. */}
+            {!pb.isAudio && (
+              <button
+                className="player__icon"
+                onClick={pb.toggleFullscreen}
+                aria-label={pb.fullscreen ? "Leave fullscreen" : "Fullscreen"}
+                aria-pressed={pb.fullscreen}
+                title={pb.fullscreen ? "Leave fullscreen" : "Fullscreen"}
+              >
+                <FullscreenGlyph />
+              </button>
+            )}
           </div>
         </div>
       </div>

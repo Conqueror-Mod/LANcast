@@ -493,3 +493,97 @@
   color: var(--danger, #ff6b6b);
   margin-top: 4px;
 }
+
+/*
+ * The "⋯" button exists for phones only. On a desktop the options group is
+ * always laid out and there is nothing to open.
+ */
+.player__more {
+  display: none;
+}
+
+/*
+ * A phone (docs/design.md, Phone).
+ *
+ * Fourteen controls in one row put seven of them past the right edge. Here the
+ * transport keeps the bar (skip, play, skip, stop, mute, fullscreen), the time
+ * takes its own line above it, and everything else waits behind "⋯" in a panel
+ * that opens upward from the bar. Volume is the phone's own buttons; mute stays.
+ */
+@media (max-width: 600px) {
+  .player__bottom {
+    position: relative;
+    padding: 10px 12px calc(14px + env(safe-area-inset-bottom, 0px));
+  }
+
+  .player__controls {
+    flex-wrap: wrap;
+    gap: 4px;
+  }
+
+  .player__time {
+    order: -1;
+    flex: 1 1 100%;
+    font-size: 12px;
+    margin-bottom: 2px;
+  }
+
+  .player__icon {
+    min-width: 40px;
+    min-height: 40px;
+  }
+
+  .player__volume-slider,
+  .player__volume:hover .player__volume-slider,
+  .player__volume-slider:focus-visible {
+    display: none;
+  }
+
+  .player__more {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 20px;
+  }
+
+  .player__options {
+    display: none;
+  }
+
+  .player__options.is-open {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 6px;
+    position: absolute;
+    right: 12px;
+    left: 12px;
+    bottom: calc(100% + 4px);
+    padding: 10px;
+    background: rgba(10, 15, 34, 0.96);
+    border: 1px solid var(--gold-dormant);
+    border-radius: var(--radius-panel);
+    box-shadow: 0 -12px 36px rgba(0, 0, 0, 0.5);
+  }
+
+  /*
+   * A panel opened from inside the overflow (playback settings, watch
+   * together, the queue) was anchored to its own button and sized for a
+   * desktop: settings opened 380px wide with its left edge 119px off the
+   * screen. Here the button's wrapper stops being the anchor, so the panel
+   * anchors to the overflow itself and takes its width, opening above it.
+   */
+  .player__options.is-open .player__menu {
+    position: static;
+  }
+
+  .player__options.is-open .player__menu > :not(button) {
+    left: 0;
+    right: 0;
+    width: auto;
+    max-width: none;
+    bottom: calc(100% + 8px);
+    max-height: calc(100vh - 260px);
+    overflow-y: auto;
+  }
+}
