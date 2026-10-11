@@ -11,7 +11,9 @@
  * bindings, and an older desktop client has none of these, which the page
  * reads as "plays in the desktop app" rather than as a broken button.
  */
-import { apiPost } from "@/api/client";
+import { apiGet, apiPost } from "@/api/client";
+import type { WebCores } from "@/api/types";
+import { browserEnv, webAvailability } from "./retroWeb";
 
 /** What the client says about playing one console. */
 export interface RetroAvailability {
@@ -26,6 +28,11 @@ export interface RetroAvailability {
   download_bytes?: number;
   /** The core is here and cannot boot without a BIOS from the person's console. */
   needs_bios?: boolean;
+  /**
+   * It plays in this browser (ADR 0077), not in the desktop app's player.
+   * Saves are not wired there yet (part c), so nothing offers to continue.
+   */
+  web?: boolean;
 }
 
 /** Where fetching the cores has got to. */
@@ -106,7 +113,16 @@ export function retroSupported(): boolean {
 /** Whether this window can play a console now, and if not, why not. */
 export async function retroAvailability(platform: string | null | undefined): Promise<RetroAvailability> {
   if (!retroSupported() || !window.lancastRetroAvailable) {
-    return { available: false, reason: "Plays in the LANcast desktop app." };
+    // Not the desktop app: the browser plays it if the server has its core
+    // (ADR 0077). A server too old to answer is a server with no web cores.
+    let cores: WebCores | undefined;
+    try {
+      cores = await apiGet<WebCores>("/api/retro/web-cores");
+    } catch {
+      cores = undefined;
+    }
+    const a = webAvailability(platform, cores, browserEnv());
+    return a.available ? { ...a, web: true } : a;
   }
   if (!platform) {
     return { available: false, reason: "LANcast does not know which console this game is for." };
