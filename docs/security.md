@@ -80,6 +80,26 @@ will see the proxy as one client** — the proxy should rate-limit instead.
 There is deliberately no lockout: an attacker who could lock the owner out of
 their own server has achieved denial of service for free.
 
+**Per account, from outside.** Per-IP throttling does nothing against guessing
+spread over many addresses, which became the real threat once a server is
+publicly reachable. So failures from outside the local network are also counted
+against the account name tried: five free, then a wait that doubles from 30
+seconds to a ceiling of 15 minutes — about a hundred guesses a day against one
+account, however many addresses they come from. It is shaped to stay on the
+right side of the no-lockout rule:
+
+- Attempts made during the wait are refused **without being counted**, so the
+  owner retrying never extends it.
+- It does **not apply from loopback or a private address**. An attack from the
+  internet can slow a remote sign-in; it can never lock the owner out at home.
+  A home device on a global IPv6 address is treated as outside — the safe
+  direction.
+- Names that match no account are counted too, so a `429` does not reveal
+  which accounts exist.
+
+Behind a reverse proxy on the same machine every caller looks local, so the
+per-account wait does not apply there either; the proxy has to rate-limit.
+
 ## Losing the password
 
 There is no password reset over HTTP, and there will not be one. A recovery

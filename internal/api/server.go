@@ -201,6 +201,9 @@ type Server struct {
 	lanBound      bool
 	restartWidens bool
 	throttle      *auth.Throttle
+	// accountWait slows guessing at one account from many addresses; throttle
+	// only sees one address at a time.
+	accountWait *auth.AccountBackoff
 	// presence is who is watching what, right now. In memory and never
 	// persisted, which is ADR 0045 §4 and not an optimisation.
 	presence *presence.Tracker
@@ -299,11 +302,12 @@ func New(d Deps) *Server {
 		retro: d.Retro, retroDB: d.RetroDB, retroSoon: d.RetroSoon, retroInstall: &retroJob{}, webCoreInstall: &webCoreJob{},
 		locations: d.Locations, placesSoon: d.PlacesSoon,
 		lanBound: d.LANBound, restartWidens: d.RestartWidens,
-		throttle: auth.NewThrottle(),
-		crashes:  crashlog.New(d.DataDir, Version),
-		together: together.New(),
-		prober:   probe.New(),
-		events:   events.New(0),
+		throttle:    auth.NewThrottle(),
+		accountWait: auth.NewAccountBackoff(),
+		crashes:     crashlog.New(d.DataDir, Version),
+		together:    together.New(),
+		prober:      probe.New(),
+		events:      events.New(0),
 
 		peerKick:     make(chan string, 16),
 		presenceSeen: map[string]string{},
