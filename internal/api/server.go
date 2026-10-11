@@ -173,12 +173,15 @@ type Server struct {
 	retroDB          *retrodb.Cache
 	retroSoon        func()
 	retroInstall     *retroJob
-	serviceManaged   bool
-	relaunch         func() error
-	trans            *transcode.Manager
-	updates          *update.Checker
-	subs             *subtitle.Extractor
-	settings         *config.SettingsStore
+	// webCoreInstall is the one browser-core download that may be running
+	// (ADR 0077, webcores.go).
+	webCoreInstall *webCoreJob
+	serviceManaged bool
+	relaunch       func() error
+	trans          *transcode.Manager
+	updates        *update.Checker
+	subs           *subtitle.Extractor
+	settings       *config.SettingsStore
 	// tools is the one media-tools install that may be running (ADR 0043).
 	tools toolsJob
 	// backupMu serialises taking a backup. Two at once would race for a name
@@ -293,7 +296,7 @@ func New(d Deps) *Server {
 		peerDown:   map[string]time.Time{},
 		rebuild:    d.Rebuild, reloadPlugins: d.ReloadPlugins, enrich: d.Enrich,
 		probe: d.Probe, detectMarkers: d.DetectMarkers, coversSoon: d.Cover,
-		retro: d.Retro, retroDB: d.RetroDB, retroSoon: d.RetroSoon, retroInstall: &retroJob{},
+		retro: d.Retro, retroDB: d.RetroDB, retroSoon: d.RetroSoon, retroInstall: &retroJob{}, webCoreInstall: &webCoreJob{},
 		locations: d.Locations, placesSoon: d.PlacesSoon,
 		lanBound: d.LANBound, restartWidens: d.RestartWidens,
 		throttle: auth.NewThrottle(),
@@ -437,6 +440,13 @@ func (s *Server) Handler() http.Handler {
 
 	// Media tools. Admin-only: this makes the server download a binary and then
 	// execute it (ADR 0043). The URL is pinned in mediatools, never a parameter.
+	// The browser's emulator cores (ADR 0077). Fetching is an admin act, as
+	// every server-side download is; knowing which consoles play here, and
+	// loading a core to play one, is every signed-in account's.
+	mux.HandleFunc("GET /api/retro/web-cores", s.webCores)
+	mux.HandleFunc("POST /api/retro/web-cores/install", s.adminOnly(s.installWebCores))
+	mux.HandleFunc("POST /api/retro/web-cores/install/cancel", s.adminOnly(s.cancelWebCoresInstall))
+	mux.HandleFunc("GET /api/retro/web-cores/{core}/{kind}", s.webCoreFile)
 	mux.HandleFunc("GET /api/retro/database", s.adminOnly(s.retroDatabase))
 	mux.HandleFunc("POST /api/retro/database/install", s.adminOnly(s.installRetroDatabase))
 	mux.HandleFunc("POST /api/retro/database/install/cancel", s.adminOnly(s.cancelRetroDatabaseInstall))

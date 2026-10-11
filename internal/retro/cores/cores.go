@@ -208,20 +208,49 @@ func Resolve(platform, dir string, overrides map[string]string) (string, Core, e
 	return "", c, ErrNotInstalled
 }
 
-// installed reports whether a core's pinned build is already in place, by
-// its bytes rather than its size: InstallAll is the one place that decides
-// whether 230 MB needs fetching, and a few megabytes of hashing is cheap.
-func installed(c Core, dir string) bool {
-	f, err := os.Open(c.Path(dir))
+/*
+ * File is one pinned file inside an Archive, and where it goes.
+ *
+ * The desktop's cores are one DLL each; the browser's (internal/retro/
+ * webcores) are a .js and a .wasm each. Both come out of a pinned libretro
+ * archive the same way, so Fetch works on files and each package says which.
+ */
+type File struct {
+	// ArchivePath is the file's path inside the archive, with forward slashes.
+	ArchivePath string
+	// Dest is where it is installed, relative to the install directory.
+	Dest      string
+	SHA256    string
+	SizeBytes int64
+	// Label names it in an error, which is what a person reads.
+	Label string
+}
+
+func (f File) pinned() bool {
+	return f.ArchivePath != "" && f.Dest != "" && len(f.SHA256) == 64 && f.SizeBytes > 0
+}
+
+func (c Core) file() File {
+	return File{
+		ArchivePath: c.ArchivePath, Dest: filepath.Join(c.Name, c.DLL),
+		SHA256: c.SHA256, SizeBytes: c.SizeBytes, Label: c.Display,
+	}
+}
+
+// Installed reports whether a file's pinned build is already in place, by its
+// bytes rather than its size: Fetch is the one place that decides whether a
+// whole archive needs downloading, and a few megabytes of hashing is cheap.
+func Installed(f File, dir string) bool {
+	fh, err := os.Open(filepath.Join(dir, f.Dest))
 	if err != nil {
 		return false
 	}
-	defer f.Close()
+	defer fh.Close()
 	h := sha256.New()
-	if _, err := io.Copy(h, f); err != nil {
+	if _, err := io.Copy(h, fh); err != nil {
 		return false
 	}
-	return hex.EncodeToString(h.Sum(nil)) == c.SHA256
+	return hex.EncodeToString(h.Sum(nil)) == f.SHA256
 }
 
 // Progress is where an install has got to. Stage is "download" (Done and
@@ -249,16 +278,29 @@ const StallTimeout = 60 * time.Second
  * a client that was killed mid-download is swept first.
  */
 func InstallAll(ctx context.Context, a Archive, dir string, want []Core, progress func(Progress)) error {
+	files := make([]File, 0, len(want))
+	for _, c := range want {
+		files = append(files, c.file())
+	}
+	return Fetch(ctx, a, dir, files, progress)
+}
+
+/*
+ * Fetch installs every file in want that is not already in place, from one
+ * pinned archive. InstallAll above is the desktop's use of it; the browser's
+ * cores are another. The guarantees are InstallAll's, because they are this.
+ */
+func Fetch(ctx context.Context, a Archive, dir string, want []File, progress func(Progress)) error {
 	if progress == nil {
 		progress = func(Progress) {}
 	}
-	var need []Core
-	for _, c := range want {
-		if c.ArchivePath == "" || len(c.SHA256) != 64 || c.SizeBytes <= 0 || !a.pinned() {
-			return fmt.Errorf("%s: %w", c.Display, ErrNotPinned)
+	var need []File
+	for _, f := range want {
+		if !f.pinned() || !a.pinned() {
+			return fmt.Errorf("%s: %w", f.Label, ErrNotPinned)
 		}
-		if !installed(c, dir) {
-			need = append(need, c)
+		if !Installed(f, dir) {
+			need = append(need, f)
 		}
 	}
 	if len(need) == 0 {
@@ -344,31 +386,31 @@ func download(ctx context.Context, a Archive, to *os.File, progress func(Progres
 // unpack takes each needed core out of a verified archive. Entries are
 // visited in the archive's own order: it is solid, so asking for them in any
 // other would decompress the start of the block again for each.
-func unpack(ctx context.Context, archive, dir string, need []Core, progress func(Progress)) error {
+func unpack(ctx context.Context, archive, dir string, need []File, progress func(Progress)) error {
 	r, err := sevenzip.OpenReader(archive)
 	if err != nil {
 		return err
 	}
 	defer r.Close()
-	byPath := map[string]Core{}
-	for _, c := range need {
-		byPath[c.ArchivePath] = c
+	byPath := map[string]File{}
+	for _, f := range need {
+		byPath[f.ArchivePath] = f
 	}
 	total := int64(len(byPath))
 	progress(Progress{Stage: "unpack", Done: 0, Total: total})
 	var done int64
-	for _, f := range r.File {
-		c, ok := byPath[strings.ReplaceAll(f.Name, `\`, "/")]
-		if !ok || f.FileInfo().IsDir() {
+	for _, zf := range r.File {
+		f, ok := byPath[strings.ReplaceAll(zf.Name, `\`, "/")]
+		if !ok || zf.FileInfo().IsDir() {
 			continue
 		}
 		if err := ctx.Err(); err != nil {
 			return err
 		}
-		if err := place(f, c, dir); err != nil {
-			return fmt.Errorf("%s: %w", c.Display, err)
+		if err := place(zf, f, dir); err != nil {
+			return fmt.Errorf("%s: %w", f.Label, err)
 		}
-		delete(byPath, c.ArchivePath)
+		delete(byPath, f.ArchivePath)
 		done++
 		progress(Progress{Stage: "unpack", Done: done, Total: total})
 	}
@@ -383,12 +425,12 @@ func unpack(ctx context.Context, archive, dir string, need []Core, progress func
 	return nil
 }
 
-func place(f *sevenzip.File, c Core, dir string) error {
-	dst := c.Path(dir)
+func place(zf *sevenzip.File, f File, dir string) error {
+	dst := filepath.Join(dir, f.Dest)
 	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
 		return err
 	}
-	rc, err := f.Open()
+	rc, err := zf.Open()
 	if err != nil {
 		return err
 	}
@@ -399,13 +441,13 @@ func place(f *sevenzip.File, c Core, dir string) error {
 	}
 	h := sha256.New()
 	// One byte past the pin is enough to know it is wrong.
-	n, cerr := io.Copy(io.MultiWriter(out, h), io.LimitReader(rc, c.SizeBytes+1))
+	n, cerr := io.Copy(io.MultiWriter(out, h), io.LimitReader(rc, f.SizeBytes+1))
 	out.Close()
 	switch {
 	case cerr != nil:
-	case n != c.SizeBytes:
-		cerr = fmt.Errorf("%w: %d bytes, pinned %d", ErrChecksumMismatch, n, c.SizeBytes)
-	case hex.EncodeToString(h.Sum(nil)) != c.SHA256:
+	case n != f.SizeBytes:
+		cerr = fmt.Errorf("%w: %d bytes, pinned %d", ErrChecksumMismatch, n, f.SizeBytes)
+	case hex.EncodeToString(h.Sum(nil)) != f.SHA256:
 		cerr = fmt.Errorf("%w: got %s", ErrChecksumMismatch, hex.EncodeToString(h.Sum(nil)))
 	}
 	if cerr != nil {

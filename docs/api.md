@@ -5041,6 +5041,52 @@ make.
 
 Deleting an account deletes its saves.
 
+### `GET /api/retro/web-cores` · `POST /api/retro/web-cores/install` · `POST /api/retro/web-cores/install/cancel`
+
+The emulator cores a browser plays games with
+([ADR 0077](adr/0077-a-browser-can-play-a-game.md)), fetched by the server on
+request. The `GET` is for **any signed-in account**, because a game page needs
+to know whether to offer play in the browser. Installing and cancelling are
+**admin only**.
+
+```json
+{ "cores": [ { "name": "fceumm", "display": "FCEUmm", "licence": "GPL-2.0",
+               "source_url": "https://github.com/libretro/libretro-fceumm",
+               "consoles": ["nes"], "size_bytes": 3327817, "installed": false } ],
+  "archive": { "url": "https://buildbot.libretro.com/stable/1.22.2/emscripten/RetroArch.7z",
+               "size_bytes": 749072539, "version": "1.22.2" },
+  "job": { "running": false, "stage": "", "done": 0, "total": 0 } }
+```
+
+Four cores, one per console the browser plays: FCEUmm (NES), mGBA (Game Boy,
+Color and Advance), Gearsystem (Master System) and ClownMDEmu (Mega Drive).
+SNES, N64 and PlayStation have none: SNES because its only web core withholds
+commercial rights, the other two by decision.
+
+**LANcast never hosts or ships a core.** The server downloads libretro's own
+stable emscripten build, about 749 MB, which is published only as one archive.
+The archive is pinned by SHA-256 and checked before it is opened. Each core
+file is pinned by its own SHA-256 and checked as it comes out. Only the listed
+cores are extracted, and the archive is deleted afterwards, leaving about 13 MB.
+Nothing in the request names what is fetched.
+
+`POST …/install` returns `202` with the job snapshot; progress is polled from
+the `GET`, with `stage` going `download` (bytes) → `unpack` (files) → `done`.
+A core already in place and correct is not fetched again. `POST …/install/cancel`
+stops a running download and leaves nothing partial.
+
+### `GET /api/retro/web-cores/{core}/{kind}`
+
+One installed core file, to any signed-in account. `kind` is `js` (the loader,
+served as `text/javascript`) or `wasm` (the module, served as
+`application/wasm`, which `WebAssembly.instantiateStreaming` requires). A core
+that is not listed or not installed, or any other `kind`, is `404`: the two
+words only ever select from the pinned list.
+
+The `ETag` is the file's pinned SHA-256 and `Cache-Control` is
+`private, no-cache`. A browser revalidates with a cheap `304`, and gets the new
+build when a release moves the pin, because the tag moves with it.
+
 ### `GET /api/retro/database` · `POST /api/retro/database/install` · `POST /api/retro/database/install/cancel`
 
 The DAT files ROMs are identified against, fetched on request. Admin only.

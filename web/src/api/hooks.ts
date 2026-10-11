@@ -14,6 +14,7 @@ import type {
   NearCopies,
   PhotoPlaces,
   RetroDatabase,
+  WebCores,
 } from "./types";
 import { isContainer } from "@/lib/kind";
 import { forgetAcknowledgements } from "@/lib/sensitiveAck";
@@ -1738,6 +1739,36 @@ export function useInstallRetroDatabase() {
     // renames games, and /api/activity's completed_at is what refreshes them —
     // invalidating them here would refetch a library that has not changed yet.
     onSuccess: () => qc.invalidateQueries({ queryKey: ["retro-database"] }),
+  });
+}
+
+/*
+ * The browser's emulator cores (ADR 0077). Readable by any signed-in account,
+ * because a game page needs to know which consoles play in the browser;
+ * installing is an administrator's, and the server refuses anyone else.
+ */
+export function useWebCores(enabled = true) {
+  return useQuery({
+    queryKey: ["web-cores"],
+    queryFn: ({ signal }) => apiGet<WebCores>("/api/retro/web-cores", signal),
+    enabled,
+    refetchInterval: (q) => (q.state.data?.job?.running ? 1000 : false),
+  });
+}
+
+export function useInstallWebCores() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => apiSend("/api/retro/web-cores/install", "POST"),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["web-cores"] }),
+  });
+}
+
+export function useCancelWebCores() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => apiSend("/api/retro/web-cores/install/cancel", "POST"),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["web-cores"] }),
   });
 }
 
