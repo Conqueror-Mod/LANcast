@@ -40,6 +40,26 @@ export default defineConfig({
         target: process.env.LANCAST_API ?? "http://127.0.0.1:8080",
         changeOrigin: true,
         secure: false,
+        /*
+         * changeOrigin rewrites Host to the target, but the browser's Origin
+         * still says localhost:5173, and the server's CSRF check compares the
+         * two (auth.SameOriginRequest). So against a server with a password
+         * set, every sign-in and every write was refused as cross-origin.
+         *
+         * The proxy presents the target's own origin instead. The server's
+         * check is untouched: this is a process the developer runs on their
+         * own machine, and the session cookie is still SameSite=Strict, so
+         * another site cannot make the browser send it through here.
+         */
+        configure: (proxy) => {
+          const target = new URL(
+            process.env.LANCAST_API ?? "http://127.0.0.1:8080",
+          );
+          proxy.on("proxyReq", (req) => {
+            if (req.getHeader("origin")) req.setHeader("origin", target.origin);
+            if (req.getHeader("referer")) req.setHeader("referer", target.origin + "/");
+          });
+        },
       },
     },
   },
