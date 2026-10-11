@@ -199,8 +199,42 @@ than one DLL per core. Where it refines the text above:
   administrator's**, because a game page needs to know which consoles play in
   the browser.
 
-Parts b (the page-side player) and c (saves, then Master System and Mega
-Drive) are next.
+## As built: part b, the page-side player (2026-10-11)
+
+`RetroWeb` (Decision 2) turned out smaller than the text above expected. A web
+core is all of RetroArch, and RetroArch already draws with WebGL, plays through
+Web Audio and reads the keyboard and the Gamepad API, so LANcast does not host
+a core. `web/src/playback/retroWeb.ts` boots one the way libretro's own web
+player does:
+- import the loader from this server, with its `.wasm` redirected to the core
+  route;
+- point `LIBRARY_PATH` at the built-in core;
+- write the game and a small config into the module's filesystem (RGUI, which
+  needs no asset bundle);
+- call `callMain` on a Start press, because a browser keeps a page silent
+  until somebody interacts.
+
+`/play/:id` picks the player at the route: the desktop's native one where its
+bindings exist, otherwise `RetroWebPlay`.
+
+**Seen working on the installed service (test build, 2026-10-11):**
+- **Part a end to end.** Settings → Download the browser cores fetched,
+  verified and unpacked all eight files in about 35 s, leaving 12.1 MB and no
+  archive.
+- **NES.** *Bubble Bobble* booted from a `.zip`, which RetroArch unpacks
+  itself, and keyboard Start began the game.
+- **Game Boy Advance.** *Fire Emblem* reached its intro.
+- **Mega Drive.** *Castle of Illusion* reached its intro.
+- **Sound and Back.** An AudioContext ran at 96 kHz after the press, and Back
+  reloaded the game's page with the emulator gone.
+
+**Leaving reloads.** A running core has no off switch, so any way out of
+the screen reloads the destination; libretro's player does the same to change
+cores. **Not yet seen:** a physical controller, a television browser, a real
+phone, and Game Boy, Game Boy Color and Master System, for which the household
+library has no games.
+
+Part c (saves, then Master System and Mega Drive) is next.
 
 ## Questions this does not answer
 
