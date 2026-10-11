@@ -267,6 +267,29 @@ type Settings struct {
 	// self-signed certificate is generated and persisted instead (ADR 0014).
 	TLSCertFile string `json:"tls_cert_file,omitempty"`
 	TLSKeyFile  string `json:"tls_key_file,omitempty"`
+
+	// PublicCert is the opt-in public certificate (ADR 0081). Off unless an
+	// admin turned it on; nothing contacts a CA while it is off.
+	PublicCert PublicCert `json:"public_cert,omitzero"`
+	// ACMEDirectoryURL overrides the CA's ACME directory, for a private CA.
+	// File-only by design (ADR 0081 §1): no API route reads or writes it, so
+	// an admin session cannot point the server's outbound requests at an
+	// arbitrary URL.
+	ACMEDirectoryURL string `json:"acme_directory_url,omitempty"`
+}
+
+// PublicCert is what the admin chose for the public certificate (ADR 0081).
+type PublicCert struct {
+	Enabled  bool   `json:"enabled,omitempty"`
+	Hostname string `json:"hostname,omitempty"`
+	// CA is one of publiccert.KnownCAs, never a URL.
+	CA string `json:"ca,omitempty"`
+	// Email is optional and empty by default: an ACME account needs none.
+	Email string `json:"email,omitempty"`
+	// AgreedAt is when an admin ticked the CA's subscriber agreement, as Unix
+	// seconds. Recorded so the agreement is a fact somebody made, not a
+	// default.
+	AgreedAt int64 `json:"agreed_at,omitempty"`
 }
 
 // CustomTLS reports whether the operator supplied their own certificate and key.

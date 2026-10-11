@@ -83,6 +83,7 @@ import { useLiveTransport } from "@/lib/liveTransport";
 import { AuditLog } from "@/components/AuditLog";
 import { Review } from "./Review";
 import { UpdateSettings } from "@/components/UpdateSettings";
+import { PublicCertificateSettings } from "@/components/PublicCertificateSettings";
 import { DesktopSettings } from "@/components/DesktopSettings";
 import { GamesSettings } from "@/components/GamesSettings";
 import { ClientLog } from "@/components/ClientLog";
@@ -3495,6 +3496,7 @@ export function Settings() {
           {isAdmin && (
             <>
               {pane === "general" && <GeneralSection />}
+              {pane === "general" && <PublicCertificateSettings />}
               <AdminSections pane={pane} />
               {pane === "metadata" && <RateLimitSection />}
               {pane === "users" && <UsersSection />}

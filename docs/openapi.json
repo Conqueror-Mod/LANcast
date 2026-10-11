@@ -2385,6 +2385,83 @@
         }
       }
     },
+    "/settings/public-certificate": {
+      "get": {
+        "operationId": "getPublicCertificate",
+        "tags": [
+          "settings"
+        ],
+        "summary": "The opt-in public certificate and its status",
+        "description": "Administrators only (ADR 0081). `available` is false on a loopback-only server.",
+        "responses": {
+          "200": {
+            "description": "The public certificate's settings and status.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicCertificate"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          }
+        }
+      },
+      "put": {
+        "operationId": "setPublicCertificate",
+        "tags": [
+          "settings"
+        ],
+        "summary": "Turn the public certificate on, off, or at a new name",
+        "description": "Administrators only (ADR 0081). Off by default; nothing is contacted while off, and turning it off deletes the certificate and the ACME account key. Saving again clears the backoff and tries now. Only clients that ask for the hostname (SNI) get the public certificate, and it is issued for the existing serving key. Proving the name needs inbound port 443 (TLS-ALPN-01).",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PublicCertificateUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The public certificate's settings and status.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicCertificate"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "409": {
+            "description": "This server is loopback-only and serves no HTTPS.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/browse": {
       "get": {
         "operationId": "browseDirectories",
@@ -17636,6 +17713,145 @@
           },
           "job": {
             "$ref": "#/components/schemas/WebCoresJob"
+          }
+        }
+      },
+      "PublicCertificateAuthority": {
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "terms_url",
+          "trusted"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "What `ca` is set to."
+          },
+          "name": {
+            "type": "string"
+          },
+          "terms_url": {
+            "type": "string",
+            "format": "uri",
+            "description": "Where the CA publishes the agreement the admin is asked to accept."
+          },
+          "trusted": {
+            "type": "boolean",
+            "description": "False for a staging CA, whose root no browser trusts: its certificate still shows a warning."
+          }
+        }
+      },
+      "PublicCertificateStatus": {
+        "type": "object",
+        "required": [
+          "state"
+        ],
+        "properties": {
+          "state": {
+            "type": "string",
+            "enum": [
+              "off",
+              "pending",
+              "active",
+              "failing"
+            ]
+          },
+          "hostname": {
+            "type": "string"
+          },
+          "ca": {
+            "type": "string"
+          },
+          "not_after": {
+            "type": "string",
+            "format": "date-time",
+            "description": "When the certificate being served expires."
+          },
+          "last_attempt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "last_error": {
+            "type": "string",
+            "description": "The CA's or the network's own words."
+          },
+          "next_attempt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Set while failing: an hour after the first failure, doubling to a day."
+          }
+        }
+      },
+      "PublicCertificate": {
+        "type": "object",
+        "required": [
+          "available",
+          "enabled",
+          "hostname",
+          "ca",
+          "email",
+          "cas",
+          "status"
+        ],
+        "properties": {
+          "available": {
+            "type": "boolean",
+            "description": "False on a loopback-only server, which serves no HTTPS."
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "hostname": {
+            "type": "string"
+          },
+          "ca": {
+            "type": "string"
+          },
+          "email": {
+            "type": "string",
+            "description": "Optional contact sent to the CA; empty by default."
+          },
+          "agreed_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "When an admin agreed to the CA's terms. Absent while off."
+          },
+          "cas": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PublicCertificateAuthority"
+            }
+          },
+          "status": {
+            "$ref": "#/components/schemas/PublicCertificateStatus"
+          }
+        }
+      },
+      "PublicCertificateUpdate": {
+        "type": "object",
+        "required": [
+          "enabled"
+        ],
+        "properties": {
+          "enabled": {
+            "type": "boolean"
+          },
+          "hostname": {
+            "type": "string",
+            "description": "One DNS name. Required when enabling."
+          },
+          "ca": {
+            "type": "string",
+            "description": "An `id` from `cas`. Required when enabling. The directory URL cannot be set through the API."
+          },
+          "email": {
+            "type": "string"
+          },
+          "agree_terms": {
+            "type": "boolean",
+            "description": "Must be true to enable, unless already agreed for the same CA."
           }
         }
       }

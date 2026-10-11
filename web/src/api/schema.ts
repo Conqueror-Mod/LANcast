@@ -844,6 +844,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/settings/public-certificate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The opt-in public certificate and its status
+         * @description Administrators only (ADR 0081). `available` is false on a loopback-only server.
+         */
+        get: operations["getPublicCertificate"];
+        /**
+         * Turn the public certificate on, off, or at a new name
+         * @description Administrators only (ADR 0081). Off by default; nothing is contacted while off, and turning it off deletes the certificate and the ACME account key. Saving again clears the backoff and tries now. Only clients that ask for the hostname (SNI) get the public certificate, and it is issued for the existing serving key. Proving the name needs inbound port 443 (TLS-ALPN-01).
+         */
+        put: operations["setPublicCertificate"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/browse": {
         parameters: {
             query?: never;
@@ -7495,6 +7519,64 @@ export interface components {
             };
             job: components["schemas"]["WebCoresJob"];
         };
+        PublicCertificateAuthority: {
+            /** @description What `ca` is set to. */
+            id: string;
+            name: string;
+            /**
+             * Format: uri
+             * @description Where the CA publishes the agreement the admin is asked to accept.
+             */
+            terms_url: string;
+            /** @description False for a staging CA, whose root no browser trusts: its certificate still shows a warning. */
+            trusted: boolean;
+        };
+        PublicCertificateStatus: {
+            /** @enum {string} */
+            state: "off" | "pending" | "active" | "failing";
+            hostname?: string;
+            ca?: string;
+            /**
+             * Format: date-time
+             * @description When the certificate being served expires.
+             */
+            not_after?: string;
+            /** Format: date-time */
+            last_attempt?: string;
+            /** @description The CA's or the network's own words. */
+            last_error?: string;
+            /**
+             * Format: date-time
+             * @description Set while failing: an hour after the first failure, doubling to a day.
+             */
+            next_attempt?: string;
+        };
+        PublicCertificate: {
+            /** @description False on a loopback-only server, which serves no HTTPS. */
+            available: boolean;
+            enabled: boolean;
+            hostname: string;
+            ca: string;
+            /** @description Optional contact sent to the CA; empty by default. */
+            email: string;
+            /**
+             * Format: date-time
+             * @description When an admin agreed to the CA's terms. Absent while off.
+             */
+            agreed_at?: string;
+            cas: components["schemas"]["PublicCertificateAuthority"][];
+            status: components["schemas"]["PublicCertificateStatus"];
+        };
+        PublicCertificateUpdate: {
+            enabled: boolean;
+            /** @description One DNS name. Required when enabling. */
+            hostname?: string;
+            /** @description An `id` from `cas`. Required when enabling. The directory URL cannot be set through the API. */
+            ca?: string;
+            email?: string;
+            /** @description Must be true to enable, unless already agreed for the same CA. */
+            agree_terms?: boolean;
+        };
     };
     responses: {
         /** @description Malformed body or invalid parameter. */
@@ -9344,6 +9426,64 @@ export interface operations {
             };
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
+        };
+    };
+    getPublicCertificate: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The public certificate's settings and status. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PublicCertificate"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    setPublicCertificate: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PublicCertificateUpdate"];
+            };
+        };
+        responses: {
+            /** @description The public certificate's settings and status. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PublicCertificate"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            /** @description This server is loopback-only and serves no HTTPS. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
         };
     };
     browseDirectories: {

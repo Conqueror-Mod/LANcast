@@ -102,6 +102,10 @@ export type PhotoPlaces = components["schemas"]["PhotoPlaces"];
 export type PhotoPlace = components["schemas"]["PhotoPlace"];
 
 export type SettingsUpdate = components["schemas"]["SettingsUpdate"];
+// The opt-in public certificate (ADR 0081).
+export type PublicCertificate = components["schemas"]["PublicCertificate"];
+export type PublicCertificateUpdate =
+  components["schemas"]["PublicCertificateUpdate"];
 
 export type ScanIssue = components["schemas"]["ScanIssue"];
 

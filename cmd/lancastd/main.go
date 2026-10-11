@@ -39,6 +39,7 @@ import (
 	"lancast/internal/photo"
 	"lancast/internal/plugin"
 	"lancast/internal/probe"
+	"lancast/internal/publiccert"
 	"lancast/internal/retro/identify"
 	"lancast/internal/retro/retrodb"
 	"lancast/internal/scan"
@@ -917,6 +918,7 @@ func run(ctx context.Context, addr, dataDir string, log *slog.Logger) error {
 	// wire is worth protecting, and a certificate warning on localhost is pure
 	// setup friction (ADR 0014).
 	var tlsConfig *tls.Config
+	var publicCert *publiccert.Manager
 	if lanBound {
 		cert, mode, err := loadTLSCert(cfg, settings.Get(), log)
 		if err != nil {
@@ -924,6 +926,27 @@ func run(ctx context.Context, addr, dataDir string, log *slog.Logger) error {
 		}
 		tlsConfig = &tls.Config{Certificates: []tls.Certificate{cert}, MinVersion: tls.VersionTLS12}
 		log.Info("TLS enabled", "certificate", mode)
+
+		/*
+		 * The opt-in public certificate (ADR 0081).
+		 *
+		 * It owns certificate choice from here on: the configured name gets
+		 * the public certificate when there is a valid one, and everything
+		 * else gets `cert` exactly as before. With the opt-in off that is
+		 * every connection, so an install that never turns it on serves what
+		 * it always served and makes no request anywhere.
+		 *
+		 * A manager that cannot be built leaves the static configuration
+		 * above in place: losing an optional certificate must not cost the
+		 * server its HTTPS.
+		 */
+		if pcm, err := publiccert.New(filepath.Join(cfg.DataDir, "tls", "acme"), cert, log); err != nil {
+			log.Warn("public certificate unavailable", "error", err)
+		} else {
+			tlsConfig.Certificates = nil
+			tlsConfig.GetCertificate = pcm.GetCertificate
+			publicCert = pcm
+		}
 
 		// Peers arrive on this same port and are told apart by an ALPN marker
 		// in the ClientHello, which no browser sends (internal/peer). They are
@@ -940,6 +963,30 @@ func run(ctx context.Context, addr, dataDir string, log *slog.Logger) error {
 			// unavailable; a server that will not start is the app being
 			// unavailable.
 			log.Warn("federation disabled: peer certificate unavailable", "error", err)
+		}
+
+		/*
+		 * The CA's validation handshake is claimed before the peer branch.
+		 *
+		 * Both are told apart by ALPN, and neither marker is one a browser
+		 * sends. acme-tls/1 goes first only because it is the narrower claim:
+		 * it is answered while a challenge is pending and refused otherwise,
+		 * and anything else falls through to the peer check exactly as before.
+		 */
+		if publicCert != nil {
+			peerBranch := tlsConfig.GetConfigForClient
+			tlsConfig.GetConfigForClient = func(hello *tls.ClientHelloInfo) (*tls.Config, error) {
+				if c, claimed, err := publicCert.ChallengeConfig(hello); claimed {
+					return c, err
+				}
+				if peerBranch != nil {
+					return peerBranch(hello)
+				}
+				return nil, nil
+			}
+			publicCert.Configure(api.PublicCertConfig(settings.Get()))
+			go publicCert.Run(ctx)
+			apiSrv.SetPublicCert(publicCert)
 		}
 	}
 

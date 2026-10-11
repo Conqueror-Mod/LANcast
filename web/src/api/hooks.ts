@@ -56,6 +56,8 @@ import type {
   ScanStatus,
   ServerLog,
   UpdateStatus,
+  PublicCertificate,
+  PublicCertificateUpdate,
   Settings,
   SettingsUpdate,
   SubtitleCandidate,
@@ -263,6 +265,45 @@ export function useSettings(enabled = true) {
     queryKey: ["settings"],
     queryFn: ({ signal }) => apiGet<Settings>("/api/settings", signal),
     enabled,
+  });
+}
+
+/*
+ * The opt-in public certificate (ADR 0081).
+ *
+ * Polled while an attempt is in flight or failing, because the state changes
+ * on the server by itself: a CA validating takes seconds to a minute, and a
+ * status that only refreshes on reload is a status somebody reads as stuck.
+ * Its own key, not a child of ["settings"], so nothing that invalidates the
+ * general settings refetches this, and the reverse.
+ */
+export function usePublicCertificate(enabled = true) {
+  return useQuery({
+    queryKey: ["public-certificate"],
+    queryFn: ({ signal }) =>
+      apiGet<PublicCertificate>("/api/settings/public-certificate", signal),
+    enabled,
+    refetchInterval: (q) => {
+      const st = q.state.data?.status?.state;
+      return st === "pending" ? 3000 : st === "failing" ? 30000 : false;
+    },
+  });
+}
+
+export function useUpdatePublicCertificate() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (update: PublicCertificateUpdate) =>
+      apiPost<PublicCertificate>(
+        "/api/settings/public-certificate",
+        update,
+        "PUT",
+      ),
+    onSuccess: (data) => {
+      // The response is the new state, so it is written straight in rather
+      // than refetched: the poll above keys off it.
+      qc.setQueryData(["public-certificate"], data);
+    },
   });
 }
 
