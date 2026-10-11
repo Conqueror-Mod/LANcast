@@ -44,6 +44,7 @@ import {
 } from "@/lib/kind";
 import { platformLabel } from "@/lib/platforms";
 import { retroAvailability } from "@/playback/retro";
+import { WEB_STATE_PREFIX, webStateCore } from "@/playback/retroWeb";
 import { useGameSaves } from "@/api/hooks";
 import { useQuery } from "@tanstack/react-query";
 import type { Item } from "@/api/types";
@@ -1271,9 +1272,7 @@ function RetroActions({ item }: { item: Item }) {
     queryFn: () => retroAvailability(item.platform),
     staleTime: 30_000,
   });
-  // In a browser (ADR 0077) saves are not wired yet, so there is nothing to
-  // continue from there: a desktop save is a different player's.
-  const { data: saves } = useGameSaves(item.id, !!can?.available && !can?.web);
+  const { data: saves } = useGameSaves(item.id, !!can?.available);
   if (!can) return null;
   if (!can.available) {
     return (
@@ -1288,7 +1287,17 @@ function RetroActions({ item }: { item: Item }) {
       </div>
     );
   }
-  const left = (saves ?? []).some((s) => s.slot === "auto");
+  /*
+   * Continue only from a state this player can load. The browser's states
+   * and the desktop's are different formats under different labels (ADR 0077
+   * part c), and they share the one `auto` slot: whichever player was used
+   * last owns it. Offering the other's would be a button that fails.
+   */
+  const left = (saves ?? []).some(
+    (s) =>
+      s.slot === "auto" &&
+      (can.web ? s.core === webStateCore(can.core ?? "") : !s.core?.startsWith(WEB_STATE_PREFIX)),
+  );
   return left ? (
     <>
       <PlayButton label="Continue" onPlay={() => navigate(`/play/${item.id}?resume=1`)} />
