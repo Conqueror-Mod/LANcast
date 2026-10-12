@@ -1417,6 +1417,26 @@ function AdminSections({ pane }: { pane: string }) {
 function ScanEverything() {
   const scanAll = useScanAllLibraries();
   /*
+   * "Update libraries" from the tray (ADR 0080 §3).
+   *
+   * The tray holds no session, so it opens this pane with ?tray=scan and the
+   * page, which is signed in as an administrator, does what the button below
+   * does. The request is removed from the address before the scan starts, so
+   * a reload or Back can never start another, and a ref keeps a re-render
+   * (or React's development double effect) from doing it twice.
+   */
+  const [params, setParams] = useSearchParams();
+  const fromTray = params.get("tray") === "scan";
+  const handled = useRef(false);
+  useEffect(() => {
+    if (!fromTray || handled.current) return;
+    handled.current = true;
+    const next = new URLSearchParams(params);
+    next.delete("tray");
+    setParams(next, { replace: true });
+    scanAll.mutate();
+  }, [fromTray, params, setParams, scanAll]);
+  /*
    * Both lists defaulted rather than trusted.
    *
    * A settings pane that throws takes the whole screen with it, and the thing

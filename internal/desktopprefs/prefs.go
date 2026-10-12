@@ -29,8 +29,6 @@ const FileName = "desktop.json"
 // should opt into. Surprising background behaviour is a bug here even when it is
 // convenient.
 type Prefs struct {
-	// CloseToTray hides the window instead of quitting when it is closed.
-	CloseToTray bool `json:"close_to_tray"`
 	/*
 	 * OpenAtLogin is deliberately absent.
 	 *

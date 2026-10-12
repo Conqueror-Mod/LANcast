@@ -77,6 +77,12 @@ func main() {
 	// window that will not load rather than merely a second database.
 	dataDir := flag.String("data", "",
 		"server data directory (default: the machine-wide one if present, else per-user)")
+	// -hidden starts LANcast in the notification area without opening the
+	// window (ADR 0080): what "Start LANcast at login" runs, so signing in
+	// puts the icon there rather than a window in front of you. The window is
+	// created the first time somebody opens it.
+	hidden := flag.Bool("hidden", false,
+		"start in the notification area without opening the window")
 	flag.Parse()
 	// Remembered because "open at login" has to reproduce this launch: someone
 	// who runs in the browser should get the browser at login, not a window.
@@ -102,6 +108,12 @@ func main() {
 	 */
 	release, held, err := singleton.Acquire(singleton.Client)
 	if err == nil && !held {
+		// Already running and asked to start hidden — the login entry, or an
+		// old shortcut handed over by the server's tray. There is nothing to
+		// show: the icon is already there.
+		if *hidden {
+			return
+		}
 		if *browser {
 			// Asked for a browser explicitly. A second -browser launch has
 			// nothing to raise, so it does what it was told.
@@ -157,15 +169,39 @@ func main() {
 		os.Exit(1)
 	}
 
-	if !*browser {
-		runWindow(l)
+	/*
+	 * The one tray (ADR 0080), for as long as this process lives.
+	 *
+	 * It starts before the window, so a launch at login is an icon and nothing
+	 * else until somebody opens it. And it starts whatever the mode: in the
+	 * browser its Open opens the browser, and its Exit is still how this
+	 * process — and a server it started — ends.
+	 */
+	d := newDesk(desktop.ResolvedURL(l.addr), *browser)
+	migrateTrayAutostart()
+	stopTray := startDesktopTray(d, slog.Default())
+	defer stopTray()
+
+	if *browser {
+		defer l.stopStartedServer()
+		if !*hidden {
+			if err := desktop.OpenBrowser(d.base); err != nil {
+				alert("LANcast", "could not open the browser: "+err.Error())
+			}
+		}
+		waitForExit(d, l)
 		return
 	}
 
-	if err := desktop.OpenBrowser(desktop.ResolvedURL(l.addr)); err != nil {
-		alert("LANcast", "could not open the browser: "+err.Error())
+	if *hidden && hasTray {
+		select {
+		case <-d.openReq:
+		case <-d.exitReq:
+			l.stopStartedServer()
+			return
+		}
 	}
-	runLauncherTray(l)
+	runWindow(l, d)
 }
 
 // runWindow shows the UI in a window this program owns, and exits when it
@@ -181,7 +217,7 @@ func main() {
 // A machine with no WebView2 runtime falls back to the browser rather than
 // failing: it is a supported configuration, and refusing to start would trade
 // a working app for a purer one.
-func runWindow(l *launcher) {
+func runWindow(l *launcher, d *desk) {
 	defer l.stopStartedServer()
 
 	// Say which of the two things is missing. "Install the WebView2 runtime" is
@@ -191,7 +227,8 @@ func runWindow(l *launcher) {
 		if err := desktop.OpenBrowser(desktop.ResolvedURL(l.addr)); err != nil {
 			alert("LANcast", "could not open the browser: "+err.Error())
 		}
-		runLauncherTray(l)
+		d.useBrowser()
+		waitForExit(d, l)
 		return
 	}
 
@@ -204,12 +241,6 @@ func runWindow(l *launcher) {
 		prefs = desktopprefs.Prefs{}
 	}
 
-	// quitting distinguishes "the user chose Quit" from "the user clicked the
-	// window's X". Without it, Quit would be intercepted by close-to-tray and
-	// the app could never be closed at all — a tray whose Quit hides the window
-	// is the worst version of this feature.
-	var quitting bool
-	var tray clientwindow.Controller
 	/*
 	 * The live window, for the bindings that end it.
 	 *
@@ -293,7 +324,8 @@ func runWindow(l *launcher) {
 			if err := desktop.OpenBrowser(url); err != nil {
 				alert("LANcast", "could not open the browser: "+err.Error())
 			}
-			runLauncherTray(l)
+			d.useBrowser()
+			waitForExit(d, l)
 			return
 		}
 	}
@@ -358,34 +390,12 @@ func runWindow(l *launcher) {
 			// here is worth interrupting a shutdown for.
 			_ = desktopprefs.Save(dir, cur)
 		},
-		OnClose: func() bool {
-			if quitting || !prefs.CloseToTray || tray == nil {
-				return true
-			}
-			/*
-			 * Hide only if something can bring the window back.
-			 *
-			 * This window has no icon of its own — it used to, and a second
-			 * LANcast icon beside the server's was reported as exactly that, so
-			 * the server's tray took over saying Open and Quit to it.
-			 *
-			 * Nothing starts that tray. A machine that has only booted runs the
-			 * service without one, and on such a machine the X hid a window
-			 * that nothing could restore: the app became a process with no way
-			 * in and no way out, which is how it was reported.
-			 *
-			 * So the preference asks for hiding and this decides whether hiding
-			 * is honest. With no tray the X closes, which is what a window with
-			 * nothing behind it has to mean.
-			 */
-			if !raise.TrayPresent() {
-				return true
-			}
-			tray.Hide()
-			return false
-		},
+		// ✕ hides into the tray, which lives in this process and so always
+		// exists while the window does (desk.closing). Exit closes.
+		OnClose: d.closing,
 		OnReady: func(c clientwindow.Controller) {
 			win = c
+			d.attach(c)
 			native.attach(c)
 			/*
 			 * Reload when the server comes back.
@@ -425,33 +435,13 @@ func runWindow(l *launcher) {
 				}
 				c.Show()
 			}, func() {
-				/*
-				 * Told to quit by the server's tray.
-				 *
-				 * The same path the tray item used to take: mark it a real quit
-				 * so close-to-tray does not intercept it and hide the window
-				 * instead — a Quit that hides is the worst version of this
-				 * feature, and the reason `quitting` exists at all.
-				 */
-				quitting = true
-				c.Close()
+				// Told to quit from outside: an older server's tray still
+				// running beside a newer client during an update. A real exit,
+				// so ✕'s hiding cannot intercept it.
+				d.exit()
 			}); err == nil {
 				stopRaise = s
 			}
-			/*
-			 * No tray icon of its own, deliberately.
-			 *
-			 * It used to appear whenever close-to-tray was on, which put a
-			 * *second* LANcast icon in the notification area beside the
-			 * server's — reported as exactly that. The two offered nearly the
-			 * same things, and the server's is the one that persists.
-			 *
-			 * Removing it needed a replacement rather than a deletion: with
-			 * close-to-tray on, the window's X hides rather than closes, so
-			 * this icon was the only way to quit the app at all. The server's
-			 * tray says Open and Quit to it now, through the signal above.
-			 */
-			tray = c
 		},
 		// Beside the client's own config, not the server's data directory: this
 		// is one person's session and cache on one machine, and the server's
@@ -490,7 +480,6 @@ func (l *launcher) desktopBindings(native *nativePlayer) map[string]any {
 				// What this window is, so the page can compare it with what the
 				// server says it is.
 				"client_version": Version,
-				"close_to_tray":  prefs.CloseToTray,
 				// Reported from the file rather than from the running window,
 				// because the window cannot change it after launch: this is
 				// what the *next* start will do, which is what the toggle is
@@ -553,7 +542,9 @@ func (l *launcher) desktopBindings(native *nativePlayer) map[string]any {
 			 * having failed.
 			 */
 			p, _ := desktopprefs.Load(dir)
-			p.CloseToTray = closeToTray
+			// closeToTray is still accepted, so a page from an older server
+			// can call this, and ignored: ✕ always hides now (ADR 0080).
+			_ = closeToTray
 			p.DevTools = devTools
 			p.Games = gamesOn
 			if err := desktopprefs.Save(dir, p); err != nil {
@@ -859,11 +850,32 @@ func applyAutostart(on bool) error {
 	if !on {
 		return autostart.Disable(autostart.Client)
 	}
-	var args []string
+	// -hidden: signing in puts the icon in the notification area, not a
+	// window in front of you (ADR 0080).
+	args := []string{"-hidden"}
 	if browserMode {
 		args = append(args, "-browser")
 	}
 	return autostart.Enable(autostart.Client, args...)
+}
+
+/*
+ * migrateTrayAutostart moves the server tray's login entry to this one.
+ *
+ * "LANcast Tray" started LANcast-Server.exe's own tray at login. There is one
+ * tray now, and it is this process's (ADR 0080), so somebody who asked the old
+ * one to start at login gets this one at login instead, and the old entry
+ * goes, rather than a second process being started every morning only to hand
+ * over and exit.
+ */
+func migrateTrayAutostart() {
+	on, err := autostart.Enabled(autostart.Tray)
+	if err != nil || !on {
+		return
+	}
+	if err := applyAutostart(true); err == nil {
+		_ = autostart.Disable(autostart.Tray)
+	}
 }
 
 /*

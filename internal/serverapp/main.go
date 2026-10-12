@@ -152,7 +152,7 @@ func Main() {
 	// `lancastd tray` is the windowless desktop mode: the server plus a
 	// system-tray presence (ADR 0022). A shortcut or the launcher invokes it.
 	if len(os.Args) > 1 && os.Args[1] == "tray" {
-		if err := runTray(os.Args[2:]); err != nil {
+		if err := runTray(os.Args[2:], true); err != nil {
 			fmt.Fprintln(os.Stderr, "lancastd tray:", err)
 			os.Exit(1)
 		}
@@ -163,7 +163,7 @@ func Main() {
 	// Running the server foreground there would start an invisible process the
 	// user can neither see nor stop, so show the tray instead (ADR 0022).
 	if !serve && len(os.Args) == 1 && bareLaunchUsesTray {
-		if err := runTray(nil); err != nil {
+		if err := runTray(nil, false); err != nil {
 			alert("LANcast", err.Error())
 			os.Exit(1)
 		}

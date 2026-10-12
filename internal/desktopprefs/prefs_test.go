@@ -14,14 +14,14 @@ func TestFirstRunIsBothOff(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
-	if p.CloseToTray || p.DevTools {
+	if p.Games || p.DevTools {
 		t.Errorf("defaults = %+v, want both false", p)
 	}
 }
 
 func TestRoundTrip(t *testing.T) {
 	dir := t.TempDir()
-	want := Prefs{CloseToTray: true, DevTools: true}
+	want := Prefs{Games: true, DevTools: true}
 	if err := Save(dir, want); err != nil {
 		t.Fatal(err)
 	}
@@ -46,7 +46,7 @@ func TestMalformedFileYieldsDefaultsAndAnError(t *testing.T) {
 	if err == nil {
 		t.Error("a malformed file returned no error; the failure needs a voice")
 	}
-	if p.CloseToTray || p.DevTools {
+	if p.Games || p.DevTools {
 		t.Errorf("malformed file yielded %+v, want defaults", p)
 	}
 }
@@ -56,7 +56,7 @@ func TestMalformedFileYieldsDefaultsAndAnError(t *testing.T) {
 // exactly like the user's settings being ignored.
 func TestSaveReplacesAtomicallyAndLeavesNoTemp(t *testing.T) {
 	dir := t.TempDir()
-	if err := Save(dir, Prefs{CloseToTray: true}); err != nil {
+	if err := Save(dir, Prefs{Games: true}); err != nil {
 		t.Fatal(err)
 	}
 	if err := Save(dir, Prefs{DevTools: true}); err != nil {
@@ -104,7 +104,7 @@ func TestEmptyDirLoadsDefaults(t *testing.T) {
  */
 func TestOpenAtLoginIsNotStoredHere(t *testing.T) {
 	dir := t.TempDir()
-	if err := Save(dir, Prefs{CloseToTray: true, DevTools: true}); err != nil {
+	if err := Save(dir, Prefs{Games: true, DevTools: true}); err != nil {
 		t.Fatal(err)
 	}
 	b, err := os.ReadFile(filepath.Join(dir, "desktop.json"))
@@ -128,7 +128,7 @@ func TestOpenAtLoginIsNotStoredHere(t *testing.T) {
 func TestWindowPlacementRoundTrips(t *testing.T) {
 	dir := t.TempDir()
 	want := Prefs{
-		CloseToTray: true,
+		Games: true,
 		Window: &WindowPlacement{
 			Monitor: `\.\DISPLAY2`, X: 100, Y: 50,
 			Width: 1280, Height: 720, Maximized: true,
@@ -147,8 +147,8 @@ func TestWindowPlacementRoundTrips(t *testing.T) {
 	if *got.Window != *want.Window {
 		t.Errorf("Window = %+v, want %+v", *got.Window, *want.Window)
 	}
-	if !got.CloseToTray {
-		t.Error("CloseToTray was lost")
+	if !got.Games {
+		t.Error("Games was lost")
 	}
 }
 
@@ -156,7 +156,7 @@ func TestWindowPlacementRoundTrips(t *testing.T) {
 func TestPrefsWithoutAWindowKeyStillLoad(t *testing.T) {
 	dir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(dir, FileName),
-		[]byte(`{"close_to_tray":true,"devtools":false}`), 0o644); err != nil {
+		[]byte(`{"devtools":false}`), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	got, err := Load(dir)
@@ -166,7 +166,29 @@ func TestPrefsWithoutAWindowKeyStillLoad(t *testing.T) {
 	if got.Window != nil {
 		t.Errorf("Window = %+v, want nil — nothing was ever recorded", got.Window)
 	}
-	if !got.CloseToTray {
-		t.Error("CloseToTray was lost")
+}
+
+/*
+ * Close to tray is gone (ADR 0080): ✕ always hides into the one tray. A file
+ * written by an older client still carries the key, and must load as if it
+ * were not there — refusing to open over a retired tickbox would trade the
+ * app for a setting — and the next save must not write it back.
+ */
+func TestARetiredCloseToTrayKeyIsIgnoredAndDropped(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, FileName),
+		[]byte(`{"close_to_tray":true,"devtools":true}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	got, err := Load(dir)
+	if err != nil || !got.DevTools {
+		t.Fatalf("Load = %+v, %v; the other settings must survive", got, err)
+	}
+	if err := Save(dir, got); err != nil {
+		t.Fatal(err)
+	}
+	b, _ := os.ReadFile(filepath.Join(dir, FileName))
+	if strings.Contains(string(b), "close_to_tray") {
+		t.Errorf("the retired key was written back:\n%s", b)
 	}
 }

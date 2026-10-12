@@ -19,6 +19,9 @@ declare global {
   interface Window {
     lancastDesktopState?: () => Promise<DesktopState>;
     lancastDesktopSet?: (
+      // Retired (ADR 0080): ✕ always hides into the tray. Still the first
+      // argument, because the window's binding is positional and a page and a
+      // window from different releases must keep agreeing.
       closeToTray: boolean,
       openAtLogin: boolean,
       devTools: boolean,
@@ -28,7 +31,6 @@ declare global {
 }
 
 export interface DesktopState {
-  close_to_tray: boolean;
   open_at_login: boolean;
   devtools: boolean;
   // Whether this window lists the machine's installed games (ADR 0066). The
@@ -50,7 +52,7 @@ export interface DesktopState {
 /** The preferences `lancastDesktopSet` writes, all of them. */
 export type DesktopPrefs = Pick<
   DesktopState,
-  "close_to_tray" | "open_at_login" | "devtools" | "games"
+  "open_at_login" | "devtools" | "games"
 >;
 
 /*
@@ -73,7 +75,7 @@ export async function saveDesktopPrefs(
   }
   const now = await window.lancastDesktopState();
   return window.lancastDesktopSet(
-    patch.close_to_tray ?? now.close_to_tray,
+    false,
     patch.open_at_login ?? now.open_at_login,
     patch.devtools ?? now.devtools,
     patch.games ?? now.games,
@@ -148,21 +150,9 @@ export function DesktopSettings() {
         </p>
       )}
 
-      {/* Present but not yet live. Shown rather than hidden because the
-          question "can LANcast do this?" deserves an answer, and disabled with
-          a reason beats a tickbox that quietly does nothing. */}
       <LifecycleOption
-        title="Close to tray"
-        sub="Keep LANcast running in the notification area when you close the window. Quit from the tray to stop it."
-        checked={state.close_to_tray}
-        onChange={(next) => save({ close_to_tray: next })}
-        busy={saving}
-        error={saveError}
-        reason="Takes effect the next time you open LANcast."
-      />
-      <LifecycleOption
-        title="Open when Windows starts"
-        sub="Start LANcast automatically when you sign in."
+        title="Start LANcast at login"
+        sub="Put LANcast in the notification area when you sign in. Closing the window always keeps it there; choose Exit from the icon to close LANcast."
         checked={state.open_at_login}
         onChange={(next) => save({ open_at_login: next })}
         busy={saving}
