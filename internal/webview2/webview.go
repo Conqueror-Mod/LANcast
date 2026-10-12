@@ -262,10 +262,6 @@ func (w *webview) callbinding(d rpcMessage) (interface{}, error) {
 
 func wndproc(hwnd, msg, wp, lp uintptr) uintptr {
 	if w, ok := getWindowContext(hwnd).(*webview); ok {
-		w.traceClose(msg, wp)
-		traceInput("main", hwnd, msg, lp)
-		armPress(msg, lp)
-		traceAll("main", msg, wp, lp)
 		if r, done := w.overlayMessage(msg, wp, lp); done {
 			return r
 		}
@@ -322,19 +318,9 @@ func wndproc(hwnd, msg, wp, lp uintptr) uintptr {
 			}
 		default:
 			r, _, _ := w32.User32DefWindowProcW.Call(hwnd, msg, wp, lp)
-			traceResult(msg, lp, r)
 			return r
 		}
 		return 0
-	}
-	switch getWindowContext(hwnd).(type) {
-	case overlayOf:
-		traceInput("overlay", hwnd, msg, lp)
-		traceAll("overlay", msg, wp, lp)
-	case videoOf:
-		traceInput("video", hwnd, msg, lp)
-	case shieldOf:
-		traceInput("shield", hwnd, msg, lp)
 	}
 	if s, ok := getWindowContext(hwnd).(shieldOf); ok {
 		if r, done := s.w.shieldMessage(msg); done {
