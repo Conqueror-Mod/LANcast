@@ -348,6 +348,7 @@ func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 
 	mux.HandleFunc("GET /api/health", s.health)
+	mux.HandleFunc("GET /api/about", s.about)
 
 	// The event stream (ADR 0079): names of things that changed, so an open
 	// window can ask again. Any signed-in account; what each topic makes stale

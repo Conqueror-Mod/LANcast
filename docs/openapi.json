@@ -142,6 +142,31 @@
         }
       }
     },
+    "/about": {
+      "get": {
+        "operationId": "getAbout",
+        "tags": [
+          "health"
+        ],
+        "summary": "What this build is: version, licence, notice and its release notes",
+        "description": "Settings › About. Everything in the answer was **embedded when the binary was built**, so a client describes the running version without asking GitHub or anyone else.\n\n`notes` is this version's release notes as Markdown, committed in `docs/releases/` before the release was tagged. It is absent for a development build or a release cut before notes were kept there. `notice` is the NOTICE file: the licence and every third-party component in the build. `repository` is a link to show, never a request the server makes.\n\nAny signed-in account.",
+        "responses": {
+          "200": {
+            "description": "About this build.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/About"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      }
+    },
     "/events": {
       "get": {
         "operationId": "streamEvents",
@@ -18398,6 +18423,37 @@
           },
           "after_title": {
             "type": "string"
+          }
+        }
+      },
+      "About": {
+        "type": "object",
+        "required": [
+          "version",
+          "repository",
+          "licence",
+          "notice"
+        ],
+        "properties": {
+          "version": {
+            "type": "string",
+            "description": "The application release, as `GET /api/health` reports it."
+          },
+          "repository": {
+            "type": "string",
+            "description": "Where the source lives. A link, not a request the server makes."
+          },
+          "licence": {
+            "type": "string",
+            "description": "An SPDX identifier."
+          },
+          "notice": {
+            "type": "string",
+            "description": "The NOTICE file, verbatim."
+          },
+          "notes": {
+            "type": "string",
+            "description": "This version's release notes, Markdown. Absent when none were committed for it."
           }
         }
       }

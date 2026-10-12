@@ -1,3 +1,4 @@
+import { AboutSettings } from "@/components/AboutSettings";
 import { useEffect, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { RATING_RUNGS } from "@/lib/ratings";
@@ -3441,6 +3442,9 @@ const DEVICE_PANES: Pane[] = [
   { id: "games", label: "PC Games" },
   { id: "display", label: "Display" },
   { id: "keyboard", label: "Keyboard" },
+  // Last, where every app keeps it, and for everyone: nothing in it is an
+  // administrator's, and the licence is anybody's business.
+  { id: "about", label: "About" },
 ];
 
 // Panes that only mean anything inside the desktop window. Offering either in a
@@ -3588,6 +3592,7 @@ export function Settings() {
             </>
           )}
           {pane === "games" && <GamesSettings />}
+          {pane === "about" && <AboutSettings />}
           {pane === "keyboard" && <KeyBindings />}
           {pane === "display" && (
             <>
