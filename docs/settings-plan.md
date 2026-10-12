@@ -246,7 +246,7 @@ Each step is one or more small PRs and leaves Settings usable.
    alongside their audio and subtitle languages.
 4. **Per-user library access:** Chris wants it explained before deciding.
    Still open.
-5. **Intro skip happens automatically by default.** That amends ADR 0054
+5. **Intro skip happens automatically by default** (confirmed). That amends ADR 0054
    decision 3, which made skipping a button only; it needs its own ADR.
    - **What stays from 0054:** the skip happens only where the player would
      have offered the button, so only for markers that pass the detector's
@@ -273,7 +273,7 @@ Each step is one or more small PRs and leaves Settings usable.
 | **Quality** | Server › Quality: the quality ceiling for everyone, a separate ceiling for viewers away from home, per-account caps. This device › Player keeps the quality *this* device asks for. | Split out of Transcoding. Remote and per-account caps are server work. |
 | **Debug** | Status › Debug: debug logging, ffmpeg's own logs, the statistics overlay default, the desktop app's developer tools. Kept apart from Troubleshooting, which is for fixing a problem rather than looking inside. | Mostly existing settings, moved. |
 | **Player** | This device › Player. | In §2. |
-| **Conversions** | Status › Conversions: what is converting now and the limit. If Chris means **pre-converted copies** (Plex's "optimized versions": convert a film once ahead of time for a phone or a slow link), that is a new feature with its own storage and schedule. | Needs Chris's meaning. |
+| **Conversions** | **Optimized versions** (confirmed): convert a film once, ahead of time, into a copy a phone or a slow link can play directly, instead of converting live every time. Status › Conversions lists them and what is converting now. Server › Transcoding holds the rules: which presets, where copies live, how much space they may use. | New feature; needs an ADR (below). |
 | **Remote Access** | Server › Remote access, separate from Network: the public name and certificate, port 443, whether the server answers from outside, what friends need. Network stays about this machine and the LAN. | Public certificate moves here from General; the rest is new. |
 
 ### DLNA, briefly
@@ -288,6 +288,23 @@ LANcast app at all. Two things make it a decision rather than a toggle.
 - **It announces the server.** Devices discover it by broadcasting on the
   network. That stays on the LAN and is not phone-home, but it is the first
   thing LANcast would do unasked.
+
+### Optimized versions, briefly
+
+- **What it is:** a stored, pre-converted copy of a title (for example, 1080p
+  H.264 at 8 Mbit/s, or 720p for phones). The player's decision chooses it
+  when it plays directly where the original would need converting live.
+- **Why it needs an ADR:** it is a second file per title the server owns,
+  so it touches several existing rules.
+  - Storage, and its own size cap.
+  - The direct-play, remux or transcode decision (`internal/probe`), which
+    gains a third source to choose from.
+  - Scans: a copy is not a library file, and must never be mistaken for one.
+  - Deletion: a copy goes when its original does, and "Remove" says so.
+- **How copies get made:** chosen per title, per collection or per library,
+  then converted by the scheduled-tasks runner with the same encoder the live
+  path proved at startup. Per CLAUDE.md, this is verified as the installed
+  service, not from a shell.
 
 ### The four groups, revised
 
