@@ -334,3 +334,32 @@ describe("what the spotlight button offers", () => {
     expect(labels.join(" ")).not.toContain("Resume");
   });
 });
+
+/*
+ * Music is listened to.
+ *
+ * Reported: an album part way through sat under "Continue watching". The
+ * eyebrow names what the spotlight is doing, and for a record that is
+ * listening — and a suggestion drawn from one is "because you listened".
+ */
+describe("what the spotlight says about music", () => {
+  const album = {
+    ...episode,
+    kind: "album",
+    title: "Ghosts I-IV",
+    progress: undefined,
+  } as unknown as Item;
+
+  it("says Continue listening for a record being played", async () => {
+    mount([50, 51, 52, 53, 54]);
+    await render(album, "resuming");
+    expect(host.textContent).toContain("Continue listening");
+    expect(host.textContent).not.toContain("Continue watching");
+  });
+
+  it("still says Continue watching for a film", async () => {
+    mount([50, 51, 52, 53, 54]);
+    await render(episode, "resuming");
+    expect(host.textContent).toContain("Continue watching");
+  });
+});
