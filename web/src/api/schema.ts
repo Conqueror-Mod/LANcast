@@ -7550,6 +7550,10 @@ export interface components {
              * @description Set while failing: an hour after the first failure, doubling to a day.
              */
             next_attempt?: string;
+            /** @description Whether the server is also answering on port 443. It does while the certificate is on, because IPv6 has no port translation and a router's 443 forward only covers IPv4. */
+            listening_443: boolean;
+            /** @description Why port 443 could not be opened, when the certificate is on. The certificate still works over IPv4 through a router forward. */
+            port_443_error?: string;
         };
         PublicCertificate: {
             /** @description False on a loopback-only server, which serves no HTTPS. */

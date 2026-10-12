@@ -984,9 +984,6 @@ func run(ctx context.Context, addr, dataDir string, log *slog.Logger) error {
 				}
 				return nil, nil
 			}
-			publicCert.Configure(api.PublicCertConfig(settings.Get()))
-			go publicCert.Run(ctx)
-			apiSrv.SetPublicCert(publicCert)
 		}
 	}
 
@@ -1020,6 +1017,36 @@ func run(ctx context.Context, addr, dataDir string, log *slog.Logger) error {
 				errc <- err
 			}
 		}()
+
+		/*
+		 * The public certificate starts here, after the main listener,
+		 * because it may open a second one (ADR 0081 §2, amended): while it is
+		 * on, the server also answers on port 443, served exactly like the
+		 * main port — the same TLS configuration, the same redirect for
+		 * plain HTTP, the same handlers — so a caller on 443 is
+		 * indistinguishable from one on 8080 except by the port.
+		 */
+		if publicCert != nil {
+			if extra := newExtraPort(listenAddr, func(ln net.Listener) {
+				tl, pl := splitTLS(ln, log)
+				go func() {
+					if err := redirectSrv.Serve(pl); err != nil &&
+						!errors.Is(err, http.ErrServerClosed) && !closedListener(err) {
+						log.Warn("http redirect listener stopped", "addr", ln.Addr(), "error", err)
+					}
+				}()
+				if err := srv.Serve(tls.NewListener(tl, tlsConfig)); err != nil &&
+					!errors.Is(err, http.ErrServerClosed) && !closedListener(err) {
+					log.Warn("listener stopped", "addr", ln.Addr(), "error", err)
+				}
+			}, log); extra != nil {
+				publicCert.SetPortHook(extra.Set)
+				defer extra.Close()
+			}
+			publicCert.Configure(api.PublicCertConfig(settings.Get()))
+			go publicCert.Run(ctx)
+			apiSrv.SetPublicCert(publicCert)
+		}
 	} else {
 		go func() {
 			log.Info("listening", "addr", listenAddr, "scheme", "http", "data", cfg.DataDir)

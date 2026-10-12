@@ -4504,7 +4504,8 @@ The opt-in public certificate ([ADR 0081](adr/0081-a-public-name-can-earn-a-publ
     "hostname": "example.duckdns.org",
     "ca": "letsencrypt",
     "not_after": "2027-01-09T20:00:00Z",
-    "last_attempt": "2026-10-11T20:00:05Z"
+    "last_attempt": "2026-10-11T20:00:05Z",
+    "listening_443": true
   }
 }
 ```
@@ -4531,6 +4532,15 @@ one is never served, and the name falls back to the self-signed certificate.
   agreed for the same CA. LANcast does not agree on anybody's behalf, and a
   different CA is a different agreement.
 - **Saving again is "try now"**: it clears the backoff and starts an attempt.
+
+**While it is on, the server also answers on port 443**, with the same
+handlers as its main port, and closes 443 again when it is turned off.
+`status.listening_443` says whether it is; `status.port_443_error` says why
+not (something else holds the port, or the process may not bind below 1024).
+This is because IPv6 has no port translation: a router's "443 → 8080"
+forward only covers IPv4, so an IPv6 browser or CA connecting on 443 must
+find LANcast there itself. A server whose main port already is 443 opens
+nothing extra.
 
 Only a client that asks for `hostname` (TLS SNI) gets the public certificate.
 Connections by IP or `localhost`, and peer servers, keep the certificate they

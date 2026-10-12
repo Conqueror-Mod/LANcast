@@ -89,6 +89,26 @@ TLS-ALPN-01 rather than the alternatives:
   validation certificate from `x/crypto/acme`'s `TLSALPN01ChallengeCert`;
   otherwise it falls through.
 
+**Amended 2026-10-11: LANcast also answers on port 443 while the certificate
+is on.** IPv6 has no port translation. The router's forward from 443 to 8080
+covers IPv4 only, so once the name has an `AAAA` record, a browser or the
+CA reaching it over IPv6 at 443 must find LANcast there itself. The second
+listener opens when the certificate is turned on and closes when it is
+turned off: tied to the certificate rather than a switch of its own (Chris's
+choice), so 443 is only ever open on a server whose admin opted in. It is
+served exactly like the main port.
+
+A port proxy in front (`netsh portproxy`) was rejected, because every
+connection would then appear to come from the proxy. The per-account login
+backoff would treat every caller as local and exempt, and the logs would
+name the wrong client.
+
+A port that will not open is reported in the status, never fatal.
+
+Measured first, from a phone: the server's stable IPv6 address answered on
+8080 both on cellular and on home Wi-Fi. That makes IPv6 the way round the
+gateway's flaky NAT loopback for devices inside the house.
+
 **The implementation is `golang.org/x/crypto/acme`**, already in `go.mod`
 through `x/crypto`. No new module. Not `autocert`: it generates a new key per
 certificate (see §4), and it owns the whole `GetCertificate` callback, which

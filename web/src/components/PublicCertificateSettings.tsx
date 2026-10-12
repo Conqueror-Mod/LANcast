@@ -203,6 +203,15 @@ function Status({ data }: { data: PublicCertificate }) {
       <div className="set-row__main">
         <div className="set-row__title">Status</div>
         <div className="set-row__sub">{line}</div>
+        {st.state !== "off" ? (
+          <div className="set-row__sub">
+            {st.listening_443
+              ? "Also answering on port 443, so IPv6 visitors can reach it."
+              : st.port_443_error
+                ? `Not answering on port 443: ${st.port_443_error}. IPv4 still works through your router's forward.`
+                : null}
+          </div>
+        ) : null}
         {st.state === "failing" && st.last_error ? (
           <div className="set-row__sub" role="alert">
             {st.last_error}
