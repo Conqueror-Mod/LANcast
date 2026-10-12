@@ -74,4 +74,3 @@ func Quit() error { return signalQuit() }
 func Listen(show func(pane string), quit func()) (stop func(), err error) {
 	return listen(show, quit)
 }
-

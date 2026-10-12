@@ -13,4 +13,3 @@ func listen(_ func(string), _ func()) (func(), error) { return func() {}, nil }
 
 // No tray on these platforms, so nothing can restore a hidden window and
 // close-to-tray must mean close.
-

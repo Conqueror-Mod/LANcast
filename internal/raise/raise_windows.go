@@ -383,4 +383,3 @@ func openOwn(event string) (windows.Handle, error) {
 	}
 	return h, nil
 }
-

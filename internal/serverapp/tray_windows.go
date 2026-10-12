@@ -58,4 +58,3 @@ func clientArgs(addr, dataDir string, hidden bool) []string {
 	}
 	return args
 }
-
