@@ -71,6 +71,7 @@ import { TrailerModal } from "@/components/TrailerModal";
 import { useDownloads, downloadURL } from "@/lib/downloads";
 import { RateItem } from "@/components/RateItem";
 import { TagItem } from "@/components/TagItem";
+import { PointMenu, type MenuAction, type MenuPoint } from "@/components/Menu";
 import type { Credit } from "@/api/types";
 import "./Detail.css";
 
@@ -204,41 +205,6 @@ function TrailerButton({ onOpen }: { onOpen: () => void }) {
   );
 }
 
-/*
- * Download.
- *
- * A real anchor rather than a button with a click handler, because the browser
- * already knows how to download a URL and any JavaScript version of that is a
- * worse copy — no resume, no native progress, and nothing in the browser's own
- * downloads list. `download` names the file; the server sends the same name in
- * Content-Disposition, which is what wins for a cross-origin or proxied setup.
- *
- * The receipt is written on click, not on completion. Completion is not
- * observable from here (see lib/downloads.ts), and a list that only recorded
- * what it could prove finished would record almost nothing.
- */
-function DownloadButton({ item }: { item: Item }) {
-  const [, record] = useDownloads();
-  const filename = downloadFilename(item);
-  const focusable = useFocusable(() => {
-    // Enter on a focused anchor does not follow it the way a click does when
-    // the focus controller is driving, so the navigation is explicit.
-    record(receiptFor(item, filename));
-    window.location.href = downloadURL(item.id);
-  });
-
-  return (
-    <a
-      {...focusable}
-      className="detail__fix"
-      href={downloadURL(item.id)}
-      download={filename}
-      onClick={() => record(receiptFor(item, filename))}
-    >
-      Download
-    </a>
-  );
-}
 
 // The name the receipt shows. The server decides the real filename — this is
 // the client's best guess at the same rule, used for the `download` attribute
@@ -286,58 +252,116 @@ function SecondaryButton({
   );
 }
 
+
+
 /*
- * Mark as watched, from the page of the thing itself.
+ * More Options: the detail page's actions other than playing.
  *
- * It was only ever in a tile's right-click menu, which is a gesture nobody
- * finds on a television remote and nobody thinks of on a detail page — the
- * page where you are looking at the film you already saw elsewhere.
- *
- * A title toggles its own flag. A container (a show, a season, a collection, a
- * multi-part work) marks every episode or film under it, the same useMarkAll
- * the tile menu uses, and reads finished from the aggregate the server sends:
- * a show or season carries unwatched_episodes, and anything else is finished
- * when every child it lists is. So the button offers to undo a finished one
- * rather than only ever offering to mark it again.
+ * A button that opens the same menu the tiles and the home spotlight use, so
+ * the three cannot drift into different shapes. Opened by click or by the
+ * remote; the menu takes focus either way, so arrows walk it at once.
  */
-function WatchedButton({ item, held }: { item: Item; held?: Item[] }) {
-  const setWatched = useSetWatchedByID();
-  const { markAll, marking } = useMarkAll();
-  const verb = watchedVerb(item);
-  if (!isContainer(item)) {
-    const seen = item.progress?.watched ?? false;
-    return (
-      <SecondaryButton
-        label={seen ? `Mark as ${verb.negated}` : `Mark as ${verb.past}`}
-        onPress={() => setWatched.mutate({ itemID: item.id, watched: !seen })}
-      />
-    );
-  }
-  const series = item.kind === "show" || item.kind === "season";
-  const done = series
-    ? isWatched(item)
-    : (held?.length ?? 0) > 0 && held!.every(isWatched);
+function MoreOptions({ actions }: { actions: MenuAction[] }) {
+  const [at, setAt] = useState<MenuPoint | null>(null);
+  const open = () => {
+    const r = document.activeElement?.getBoundingClientRect();
+    setAt({ x: r ? r.left : 0, y: r ? r.bottom + 4 : 0 });
+  };
+  const focusable = useFocusable(open);
+  if (actions.length === 0) return null;
   return (
-    <SecondaryButton
-      label={
-        marking
-          ? "Marking…"
-          : done
-            ? `Mark all as ${verb.negated}`
-            : `Mark all as ${verb.past}`
-      }
-      onPress={() => void markAll(item, !done)}
-    />
+    <>
+      <button
+        {...focusable}
+        className="detail__play detail__play--secondary"
+        aria-haspopup="menu"
+        aria-expanded={at !== null}
+        onClick={(e) => {
+          const r = e.currentTarget.getBoundingClientRect();
+          setAt({ x: r.left, y: r.bottom + 4 });
+        }}
+      >
+        More Options
+      </button>
+      {at && <PointMenu at={at} actions={actions} autoFocus onClose={() => setAt(null)} />}
+    </>
   );
 }
 
-function RemoveButton({ onOpen }: { onOpen: () => void }) {
-  const focusable = useFocusable(onOpen);
-  return (
-    <button {...focusable} className="detail__remove" onClick={onOpen}>
-      Remove
-    </button>
-  );
+// What the detail page offers under More Options, in the order it lists them.
+function detailActions(o: {
+  item: Item;
+  container: boolean;
+  isMusic: boolean;
+  isPlaylist: boolean;
+  onShelf: boolean;
+  forget: () => void;
+  download: () => void;
+  addToPlaylist: () => void;
+  watched: MenuAction | null;
+  pin: { pinned: boolean; toggle: () => void } | null;
+  rename: (() => void) | null;
+  remove: (() => void) | null;
+}): MenuAction[] {
+  const { item } = o;
+  const out: MenuAction[] = [];
+  // Taking a title off the shelf from its own page: a collection's next film
+  // arrives there unasked, and its page has to be able to say no.
+  if (o.onShelf) {
+    out.push({
+      label: o.isMusic ? "Remove from Continue Listening" : "Remove from Continue Watching",
+      onSelect: o.forget,
+    });
+  }
+  if (o.watched) out.push(o.watched);
+  // Anything that plays on its own can go in a playlist; a container cannot,
+  // since a playlist holds entries, not albums. Pictures do not play at all.
+  if (!o.container && !isPicture(item) && !isROM(item)) {
+    out.push({ label: "Add to playlist", onSelect: o.addToPlaylist });
+  }
+  // Anything with a file of its own can be taken away; a container has none,
+  // and a missing item's file is not there to hand over.
+  if (!o.container && !item.missing) out.push({ label: "Download", onSelect: o.download });
+  if (o.pin) {
+    out.push({
+      label: o.pin.pinned ? "Unpin from homepage" : "Pin to homepage",
+      onSelect: o.pin.toggle,
+    });
+  }
+  if (o.rename) out.push({ label: "Rename", onSelect: o.rename });
+  // Opens its confirmation; nothing is removed from the menu itself.
+  if (o.remove) out.push({ label: "Remove…", onSelect: o.remove, danger: true });
+  return out;
+}
+
+/*
+ * Mark as watched, as a menu item. A title toggles its own flag; a container
+ * (a show, a season, a collection, a multi-part work) marks every episode or
+ * film under it, and reads finished from the aggregate the server sends, so it
+ * offers to undo a finished one rather than only ever marking it again.
+ */
+function watchedAction(
+  item: Item,
+  held: Item[] | undefined,
+  setWatched: (a: { itemID: number; watched: boolean }) => void,
+  markAll: (item: Item, watched: boolean) => Promise<unknown> | void,
+  marking: boolean,
+): MenuAction {
+  const verb = watchedVerb(item);
+  if (!isContainer(item)) {
+    const seen = item.progress?.watched ?? false;
+    return {
+      label: seen ? `Mark as ${verb.negated}` : `Mark as ${verb.past}`,
+      onSelect: () => setWatched({ itemID: item.id, watched: !seen }),
+    };
+  }
+  const series = item.kind === "show" || item.kind === "season";
+  const done = series ? isWatched(item) : (held?.length ?? 0) > 0 && held!.every(isWatched);
+  return {
+    label: marking ? "Marking…" : done ? `Mark all as ${verb.negated}` : `Mark all as ${verb.past}`,
+    disabled: marking,
+    onSelect: () => void markAll(item, !done),
+  };
 }
 
 function castOf(credits: Credit[] | undefined) {
@@ -459,6 +483,8 @@ export function Detail() {
    * had once.
    */
   const forgetPlace = useSetWatchedByID();
+  const [, recordDownload] = useDownloads();
+  const { markAll, marking } = useMarkAll();
   const { data: onTheShelf } = useContinueWatching();
   const { data: standing } = useShowStanding(
     itemID,
@@ -984,20 +1010,6 @@ export function Detail() {
                   <PlayButton onPlay={() => navigate(`/watch/${item.id}`)} />
                 ))}
               {/*
-               * Taking a title off Continue Watching from its own page.
-               *
-               * Reported after 0.9.80: a collection's next film appears on the
-               * shelf and in the spotlight unasked, and its page had no way to
-               * say no. The same write the shelf's menu makes: forget the
-               * place, claim nothing about whether it was seen.
-               */}
-              {!container && (onTheShelf ?? []).some((i) => i.id === item.id) && (
-                <SecondaryButton
-                  label={isMusic ? "Remove from Continue Listening" : "Remove from Continue Watching"}
-                  onPress={() => forgetPlace.mutate({ itemID: item.id, watched: false })}
-                />
-              )}
-              {/*
                * A season leads with Continue, matching the show page so the
                * two do not disagree about what a season offers. It asks the
                * same endpoint: the query matches episodes by their parent, so
@@ -1076,64 +1088,54 @@ export function Detail() {
                 />
               )}
               {trailer && <TrailerButton onOpen={() => setTrailerOpen(true)} />}
-              {/* Anything with a file of its own can be taken away. A container
-                  has no file — "download this season" would have to mean a zip
-                  the server does not build — and a missing item's file is not
-                  there to hand over. */}
-              {!container && !item.missing && <DownloadButton item={item} />}
-              {/* Anything that plays on its own can go in a playlist — a
-                  track, a film, an episode. A container cannot: a playlist
-                  holds entries, not albums, so "add this record" would have to
-                  silently mean "add its twelve tracks", which is a different
-                  request and not one this button asked. Pictures are not
-                  playable at all. */}
-              {!container && !isPicture(item) && !isROM(item) && (
-                <SecondaryButton
-                  label="Add to playlist"
-                  onPress={() => setAddOpen(true)}
-                />
-              )}
-              {/* Things that are watched: not music, which marks itself by
-                  playing, nor pictures or a playlist somebody built. */}
-              {!isMusic && !isPicture(item) && !isROM(item) && !isPlaylist && (
-                <WatchedButton item={item} held={children} />
-              )}
               {/*
-               * Pinning is a thing you think while looking at a film, not
-               * while reading a settings page, so the gesture lives here and
-               * the setting only shows what it did.
+               * Everything that is not playing it, behind one button.
                *
-               * It sets the spotlight mode as well as the item, because a pin
-               * that changed a stored id and nothing you can see would be the
-               * quiet-failure shape this project keeps rediscovering: the
-               * write succeeded, the page is right, and nothing happened.
-               *
-               * Offered only for something that can actually be a hero. A film
-               * with no backdrop would be pinned to a spotlight that then
-               * declines to show it.
+               * The row had grown to ten controls, most of them unbordered
+               * text that read as labels rather than buttons: reported as
+               * "Remove from Continue Watching" with no border. Playing and
+               * the trailer stay in view; the rest is More Options, the same
+               * name the home spotlight's menu has. Delete playlist stays a
+               * button of its own, because it confirms by changing its label.
                */}
-              {heroEligible(item) && (
-                <SecondaryButton
-                  label={pinned ? "Unpin from homepage" : "Pin to homepage"}
-                  onPress={() => {
-                    if (pinned) {
-                      setPinnedHero(0);
-                      // Back to the default rather than an empty spotlight
-                      // pointing at nothing.
-                      setHeroMode("continue");
-                      return;
-                    }
-                    setPinnedHero(item.id);
-                    setHeroMode("pinned");
-                  }}
-                />
-              )}
-              {isPlaylist && (
-                <SecondaryButton
-                  label="Rename"
-                  onPress={() => setRenaming(true)}
-                />
-              )}
+              <MoreOptions
+                actions={detailActions({
+                  item,
+                  container,
+                  isMusic,
+                  isPlaylist,
+                  onShelf: !container && (onTheShelf ?? []).some((i) => i.id === item.id),
+                  forget: () => forgetPlace.mutate({ itemID: item.id, watched: false }),
+                  download: () => {
+                    const filename = downloadFilename(item);
+                    recordDownload(receiptFor(item, filename));
+                    window.location.href = downloadURL(item.id);
+                  },
+                  addToPlaylist: () => setAddOpen(true),
+                  watched:
+                    !isMusic && !isPicture(item) && !isROM(item) && !isPlaylist
+                      ? watchedAction(item, children, forgetPlace.mutate, markAll, marking)
+                      : null,
+                  pin: heroEligible(item)
+                    ? {
+                        pinned,
+                        toggle: () => {
+                          if (pinned) {
+                            setPinnedHero(0);
+                            // Back to the default rather than an empty
+                            // spotlight pointing at nothing.
+                            setHeroMode("continue");
+                            return;
+                          }
+                          setPinnedHero(item.id);
+                          setHeroMode("pinned");
+                        },
+                      }
+                    : null,
+                  rename: isPlaylist ? () => setRenaming(true) : null,
+                  remove: isAdmin && canRemove ? () => setRemoveOpen(true) : null,
+                })}
+              />
               {isPlaylist && (
                 <SecondaryButton
                   className="detail__remove"
@@ -1153,9 +1155,7 @@ export function Detail() {
                   }}
                 />
               )}
-              {isAdmin && canRemove && (
-                <RemoveButton onOpen={() => setRemoveOpen(true)} />
-              )}
+
             </div>
 
             {/* Rating sits under the actions and above the synopsis: it is
