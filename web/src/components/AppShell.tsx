@@ -498,7 +498,7 @@ function UpdateBanner() {
       </span>
       <button
         className="app-shell__banner-go"
-        onClick={() => navigate("/settings?pane=updates")}
+        onClick={() => navigate("/settings?pane=general")}
       >
         Install it
       </button>

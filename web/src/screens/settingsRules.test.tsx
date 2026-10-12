@@ -112,8 +112,8 @@ async function render(entry: string) {
 }
 
 describe("server rules on the settings screen", () => {
-  it("puts the viewing rules on Playback", async () => {
-    await render("/settings?pane=playback");
+  it("puts the viewing rules on Playback & progress", async () => {
+    await render("/settings?pane=progress");
     const text = host.textContent ?? "";
     expect(text).toContain("Counts as watched at");
     expect(text).toContain("Weeks to keep in Continue Watching");
@@ -128,7 +128,7 @@ describe("server rules on the settings screen", () => {
   });
 
   it("renders the server's values rather than its own defaults", async () => {
-    await render("/settings?pane=playback");
+    await render("/settings?pane=progress");
     const select = host.querySelector<HTMLSelectElement>("select.set-select");
     expect(select?.value).toBe("90");
     /*
@@ -144,7 +144,7 @@ describe("server rules on the settings screen", () => {
   });
 
   it("writes the documented field when a rule changes", async () => {
-    await render("/settings?pane=playback");
+    await render("/settings?pane=progress");
     const select = host.querySelector<HTMLSelectElement>("select.set-select")!;
     const setValue = Object.getOwnPropertyDescriptor(
       window.HTMLSelectElement.prototype,
@@ -168,4 +168,34 @@ describe("server rules on the settings screen", () => {
     const put = writes.find((w) => w.url.includes("/api/settings"));
     expect(put!.body).toEqual({ allow_media_deletion: false });
   });
+
+  /*
+   * The four groups (docs/settings-plan.md), as an administrator sees them,
+   * and the Dashboard as where they land.
+   */
+  it("opens on the Dashboard, in four groups, for an administrator", async () => {
+    await render("/settings");
+    const groups = [...host.querySelectorAll(".settings__navgroup > .section-label")].map(
+      (g) => g.textContent,
+    );
+    expect(groups).toEqual(["Status", "Server", "Your account", "This device"]);
+    expect(host.querySelector(".settings__navitem.is-active")?.textContent).toBe("Dashboard");
+  });
+
+  it.each([
+    ["playback", "Transcoding"],
+    ["logs", "Troubleshooting"],
+    ["activity", "Dashboard"],
+    ["updates", "General"],
+  ])("opens ?pane=%s where its contents went (%s)", async (old, now) => {
+    await render(`/settings?pane=${old}`);
+    expect(host.querySelector(".settings__navitem.is-active")?.textContent).toBe(now);
+  });
+
+  it("puts the encoder and the conversion limit on Transcoding", async () => {
+    await render("/settings?pane=transcoding");
+    expect(host.textContent).toContain("Video encoder");
+    expect(host.textContent).toContain("Conversions at once");
+  });
 });
+

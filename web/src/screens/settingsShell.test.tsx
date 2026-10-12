@@ -77,7 +77,7 @@ describe("the settings shell", () => {
     // Not an exhaustive list on purpose: asserting the exact set would make
     // this fail every time a category is added, which is not a regression.
     const labels = navItems().map((b) => b.textContent);
-    expect(labels).toContain("Account");
+    expect(labels).toContain("Profile");
     expect(labels).toContain("Keyboard");
     expect(labels.length).toBeGreaterThan(1);
   });
@@ -96,13 +96,31 @@ describe("the settings shell", () => {
     // its content is a static table, so it is the honest way to prove the pane
     // actually changed rather than only the highlight.
     expect(host.textContent).toContain("Keyboard");
-    click("Account");
-    expect(activeItem()).toBe("Account");
+    click("Profile");
+    expect(activeItem()).toBe("Profile");
   });
 
   it("takes the pane from the URL", () => {
     render("/settings?pane=keyboard");
     expect(activeItem()).toBe("Keyboard");
+  });
+
+  /*
+   * Panes that were renamed or split in the four-group restructure still open
+   * where their contents went: the tray asks for ?pane=updates, an older
+   * window for ?pane=account, and a bookmark may hold either.
+   */
+  it("opens a renamed pane where its contents went", () => {
+    render("/settings?pane=account");
+    expect(activeItem()).toBe("Profile");
+  });
+
+  it("groups the panes as Your account and This device for everyone", () => {
+    render();
+    const groups = [...host.querySelectorAll(".settings__navgroup > .section-label")].map(
+      (g) => g.textContent,
+    );
+    expect(groups).toEqual(["Your account", "This device"]);
   });
 
   it("falls back to a real pane when the URL names one that does not exist", () => {
@@ -128,15 +146,15 @@ describe("panes added after the shell was built", () => {
   it("lists Display, Keyboard and Sharing's home among the categories", () => {
     render();
     const labels = navItems().map((b) => b.textContent);
-    for (const label of ["Account", "Display", "Keyboard"]) {
+    for (const label of ["Profile", "Privacy", "Display & home", "Keyboard"]) {
       expect(labels).toContain(label);
     }
   });
 
   it("switches to Display and renders it", () => {
     render();
-    click("Display");
-    expect(activeItem()).toBe("Display");
+    click("Display & home");
+    expect(activeItem()).toBe("Display & home");
     // Bigscreen is the pane's only control, and it renders without a server.
     expect(host.textContent).toContain("Bigscreen");
   });
@@ -346,13 +364,13 @@ describe("the clear watch history row", () => {
     );
   }
 
-  it("is on the account pane, which every user has", () => {
-    render("/settings?pane=account");
+  it("is on the Privacy pane, which every user has", () => {
+    render("/settings?pane=privacy");
     expect(historyRow()).toBeTruthy();
   });
 
   it("offers the three scopes, not one button", () => {
-    render("/settings?pane=account");
+    render("/settings?pane=privacy");
     const options = [
       ...(historyRow()?.querySelectorAll("option") ?? []),
     ].map((o) => (o as HTMLOptionElement).value);
@@ -368,7 +386,7 @@ describe("the clear watch history row", () => {
    * nobody has is the failure this row's whole design is trying to avoid.
    */
   it("will not offer to clear a count it does not have", () => {
-    render("/settings?pane=account");
+    render("/settings?pane=privacy");
     const btn = [...(historyRow()?.querySelectorAll("button") ?? [])].find(
       (b) => b.textContent?.includes("Clear"),
     );

@@ -108,9 +108,9 @@ async function render() {
     );
   });
   await settle();
-  // The keys live in the Account pane, which is not the one Settings opens on.
+  // The keys live in the Security pane, which is not the one Settings opens on.
   const account = [...host.querySelectorAll("button")].find(
-    (b) => b.textContent?.trim() === "Account",
+    (b) => b.textContent?.trim() === "Security",
   );
   if (account) {
     await act(async () => account.click());
