@@ -26,6 +26,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/about": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * What this build is: version, licence, notice and its release notes
+         * @description Settings › About. Everything in the answer was **embedded when the binary was built**, so a client describes the running version without asking GitHub or anyone else.
+         *
+         *     `notes` is this version's release notes as Markdown, committed in `docs/releases/` before the release was tagged. It is absent for a development build or a release cut before notes were kept there. `notice` is the NOTICE file: the licence and every third-party component in the build. `repository` is a link to show, never a request the server makes.
+         *
+         *     Any signed-in account.
+         */
+        get: operations["getAbout"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/events": {
         parameters: {
             query?: never;
@@ -7781,6 +7805,18 @@ export interface components {
             after_id: number;
             after_title: string;
         };
+        About: {
+            /** @description The application release, as `GET /api/health` reports it. */
+            version: string;
+            /** @description Where the source lives. A link, not a request the server makes. */
+            repository: string;
+            /** @description An SPDX identifier. */
+            licence: string;
+            /** @description The NOTICE file, verbatim. */
+            notice: string;
+            /** @description This version's release notes, Markdown. Absent when none were committed for it. */
+            notes?: string;
+        };
     };
     responses: {
         /** @description Malformed body or invalid parameter. */
@@ -7940,6 +7976,27 @@ export interface operations {
                     "application/json": components["schemas"]["Health"];
                 };
             };
+        };
+    };
+    getAbout: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description About this build. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["About"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
         };
     };
     streamEvents: {

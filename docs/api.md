@@ -613,6 +613,26 @@ Every error returns a consistent shape. Handlers never surface raw SQL errors.
 build time — a build from source reports `dev`. `api_version` is the HTTP
 contract revision and changes only when a new `/api/vN` prefix ships.
 
+### `GET /api/about`
+
+What this build is, for Settings › About. Any signed-in account.
+
+```json
+{ "version": "0.9.79", "repository": "https://github.com/Conqueror-Mod/LANcast",
+  "licence": "AGPL-3.0-only", "notice": "LANcast
+Copyright …",
+  "notes": "## Run the installer for this one
+…" }
+```
+
+**Everything here was embedded when the binary was built**, so the pane
+describes the running version without asking GitHub or anyone else. `notes`
+is this version's release notes, as Markdown, committed to `docs/releases/`
+before the release was tagged; it is absent for a development build or for a
+release cut before notes were kept there. `notice` is the NOTICE file: the
+licence and every third-party component in the build. `repository` is a link
+to show, never a request the server makes.
+
 ---
 
 ## Events
