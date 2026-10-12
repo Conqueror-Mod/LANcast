@@ -1726,8 +1726,17 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
     // A new source is a new stream; whatever the last one was cut at says
     // nothing about this one.
     recoveredAt.current = null;
+    /*
+     * Read, not cleared. This effect runs again for the same item when the
+     * audio track or quality is settled a moment after the item arrives — an
+     * account with a language preference gets its track with the item, and
+     * setting it re-runs this. Clearing the flag on the first run left the
+     * second with nothing to say but the saved position, so Play from start
+     * resumed (playFromStartEntry.test.tsx). The flag is let go once this item
+     * reports a position of its own (timeupdate), when the live position
+     * takes over, and by play() for anything else.
+     */
     const restart = fromStartFor.current === item.id;
-    fromStartFor.current = 0;
     startedFrom.current = entrySeconds({
       fromStart: restart,
       liveAt: live.at,
@@ -3091,6 +3100,11 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
         id: sourceItem.current,
         at: (transcoding.current ? offset.current : 0) + t,
       };
+      // Started from the top and now somewhere past it: a reload from here
+      // resumes the live position, so Play from start has done its job.
+      if (fromStartFor.current === sourceItem.current && livePos.current.at > 0) {
+        fromStartFor.current = 0;
+      }
       saveProgress();
     },
     play: () => setPlaying(true),
