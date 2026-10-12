@@ -18,6 +18,7 @@ import {
   usePlaylistEntries,
   useDeletePlaylist,
   fetchShowEpisodes,
+  fetchShowContinue,
   useShowStanding,
   useSetWatchedByID,
 } from "@/api/hooks";
@@ -458,7 +459,7 @@ export function Detail() {
    */
   const { data: standing } = useShowStanding(
     itemID,
-    item?.kind === "show" || item?.kind === "season",
+    item?.kind === "show" || item?.kind === "season" || item?.kind === "collection",
   );
   const deletePlaylist = useDeletePlaylist(itemID);
   const isAdmin = useIsAdmin();
@@ -604,6 +605,28 @@ export function Detail() {
       navigate(`/watch/${target.episodeID}`, {
         state: { queue: target.queue },
       });
+    } finally {
+      setShowBusy(null);
+    }
+  };
+
+  /*
+   * A collection continues film by film, in release order, the way a show
+   * does (store.NextInCollectionFor, settled 2026-10-12). Asked again on the
+   * press: the label above is drawn from a moment ago, and the press must not
+   * play a film somebody finished since.
+   */
+  const continueCollection = async () => {
+    if (!item || showBusy) return;
+    setShowBusy("continue");
+    setShowNote(null);
+    try {
+      const next = await fetchShowContinue(item.id);
+      if (next.exhausted || !next.episode) {
+        setShowNote("You have watched every film in this collection.");
+        return;
+      }
+      navigate(`/watch/${next.episode.id}`);
     } finally {
       setShowBusy(null);
     }
@@ -958,6 +981,21 @@ export function Detail() {
                 />
               )}
               {/*
+               * A collection part way through leads with the next film,
+               * named, because "Continue" alone over a franchise does not say
+               * which one. Untouched or finished, Play all leads as before.
+               */}
+              {isCollection && standing?.started && !standing.exhausted && standing.episode && (
+                <PlayButton
+                  label={
+                    showBusy === "continue"
+                      ? "Finding…"
+                      : `${standing.resume ? "Continue" : "Up next"}: ${standing.episode.title}`
+                  }
+                  onPlay={() => void continueCollection()}
+                />
+              )}
+              {/*
                 Not for an artist, which has its own below.
                 
                 An artist whose children are all albums finds nothing playable
@@ -972,7 +1010,8 @@ export function Detail() {
                 <SecondaryButton
                   label={playAllLabel(playableChildren.length)}
                   className={
-                    isEpisodeList && seasonContinues
+                    (isEpisodeList && seasonContinues) ||
+                    (isCollection && standing?.started && !standing.exhausted && standing.episode)
                       ? "detail__play detail__play--secondary"
                       : "detail__play"
                   }

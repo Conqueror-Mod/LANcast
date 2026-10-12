@@ -421,6 +421,8 @@ export interface paths {
          *     For everything else — films, tracks — "in progress" is a saved position past zero with `watched` unset, so an item played to the end drops off rather than inviting a replay.
          *
          *     Progress and artwork are included so a tile draws its bar and poster without a second call.
+         *
+         *     **A collection puts its next film on the shelf.** Finishing a film in a collection lists the film after it (the row is the film), unless the collection is finished, that film is already in progress, or its own play state was written after the finish — which is how Remove from Continue Watching takes it off.
          */
         get: operations["getContinue"];
         put?: never;
@@ -3079,10 +3081,12 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Where a show should resume
+         * Where a show, season or collection should resume
          * @description **Never cached** — the response carries `Cache-Control: no-store`, and that is the feature rather than a precaution. Ask this on the press: resuming from the Continue shelf's `next_episode`, which is cacheable and may be seconds old, is how a viewer lands on an episode they have already finished.
          *
          *     Progress is per user, so one person finishing a season does not move anybody else.
+         *
+         *     **A collection answers too**, film by film in release order: the same rules over its films and the same shape, with `episode` holding the film.
          */
         get: operations["getShowContinue"];
         put?: never;
@@ -5556,6 +5560,7 @@ export interface components {
              *     **For drawing, not for deciding.** A client may hold this response, but must not play from it: ask `GET /api/items/{id}/continue` on the press. Resuming from a list a few seconds old is how a viewer lands on an episode they have already finished.
              */
             next_episode?: components["schemas"]["Item"];
+            continues_from?: components["schemas"]["Continuation"];
             /**
              * @description Detected intro and credits ranges (ADR 0054). Present on detail responses only.
              *
@@ -7763,6 +7768,18 @@ export interface components {
         ScanCancelled: {
             /** @description The libraries whose scans were stopped. Empty when nothing was running. */
             cancelled: number[];
+        };
+        /** @description Set only on a Continue Watching row that is a collection's next film: which collection, and the film just finished in it. What lets a client say "Because you watched" about a franchise. */
+        Continuation: {
+            /** Format: int64 */
+            collection_id: number;
+            collection_title: string;
+            /**
+             * Format: int64
+             * @description The film just finished, which this one follows in release order.
+             */
+            after_id: number;
+            after_title: string;
         };
     };
     responses: {

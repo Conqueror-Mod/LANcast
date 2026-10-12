@@ -1344,7 +1344,7 @@
           "items"
         ],
         "summary": "In-progress items, most recently played first",
-        "description": "The home screen's first shelf.\n\n**A show appears as the show, not as an episode.** Episodes collapse to the show they belong to, and `next_episode` carries the one the show would play — the same answer `GET /api/items/{id}/continue` gives, computed by the same query, so the shelf and a show's Continue button cannot disagree.\n\nA show qualifies on **any** episode activity, watched or in progress. Finishing an episode is the ordinary way to stop watching a series, and a shelf that dropped the show at that moment answered \"which episode did I stop inside\" rather than \"what am I watching\". A show with every episode watched has nothing to continue and is absent.\n\nFor everything else — films, tracks — \"in progress\" is a saved position past zero with `watched` unset, so an item played to the end drops off rather than inviting a replay.\n\nProgress and artwork are included so a tile draws its bar and poster without a second call.",
+        "description": "The home screen's first shelf.\n\n**A show appears as the show, not as an episode.** Episodes collapse to the show they belong to, and `next_episode` carries the one the show would play — the same answer `GET /api/items/{id}/continue` gives, computed by the same query, so the shelf and a show's Continue button cannot disagree.\n\nA show qualifies on **any** episode activity, watched or in progress. Finishing an episode is the ordinary way to stop watching a series, and a shelf that dropped the show at that moment answered \"which episode did I stop inside\" rather than \"what am I watching\". A show with every episode watched has nothing to continue and is absent.\n\nFor everything else — films, tracks — \"in progress\" is a saved position past zero with `watched` unset, so an item played to the end drops off rather than inviting a replay.\n\nProgress and artwork are included so a tile draws its bar and poster without a second call.\n\n**A collection puts its next film on the shelf.** Finishing a film in a collection lists the film after it (the row is the film), unless the collection is finished, that film is already in progress, or its own play state was written after the finish — which is how Remove from Continue Watching takes it off.",
         "parameters": [
           {
             "name": "limit",
@@ -6968,8 +6968,8 @@
         "tags": [
           "items"
         ],
-        "summary": "Where a show should resume",
-        "description": "**Never cached** — the response carries `Cache-Control: no-store`, and that is the feature rather than a precaution. Ask this on the press: resuming from the Continue shelf's `next_episode`, which is cacheable and may be seconds old, is how a viewer lands on an episode they have already finished.\n\nProgress is per user, so one person finishing a season does not move anybody else.",
+        "summary": "Where a show, season or collection should resume",
+        "description": "**Never cached** — the response carries `Cache-Control: no-store`, and that is the feature rather than a precaution. Ask this on the press: resuming from the Continue shelf's `next_episode`, which is cacheable and may be seconds old, is how a viewer lands on an episode they have already finished.\n\nProgress is per user, so one person finishing a season does not move anybody else.\n\n**A collection answers too**, film by film in release order: the same rules over its films and the same shape, with `episode` holding the film.",
         "responses": {
           "200": {
             "description": "The episode to play, or `exhausted`.",
@@ -12804,6 +12804,9 @@
             "$ref": "#/components/schemas/Item",
             "description": "The episode a show would play next. **Set only on the Continue Watching shelf**, where the row is the show rather than the episode.\n\nIts own `progress` and `duration_ms` are the episode's, which is what a resume bar is drawn from — a show has no position of its own and never did. Its `artwork` is the episode's as well (a `thumb` still, where there is one), so a client can draw the episode rather than the show's poster.\n\n**For drawing, not for deciding.** A client may hold this response, but must not play from it: ask `GET /api/items/{id}/continue` on the press. Resuming from a list a few seconds old is how a viewer lands on an episode they have already finished."
           },
+          "continues_from": {
+            "$ref": "#/components/schemas/Continuation"
+          },
           "markers": {
             "type": "array",
             "items": {
@@ -18368,6 +18371,33 @@
               "format": "int64"
             },
             "description": "The libraries whose scans were stopped. Empty when nothing was running."
+          }
+        }
+      },
+      "Continuation": {
+        "type": "object",
+        "description": "Set only on a Continue Watching row that is a collection's next film: which collection, and the film just finished in it. What lets a client say \"Because you watched\" about a franchise.",
+        "required": [
+          "collection_id",
+          "collection_title",
+          "after_id",
+          "after_title"
+        ],
+        "properties": {
+          "collection_id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "collection_title": {
+            "type": "string"
+          },
+          "after_id": {
+            "type": "integer",
+            "format": "int64",
+            "description": "The film just finished, which this one follows in release order."
+          },
+          "after_title": {
+            "type": "string"
           }
         }
       }
