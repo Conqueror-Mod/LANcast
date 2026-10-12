@@ -7,6 +7,8 @@ import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { MemoryRouter } from "react-router-dom";
+import { PlaybackProvider, usePlayback } from "@/playback/PlaybackProvider";
 import { TrayBridge } from "./TrayBridge";
 
 declare global {
@@ -19,10 +21,20 @@ let host: HTMLDivElement;
 let root: Root;
 let tasks: { kind: string; state: string }[];
 let cancels: number;
+let pb: ReturnType<typeof usePlayback>;
+
+function Probe() {
+  pb = usePlayback();
+  return null;
+}
 
 beforeEach(() => {
   tasks = [];
   cancels = 0;
+  const proto = window.HTMLMediaElement.prototype;
+  proto.load = vi.fn();
+  proto.play = vi.fn(async () => {});
+  proto.pause = vi.fn();
   host = document.createElement("div");
   document.body.append(host);
   root = createRoot(host);
@@ -35,6 +47,13 @@ beforeEach(() => {
         cancels++;
         return json({ cancelled: [1] });
       }
+      if (/^\/api\/items\/5(\?|$)/.test(url)) {
+        return json({ id: 5, kind: "track", title: "A Song", duration_ms: 200_000, streams: [] });
+      }
+      if (/^\/api\/items\/7(\?|$)/.test(url)) {
+        return json({ id: 7, kind: "movie", title: "A Film", duration_ms: 6_000_000, streams: [] });
+      }
+      if (url.includes("/playback")) return json({ decision: { method: "direct", reason: "" } });
       if (url.startsWith("/api/activity")) {
         return json({
           active: tasks.length > 0,
@@ -68,7 +87,12 @@ async function render() {
   await act(async () => {
     root.render(
       <QueryClientProvider client={qc}>
-        <TrayBridge />
+        <MemoryRouter>
+          <PlaybackProvider>
+            <Probe />
+            <TrayBridge />
+          </PlaybackProvider>
+        </MemoryRouter>
       </QueryClientProvider>,
     );
   });
@@ -129,5 +153,29 @@ describe("tray bridge", () => {
     tasks = [{ kind: "scan", state: "running" }];
     await render();
     expect(window.__lancastTray).toBeUndefined();
+  });
+
+  /*
+   * ✕ hides the window. A film does not play on, heard and not seen, in a
+   * hidden one — reported as the window "not closing" while something
+   * played. Music does: listening with the window away is what a tray is for.
+   */
+  it("stops a film when the window is hidden, keeping music playing", async () => {
+    window.lancastTrayScanning = vi.fn();
+    await render();
+
+    await act(async () => pb.play(7, [7]));
+    await settle();
+    expect(pb.itemID).toBe(7);
+    await act(async () => window.__lancastTray!("window-hidden"));
+    await settle();
+    expect(pb.itemID, "the film played on in a hidden window").toBe(0);
+
+    await act(async () => pb.play(5, [5]));
+    await settle();
+    expect(pb.isAudio).toBe(true);
+    await act(async () => window.__lancastTray!("window-hidden"));
+    await settle();
+    expect(pb.itemID, "music was stopped by hiding the window").toBe(5);
   });
 });

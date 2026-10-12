@@ -174,5 +174,8 @@ func (d *desk) closing() bool {
 		return true
 	}
 	w.Hide()
+	// A film does not play on in a hidden window; the page stops it and keeps
+	// its place, and leaves music playing (TrayBridge.tsx).
+	w.Eval(`window.__lancastTray && window.__lancastTray("window-hidden")`)
 	return false
 }

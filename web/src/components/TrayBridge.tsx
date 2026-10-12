@@ -1,5 +1,6 @@
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { useActivity, useCancelScans } from "@/api/hooks";
+import { usePlayback } from "@/playback/PlaybackProvider";
 
 declare global {
   interface Window {
@@ -45,11 +46,28 @@ export function TrayBridge() {
     return () => report(false);
   }, [report]);
 
+  /*
+   * ✕ hides the window, and a film does not play on in a hidden one.
+   *
+   * Reported as the window "not closing" while something played: the
+   * window went, and the film carried on, heard and not seen, with no
+   * window to stop it from. Stopping saves the place, so Continue picks
+   * it up. Music is different — listening with the window away is the
+   * point of a tray — and keeps playing.
+   */
+  const pb = usePlayback();
+  const playingRef = useRef(pb);
+  playingRef.current = pb;
+
   const mutate = cancel.mutate;
   useEffect(() => {
     if (!report) return;
     window.__lancastTray = (action: string) => {
       if (action === "cancel-scan") mutate();
+      if (action === "window-hidden") {
+        const now = playingRef.current;
+        if (now.itemID && !now.isAudio) now.stop();
+      }
     };
     return () => {
       delete window.__lancastTray;
