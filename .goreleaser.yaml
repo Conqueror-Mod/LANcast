@@ -74,9 +74,7 @@ builds:
     ldflags:
       - -s -w -X main.Version={{ .Version }}
 
-# The archive names are unchanged from the single-archive version: same
-# template, same formats per OS. Splitting the block is about what goes *in*
-# them, not what they are called.
+# Split by OS for what goes *in* each archive; the name is shared, and below.
 archives:
   # LANcast_…, not lancast_…, and the capital is load-bearing (ADR 0080 §5,
   # amended): updaters from before the single executable look for lancast_…
