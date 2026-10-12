@@ -385,6 +385,7 @@ func (s *Server) Handler() http.Handler {
 
 	// Before the {id} form only for readability; the patterns do not overlap.
 	mux.HandleFunc("POST /api/libraries/scan", s.adminOnly(s.scanAll))
+	mux.HandleFunc("POST /api/libraries/scan/cancel", s.adminOnly(s.cancelScans))
 	mux.HandleFunc("GET /api/libraries/{id}/timeline", s.photoTimeline)
 	// Places (ADR 0078): names and counts, never a coordinate.
 	mux.HandleFunc("GET /api/libraries/{id}/places", s.photoPlaces)

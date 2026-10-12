@@ -41,6 +41,9 @@ func MayEmptyTrash(p Progress) TrashVerdict {
 	if p.State == StateFailed {
 		return TrashVerdict{Reason: "the scan failed, so what is missing is not known"}
 	}
+	if p.State == StateCancelled {
+		return TrashVerdict{Reason: "the scan was cancelled, so what is missing is not known"}
+	}
 	if len(p.RootsSkipped) > 0 {
 		return TrashVerdict{Reason: fmt.Sprintf(
 			"%d location(s) could not be read, so what is missing is not known",
