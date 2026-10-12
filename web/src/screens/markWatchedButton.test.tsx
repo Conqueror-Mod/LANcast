@@ -87,11 +87,17 @@ async function render(id: number) {
   await settle();
 }
 
-const labels = () => [...host.querySelectorAll("button")].map((b) => (b.textContent ?? "").trim());
+// Mark as watched lives under More Options now, so what is on offer is what
+// the page shows plus what that menu holds once opened. The menu may render
+// outside the page's root, so the whole document is searched.
+const controls = () => [...document.querySelectorAll("button, [role=menuitem]")];
+const labels = () => controls().map((b) => (b.textContent ?? "").trim());
 const button = (label: string) =>
-  [...host.querySelectorAll("button")].find((b) => (b.textContent ?? "").trim() === label) as
-    | HTMLButtonElement
-    | undefined;
+  controls().find((b) => (b.textContent ?? "").trim() === label) as HTMLButtonElement | undefined;
+async function openMore() {
+  const more = button("More Options");
+  if (more) await act(async () => more.click());
+}
 
 beforeEach(() => {
   host = document.createElement("div");
@@ -109,6 +115,7 @@ describe("the detail page's watched button", () => {
   it("marks an unwatched film watched", async () => {
     stub(film(false));
     await render(700);
+    await openMore();
     const b = button("Mark as watched");
     expect(b).toBeDefined();
     await act(async () => b!.click());
@@ -121,6 +128,7 @@ describe("the detail page's watched button", () => {
   it("offers the undo on a film already watched", async () => {
     stub(film(true));
     await render(700);
+    await openMore();
     expect(labels()).toContain("Mark as unwatched");
     expect(labels()).not.toContain("Mark as watched");
   });
@@ -128,6 +136,7 @@ describe("the detail page's watched button", () => {
   it("marks every episode of a show with some left", async () => {
     stub(show(2));
     await render(900);
+    await openMore();
     const b = button("Mark all as watched");
     expect(b).toBeDefined();
     await act(async () => b!.click());
@@ -141,6 +150,7 @@ describe("the detail page's watched button", () => {
   it("offers to unmark a show with nothing left", async () => {
     stub(show(0));
     await render(900);
+    await openMore();
     expect(labels()).toContain("Mark all as unwatched");
     expect(labels()).not.toContain("Mark all as watched");
   });
@@ -148,6 +158,7 @@ describe("the detail page's watched button", () => {
   it("leaves music alone", async () => {
     stub(track);
     await render(800);
+    await openMore();
     expect(labels().some((l) => l.startsWith("Mark"))).toBe(false);
   });
 });

@@ -270,7 +270,11 @@ describe("removing a title from Continue Watching on its page", () => {
     stub(film(), { items: [film()] });
     const calls = vi.mocked(fetch).mock.calls;
     await render(700);
-    const remove = button("Remove from Continue Watching");
+    // Under More Options, with the page's other actions.
+    await act(async () => button("More Options")!.click());
+    const remove = [...document.querySelectorAll("[role=menuitem]")].find(
+      (b) => b.textContent === "Remove from Continue Watching",
+    ) as HTMLButtonElement | undefined;
     expect(remove, "no way to take it off the shelf").toBeDefined();
     await act(async () => remove!.click());
     await settle();
@@ -283,7 +287,12 @@ describe("removing a title from Continue Watching on its page", () => {
   it("is not offered for a title that is not on the shelf", async () => {
     stub(film(), { items: [] });
     await render(700);
-    expect(button("Remove from Continue Watching")).toBeUndefined();
+    await act(async () => button("More Options")!.click());
+    expect(
+      [...document.querySelectorAll("[role=menuitem]")].some(
+        (b) => b.textContent === "Remove from Continue Watching",
+      ),
+    ).toBe(false);
   });
 });
 

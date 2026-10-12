@@ -199,6 +199,19 @@ func (s *Server) writeSharedItems(w http.ResponseWriter, r *http.Request, peerFP
 		s.writeInternal(w, err, "guest items")
 		return
 	}
+	/*
+	 * Posters come with the listing, as they do with the household's own.
+	 *
+	 * Without this every tile on a friend's screen was a lettered placeholder:
+	 * their client had no hash to ask /api/federation/artwork for, so that
+	 * route — which checks the hash belongs to a shared item — was never
+	 * called at all. The hashes say nothing the artwork route would not
+	 * answer for these same items.
+	 */
+	if err := s.st.AttachArtwork(r.Context(), items); err != nil {
+		s.writeInternal(w, err, "attach artwork")
+		return
+	}
 	writeJSON(w, http.StatusOK, map[string]any{
 		"items": items,
 		"total": total,

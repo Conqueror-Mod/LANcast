@@ -324,7 +324,7 @@ export function HomeHero({
             />
             {hasMenu && (
               <HeroButton
-                label="More"
+                label="More Options"
                 onPress={() => {
                   const r = document.activeElement?.getBoundingClientRect();
                   setByKey(true);

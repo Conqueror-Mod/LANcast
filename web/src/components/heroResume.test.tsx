@@ -397,7 +397,7 @@ describe("the spotlight's menu", () => {
         </QueryClientProvider>,
       );
     });
-    const more = [...host.querySelectorAll("button")].find((b) => b.textContent === "More");
+    const more = [...host.querySelectorAll("button")].find((b) => b.textContent === "More Options");
     expect(more, "no More on a spotlight with actions").toBeTruthy();
     await act(async () => more!.click());
     const item = [...document.querySelectorAll("button, [role=menuitem]")].find(
@@ -411,6 +411,6 @@ describe("the spotlight's menu", () => {
   it("has no More when it has nothing to offer", async () => {
     mount([50, 51, 52, 53, 54]);
     await render(episode as Item, "recent");
-    expect([...host.querySelectorAll("button")].some((b) => b.textContent === "More")).toBe(false);
+    expect([...host.querySelectorAll("button")].some((b) => b.textContent === "More Options")).toBe(false);
   });
 });
