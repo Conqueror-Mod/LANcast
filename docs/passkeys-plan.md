@@ -114,21 +114,30 @@ identity certificate, selected by ALPN, never the serving one.
 ### Inside the house
 
 A phone on the LAN must also reach the server *by name*, or it gets a
-certificate for a name it did not ask for, and no passkey. Three options:
+certificate for a name it did not ask for, and no passkey.
 
-- **Hairpin NAT** on the AT&T gateway, so the public `A` record works from
-  inside. **Measured 2026-10-11: it does, over IPv4, but unreliably.** From
-  the server itself the public name answered with the same serving key as
-  loopback, but only 3 of 8 attempts succeeded on either port, against 8 of 8
-  on loopback. The gateway's NAT loopback is flaky, so **split DNS (the name
-  pointing at the LAN address inside the house) is the real answer** for
-  passkeys at home. IPv6 is untested, because there is no `AAAA` record yet.
-- **IPv6:** with no NAT, an `AAAA` record that resolves to the server's global
-  address works on the LAN as-is, if the gateway is not filtering it.
-- **Split DNS:** the router or a hosts entry maps the name to the LAN address.
+**Solved 2026-10-11, over IPv6.** The gateway's NAT loopback for IPv4 is
+unreliable: only 3 of 8 requests by name from inside succeeded. IPv6 has no
+NAT, so with an `AAAA` record a device at home connects straight to the server.
+Measured: 8 of 8 by name over IPv6 with the trusted certificate, and a phone on
+home Wi-Fi loads the name quickly with no warning.
 
-Typing the IP keeps working everywhere, with the self-signed certificate and a
-password. It just never offers a passkey.
+What it took:
+- The server answers on port 443 itself while the certificate is on, because
+  IPv6 has no port translation (ADR 0081 §2, amended).
+- A Windows Firewall inbound rule for TCP 443.
+- On an AT&T BGW320, **IPv6 ports are opened in Firewall → Packet Filter, not
+  NAT/Gaming.** NAT/Gaming forwards IPv4 only. Reflexive ACL (the gateway's
+  IPv6 firewall) stays on. The rule that worked: *Pass*, destination IP = the
+  server's stable IPv6 address, protocol TCP, destination port 443,
+  **ingress WAN, egress LAN**. Without the two interface matches the rule does
+  nothing. Without the port match it would expose every port on the server.
+- An `AAAA` record for the name, with the server's **stable** IPv6 address,
+  never a temporary one.
+
+**The standing risk:** the IPv4 address is static, but the IPv6 range is not
+guaranteed. If it changes, the `AAAA` record and the gateway rule must both be
+updated. Until then, IPv6 visitors fail, and browsers fall back to IPv4.
 
 ## Part 2: passkeys (ADR 0082)
 
@@ -228,8 +237,8 @@ small.
 2. **Does the client's pinned self-signed certificate count as a certificate
    error** for WebAuthn? It uses `--ignore-certificate-errors-spki-list`. This
    decides whether passkeys could ever work on the LAN without a public name.
-3. **Does the AT&T gateway hairpin?** IPv4: **yes** (2026-10-11). IPv6:
-   untested until an `AAAA` record exists.
+3. ~~**Does the AT&T gateway hairpin?**~~ IPv4: unreliably (3 of 8). IPv6:
+   no NAT, so no hairpin needed; solved with an `AAAA` record (2026-10-11).
 4. **The module graph of go-webauthn.**
 
 ## Build order

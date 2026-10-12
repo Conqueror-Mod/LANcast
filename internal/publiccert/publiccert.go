@@ -160,6 +160,11 @@ type Status struct {
 	// failed" with no reason is a status nobody can act on.
 	LastError   string    `json:"last_error,omitempty"`
 	NextAttempt time.Time `json:"next_attempt,omitzero"`
+	// Listening443 reports whether the server is also answering on port 443,
+	// which it does while the certificate is on (ADR 0081 §2, amended).
+	// Port443Error is why it is not, when it should be.
+	Listening443 bool   `json:"listening_443"`
+	Port443Error string `json:"port_443_error,omitempty"`
 }
 
 const (
@@ -188,7 +193,16 @@ type Manager struct {
 	status  Status
 	backoff time.Duration
 	kick    chan struct{}
+
+	// port opens or closes port 443 with the certificate; nil when there is
+	// no second port to manage (the server already listens on 443).
+	port func(on bool) error
 }
+
+// SetPortHook gives the manager the switch for port 443, which it flips
+// whenever the certificate is turned on or off. Set before the first
+// Configure.
+func (m *Manager) SetPortHook(fn func(on bool) error) { m.port = fn }
 
 // New prepares a manager that serves fallback for everything until it has a
 // public certificate. dir is where the certificate and the ACME account key
@@ -230,7 +244,7 @@ func (m *Manager) Configure(cfg Config) {
 	// an admin pressing save is asking for an attempt now, not after backoff.
 	m.backoff = 0
 	if !cfg.Enabled {
-		m.status = Status{State: StateOff}
+		m.status = Status{State: StateOff, Listening443: m.status.Listening443}
 	} else {
 		m.status.Hostname, m.status.CA = cfg.Hostname, cfg.CA
 		m.status.NextAttempt = time.Time{}
@@ -241,6 +255,7 @@ func (m *Manager) Configure(cfg Config) {
 	}
 	m.mu.Unlock()
 
+	m.setPort(cfg.Enabled)
 	if !cfg.Enabled {
 		m.forget()
 	} else if c := m.cur.Load(); c != nil && !covers(c, cfg.Hostname) {
@@ -254,6 +269,28 @@ func (m *Manager) Configure(cfg Config) {
 	select {
 	case m.kick <- struct{}{}:
 	default:
+	}
+}
+
+/*
+ * setPort opens port 443 with the certificate and closes it without.
+ *
+ * A port that will not open is reported, not fatal: the certificate still
+ * works over IPv4 through the router's forward, and the status says why IPv6
+ * visitors and the CA's IPv6 checks may not reach the server.
+ */
+func (m *Manager) setPort(on bool) {
+	if m.port == nil {
+		return
+	}
+	err := m.port(on)
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.status.Listening443 = on && err == nil
+	m.status.Port443Error = ""
+	if err != nil && on {
+		m.status.Port443Error = err.Error()
+		m.log.Warn("acme", "action", "listen 443", "error", err)
 	}
 }
 

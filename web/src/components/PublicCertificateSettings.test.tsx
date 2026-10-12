@@ -126,11 +126,12 @@ describe("public certificate settings", () => {
   it("does not ask for the same CA's terms twice", async () => {
     current = { ...off, enabled: true, hostname: "example.duckdns.org", ca: "letsencrypt",
       agreed_at: "2026-10-11T20:00:00Z", status: { state: "active", hostname: "example.duckdns.org",
-        not_after: "2027-01-09T20:00:00Z" } };
+        not_after: "2027-01-09T20:00:00Z", listening_443: true } };
     await render();
     expect(host.querySelector('input[type="checkbox"]')).toBeNull();
     expect(button("Save and try now")!.disabled).toBe(false);
     expect(host.textContent).toContain("Active for example.duckdns.org");
+    expect(host.textContent).toContain("Also answering on port 443");
 
     // Switching CA is a different agreement.
     const select = host.querySelector("select") as HTMLSelectElement;
@@ -146,10 +147,12 @@ describe("public certificate settings", () => {
   it("shows the CA's own words when it fails", async () => {
     current = { ...off, enabled: true, hostname: "example.duckdns.org", ca: "letsencrypt",
       agreed_at: "2026-10-11T20:00:00Z",
-      status: { state: "failing", last_error: "connection refused on 443",
+      status: { state: "failing", last_error: "connection refused on 443", listening_443: false,
+        port_443_error: "address in use",
         next_attempt: "2026-10-11T21:00:00Z" } };
     await render();
     expect(host.querySelector('[role="alert"]')!.textContent).toContain("connection refused on 443");
+    expect(host.textContent).toContain("Not answering on port 443: address in use");
   });
 
   it("turns off", async () => {

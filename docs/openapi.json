@@ -17746,7 +17746,8 @@
       "PublicCertificateStatus": {
         "type": "object",
         "required": [
-          "state"
+          "state",
+          "listening_443"
         ],
         "properties": {
           "state": {
@@ -17781,6 +17782,14 @@
             "type": "string",
             "format": "date-time",
             "description": "Set while failing: an hour after the first failure, doubling to a day."
+          },
+          "listening_443": {
+            "type": "boolean",
+            "description": "Whether the server is also answering on port 443. It does while the certificate is on, because IPv6 has no port translation and a router's 443 forward only covers IPv4."
+          },
+          "port_443_error": {
+            "type": "string",
+            "description": "Why port 443 could not be opened, when the certificate is on. The certificate still works over IPv4 through a router forward."
           }
         }
       },

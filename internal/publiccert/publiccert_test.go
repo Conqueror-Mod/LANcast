@@ -322,3 +322,41 @@ func TestNormalizeHostname(t *testing.T) {
 		}
 	}
 }
+
+// Port 443 opens with the certificate and closes with it (ADR 0081 §2,
+// amended): IPv6 has no port translation, so the server answers there itself.
+func TestPort443FollowsTheCertificate(t *testing.T) {
+	m, _, _ := newTestManager(t)
+	var calls []bool
+	m.SetPortHook(func(on bool) error { calls = append(calls, on); return nil })
+
+	m.Configure(enabled())
+	if st := m.Status(); !st.Listening443 {
+		t.Fatalf("status %+v; 443 should be open while the certificate is on", st)
+	}
+	m.Configure(Config{})
+	if st := m.Status(); st.Listening443 {
+		t.Fatalf("status %+v; 443 should close with the certificate", st)
+	}
+	if len(calls) != 2 || !calls[0] || calls[1] {
+		t.Fatalf("hook calls %v, want [true false]", calls)
+	}
+}
+
+func TestAPortThatWillNotOpenIsReportedNotFatal(t *testing.T) {
+	m, _, _ := newTestManager(t)
+	m.SetPortHook(func(on bool) error {
+		if on {
+			return errors.New("cannot listen on :443: address already in use")
+		}
+		return nil
+	})
+	m.Configure(enabled())
+	st := m.Status()
+	if st.Listening443 || st.Port443Error == "" {
+		t.Fatalf("status %+v; the reason must be shown", st)
+	}
+	if st.State == StateOff {
+		t.Fatal("a port problem turned the certificate off")
+	}
+}
