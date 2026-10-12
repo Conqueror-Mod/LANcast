@@ -801,26 +801,53 @@ function UsersSection() {
 
 // Everyone can change their own password. The server revokes the caller's
 // sessions on success, so the auth gate returns them to the login screen.
-function AccountSection() {
+/*
+ * Your account, in four panes (docs/settings-plan.md).
+ *
+ * One "Account" pane held a name, a password, passkeys, API keys, languages,
+ * sharing and history, and sat under "This device" although every one of them
+ * follows the person to any device. Split by what somebody comes looking for.
+ */
+function ProfileSection() {
+  return (
+    <section className="settings__section">
+      <span className="section-label">Profile</span>
+      <DisplayNameForm />
+    </section>
+  );
+}
+
+function LanguagesSection() {
+  return (
+    <section className="settings__section">
+      <span className="section-label">Languages &amp; subtitles</span>
+      <LanguagePreferences />
+    </section>
+  );
+}
+
+function PrivacySection() {
+  return (
+    <section className="settings__section">
+      <span className="section-label">Privacy</span>
+      <SharingToggle />
+      <HistoryReset />
+    </section>
+  );
+}
+
+function SecuritySection() {
   const change = useChangePassword();
   const [current, setCurrent] = useState("");
   const [next, setNext] = useState("");
 
   return (
     <section className="settings__section">
-      <span className="section-label">Account</span>
-
-      <DisplayNameForm />
-
-      <LanguagePreferences />
-
-      <SharingToggle />
-
-      <HistoryReset />
-
-      <APIKeysPanel />
+      <span className="section-label">Security</span>
 
       <PasskeySettings />
+
+      <APIKeysPanel />
 
       <span className="set-sublabel">Password</span>
       <form
@@ -1009,27 +1036,6 @@ function AdminSections({ pane }: { pane: string }) {
 
           {settings && (
             <>
-              {/*
-                On the Libraries pane because it is about what the library
-                costs on disk, beside scanning and the trash. A number rather
-                than a slider: somebody with a large array may reasonably allow
-                a great deal, and a ladder this page invented would be wrong for
-                them with no way to say so.
-              */}
-              <RuleSelect
-                title="Artwork cache limit"
-                sub="Posters and stills LANcast has downloaded. Artwork nothing uses any more is always cleared out, whatever this says. A limit additionally drops resized copies, which are rebuilt from the originals when they are next needed — the originals themselves are never deleted, so a limit below what your library actually uses simply will not be met."
-                value={settings.artwork_cache_mb ?? 0}
-                options={[
-                  { value: 0, label: "No limit" },
-                  { value: 512, label: "512 MB" },
-                  { value: 1024, label: "1 GB" },
-                  { value: 2048, label: "2 GB" },
-                  { value: 5120, label: "5 GB" },
-                  { value: 10240, label: "10 GB" },
-                ]}
-                onChange={(v) => update.mutate({ artwork_cache_mb: v })}
-              />
               <RuleSelect
                 title="Rescan libraries automatically"
                 sub="LANcast scans when you ask it to and when a library is added. A timer is for a server whose media arrives by other means — a downloader, a sync job, another machine writing to the drive. A library already scanning is skipped, never queued."
@@ -1215,28 +1221,6 @@ function AdminSections({ pane }: { pane: string }) {
                     </p>
                   </>
                 )}
-              <MediaToolsRow settings={settings} update={update} />
-              <ReprobeRow available={!!settings.media_tools?.probe_available} />
-              <label className="set-toggle">
-                <input
-                  type="checkbox"
-                  checked={settings.detect_markers}
-                  disabled={!settings.media_tools?.probe_available}
-                  onChange={(e) =>
-                    update.mutate({ detect_markers: e.target.checked })
-                  }
-                />
-                Detect where the credits start
-              </label>
-              <p className="set-row__sub">
-                Looks at the end of each film and episode in the background and
-                records where the credits appear to begin. Off by default
-                because it reads a quarter of every file, which takes hours on a
-                large library. Nothing uses it yet — playback and what counts as
-                watched are unchanged — so this only fills in what a later
-                release will be able to skip to. Only files that have been read
-                are examined.
-              </p>
               <label className="set-toggle">
                 <input
                   type="checkbox"
@@ -1262,9 +1246,9 @@ function AdminSections({ pane }: { pane: string }) {
         </section>
       )}
 
-      {pane === "playback" && (
+      {pane === "transcoding" && (
         <section className="settings__section">
-          <span className="section-label">Playback</span>
+          <span className="section-label">Transcoding</span>
           {settings && (
             <div className="set-row">
               <div className="set-row__main">
@@ -1292,19 +1276,34 @@ function AdminSections({ pane }: { pane: string }) {
               </div>
             </div>
           )}
-
           {settings && (
             <>
-              {/* Applied by the server on every progress write, so every client
-                agrees about what is finished — the reason this is here and not
-                in each player. */}
               {/*
-                The ceiling this server imposes, as opposed to the one each
-                screen picks for itself in its own settings. On the Playback
-                pane because that is where the other rules about how media is
-                delivered live, and because it is an administrator's decision
-                rather than a viewer's.
+                Beside the encoder because both are the same kind of decision:
+                what this machine is willing to spend on delivering media, set
+                by whoever runs it rather than by whoever is watching.
               */}
+              <RuleNumber
+                title="Conversions at once"
+                sub="How many files this server will convert at the same time. Each one is a separate ffmpeg working flat out, so this is really a statement about the machine: past the limit the next person is told the server is busy, which is better than everybody's picture stuttering at once. Files that play as they are do not count — they are sent untouched, however many people are watching."
+                value={settings.max_transcodes ?? 3}
+                min={1}
+                max={64}
+                onCommit={(v) => update.mutate({ max_transcodes: v })}
+              />
+
+              <MediaToolsRow settings={settings} update={update} />
+              <ReprobeRow available={!!settings.media_tools?.probe_available} />
+            </>
+          )}
+        </section>
+      )}
+
+      {pane === "quality" && (
+        <section className="settings__section">
+          <span className="section-label">Quality</span>
+          {settings && (
+            <>
               {settings.quality_rungs && settings.quality_rungs.length > 0 && (
                 <>
                   <label className="set-row">
@@ -1337,21 +1336,16 @@ function AdminSections({ pane }: { pane: string }) {
                 </>
               )}
 
-              {/*
-                Beside the quality ceiling because both are the same kind of
-                decision: what this machine is willing to spend on delivering
-                media, set by whoever runs it rather than by whoever is
-                watching.
-              */}
-              <RuleNumber
-                title="Conversions at once"
-                sub="How many files this server will convert at the same time. Each one is a separate ffmpeg working flat out, so this is really a statement about the machine: past the limit the next person is told the server is busy, which is better than everybody's picture stuttering at once. Files that play as they are do not count — they are sent untouched, however many people are watching."
-                value={settings.max_transcodes ?? 3}
-                min={1}
-                max={64}
-                onCommit={(v) => update.mutate({ max_transcodes: v })}
-              />
+            </>
+          )}
+        </section>
+      )}
 
+      {pane === "progress" && (
+        <section className="settings__section">
+          <span className="section-label">Playback &amp; progress</span>
+          {settings && (
+            <>
               <RuleSelect
                 title="Counts as watched at"
                 sub="Stop past this much of a film or episode and it is finished. Credits are not the film, and a shelf that keeps offering the last ninety seconds back is a shelf nobody clears."
@@ -1382,8 +1376,48 @@ function AdminSections({ pane }: { pane: string }) {
                 max={100}
                 onCommit={(v) => update.mutate({ continue_limit: v })}
               />
+              <label className="set-toggle">
+                <input
+                  type="checkbox"
+                  checked={settings.detect_markers}
+                  disabled={!settings.media_tools?.probe_available}
+                  onChange={(e) =>
+                    update.mutate({ detect_markers: e.target.checked })
+                  }
+                />
+                Detect where the credits start
+              </label>
+              <p className="set-row__sub">
+                Looks at the end of each film and episode in the background and
+                records where the credits appear to begin. Off by default
+                because it reads a quarter of every file, which takes hours on a
+                large library. Nothing uses it yet — playback and what counts as
+                watched are unchanged — so this only fills in what a later
+                release will be able to skip to. Only files that have been read
+                are examined.
+              </p>
             </>
           )}
+        </section>
+      )}
+
+      {pane === "backup" && settings && (
+        <section className="settings__section">
+          <span className="section-label">Storage</span>
+          <RuleSelect
+            title="Artwork cache limit"
+            sub="Posters and stills LANcast has downloaded. Artwork nothing uses any more is always cleared out, whatever this says. A limit additionally drops resized copies, which are rebuilt from the originals when they are next needed — the originals themselves are never deleted, so a limit below what your library actually uses simply will not be met."
+            value={settings.artwork_cache_mb ?? 0}
+            options={[
+              { value: 0, label: "No limit" },
+              { value: 512, label: "512 MB" },
+              { value: 1024, label: "1 GB" },
+              { value: 2048, label: "2 GB" },
+              { value: 5120, label: "5 GB" },
+              { value: 10240, label: "10 GB" },
+            ]}
+            onChange={(v) => update.mutate({ artwork_cache_mb: v })}
+          />
         </section>
       )}
     </>
@@ -3384,52 +3418,63 @@ interface Pane {
   admin?: boolean;
 }
 
+/*
+ * Four groups (docs/settings-plan.md, decided 2026-10-12): Status is what the
+ * server is doing, Server is how it is configured, Your account follows the
+ * person to any device, This device stays on this screen. Panes from the plan
+ * that have nothing in them yet are not listed until they do — a heading that
+ * leads to an empty column is the fault DESKTOP_ONLY exists to avoid.
+ */
+const STATUS_PANES: Pane[] = [
+  // First, for an administrator: what is happening, before how it is set up.
+  { id: "dashboard", label: "Dashboard", admin: true },
+  { id: "troubleshooting", label: "Troubleshooting", admin: true },
+];
+
 const SERVER_PANES: Pane[] = [
   { id: "general", label: "General", admin: true },
+  { id: "remote", label: "Remote access", admin: true },
+  { id: "users", label: "Users & access", admin: true },
   { id: "libraries", label: "Libraries", admin: true },
+  { id: "metadata", label: "Metadata", admin: true },
+  { id: "transcoding", label: "Transcoding", admin: true },
+  { id: "quality", label: "Quality", admin: true },
+  { id: "progress", label: "Playback & progress", admin: true },
+  { id: "livetv", label: "Live TV", admin: true },
   /*
-   * Pictures has its own pane rather than a corner of Libraries.
-   *
-   * Sensitive marking sat under Libraries because it was the only setting a
-   * picture library had. It is not any more — face grouping arrived with a
-   * download, a state and a switch of its own — and two of them in a general
-   * pane is the point at which somebody looking for one has to read all of it.
-   * Made a home now rather than after the third.
+   * Pictures has its own pane rather than a corner of Libraries: sensitive
+   * marking, face grouping and places each have a download, a state or a
+   * switch of their own.
    */
   { id: "pictures", label: "Pictures", admin: true },
-  // Retro games (ADR 0073). Its own pane for the reason Pictures has one: it
-  // holds an optional download and a network switch, and both would be lost
-  // in a general pane.
+  // Retro games (ADR 0073), for the reason Pictures has one: an optional
+  // download and a network switch that would be lost in a general pane.
   { id: "retro", label: "Retro games", admin: true },
-  { id: "metadata", label: "Metadata", admin: true },
-  { id: "playback", label: "Playback", admin: true },
-  { id: "users", label: "Users", admin: true },
   /*
-   * Other servers sits beside Users because they are the same question asked
-   * of two different populations: who may do what here. Its own pane rather
-   * than a corner of Users because a peer is not an account and must never
-   * come to look like one — pairing grants nothing, where adding a user grants
-   * the whole library.
+   * Other servers beside Users & access because both answer who may do what
+   * here. Its own pane because a peer is not an account and must never come
+   * to look like one — pairing grants nothing, where adding a user grants the
+   * whole library.
    */
   { id: "peers", label: "Other servers", admin: true },
-  { id: "livetv", label: "Live TV", admin: true },
   { id: "addons", label: "Add-ons", admin: true },
-  { id: "updates", label: "Updates", admin: true },
   /*
-   * Backup has its own pane rather than a corner of Logs.
-   *
-   * Maintenance next door is explicitly about throwing away things the server
-   * can make again. This is the opposite — the things it can never make again
-   * — and filing them together would put "protect what cannot be rebuilt"
-   * under a heading that means "discard what can".
+   * Backup apart from Troubleshooting's maintenance, which throws away what
+   * the server can make again; this protects what it never can.
    */
-  { id: "backup", label: "Backup", admin: true },
-  { id: "activity", label: "Activity", admin: true },
-  { id: "logs", label: "Logs", admin: true },
+  { id: "backup", label: "Backup & storage", admin: true },
+];
+
+const ACCOUNT_PANES: Pane[] = [
+  { id: "profile", label: "Profile" },
+  { id: "security", label: "Security" },
+  { id: "languages", label: "Languages & subtitles" },
+  { id: "privacy", label: "Privacy" },
 ];
 
 const DEVICE_PANES: Pane[] = [
-  { id: "account", label: "Account" },
+  { id: "display", label: "Display & home" },
+  { id: "keyboard", label: "Keyboard" },
   { id: "app", label: "This app" },
   /*
    * Games has a pane of its own rather than a row inside "This app".
@@ -3440,12 +3485,26 @@ const DEVICE_PANES: Pane[] = [
    * the right decision (ADR 0066) and undiscoverable is not the same thing.
    */
   { id: "games", label: "PC Games" },
-  { id: "display", label: "Display" },
-  { id: "keyboard", label: "Keyboard" },
   // Last, where every app keeps it, and for everyone: nothing in it is an
   // administrator's, and the licence is anybody's business.
   { id: "about", label: "About" },
 ];
+
+/*
+ * Where a pane that was renamed or split now lives.
+ *
+ * Links outlive a restructure: the tray asks for ?pane=updates, an older
+ * window open against a newer server asks for ?pane=account, and somebody
+ * may have a bookmark. Each lands where its contents went rather than on the
+ * first pane, which would read as the link being broken.
+ */
+const MOVED: Record<string, string> = {
+  activity: "dashboard",
+  logs: "troubleshooting",
+  updates: "general",
+  playback: "transcoding",
+  account: "profile",
+};
 
 // Panes that only mean anything inside the desktop window. Offering either in a
 // browser tab would give a heading that leads to an empty column.
@@ -3468,18 +3527,22 @@ export function Settings() {
   const isAdmin = useIsAdmin();
   const [params, setParams] = useSearchParams();
 
+  const status = isAdmin ? STATUS_PANES : [];
   const server = isAdmin ? SERVER_PANES : [];
+  const account = ACCOUNT_PANES;
   const device = DEVICE_PANES.filter(
     (x) => !DESKTOP_ONLY.has(x.id) || desktopAvailable(),
   );
-  const all = [...server, ...device];
+  const all = [...status, ...server, ...account, ...device];
   // An unknown or absent pane falls back to the first one the user may see,
   // rather than rendering an empty column — a link to an admin pane followed by
-  // a demotion should land somewhere, not nowhere.
-  const requested = params.get("pane") ?? "";
+  // a demotion should land somewhere, not nowhere. For an administrator that
+  // is the Dashboard; for anyone else, their Profile.
+  const asked = params.get("pane") ?? "";
+  const requested = MOVED[asked] ?? asked;
   const pane = all.some((x) => x.id === requested)
     ? requested
-    : (all[0]?.id ?? "account");
+    : (all[0]?.id ?? "profile");
 
   const go = (id: string) =>
     setParams(
@@ -3515,7 +3578,9 @@ export function Settings() {
 
       <div className="settings__layout">
         <nav className="settings__nav" aria-label="Settings categories">
+          {navGroup("Status", status)}
           {navGroup("Server", server)}
+          {navGroup("Your account", account)}
           {navGroup("This device", device)}
         </nav>
 
@@ -3523,21 +3588,23 @@ export function Settings() {
           {isAdmin && (
             <>
               {pane === "general" && <GeneralSection />}
-              {pane === "general" && <PublicCertificateSettings />}
-              <AdminSections pane={pane} />
-              {pane === "metadata" && <RateLimitSection />}
-              {pane === "users" && <UsersSection />}
-              {pane === "livetv" && <LiveTVSection />}
-              {pane === "addons" && <AddonsSection />}
-              {pane === "updates" && (
+              {pane === "general" && (
                 <>
                   <UpdateSettings />
                   <UpdateCheckSection />
                 </>
               )}
+              {pane === "remote" && <PublicCertificateSettings />}
+              {/* Backup first: what cannot be rebuilt leads, storage follows. */}
+              {pane === "backup" && <BackupSettings />}
+              <AdminSections pane={pane} />
+              {pane === "metadata" && <RateLimitSection />}
+              {pane === "users" && <UsersSection />}
+              {pane === "livetv" && <LiveTVSection />}
+              {pane === "addons" && <AddonsSection />}
               {pane === "pictures" && <PicturesSection />}
               {pane === "retro" && <RetroSection />}
-              {pane === "activity" && (
+              {pane === "dashboard" && (
                 <>
                   {/*
                     Review has a permanent home here, and only a conditional one
@@ -3566,8 +3633,7 @@ export function Settings() {
                   <AuditLog />
                 </>
               )}
-              {pane === "backup" && <BackupSettings />}
-              {pane === "logs" && (
+              {pane === "troubleshooting" && (
                 <>
                   <ServerLogSection />
                   <CrashReports />
@@ -3576,7 +3642,10 @@ export function Settings() {
               )}
             </>
           )}
-          {pane === "account" && <AccountSection />}
+          {pane === "profile" && <ProfileSection />}
+          {pane === "security" && <SecuritySection />}
+          {pane === "languages" && <LanguagesSection />}
+          {pane === "privacy" && <PrivacySection />}
           {pane === "app" && (
             <>
               <DesktopSettings />

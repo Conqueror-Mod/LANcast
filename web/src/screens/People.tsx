@@ -78,7 +78,7 @@ export function People() {
         <p className="people__foot">
           People choose for themselves whether to share what they have watched.
           Yours is off unless you turn it on, in{" "}
-          <Link to="/settings?pane=account">Settings → Account</Link>.
+          <Link to="/settings?pane=privacy">Settings → Privacy</Link>.
         </p>
       )}
     </div>

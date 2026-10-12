@@ -105,7 +105,7 @@ func buildTrayMenu(d *desk, log *slog.Logger) {
 	watch(mLogin.ClickedCh, func() { toggleLogin(mLogin, log) })
 	watch(mScan.ClickedCh, func() { d.open(d.base + "/settings?pane=libraries&tray=scan") })
 	watch(mCancel.ClickedCh, func() { d.cancelScan() })
-	watch(mUpdates.ClickedCh, func() { d.open(d.base + "/settings?pane=updates") })
+	watch(mUpdates.ClickedCh, func() { d.open(d.base + "/settings?pane=general") })
 	watch(mAbout.ClickedCh, func() { d.open(d.base + "/settings?pane=about") })
 	watch(mExit.ClickedCh, func() { d.exit() })
 }

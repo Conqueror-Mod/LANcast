@@ -104,7 +104,7 @@ async function render() {
   await act(async () => {
     root.render(
       <QueryClientProvider client={client}>
-        <MemoryRouter initialEntries={["/settings?pane=account"]}>
+        <MemoryRouter initialEntries={["/settings?pane=privacy"]}>
           <Settings />
         </MemoryRouter>
       </QueryClientProvider>,
