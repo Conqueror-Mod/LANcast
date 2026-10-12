@@ -219,6 +219,8 @@ func New(st *store.Store, log *slog.Logger) *Scanner {
 		running: map[int64]bool{},
 		last:    map[int64]*Progress{},
 		cancel:  map[int64]context.CancelFunc{},
+		// Nil in every real build; set only behind the slowscan build tag.
+		afterFile: slowWalk,
 	}
 }
 
