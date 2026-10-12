@@ -25,6 +25,9 @@ declare global {
  * Renders nothing, and does nothing outside the desktop window: a browser
  * tab has no tray to talk to.
  */
+/** Raised on window when ✕ hides the desktop window into the tray. */
+export const WINDOW_HIDDEN = "lancast:window-hidden";
+
 export function TrayBridge() {
   const report = window.lancastTrayScanning;
   const { data } = useActivity();
@@ -50,6 +53,12 @@ export function TrayBridge() {
     if (!report) return;
     window.__lancastTray = (action: string) => {
       if (action === "cancel-scan") mutate();
+      /*
+       * ✕ hid the window. Passed on as an event rather than acted on here:
+       * the player decides what that means for what it is playing
+       * (PlaybackProvider), and this bridge stays usable on its own.
+       */
+      if (action === "window-hidden") window.dispatchEvent(new Event(WINDOW_HIDDEN));
     };
     return () => {
       delete window.__lancastTray;

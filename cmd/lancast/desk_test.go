@@ -82,6 +82,10 @@ func TestCloseHidesAndExitCloses(t *testing.T) {
 	if hasTray && (destroy || w.hidden != 1) {
 		t.Fatalf("✕ with a tray: destroy=%v hidden=%d; want hidden", destroy, w.hidden)
 	}
+	// And the page is told, so a film does not play on in a hidden window.
+	if hasTray && (len(w.evals) != 1 || w.evals[0] != `window.__lancastTray && window.__lancastTray("window-hidden")`) {
+		t.Fatalf("✕ did not tell the page the window was hidden: %v", w.evals)
+	}
 	if !hasTray && !destroy {
 		t.Fatal("✕ with no tray must close: a hidden window with nothing to restore it is a process with no way in")
 	}

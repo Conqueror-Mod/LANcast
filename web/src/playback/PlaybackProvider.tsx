@@ -1,4 +1,5 @@
 import { clientNote } from "@/lib/clientNote";
+import { WINDOW_HIDDEN } from "@/components/TrayBridge";
 import { TrackGapMeter } from "@/lib/trackGap";
 import { taperGain, TAPER_IN_MS } from "@/lib/taper";
 import {
@@ -1093,6 +1094,27 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
     setLoading(false);
     setCurrent(0);
     setDuration(0);
+  }, []);
+
+  /*
+   * ✕ hides the window, and a film does not play on in a hidden one.
+   *
+   * Reported as the window "not closing" while something played: the window
+   * went, and the film carried on, heard and not seen, with no window to stop
+   * it from. Stopping saves the place, so Continue picks it up. Music is
+   * different — listening with the window away is what a tray is for — and
+   * keeps playing. The desktop's tray bridge raises the event
+   * (TrayBridge.tsx); a browser tab never does.
+   */
+  const hiddenRef = useRef({ itemID, isAudio, stop });
+  hiddenRef.current = { itemID, isAudio, stop };
+  useEffect(() => {
+    const onHidden = () => {
+      const now = hiddenRef.current;
+      if (now.itemID && !now.isAudio) now.stop();
+    };
+    window.addEventListener(WINDOW_HIDDEN, onHidden);
+    return () => window.removeEventListener(WINDOW_HIDDEN, onHidden);
   }, []);
 
   // "Play all" hands over the ordered ids of a container's children; the player
