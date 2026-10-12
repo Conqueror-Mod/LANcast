@@ -83,7 +83,7 @@ func TestReleaseIsSafeWhenNotHeld(t *testing.T) {
  * locked nothing.
  */
 func TestTheNamesAreDistinct(t *testing.T) {
-	names := []string{Server, Client, Tray}
+	names := []string{Server, Client}
 	for i := range names {
 		if names[i] == "" {
 			t.Fatalf("name %d is empty", i)
@@ -94,28 +94,5 @@ func TestTheNamesAreDistinct(t *testing.T) {
 					names[i])
 			}
 		}
-	}
-}
-
-// A tray can be acquired while a server is held: on an installed machine the
-// server is a service and the tray is a user-session process controlling it,
-// and they run together by design.
-func TestATrayDoesNotBlockAServer(t *testing.T) {
-	relServer, heldServer, err := Acquire(Server)
-	if err != nil {
-		t.Skipf("locks unavailable here: %v", err)
-	}
-	defer relServer()
-	if !heldServer {
-		t.Skip("a LANcast server is already running on this machine")
-	}
-
-	relTray, heldTray, err := Acquire(Tray)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer relTray()
-	if !heldTray {
-		t.Error("holding the server name blocked the tray")
 	}
 }

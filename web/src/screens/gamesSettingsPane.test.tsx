@@ -33,7 +33,6 @@ let root: Root;
 function desktopState(games = false) {
   return {
     client_version: "0.9.19",
-    close_to_tray: true,
     open_at_login: true,
     devtools: false,
     games,
@@ -152,8 +151,8 @@ describe("the games settings pane", () => {
     /*
      * The regression this pane could easily have introduced. lancastDesktopSet
      * takes all four preferences at once, so a second pane that sent its own
-     * idea of the other three would silently undo them — close to tray and open
-     * at login are both on here, and both must survive.
+     * idea of the others would silently undo them — open at login is on here,
+     * and it must survive.
      */
     const set = stubDesktop(false);
     await render();
@@ -162,6 +161,8 @@ describe("the games settings pane", () => {
       ".settings__pane input[type=checkbox]",
     )!;
     await click(box);
-    expect(set).toHaveBeenCalledWith(true, true, false, true);
+    // The first argument is the retired close-to-tray value (ADR 0080),
+    // always false now; the other three must come through untouched.
+    expect(set).toHaveBeenCalledWith(false, true, false, true);
   });
 });
