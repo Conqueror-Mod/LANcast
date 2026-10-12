@@ -33,7 +33,7 @@ func recordFFmpegDir(dataDir, dir string) error {
 // the service host invokes (ADR 0016).
 func runService(args []string) error {
 	if len(args) == 0 {
-		return fmt.Errorf("usage: lancastd service install|uninstall|start|stop|status [-data DIR] [-addr ADDR]")
+		return fmt.Errorf("usage: lancast service install|uninstall|start|stop|status [-data DIR] [-addr ADDR]")
 	}
 	action := args[0]
 

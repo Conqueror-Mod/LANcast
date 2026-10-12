@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 )
 
 /*
@@ -31,7 +32,7 @@ func trayRun(addr, dataDir string, hidden bool) error {
 	if err != nil {
 		return err
 	}
-	client := filepath.Join(filepath.Dir(exe), "LANcast-Client.exe")
+	client := handoverTarget(exe)
 	if _, err := os.Stat(client); err != nil {
 		// Said out loud: the alternative is a server running with no window
 		// and no icon, which is the invisible process LANcast promises never
@@ -41,6 +42,20 @@ func trayRun(addr, dataDir string, hidden bool) error {
 		return nil
 	}
 	return exec.Command(client, clientArgs(addr, dataDir, hidden)...).Start()
+}
+
+/*
+ * handoverTarget is the program that runs the desktop.
+ *
+ * In the single LANcast executable (ADR 0080) that is this program again —
+ * `LANcast tray` starts itself hidden. Only a leftover LANcast-Server.exe,
+ * from before the two programs became one, hands to the client beside it.
+ */
+func handoverTarget(exe string) string {
+	if strings.EqualFold(filepath.Base(exe), "LANcast-Server.exe") {
+		return filepath.Join(filepath.Dir(exe), "LANcast-Client.exe")
+	}
+	return exe
 }
 
 // clientArgs carries this launch's choices over to the client: start hidden

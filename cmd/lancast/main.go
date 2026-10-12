@@ -50,7 +50,10 @@ func main() {
 	 * are handed over before a single flag is defined here. Both programs use
 	 * the default flag set, and defining -addr twice in one process panics.
 	 */
-	if len(os.Args) > 1 && serverapp.IsCommand(os.Args[1]) {
+	// -version answers for the one program there now is; the server's own
+	// path already prints it, with the console attached.
+	if len(os.Args) > 1 && (serverapp.IsCommand(os.Args[1]) ||
+		os.Args[1] == "-version" || os.Args[1] == "--version") {
 		serverapp.Main()
 		return
 	}
@@ -716,7 +719,8 @@ func (l *launcher) ensureServer() error {
 	if err != nil {
 		return err
 	}
-	args := []string{"-addr", l.addr}
+	// This same executable, as the server (ADR 0080).
+	args := []string{"serve", "-addr", l.addr}
 	// Pin the data directory when a machine-wide one already exists.
 	//
 	// Without this the spawned server takes the per-user default while the
@@ -790,16 +794,13 @@ func (l *launcher) stopStartedServer() {
 const stopWait = 5 * time.Second
 
 // serverExePath is the lancastd binary next to the launcher — they ship together.
+/*
+ * serverExePath is this executable (ADR 0080): it is the server too, as
+ * `LANcast serve`. There is no second program to find beside it, so a
+ * missing LANcast-Server.exe can no longer be why a server will not start.
+ */
 func serverExePath() (string, error) {
-	self, err := os.Executable()
-	if err != nil {
-		return "", err
-	}
-	exe := filepath.Join(filepath.Dir(self), serverExeName())
-	if _, err := os.Stat(exe); err != nil {
-		return "", fmt.Errorf("lancastd not found next to the launcher (%s)", exe)
-	}
-	return exe, nil
+	return os.Executable()
 }
 
 // sharedDataDir reports the machine-wide data directory when one is already in
@@ -817,13 +818,6 @@ func sharedDataDir() (string, bool) {
 		return "", false
 	}
 	return dir, true
-}
-
-func serverExeName() string {
-	if runtime.GOOS == "windows" {
-		return "LANcast-Server.exe"
-	}
-	return "LANcast-Server"
 }
 
 // serverHolder names what is serving when this client did not start it.

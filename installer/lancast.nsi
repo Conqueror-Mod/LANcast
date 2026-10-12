@@ -1,10 +1,11 @@
-; LANcast Windows installer (ADR 0022). Lays down both executables, registers the
-; server as a service, and puts a Start-menu/desktop shortcut to the launcher.
+; LANcast Windows installer (ADR 0022, ADR 0080). Lays down the one LANcast
+; executable, registers it as the server's service, and puts a Start-menu and
+; desktop shortcut to it.
 ;
 ; Built in the release pipeline with makensis; VERSION is passed in:
 ;   makensis -DVERSION=0.3.0 lancast.nsi
-; It expects lancastd.exe and lancast.exe beside this script (the release job
-; copies them from the goreleaser output).
+; It expects LANcast.exe beside this script (the release job copies it from
+; the goreleaser output).
 
 !include "MUI2.nsh"
 
@@ -53,8 +54,8 @@ RequestExecutionLevel admin
 ; on a machine without the WebView2 runtime, and it is what someone used to the
 ; old behaviour will look for. SHOWREADME is repurposed to carry it — NSIS gives
 ; the finish page exactly two checkboxes and no way to add a third.
-; Both checkboxes go through a function rather than straight to the client,
-; because starting LANcast means starting the *tray* first. See StartLANcast.
+; Both checkboxes go through a function so the launch happens as the person,
+; not as this elevated installer. See LaunchAsUser.
 !define MUI_FINISHPAGE_RUN
 !define MUI_FINISHPAGE_RUN_FUNCTION StartLANcast
 !define MUI_FINISHPAGE_RUN_TEXT "Start LANcast"
@@ -64,18 +65,10 @@ RequestExecutionLevel admin
 !define MUI_FINISHPAGE_SHOWREADME_FUNCTION OpenInBrowser
 !insertmacro MUI_PAGE_FINISH
 
-; The tray is the top of the hierarchy, and neither finish option used to start
-; it.
+; The tray and the window are one process now (ADR 0080), so starting LANcast
+; starts both: there is no separate tray to start first any more, which is
+; what this space used to explain.
 ;
-; The service is installed and running by this point, so LANcast *works* — but
-; the tray is how a person reaches it: start it, stop it, open it, check for an
-; update, decide whether it launches at login. Finishing the installer straight
-; into the client window left the notification area empty, so the only visible
-; LANcast was a window, and closing that window looked like closing LANcast.
-;
-; So both checkboxes start the tray first and then the surface the person asked
-; for. Starting it twice is harmless — the tray holds a lock of its own and a
-; second launch opens the UI instead of adding an icon.
 ; Started as the person, not as the installer.
 ;
 ; This installer runs elevated (RequestExecutionLevel admin, because it writes
@@ -123,32 +116,18 @@ Function LaunchAsUser
   launched:
 FunctionEnd
 
-Function StartTray
-  ; The Start Menu shortcut, which already pins -data to the machine-wide
-  ; directory: without that the tray reads a relative directory and opens a
-  ; second database beside the install, which is the failure v0.4.1 was about.
-  StrCpy $9 "$SMPROGRAMS\LANcast\LANcast Server.lnk"
-  Call LaunchAsUser
-  ; A moment for the icon to appear before the window opens on top of it. Not a
-  ; synchronisation — nothing depends on the order — but a person watching sees
-  ; the tray populate rather than a window arriving from nowhere.
-  Sleep 400
-FunctionEnd
-
 Function StartLANcast
-  Call StartTray
-  StrCpy $9 "$SMPROGRAMS\LANcast\LANcast Client.lnk"
+  StrCpy $9 "$SMPROGRAMS\LANcast\LANcast.lnk"
   Call LaunchAsUser
 FunctionEnd
 
 Function OpenInBrowser
-  Call StartTray
   ; -browser is the documented opt-out, and no shortcut carries it, so one is
   ; written for this launch. $PLUGINSDIR because it is temporary by definition
   ; and removed when the installer exits; the Sleep is what keeps it alive long
   ; enough for Explorer to read it, which takes milliseconds.
-  CreateShortcut "$PLUGINSDIR\LANcast in browser.lnk" "$INSTDIR\LANcast-Client.exe" \
-    "-browser" "$INSTDIR\LANcast-Client.exe" 0 SW_SHOWNORMAL "" \
+  CreateShortcut "$PLUGINSDIR\LANcast in browser.lnk" "$INSTDIR\LANcast.exe" \
+    "-browser" "$INSTDIR\LANcast.exe" 0 SW_SHOWNORMAL "" \
     "Open LANcast in the default browser"
   StrCpy $9 "$PLUGINSDIR\LANcast in browser.lnk"
   Call LaunchAsUser
@@ -196,15 +175,37 @@ Section "LANcast"
   !insertmacro Quietly 'taskkill /F /IM lancastd.exe'
   !insertmacro Quietly 'taskkill /F /IM LANcast-Client.exe'
   !insertmacro Quietly 'taskkill /F /IM LANcast-Server.exe'
+  !insertmacro Quietly 'taskkill /F /IM LANcast.exe'
 
+  ; Files an earlier LANcast laid down that nothing runs any more, by name.
+  ;
+  ; By name and never by sweep: this folder is LANcast's, but a pattern broad
+  ; enough to be convenient is broad enough to one day take something that was
+  ; not stale. The two programs became one in ADR 0080, so LANcast-Server.exe
+  ; and LANcast-Client.exe go, with the `.old` / `.old.<stamp>` copies the
+  ; in-app updater leaves while it swaps a running file (the new program's own
+  ; sweep only knows its own name). Older names still from before 0.4.
   Delete "$INSTDIR\lancastd.exe"
   Delete "$INSTDIR\lancast.exe"
+  Delete "$INSTDIR\LANcast-Server.exe"
+  Delete "$INSTDIR\LANcast-Client.exe"
+  Delete "$INSTDIR\LANcast-Server.exe.old*"
+  Delete "$INSTDIR\LANcast-Client.exe.old*"
+
+  ; The old server tray's log (applog.TrayFileName and its one rotation), in
+  ; the two places that tray wrote it: the machine-wide data directory its
+  ; shortcut pinned, and the per-user one. Exact names only: those folders
+  ; hold the library's database, and nothing else in them is touched.
+  ReadEnvStr $0 "ProgramData"
+  Delete "$0\LANcast\lancast-tray.log"
+  Delete "$0\LANcast\lancast-tray.log.1"
+  Delete "$APPDATA\LANcast\lancast-tray.log"
+  Delete "$APPDATA\LANcast\lancast-tray.log.1"
 
   SetOutPath "$INSTDIR"
-  File "LANcast-Server.exe"
-  File "LANcast-Client.exe"
+  File "LANcast.exe"
   ; Microsoft's WebView2 loader shim, which the client's window mode calls into
-  ; (ADR 0023 stage 1). It has to sit beside LANcast-Client.exe: the client
+  ; (ADR 0023 stage 1). It has to sit beside LANcast.exe: the client
   ; resolves it by name, and the alternative — the upstream binding's habit of
   ; embedding a copy and mapping it from memory — is a blob in our binary and a
   ; technique that trips AV, so LANcast ships Microsoft's signed file instead
@@ -251,48 +252,46 @@ Section "LANcast"
 
   ; Register the server as a service pinned to the machine-wide data dir, and
   ; start it. `service install` refuses an unset --data, so the pin is enforced.
-  nsExec::ExecToLog '"$INSTDIR\LANcast-Server.exe" service install'
-  nsExec::ExecToLog '"$INSTDIR\LANcast-Server.exe" service start'
+  nsExec::ExecToLog '"$INSTDIR\LANcast.exe" service install'
+  nsExec::ExecToLog '"$INSTDIR\LANcast.exe" service start'
 
-  ; Two shortcuts, because there are two programs and which one you launched
-  ; changes what happens. A single "LANcast" entry pointing at the client made
-  ; that invisible: when the service was not running the client silently
-  ; started its own server, and there was no way to launch the server on its
-  ; own or to tell from the Start menu which you had.
+  ; One shortcut, because there is one program (ADR 0080). It opens the
+  ; window and its tray; the server is the service, started above.
   ;
-  ; The desktop shortcut stays the client — that is the one to double-click.
+  ; The two older entries go: "LANcast Client" pointed at a file this install
+  ; removed, and "LANcast Server" started a tray that no longer exists.
+  ;
+  ; (ReadEnvStr, used above for ProgramData, and never $%ProgramData%: NSIS
+  ; expands $%VAR% at COMPILE time on the Linux runner, where it is empty, and
+  ; that once shipped a literal "$%ProgramData%" into a shortcut — v0.4.1.)
   CreateDirectory "$SMPROGRAMS\LANcast"
-  ; Upgrading from a single-shortcut install: remove the old entry so it does
-  ; not sit beside the two new ones pointing at the same program.
-  Delete "$SMPROGRAMS\LANcast\LANcast.lnk"
-  CreateShortcut "$SMPROGRAMS\LANcast\LANcast Client.lnk" "$INSTDIR\LANcast-Client.exe" \
-    "" "$INSTDIR\LANcast-Client.exe" 0 SW_SHOWNORMAL "" "Open LANcast"
-  ; The server pinned to the same machine-wide data directory the service uses,
-  ; so starting it by hand cannot quietly open a second, per-user database.
+  Delete "$SMPROGRAMS\LANcast\LANcast Client.lnk"
+  Delete "$SMPROGRAMS\LANcast\LANcast Server.lnk"
+  CreateShortcut "$SMPROGRAMS\LANcast\LANcast.lnk" "$INSTDIR\LANcast.exe" \
+    "" "$INSTDIR\LANcast.exe" 0 SW_SHOWNORMAL "" "Open LANcast"
+  CreateShortcut "$DESKTOP\LANcast.lnk" "$INSTDIR\LANcast.exe"
+
+  ; Start at login, carried across the rename.
   ;
-  ; ReadEnvStr, not $%ProgramData%. NSIS expands $%VAR% at COMPILE time from the
-  ; compiler's own environment, and this installer is compiled by makensis on a
-  ; Linux runner where ProgramData does not exist — so it expanded to nothing and
-  ; shipped the literal text "$%ProgramData%\LANcast" into the shortcut. The
-  ; server then read that as a relative directory and opened a second database
-  ; beside the install, which is exactly the failure this -data argument exists
-  ; to prevent (v0.4.1). The original intent — "the environment variable,
-  ; expanded on the target machine" — was right; only the mechanism was wrong,
-  ; and ReadEnvStr is the one that actually runs there.
-  ;
-  ; Not SetShellVarContext all + $APPDATA, which is the other documented route:
-  ; that setting also moves $SMPROGRAMS and $DESKTOP to the all-users folders, so
-  ; using it here would quietly relocate every shortcut this installer writes.
-  ReadEnvStr $0 "ProgramData"
-  CreateShortcut "$SMPROGRAMS\LANcast\LANcast Server.lnk" "$INSTDIR\LANcast-Server.exe" \
-    'tray -data "$0\LANcast"' "$INSTDIR\LANcast-Server.exe" 0 SW_SHOWNORMAL "" \
-    "Run the LANcast server in the system tray"
-  CreateShortcut "$DESKTOP\LANcast.lnk" "$INSTDIR\LANcast-Client.exe"
+  ; Somebody who had it on has a "LANcast" run-key value naming
+  ; LANcast-Client.exe, which this install just deleted: left alone it is an
+  ; error dialog every morning. Rewritten to the new program, still -hidden,
+  ; so the choice survives; absent, nothing is written, because a login entry
+  ; is somebody's choice and never a default. "LANcast Tray" started the old
+  ; server tray and is removed outright: the app migrates it too, but a
+  ; machine that skips straight to this release may never have run that app.
+  ; HKCU is the installing user's hive; other accounts' apps migrate their own
+  ; entries when they start.
+  ReadRegStr $1 HKCU "Software\Microsoft\Windows\CurrentVersion\Run" "LANcast"
+  StrCmp $1 "" loginDone
+    WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Run" "LANcast" '"$INSTDIR\LANcast.exe" -hidden'
+  loginDone:
+  DeleteRegValue HKCU "Software\Microsoft\Windows\CurrentVersion\Run" "LANcast Tray"
 
   WriteUninstaller "$INSTDIR\uninstall.exe"
   WriteRegStr HKLM "${UNINST_KEY}" "DisplayName" "LANcast"
   WriteRegStr HKLM "${UNINST_KEY}" "DisplayVersion" "${VERSION}"
-  WriteRegStr HKLM "${UNINST_KEY}" "DisplayIcon" "$INSTDIR\LANcast-Client.exe"
+  WriteRegStr HKLM "${UNINST_KEY}" "DisplayIcon" "$INSTDIR\LANcast.exe"
   WriteRegStr HKLM "${UNINST_KEY}" "UninstallString" '"$INSTDIR\uninstall.exe"'
   WriteRegStr HKLM "${UNINST_KEY}" "Publisher" "LANcast"
 SectionEnd
@@ -301,11 +300,15 @@ Section "Uninstall"
   ; Stop and remove the service before deleting its binary, then stop anything
   ; still running interactively — a tray client holds its executable open, and
   ; Delete silently fails on a file in use.
-  nsExec::ExecToLog '"$INSTDIR\LANcast-Server.exe" service stop'
-  nsExec::ExecToLog '"$INSTDIR\LANcast-Server.exe" service uninstall'
+  nsExec::ExecToLog '"$INSTDIR\LANcast.exe" service stop'
+  nsExec::ExecToLog '"$INSTDIR\LANcast.exe" service uninstall'
+  !insertmacro Quietly 'taskkill /F /IM LANcast.exe'
   !insertmacro Quietly 'taskkill /F /IM LANcast-Client.exe'
   !insertmacro Quietly 'taskkill /F /IM LANcast-Server.exe'
 
+  Delete "$INSTDIR\LANcast.exe"
+  Delete "$INSTDIR\LANcast.exe.old*"
+  ; Older names too, in case this uninstalls over a half-finished upgrade.
   Delete "$INSTDIR\LANcast-Server.exe"
   Delete "$INSTDIR\LANcast-Client.exe"
   Delete "$INSTDIR\lancast-faces.exe"
@@ -322,8 +325,7 @@ Section "Uninstall"
   ; something an uninstaller should decide (see docs/desktop-lifecycle-plan.md).
   RMDir "$INSTDIR"
 
-  ; Includes the pre-0.4.1 single shortcut, so upgrading from an older install
-  ; does not leave a stale "LANcast" entry beside the two new ones.
+  ; The one shortcut, and the two older entries in case an upgrade left them.
   Delete "$SMPROGRAMS\LANcast\LANcast.lnk"
   Delete "$SMPROGRAMS\LANcast\LANcast Client.lnk"
   Delete "$SMPROGRAMS\LANcast\LANcast Server.lnk"

@@ -118,10 +118,23 @@ A bridge release, in which the service rewrites its own registration, was
 rejected: a self-modifying service registration is exactly the kind of change
 that fails only on a real machine.
 
+**Amended while building, 2026-10-12: the archive is renamed as well.** The
+installer-only release cannot rely on old updaters refusing to stage it. They
+keep whichever file names they know, and the new archive still holds the two
+DLLs, so an old updater would stage the DLLs alone, restart on the old
+programs, and offer the same update again, for ever. From this release the
+archives are `LANcast_<version>_<os>_<arch>`, not `lancast_…`. An old updater
+looks for the old name, finds nothing, and stops with "release vX has no
+lancast_…zip". The release notes then send people to the installer. The new
+updater looks for the new name (`internal/update/download.go archiveName`,
+pinned by `TestTheArchiveIsNeverTheOldName`).
+
 **Checked before that release:** Aither's inbound firewall rules. Program-scoped
 rules exist for older executable names (`lancastd.exe` … `lancast-server.exe`);
 the 8080 and 443 rules must be port-scoped, or renaming the file cuts friends
-off without LANcast reporting anything.
+off without LANcast reporting anything. *Checked 2026-10-11:* 8080 is opened
+by a rule with Program Any, on the Private and Public profiles, and 443 by
+another port rule, so the rename is safe there.
 
 ## Build order
 

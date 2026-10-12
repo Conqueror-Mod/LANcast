@@ -1,5 +1,5 @@
-# Release build for LANcast (ADR 0016 / ADR 0022). A pushed vX.Y.Z tag builds
-# both executables for the matrix and publishes a GitHub release. No CGO, so
+# Release build for LANcast (ADR 0016, ADR 0080). A pushed vX.Y.Z tag builds
+# the one LANcast executable for the matrix and publishes a GitHub release. No CGO, so
 # every target cross-compiles on one Linux runner; the committed internal/web/dist
 # is what the server embeds, so no npm at release time.
 version: 2
@@ -11,48 +11,32 @@ version: 2
 # does the wrong thing — the first attempt used a glob expected to match nothing
 # off Windows, and goreleaser treats a glob with no matches as a hard error.
 builds:
-  - id: lancastd-windows
-    main: ./cmd/lancastd
-    binary: LANcast-Server
+  # One LANcast executable (ADR 0080): the desktop app and the server in one
+  # file. `LANcast.exe` opens the window and its tray; `LANcast.exe service`,
+  # `serve`, `reset-auth` and the rest are the server. Both version variables
+  # are injected, because both halves report one: the page compares the
+  # window's with the server's, and /api/health reports the server's.
+  - id: lancast-windows
+    main: ./cmd/lancast
+    binary: LANcast
     env: [CGO_ENABLED=0]
     goos: [windows]
     # Windows is amd64-only for now (ADR 0016).
     goarch: [amd64]
-    # The version is injected so the binary, /api/health, and the tag agree.
-    # The GUI subsystem is what stops a double-click showing a console; the icon
-    # comes from the committed cmd/lancastd/lancastd_windows.syso.
+    # The GUI subsystem is what stops a double-click showing a console; the
+    # icon comes from the committed cmd/lancast/lancast_windows.syso.
     ldflags:
-      - -s -w -X lancast/internal/api.Version={{ .Version }} -H=windowsgui
+      - -s -w -X main.Version={{ .Version }} -X lancast/internal/api.Version={{ .Version }} -H=windowsgui
 
-  - id: lancastd-unix
-    main: ./cmd/lancastd
-    binary: LANcast-Server
-    env: [CGO_ENABLED=0]
-    goos: [linux]
-    goarch: [amd64, arm64]
-    ldflags:
-      - -s -w -X lancast/internal/api.Version={{ .Version }}
-
-  - id: lancast-windows
-    main: ./cmd/lancast
-    binary: LANcast-Client
-    env: [CGO_ENABLED=0]
-    goos: [windows]
-    goarch: [amd64]
-    # The client carries its version too, so the page can tell when the window
-    # it is running in predates the server it is talking to. The in-app updater
-    # replaces only the server, so that gap is normal rather than exotic.
-    ldflags:
-      - -s -w -X main.Version={{ .Version }} -H=windowsgui
-
+  # Headless on Linux: `lancast serve` is what systemd runs.
   - id: lancast-unix
     main: ./cmd/lancast
-    binary: LANcast-Client
+    binary: lancast
     env: [CGO_ENABLED=0]
     goos: [linux]
     goarch: [amd64, arm64]
     ldflags:
-      - -s -w -X main.Version={{ .Version }}
+      - -s -w -X main.Version={{ .Version }} -X lancast/internal/api.Version={{ .Version }}
 
   # ---- lancast-faces (ADR 0052) --------------------------------------------
   #
@@ -94,9 +78,15 @@ builds:
 # template, same formats per OS. Splitting the block is about what goes *in*
 # them, not what they are called.
 archives:
+  # LANcast_…, not lancast_…, and the capital is load-bearing (ADR 0080 §5,
+  # amended): updaters from before the single executable look for lancast_…
+  # and keep only the file names they know, so under the old name they would
+  # stage the two DLLs alone and offer the same update for ever. Under this
+  # one they stop and say so, and the release notes send people to the
+  # installer. internal/update/download.go archiveName must agree.
   - id: windows
-    ids: [lancastd-windows, lancast-windows]
-    name_template: "lancast_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    ids: [lancast-windows]
+    name_template: "LANcast_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
     formats: [zip]
     files:
       - README.md
@@ -111,7 +101,7 @@ archives:
       - NOTICE
       - COMMERCIAL.md
       # Microsoft's WebView2 loader shim, which the client's window mode calls
-      # into (ADR 0023 stage 1). It has to sit beside LANcast-Client.exe.
+      # into (ADR 0023 stage 1). It has to sit beside LANcast.exe.
       #
       # The installer places it too. It is here as well so unpacking the
       # portable zip is not a quietly worse install than running the setup —
@@ -130,8 +120,8 @@ archives:
         dst: libmpv-LICENSE.txt
 
   - id: unix
-    ids: [lancastd-unix, lancast-unix]
-    name_template: "lancast_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    ids: [lancast-unix]
+    name_template: "LANcast_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
     formats: [tar.gz]
     files:
       - README.md

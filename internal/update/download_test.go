@@ -101,8 +101,8 @@ func (f *fakeRelease) start(t *testing.T) string {
 // The whole path: look up, verify, download, check the digest, extract, stage.
 func TestDownloadVerifiesAndStages(t *testing.T) {
 	f := newFakeRelease(t, "v9.9.9", map[string][]byte{
-		"LANcast-Server.exe": []byte("new server"),
-		"LANcast-Client.exe": []byte("new client"),
+		"LANcast.exe":        []byte("new program"),
+		"WebView2Loader.dll": []byte("loader"),
 		"README.md":          []byte("not an install file"),
 	})
 	f.sign(t)
@@ -126,14 +126,14 @@ func TestDownloadVerifiesAndStages(t *testing.T) {
 		}
 	}
 	if len(m.Files) != 2 {
-		t.Errorf("staged %v, want the two executables", m.Files)
+		t.Errorf("staged %v, want LANcast.exe and the loader", m.Files)
 	}
 }
 
 // The attack the signature exists to stop: an archive swapped for another,
 // with a checksums file that matches it.
 func TestDownloadRefusesATamperedArchive(t *testing.T) {
-	f := newFakeRelease(t, "v9.9.9", map[string][]byte{"LANcast-Server.exe": []byte("real")})
+	f := newFakeRelease(t, "v9.9.9", map[string][]byte{"LANcast.exe": []byte("real")})
 	f.sign(t)
 	// Swap the archive after signing, so the signature covers the old digest.
 	f.archive = []byte("malicious payload")
@@ -156,7 +156,7 @@ func TestDownloadRefusesATamperedArchive(t *testing.T) {
 // An unsigned release is refused for automatic installation. It remains
 // installable by hand, which is a different path.
 func TestDownloadRefusesAnUnsignedRelease(t *testing.T) {
-	f := newFakeRelease(t, "v9.9.9", map[string][]byte{"LANcast-Server.exe": []byte("x")})
+	f := newFakeRelease(t, "v9.9.9", map[string][]byte{"LANcast.exe": []byte("x")})
 	f.sign(t)
 	f.omitSig = true
 	endpoint := f.start(t)
@@ -184,7 +184,7 @@ func TestDownloadRefusesWhenTheBuildCannotVerify(t *testing.T) {
 
 // Nothing newer is not an error condition worth staging for.
 func TestDownloadDeclinesAnOlderRelease(t *testing.T) {
-	f := newFakeRelease(t, "v0.1.0", map[string][]byte{"LANcast-Server.exe": []byte("x")})
+	f := newFakeRelease(t, "v0.1.0", map[string][]byte{"LANcast.exe": []byte("x")})
 	f.sign(t)
 	endpoint := f.start(t)
 
@@ -197,7 +197,7 @@ func TestDownloadDeclinesAnOlderRelease(t *testing.T) {
 
 func TestArchiveNameMatchesGoreleaser(t *testing.T) {
 	got := archiveName("v0.6.1")
-	if !strings.HasPrefix(got, "lancast_0.6.1_") {
+	if !strings.HasPrefix(got, "LANcast_0.6.1_") {
 		t.Errorf("archiveName = %q; the leading v must be stripped", got)
 	}
 	if strings.Contains(got, "vv") {
@@ -211,8 +211,7 @@ func TestArchiveNameMatchesGoreleaser(t *testing.T) {
 // what a 415 looked like from the outside.
 func TestAFailedDownloadIsRecordedInState(t *testing.T) {
 	f := newFakeRelease(t, "v9.9.9", map[string][]byte{
-		"LANcast-Server.exe": []byte("new server"),
-		"LANcast-Client.exe": []byte("new client"),
+		"LANcast.exe": []byte("new program"),
 	})
 	f.sign(t)
 	endpoint := f.start(t)
@@ -237,5 +236,34 @@ func TestAFailedDownloadIsRecordedInState(t *testing.T) {
 	c.setDownloadError(nil)
 	if got := c.State().DownloadError; got != "" {
 		t.Errorf("DownloadError = %q after a reset, want empty", got)
+	}
+}
+
+/*
+ * The single executable's transition (ADR 0080 §5, amended).
+ *
+ * The archive name is new on purpose: updaters from before it look for
+ * lancast_<v>_… and keep only the files they know, so a LANcast.exe archive
+ * under the old name would have had them stage the two DLLs alone and offer
+ * the same update for ever. This pins that the old name is never what this
+ * updater looks for, so a later tidy-up cannot quietly restore it.
+ */
+func TestTheArchiveIsNeverTheOldName(t *testing.T) {
+	got := archiveName("v1.2.3")
+	if strings.HasPrefix(got, "lancast_") {
+		t.Fatalf("archiveName = %q; the pre-ADR-0080 name would let old updaters half-install this release", got)
+	}
+}
+
+// An archive carrying only the two old programs stages nothing: they are
+// files nothing runs any more, and installing them would bring them back.
+func TestTheOldProgramsAreNotInstallFiles(t *testing.T) {
+	for _, old := range []string{"LANcast-Server.exe", "LANcast-Client.exe", "lancastd"} {
+		if installFiles[old] {
+			t.Errorf("%s is still an install file", old)
+		}
+	}
+	if !installFiles["LANcast.exe"] {
+		t.Error("LANcast.exe is not an install file")
 	}
 }

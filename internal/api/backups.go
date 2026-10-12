@@ -203,9 +203,9 @@ func (s *Server) deleteBackup(w http.ResponseWriter, r *http.Request) {
 // on. Shown rather than performed — see the note at the top of this file.
 func restoreCommand() string {
 	if runtime.GOOS == "windows" {
-		return `LANcast-Server.exe restore -from <file> -yes`
+		return `LANcast.exe restore -from <file> -yes`
 	}
-	return "./LANcast-Server restore -from <file> -yes"
+	return "./lancast restore -from <file> -yes"
 }
 
 /*
