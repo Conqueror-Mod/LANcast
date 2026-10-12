@@ -395,3 +395,49 @@ func TestFederationStreamingNeedsAnItem(t *testing.T) {
 		}
 	}
 }
+
+/*
+ * A friend's grid draws posters, so the listing carries their hashes.
+ *
+ * Reported from two households browsing a shared film library: every tile a
+ * lettered placeholder. The local listing attaches artwork before answering;
+ * this one never did, so a friend's client had no hash to ask
+ * /api/federation/artwork for, and that route — correct all along — was
+ * simply never called.
+ */
+func TestAFriendsListingCarriesArtwork(t *testing.T) {
+	f := newFedFixture(t)
+	ctx := context.Background()
+	film := f.h.addFile(t, "film.mkv", []byte("x"))
+	const hash = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+	if err := f.h.st.PutArtwork(ctx, film, hash, "poster", "", 1, 1, 1); err != nil {
+		t.Fatal(err)
+	}
+	f.share(t, f.h.lib.ID, "")
+
+	w := f.call(f.h.srvAPI.federationItems,
+		peerRequest(t, f.georgia, "/api/federation/items?library="+itoa(f.h.lib.ID)))
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", w.Code)
+	}
+	var got struct {
+		Items []struct {
+			ID      int64 `json:"id"`
+			Artwork *struct {
+				Poster string `json:"poster"`
+			} `json:"artwork"`
+		} `json:"items"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &got); err != nil {
+		t.Fatal(err)
+	}
+	for _, it := range got.Items {
+		if it.ID == film {
+			if it.Artwork == nil || it.Artwork.Poster != hash {
+				t.Fatalf("the shared film arrived with artwork %+v; want its poster", it.Artwork)
+			}
+			return
+		}
+	}
+	t.Fatal("the shared film was not listed")
+}
