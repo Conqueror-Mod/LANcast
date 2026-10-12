@@ -50,7 +50,7 @@ const (
 )
 
 /*
- * WatchPeers runs until ctx ends. cmd/lancastd starts it once.
+ * WatchPeers runs until ctx ends. The server program (internal/serverapp) starts it once.
  *
  * Every tick looks at every peer concurrently, so a peer that has gone quiet
  * costs the tick one peerDeadline, not one per peer.
