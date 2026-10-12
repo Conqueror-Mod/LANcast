@@ -55,7 +55,7 @@ func TestNothingToNameStaysEmpty(t *testing.T) {
 	}
 }
 
-// The filename has to agree with cmd/lancastd (which decides where the download
+// The filename has to agree with internal/serverapp (which decides where the download
 // goes) and internal/faceinstall (which puts it there). They cannot import each
 // other, so the agreement is asserted rather than assumed.
 func TestTheLibraryNameMatchesThePlatform(t *testing.T) {

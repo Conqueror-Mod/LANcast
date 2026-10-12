@@ -32,7 +32,7 @@ func runtimePath(env, modelsDir string) string {
  *
  * Deliberately not behind the cgo tag. The no-cgo build has no use for it, and
  * a name that exists in only one of two builds is a name that drifts — this one
- * has to agree with `onnxLibName` in cmd/lancastd, which decides where the
+ * has to agree with `onnxLibName` in internal/serverapp, which decides where the
  * optional download is placed, and with `faceinstall`, which places it. Three
  * spellings of one filename is a fault nobody finds by reading any single file.
  */
