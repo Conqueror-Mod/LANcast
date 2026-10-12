@@ -759,7 +759,7 @@ export function Detail() {
                 are. */}
             {(item.progress?.watch_count ?? 0) > 1 && (
               <div className="detail__watchcount">
-                Watched {item.progress!.watch_count} times
+                {isMusic ? "Played" : "Watched"} {item.progress!.watch_count} times
               </div>
             )}
 
@@ -930,7 +930,7 @@ export function Detail() {
                 }) > 0 ? (
                   <>
                     <PlayButton
-                      label="Continue watching"
+                      label={isMusic ? "Continue listening" : "Continue watching"}
                       onPlay={() => navigate(`/watch/${item.id}`)}
                     />
                     <SecondaryButton

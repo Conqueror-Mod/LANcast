@@ -4,7 +4,7 @@ import { fetchShowEpisodes } from "@/api/hooks";
 import { showContinueTarget } from "@/lib/continueShow";
 import { artworkURL } from "@/api/client";
 import { useFocusable } from "@/focus/FocusController";
-import { isSquareArt } from "@/lib/kind";
+import { isMusic, isSquareArt } from "@/lib/kind";
 import { rating, runtime } from "@/lib/format";
 import type { Item } from "@/api/types";
 import type { HeroReason } from "@/lib/heroMode";
@@ -105,16 +105,20 @@ function progressPct(item: Item): number {
  * a suggestion that cannot say where it came from is the kind of thing this
  * project has no interest in growing.
  */
-function eyebrow(reason: HeroReason, seed: Item | undefined): string {
+function eyebrow(reason: HeroReason, item: Item, seed: Item | undefined): string {
   switch (reason) {
     case "resuming":
-      return "Continue watching";
+      // An album part way through is being listened to, not watched.
+      return isMusic(item) ? "Continue listening" : "Continue watching";
     case "recent":
       return "Just added";
     case "pinned":
       return "Pinned to your homepage";
     case "recommended":
-      return seed ? `Because you watched ${seed.title}` : "Suggested";
+      if (!seed) return "Suggested";
+      return isMusic(seed)
+        ? `Because you listened to ${seed.title}`
+        : `Because you watched ${seed.title}`;
   }
 }
 
@@ -128,7 +132,7 @@ export function HomeHero({
   /** For "recommended": the item the suggestion was drawn from. */
   seed?: Item;
 }) {
-  const label = eyebrow(reason, seed);
+  const label = eyebrow(reason, item, seed);
   const navigate = useNavigate();
 
   /*

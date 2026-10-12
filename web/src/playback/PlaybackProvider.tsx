@@ -1519,8 +1519,7 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
       nearEnd &&
       nextItemID != null &&
       prefsRef.current.autoPlay &&
-      repeat !== "one" &&
-      !shouldAsk(advanced(runRef.current, Date.now()));
+      repeat !== "one";
     if (!willAdvance || nextItemID == null) {
       deck.queue(null);
       // Said only once the track is near its end: that is when a missing
@@ -1531,9 +1530,7 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
             ? "nothing next"
             : !prefsRef.current.autoPlay
               ? "auto play off"
-              : repeat === "one"
-                ? "repeat one"
-                : "still-watching prompt due";
+              : "repeat one";
         clientNote("info", "playback", `deck not queued: ${why}`);
       }
       return;
@@ -3197,10 +3194,16 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
        * over an episode already playing has let the thing happen that
        * it exists to prevent.
        */
+      /*
+       * Music is not counted. The question is about a screen playing to
+       * an empty room, and an album is meant to roll on: counting tracks
+       * stopped every record three songs in, behind a button that said
+       * "Keep watching".
+       */
       const now = Date.now();
-      const next = advanced(runRef.current, now);
+      const next = isAudio ? runRef.current : advanced(runRef.current, now);
       runRef.current = next;
-      if (shouldAsk(next)) {
+      if (!isAudio && shouldAsk(next)) {
         stillWatchingRef.current = describeRun(next, now);
         setStillWatching(stillWatchingRef.current);
         setPlaying(false);
