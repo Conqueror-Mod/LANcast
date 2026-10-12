@@ -316,7 +316,21 @@ export function Home() {
         nobody designs for.
       */}
       <HomeMasthead libraries={libraries} hasHero={!!hero} />
-      {hero && <HomeHero item={hero.item} reason={hero.reason} seed={hero.seed} />}
+      {hero && (
+        <HomeHero
+          item={hero.item}
+          reason={hero.reason}
+          seed={hero.seed}
+          // The shelf's menu, when the spotlight is showing something from
+          // the shelf: the one place a collection's next film or a resumed
+          // title can be taken off without opening it.
+          actions={
+            (continueWatching ?? []).some((i) => i.id === hero.item.id)
+              ? continueActions(hero.item)
+              : undefined
+          }
+        />
+      )}
       <div className="home__shelves">
         <Shelf
           title="Continue Watching"

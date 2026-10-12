@@ -200,6 +200,25 @@ describe("a film's leading button", () => {
     expect(landed?.path).toBe("700");
     expect((landed?.state as { fromStart?: boolean })?.fromStart).toBe(true);
   });
+
+  /*
+   * And tells the server. Reported after 0.9.80: Play from start played from
+   * the top, but backing out to Home showed the old position on Continue
+   * Watching, because the player writes nothing for its first stretch.
+   */
+  it("forgets the saved place on the server before starting over", async () => {
+    stub(film({ position_ms: 1_800_000, watched: false }));
+    const calls = vi.mocked(fetch).mock.calls;
+    await render(700);
+    await act(async () => button("Play from start")!.click());
+    await settle();
+    const put = calls.find(
+      ([u, init]) => String(u) === "/api/items/700/progress" && (init as RequestInit)?.method === "PUT",
+    );
+    expect(put, "Play from start never told the server").toBeDefined();
+    expect(JSON.parse(String((put![1] as RequestInit).body))).toEqual({ position_ms: 0, watched: false });
+    expect(landed?.path).toBe("700");
+  });
 });
 
 /*
@@ -237,6 +256,34 @@ describe("a collection's leading button", () => {
     stub(collection, { started: true, resume: false, exhausted: true });
     await render(800);
     expect(labels().some((l) => l.startsWith("Up next") || l.startsWith("Continue"))).toBe(false);
+  });
+});
+
+/*
+ * Taking a title off Continue Watching from its own page. Reported after
+ * 0.9.80: a collection's next film was put on the shelf unasked, and neither
+ * its page nor the spotlight could take it off.
+ */
+describe("removing a title from Continue Watching on its page", () => {
+  it("is offered when the title is on the shelf, and forgets the place", async () => {
+    // The shelf answers with this film on it (the stub serves /continue).
+    stub(film(), { items: [film()] });
+    const calls = vi.mocked(fetch).mock.calls;
+    await render(700);
+    const remove = button("Remove from Continue Watching");
+    expect(remove, "no way to take it off the shelf").toBeDefined();
+    await act(async () => remove!.click());
+    await settle();
+    const put = calls.find(
+      ([u, init]) => String(u) === "/api/items/700/progress" && (init as RequestInit)?.method === "PUT",
+    );
+    expect(JSON.parse(String((put![1] as RequestInit).body))).toEqual({ position_ms: 0, watched: false });
+  });
+
+  it("is not offered for a title that is not on the shelf", async () => {
+    stub(film(), { items: [] });
+    await render(700);
+    expect(button("Remove from Continue Watching")).toBeUndefined();
   });
 });
 

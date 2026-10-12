@@ -363,3 +363,54 @@ describe("what the spotlight says about music", () => {
     expect(host.textContent).toContain("Continue watching");
   });
 });
+
+/*
+ * The spotlight carries the shelf's menu when it shows something from the
+ * shelf. Reported after 0.9.80: a collection's next film in the spotlight
+ * had no right-click and no way to be removed.
+ */
+describe("the spotlight's menu", () => {
+  it("opens the shelf's actions from More, and runs them", async () => {
+    const removed = vi.fn();
+    mount([50, 51, 52, 53, 54]);
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    await act(async () => {
+      root.render(
+        <QueryClientProvider client={client}>
+          <FocusProvider>
+            <MemoryRouter initialEntries={["/"]}>
+              <Routes>
+                <Route
+                  path="/"
+                  element={
+                    <HomeHero
+                      item={episode as Item}
+                      reason="recommended"
+                      seed={episode as Item}
+                      actions={[{ label: "Remove from Continue Watching", onSelect: removed }]}
+                    />
+                  }
+                />
+              </Routes>
+            </MemoryRouter>
+          </FocusProvider>
+        </QueryClientProvider>,
+      );
+    });
+    const more = [...host.querySelectorAll("button")].find((b) => b.textContent === "More");
+    expect(more, "no More on a spotlight with actions").toBeTruthy();
+    await act(async () => more!.click());
+    const item = [...document.querySelectorAll("button, [role=menuitem]")].find(
+      (b) => b.textContent === "Remove from Continue Watching",
+    ) as HTMLElement | undefined;
+    expect(item, "the menu did not open").toBeTruthy();
+    await act(async () => item!.click());
+    expect(removed).toHaveBeenCalledTimes(1);
+  });
+
+  it("has no More when it has nothing to offer", async () => {
+    mount([50, 51, 52, 53, 54]);
+    await render(episode as Item, "recent");
+    expect([...host.querySelectorAll("button")].some((b) => b.textContent === "More")).toBe(false);
+  });
+});

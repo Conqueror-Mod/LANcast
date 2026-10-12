@@ -8,6 +8,7 @@ import { isMusic, isSquareArt } from "@/lib/kind";
 import { rating, runtime } from "@/lib/format";
 import type { Item } from "@/api/types";
 import type { HeroReason } from "@/lib/heroMode";
+import { PointMenu, type MenuAction, type MenuPoint } from "./Menu";
 import "./HomeHero.css";
 
 // Motion is opt-out, and the check is read once per mount rather than per frame.
@@ -126,14 +127,26 @@ export function HomeHero({
   item,
   reason,
   seed,
+  actions,
 }: {
   item: Item;
   reason: HeroReason;
   /** For "recommended": the item the suggestion was drawn from. */
   seed?: Item;
+  /**
+   * The same menu the item's Continue Watching tile carries, when it is on
+   * that shelf. Reported after 0.9.80: a collection's next film sat in the
+   * spotlight with no way to take it off — no right-click, and nothing on
+   * its page — so the spotlight answers right-click, and More opens the
+   * same menu for a remote or a keyboard.
+   */
+  actions?: MenuAction[];
 }) {
   const label = eyebrow(reason, item, seed);
   const navigate = useNavigate();
+  const [menuAt, setMenuAt] = useState<MenuPoint | null>(null);
+  const [byKey, setByKey] = useState(false);
+  const hasMenu = (actions?.length ?? 0) > 0;
 
   /*
    * Resuming a show carries on through it.
@@ -225,7 +238,19 @@ export function HomeHero({
   ].filter(Boolean) as string[];
 
   return (
-    <section className="hero" aria-label={label}>
+    <section
+      className="hero"
+      aria-label={label}
+      onContextMenu={
+        hasMenu
+          ? (e) => {
+              e.preventDefault();
+              setByKey(false);
+              setMenuAt({ x: e.clientX, y: e.clientY });
+            }
+          : undefined
+      }
+    >
       <div className="hero__backdrop" ref={parallaxRef}>
         {fanart && (
           <div
@@ -297,9 +322,27 @@ export function HomeHero({
               label="Details"
               onPress={() => navigate(`/item/${item.id}`)}
             />
+            {hasMenu && (
+              <HeroButton
+                label="More"
+                onPress={() => {
+                  const r = document.activeElement?.getBoundingClientRect();
+                  setByKey(true);
+                  setMenuAt({ x: r ? r.left : 0, y: r ? r.bottom + 4 : 0 });
+                }}
+              />
+            )}
           </div>
         </div>
       </div>
+      {menuAt && actions && (
+        <PointMenu
+          at={menuAt}
+          actions={actions}
+          autoFocus={byKey}
+          onClose={() => setMenuAt(null)}
+        />
+      )}
     </section>
   );
 }
