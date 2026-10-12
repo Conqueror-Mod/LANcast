@@ -54,3 +54,32 @@ func TestTheOverlayIsUpForAFullFilmOrAnyGame(t *testing.T) {
 		}
 	}
 }
+
+/*
+ * When the main window gives activation back to the page overlay.
+ *
+ * Traced on 2026-10-12: a press on the close button with a film playing full
+ * arrived as WA_ACTIVE, not WA_CLICKACTIVE, and handing activation over at
+ * once cancelled the press — the ✕ did nothing until the film was docked. A
+ * press on the frame waits for the press to end, however it was labelled.
+ */
+func TestAPressOnTheFrameFinishesBeforeTheHandOff(t *testing.T) {
+	cases := []struct {
+		name       string
+		state      uintptr
+		framePress bool
+		want       handOff
+	}{
+		{"✕ pressed, reported as WA_ACTIVE (the traced case)", 1, true, handOffAfterPress},
+		{"✕ pressed, reported as WA_CLICKACTIVE", waClickActive, true, handOffAfterPress},
+		{"a click activation with no press noted", waClickActive, false, handOffAfterPress},
+		{"Alt-Tab or the taskbar", 1, false, handOffNow},
+		{"going inactive", 0, true, handOffNone},
+		{"going inactive, no press", 0, false, handOffNone},
+	}
+	for _, c := range cases {
+		if got := activationHandOff(c.state, c.framePress); got != c.want {
+			t.Errorf("%s: activationHandOff(%d, %v) = %d, want %d", c.name, c.state, c.framePress, got, c.want)
+		}
+	}
+}
