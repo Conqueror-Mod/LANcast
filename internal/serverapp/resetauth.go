@@ -32,7 +32,7 @@ func runResetAuth(args []string) error {
 	addr := fs.String("addr", ":8080", "address the server listens on, used only to check it is stopped")
 	yes := fs.Bool("yes", false, "actually do it; without this the command only reports what it would remove")
 	fs.Usage = func() {
-		fmt.Fprint(fs.Output(), `usage: lancastd reset-auth [-data DIR] [-yes]
+		fmt.Fprint(fs.Output(), `usage: lancast reset-auth [-data DIR] [-yes]
 
 Removes every LANcast account and session so you can create a new first admin.
 Watch history, libraries, and settings are kept.
@@ -204,7 +204,7 @@ func sameDir(a, b string) bool {
 func exeName() string {
 	exe, err := os.Executable()
 	if err != nil {
-		return "lancastd"
+		return "LANcast"
 	}
 	return filepath.Base(exe)
 }

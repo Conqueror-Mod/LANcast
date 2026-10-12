@@ -55,9 +55,15 @@ var (
 	// Client is the desktop window. It keeps the original value name, because
 	// it is the common case and an existing entry pointing at the client should
 	// go on working across this change.
-	Client = Target{value: "LANcast", own: "LANcast-Client.exe", foreign: "LANcast-Server.exe"}
-	// Tray is the server's notification-area icon.
-	Tray = Target{value: "LANcast Tray", own: "LANcast-Server.exe", foreign: "LANcast-Client.exe"}
+	//
+	// Its executable is LANcast.exe since the two programs became one
+	// (ADR 0080). An entry still naming LANcast-Client.exe is rewritten by
+	// the installer, and is not "foreign": it is the same intent.
+	Client = Target{value: "LANcast", own: "LANcast.exe", foreign: "LANcast-Server.exe"}
+	// Tray was LANcast-Server.exe's own icon. There is no such tray now
+	// (ADR 0080); the target remains so its old entry can be found and
+	// migrated or removed.
+	Tray = Target{value: "LANcast Tray", own: "LANcast-Server.exe", foreign: "LANcast.exe"}
 )
 
 // Names lists every run-key value LANcast may have written, for the

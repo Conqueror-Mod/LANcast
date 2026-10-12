@@ -1,7 +1,7 @@
 // Package serverapp is the LANcast media server's program: its subcommands,
 // flags, wiring and shutdown. It was cmd/lancastd's package main until the
 // one-executable work (ADR 0080), and moved here unchanged so that more than
-// one entrypoint can run it — cmd/lancastd today, the single LANcast.exe next.
+// one entrypoint can run it: LANcast.exe, and cmd/lancastd for development.
 //
 // This file is wiring only — flags, construction, shutdown. Logic lives in
 // the other internal packages.
@@ -97,7 +97,7 @@ func Main() {
 	// here so flag.Parse never sees the subcommand token.
 	if len(os.Args) > 1 && os.Args[1] == "service" {
 		if err := runService(os.Args[2:]); err != nil {
-			fmt.Fprintln(os.Stderr, "lancastd service:", err)
+			fmt.Fprintln(os.Stderr, "lancast service:", err)
 			os.Exit(1)
 		}
 		return
@@ -108,7 +108,7 @@ func Main() {
 	if len(os.Args) > 1 && os.Args[1] == "devseed" {
 		attachConsole()
 		if err := runDevSeed(os.Args[2:]); err != nil {
-			fmt.Fprintln(os.Stderr, "lancastd devseed:", err)
+			fmt.Fprintln(os.Stderr, "lancast devseed:", err)
 			os.Exit(1)
 		}
 		return
@@ -120,7 +120,7 @@ func Main() {
 	if len(os.Args) > 1 && os.Args[1] == "reset-auth" {
 		attachConsole()
 		if err := runResetAuth(os.Args[2:]); err != nil {
-			fmt.Fprintln(os.Stderr, "lancastd reset-auth:", err)
+			fmt.Fprintln(os.Stderr, "lancast reset-auth:", err)
 			os.Exit(1)
 		}
 		return
@@ -132,7 +132,7 @@ func Main() {
 	if len(os.Args) > 1 && os.Args[1] == "restore" {
 		attachConsole()
 		if err := runRestore(os.Args[2:]); err != nil {
-			fmt.Fprintln(os.Stderr, "lancastd restore:", err)
+			fmt.Fprintln(os.Stderr, "lancast restore:", err)
 			os.Exit(1)
 		}
 		return
@@ -143,7 +143,7 @@ func Main() {
 	// again. Never typed by a person — it is a step in an update.
 	if len(os.Args) > 1 && os.Args[1] == relaunchArg {
 		if err := runRelaunch(os.Args[2:]); err != nil {
-			fmt.Fprintln(os.Stderr, "lancastd relaunch:", err)
+			fmt.Fprintln(os.Stderr, "lancast relaunch:", err)
 			os.Exit(1)
 		}
 		return
@@ -153,7 +153,7 @@ func Main() {
 	// system-tray presence (ADR 0022). A shortcut or the launcher invokes it.
 	if len(os.Args) > 1 && os.Args[1] == "tray" {
 		if err := runTray(os.Args[2:], true); err != nil {
-			fmt.Fprintln(os.Stderr, "lancastd tray:", err)
+			fmt.Fprintln(os.Stderr, "lancast tray:", err)
 			os.Exit(1)
 		}
 		return
@@ -1028,7 +1028,7 @@ func run(ctx context.Context, addr, dataDir string, log *slog.Logger) error {
 	listener, err := net.Listen("tcp", listenAddr)
 	if err != nil {
 		return fmt.Errorf("cannot listen on %s: %w\n"+
-			"Another LANcast may still be running — close it, or run: taskkill /IM lancastd.exe /F",
+			"Another LANcast may still be running: close it, or stop the LANcast service.",
 			listenAddr, err)
 	}
 

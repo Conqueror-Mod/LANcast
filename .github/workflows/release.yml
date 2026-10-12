@@ -29,8 +29,9 @@ jobs:
       # server binds loopback until an account exists, so this needs no auth.
       - name: smoke-test the linux server
         run: |
-          go build -o /tmp/lancastd ./cmd/lancastd
-          /tmp/lancastd -addr :18080 -data /tmp/lancast-smoke &
+          # The one executable, as the server (ADR 0080).
+          go build -o /tmp/lancast ./cmd/lancast
+          /tmp/lancast serve -addr :18080 -data /tmp/lancast-smoke &
           srv=$!
           ok=0
           for _ in $(seq 1 30); do
@@ -94,8 +95,12 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          cp "$(find dist -name LANcast-Server.exe | head -1)" installer/LANcast-Server.exe
-          cp "$(find dist -name LANcast-Client.exe | head -1)" installer/LANcast-Client.exe
+          # One executable since ADR 0080. Fail loudly if goreleaser did not
+          # produce it: cp of an empty find result would otherwise stage nothing
+          # and makensis would fail late with a less useful message.
+          exe="$(find dist -name LANcast.exe | head -1)"
+          test -n "$exe" || { echo "goreleaser produced no LANcast.exe"; exit 1; }
+          cp "$exe" installer/LANcast.exe
           # The face worker ships with the installer (ADR 0052). Failing loudly
           # here beats a setup.exe that silently lacks it: the feature would be
           # unavailable on every install with nothing to say why, and the models

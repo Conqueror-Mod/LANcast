@@ -3,20 +3,21 @@ package main
 import (
 	"net/http"
 	"net/http/httptest"
-	"runtime"
+	"os"
 	"strings"
 	"testing"
 )
 
-// The launcher finds the server by name next to itself, so this name has to
-// match what the release archives and the installer lay down.
-func TestServerExeName(t *testing.T) {
-	got := serverExeName()
-	if runtime.GOOS == "windows" && got != "LANcast-Server.exe" {
-		t.Errorf("windows server exe = %q, want LANcast-Server.exe", got)
+// The server is this same executable (ADR 0080), started as `serve`: there is
+// no second program beside it to find, so none can be missing.
+func TestTheServerIsThisExecutable(t *testing.T) {
+	got, err := serverExePath()
+	if err != nil {
+		t.Fatal(err)
 	}
-	if runtime.GOOS != "windows" && got != "LANcast-Server" {
-		t.Errorf("non-windows server exe = %q, want LANcast-Server", got)
+	self, _ := os.Executable()
+	if got != self {
+		t.Errorf("server exe = %q, want this executable %q", got, self)
 	}
 }
 

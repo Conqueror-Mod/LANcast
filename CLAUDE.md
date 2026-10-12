@@ -45,7 +45,8 @@ internal/retro/    retro games (ADR 0073): romhash/ identifies a dump, retrodb/
                    host/ (the session), remote/ (files and saves by ticket),
                    cores/ (which core plays what, fetched from libretro)
 internal/knownserver/ which servers this client trusts, and by which key (ADR 0070)
-cmd/lancast/       LANcast-Client. The window itself is internal/clientwindow,
+cmd/lancast/       LANcast.exe: the app (window + tray) and, by subcommand, the
+                   server (ADR 0080). The window itself is internal/clientwindow,
                    internal/webview2 and internal/certpin — not subdirectories
                    of this one, which is only the entrypoint and its bindings.
 docs/adr/          decision records (71 and counting — read before re-deciding)
@@ -174,8 +175,8 @@ media a copy.
 `devseed` creates those libraries in a data directory and turns NFO writing off:
 
 ```bash
-go build -tags devseed -o LANcast-Server.exe ./cmd/lancastd
-./LANcast-Server.exe devseed -data <dev data dir> -root "<test libraries>" -scan
+go build -tags devseed -o LANcast.exe ./cmd/lancast
+./LANcast.exe devseed -data <dev data dir> -root "<test libraries>" -scan
 ```
 
 It is idempotent, and it is **behind a build tag so it is absent from release
@@ -250,9 +251,9 @@ So, for a change to `internal/transcode`, `internal/probe`, or anything else
 that shells out to ffmpeg or ffprobe:
 
 1. Build, then swap the binary into the installed service and restart it —
-   backing up `C:\Program Files\LANcast\LANcast-Server.exe` first, so a
+   backing up `C:\Program Files\LANcast\LANcast.exe` first, so a
    rollback is one copy. This is the *only* check that means anything for GPU
-   work; running `LANcast-Server.exe` from a terminal reproduces the wrong
+   work; running `LANcast.exe serve` from a terminal reproduces the wrong
    session every time.
 2. Play a file that actually takes the path you changed, and read
    `lancastd.log` for `ffmpeg reported errors` afterwards. A stuck spinner is

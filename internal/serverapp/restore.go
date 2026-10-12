@@ -31,7 +31,7 @@ func runRestore(args []string) error {
 	addr := fs.String("addr", ":8080", "address the server listens on, used only to check it is stopped")
 	yes := fs.Bool("yes", false, "actually do it; without this the command only reports what it would do")
 	fs.Usage = func() {
-		fmt.Fprint(fs.Output(), `usage: lancastd restore -from BACKUP [-data DIR] [-yes]
+		fmt.Fprint(fs.Output(), `usage: lancast restore -from BACKUP [-data DIR] [-yes]
 
 Replaces the LANcast database with a backup taken from Settings.
 

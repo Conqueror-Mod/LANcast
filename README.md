@@ -100,7 +100,7 @@ explicitly ([ADR 0020](docs/adr/0020-plugin-isolation-boundary.md),
 [docs/writing-a-plugin.md](docs/writing-a-plugin.md), which is honest about the
 two things a third party still cannot do.
 
-**Its own window.** `LANcast-Client` opens a WebView2 window rather than handing
+**Its own window.** `LANcast` opens a WebView2 window rather than handing
 a URL to a browser — which is what lets it pin the server's certificate instead
 of showing you a warning it cannot resolve
 ([ADR 0023](docs/adr/0023-native-desktop-client.md)).
@@ -123,7 +123,7 @@ cgo and no C toolchain needed on any platform. See
 ## Build and run
 
 ```bash
-go test ./... && go run ./cmd/lancastd -addr :8080
+go test ./... && go run ./cmd/lancast serve -addr :8080
 ```
 
 Then open <http://localhost:8080>, create the first account, add a library
@@ -135,10 +135,10 @@ pointing at a folder of media, and scan it.
 | `-data` | `%APPDATA%/LANcast` (platform config dir) | Where `lancast.db` lives |
 | `-v` | off | Verbose logging |
 
-Build a distributable server binary:
+Build the one LANcast executable (the app, and the server as `LANcast serve`):
 
 ```bash
-go build -o LANcast-Server ./cmd/lancastd
+./build.sh
 ```
 
 The client UI is a React + TypeScript app in `web/`, built by Vite and committed
@@ -179,16 +179,18 @@ personal, non-commercial use, and each score is shown labelled with its source.
 
 ## Install a release
 
-Releases ship two executables — `LANcast-Server` (the daemon) and
-`LANcast-Client` (the launcher you open) — with no runtime to install. On
-Windows the installer registers the server as a service and adds a shortcut; on
-Linux/NAS it runs as a systemd service. Full steps, including the one
+Releases ship one executable — `LANcast.exe` on Windows, `lancast` on Linux —
+with no runtime to install. Opened, it is the app, with its window and tray
+icon; installed as a service, the same file is the server
+([ADR 0080](docs/adr/0080-one-executable-two-roles.md)). On Windows the
+installer registers the service and adds a shortcut; on Linux/NAS it runs as a
+systemd service. Full steps, including the one
 data-directory rule that matters most, are in
 **[docs/install.md](docs/install.md)**.
 
 The server can check for, download, verify, and stage an update that swaps
-itself in on the way down. It swaps `LANcast-Server` only — a change to the
-client, the window, or the installer needs the installer.
+itself in on the way down. It swaps `LANcast.exe` and the libraries beside it;
+a change to the installer itself needs the installer.
 
 ## Documentation
 

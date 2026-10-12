@@ -1,8 +1,9 @@
-// Command lancastd is the LANcast media server.
+// Command lancastd is the LANcast server alone, for development.
 //
-// The program itself lives in internal/serverapp (ADR 0080), so that the
-// single LANcast executable can run it too. This entrypoint stays, with the
-// icon resource beside it, for as long as LANcast-Server.exe ships.
+// Releases ship one executable, LANcast.exe, built from cmd/lancast, which is
+// the app and, by subcommand, this same server (ADR 0080). This entrypoint
+// stays because a server-only build is handy when working on the server, and
+// it costs three lines: the program itself lives in internal/serverapp.
 package main
 
 import "lancast/internal/serverapp"

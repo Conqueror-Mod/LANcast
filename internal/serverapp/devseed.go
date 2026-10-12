@@ -58,7 +58,7 @@ func runDevSeed(args []string) error {
 		"folder holding the TEST * LIBRARY directories")
 	doScan := fs.Bool("scan", false, "scan each library after creating it")
 	fs.Usage = func() {
-		fmt.Fprint(fs.Output(), `usage: lancastd devseed [-data DIR] [-root DIR] [-scan]
+		fmt.Fprint(fs.Output(), `usage: lancast devseed [-data DIR] [-root DIR] [-scan]
 
 Creates the development libraries pointing at the test folders under ROOT, and
 turns off NFO writing so a scan cannot touch files on disk.

@@ -205,8 +205,7 @@ jobs:
       # This checks the script, not the payload.
       - name: stage placeholders
         run: |
-          : > installer/LANcast-Server.exe
-          : > installer/LANcast-Client.exe
+          : > installer/LANcast.exe
           # The face worker, which the installer ships (ADR 0052). Adding the
           # File line without this is what turned this job red, which is the
           # job doing its work: the alternative was finding out during a

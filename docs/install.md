@@ -1,8 +1,9 @@
 # Installing LANcast
 
-LANcast ships as two small executables — `LANcast-Server` (the daemon) and
-`LANcast-Client` (the launcher you open) — with no runtime to install. ffmpeg is
-an optional extra
+LANcast ships as one small executable — `LANcast.exe` on Windows, `lancast`
+on Linux — with no runtime to install. Opened, it is the app: a window and its
+tray icon. Installed as a service, the same file is the server
+([ADR 0080](adr/0080-one-executable-two-roles.md)). ffmpeg is an optional extra
 for transcoding.
 
 ## The one rule that matters most
@@ -10,9 +11,9 @@ for transcoding.
 > **A service uses an explicit, machine-wide data directory.** A Windows service
 > runs as a service account whose per-user config dir is *not* yours, so a service
 > left on the default would build a **second, empty library** somewhere you never
-> look. `LANcast-Server service install` pins the data dir explicitly —
+> look. `LANcast service install` pins the data dir explicitly —
 > `%ProgramData%\LANcast` on Windows, `/var/lib/lancast` on Linux — and any
-> interactive `LANcast-Server` you point at that same path sees the same library
+> interactive `LANcast serve` you point at that same path sees the same library
 > ([ADR 0016](adr/0016-packaging-and-distribution.md)).
 
 If your library ever looks empty after installing as a service, this is why:
@@ -23,28 +24,29 @@ you (or an interactive run) are pointed at a different data dir. Pass the same
 
 ### Installer (recommended)
 
-Run **`LANcast-Setup-<version>.exe`** from the release. It installs both exes to
-`Program Files\LANcast`, **registers and starts the server as a service**, and
-adds a Start-menu and desktop shortcut to **LANcast** (the launcher). Double-click
-that shortcut to open the app in its own window — no terminal, ever. The finish
+Run **`LANcast-Setup-<version>.exe`** from the release. It installs
+`LANcast.exe` to `Program Files\LANcast`, **registers and starts it as the
+server's service**, and adds a Start-menu and desktop shortcut to **LANcast**.
+Double-click that shortcut to open the app in its own window, with LANcast's
+icon in the notification area — no terminal, ever. Closing the window keeps
+LANcast in the tray; **Exit** from the icon closes it, and the service keeps
+serving. The finish
 page offers the browser instead if you would rather have a tab. Uninstalling
 removes the service and shortcuts but **leaves your library** in
 `%ProgramData%\LANcast`.
 
 ### From the archive (manual)
 
-Unzip `lancast_<version>_windows_amd64.zip` anywhere, then either:
+Unzip `LANcast_<version>_windows_amd64.zip` anywhere, then either:
 
-- **Just run it**: double-click `LANcast-Client.exe`. It starts the server
-  (windowless) and opens LANcast in its own window. Where the server is
-  installed as a service, its tray icon is the one controller for both — start
-  and stop the service, open the app, and quit it, from one menu. There is
-  deliberately **one** LANcast icon, not two.
+- **Just run it**: double-click `LANcast.exe`. With no service installed it
+  runs the server itself, behind its window and tray, and **Exit** stops it.
+  There is one LANcast icon.
 - **Run it on boot as a service** (an elevated terminal):
 
   ```
-  LANcast-Server.exe service install
-  LANcast-Server.exe service start
+  LANcast.exe service install
+  LANcast.exe service start
   ```
 
 ## Linux (server / NAS / Raspberry Pi)
@@ -53,13 +55,13 @@ Extract the archive for your architecture (`linux_amd64` or `linux_arm64`), then
 install the service:
 
 ```
-sudo ./LANcast-Server service install
-sudo ./LANcast-Server service start
+sudo ./lancast service install
+sudo ./lancast service start
 ```
 
 This writes a systemd unit pinned to `/var/lib/lancast` and enables it on boot.
-Then open `http://<host>:8080` in a browser. `LANcast-Client` (the launcher) is a desktop
-convenience and is not needed on a headless server.
+Then open `http://<host>:8080` in a browser. To run the server in the
+foreground instead, `./lancast serve`.
 
 Manage it with `service status | stop | uninstall`, or `systemctl … lancastd`.
 
@@ -77,8 +79,8 @@ the server, then run `reset-auth` from the directory the binary is in.
 
 ```
 Stop-Service lancastd
-LANcast-Server.exe reset-auth          # shows what it would remove
-LANcast-Server.exe reset-auth -yes     # does it
+LANcast.exe reset-auth          # shows what it would remove
+LANcast.exe reset-auth -yes     # does it
 Start-Service lancastd
 ```
 
@@ -97,8 +99,8 @@ server is how a restore becomes the incident:
 
 ```
 Stop-Service lancastd
-LANcast-Server.exe restore -from "D:\Backups\lancast-backup.db"        # shows what it would do
-LANcast-Server.exe restore -from "D:\Backups\lancast-backup.db" -yes   # does it
+LANcast.exe restore -from "D:\Backups\lancast-backup.db"        # shows what it would do
+LANcast.exe restore -from "D:\Backups\lancast-backup.db" -yes   # does it
 Start-Service lancastd
 ```
 
@@ -183,5 +185,5 @@ To watch it live, stop the service and run the server in a terminal:
 
 ```
 Stop-Service lancastd
-& "C:\Program Files\LANcast\LANcast-Server.exe" -addr :8080 -data "C:\ProgramData\LANcast"
+& "C:\Program Files\LANcast\LANcast.exe" serve -addr :8080 -data "C:\ProgramData\LANcast"
 ```

@@ -13,7 +13,7 @@ import "errors"
 //
 // Build with it when you need it:
 //
-//	go build -tags devseed -o LANcast-Server.exe ./cmd/lancastd
+//	go build -tags devseed -o LANcast.exe ./cmd/lancast
 func runDevSeed([]string) error {
 	return errors.New("this build has no devseed command; rebuild with -tags devseed")
 }
