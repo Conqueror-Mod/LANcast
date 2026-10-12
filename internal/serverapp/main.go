@@ -57,9 +57,42 @@ import (
 	"lancast/internal/web"
 )
 
+// IsCommand reports whether arg, the first argument on a command line,
+// belongs to the server program. An entrypoint that is not only the server
+// (the single LANcast executable, ADR 0080) asks this before defining any
+// flags of its own and hands such a launch to Main untouched.
+func IsCommand(arg string) bool {
+	switch arg {
+	case "serve", "service", "tray", "devseed", "reset-auth", "restore", relaunchArg:
+		return true
+	}
+	return false
+}
+
+// stripServe removes a leading `serve` subcommand and reports whether there
+// was one.
+func stripServe(args []string) ([]string, bool) {
+	if len(args) > 1 && args[1] == "serve" {
+		return append([]string{args[0]}, args[2:]...), true
+	}
+	return args, false
+}
+
 // Main runs the server program with os.Args, exactly as its own executable
 // would: subcommands first (service, tray, reset-auth, ...), then flags.
 func Main() {
+	/*
+	 * `serve` is the foreground server asked for by name (ADR 0080).
+	 *
+	 * The server's own executable runs it from bare flags, and still does. A
+	 * binary that is also the desktop app cannot: with no subcommand it opens
+	 * a window. So `serve` is stripped here and the rest runs exactly as the
+	 * flags-only launch always has — except that it can never be mistaken for
+	 * a bare double-click, which would otherwise show the tray instead.
+	 */
+	var serve bool
+	os.Args, serve = stripServe(os.Args)
+
 	// Subcommands come before flags: `lancastd service install -data …`. Routed
 	// here so flag.Parse never sees the subcommand token.
 	if len(os.Args) > 1 && os.Args[1] == "service" {
@@ -129,7 +162,7 @@ func Main() {
 	// A bare launch — a double-click, no arguments — has no console on Windows.
 	// Running the server foreground there would start an invisible process the
 	// user can neither see nor stop, so show the tray instead (ADR 0022).
-	if len(os.Args) == 1 && bareLaunchUsesTray {
+	if !serve && len(os.Args) == 1 && bareLaunchUsesTray {
 		if err := runTray(nil); err != nil {
 			alert("LANcast", err.Error())
 			os.Exit(1)

@@ -24,6 +24,7 @@ import (
 	"lancast/internal/desktopprefs"
 	"lancast/internal/knownserver"
 	"lancast/internal/raise"
+	"lancast/internal/serverapp"
 	"lancast/internal/service"
 	"lancast/internal/singleton"
 )
@@ -41,6 +42,19 @@ var Version = "dev"
 var browserMode bool
 
 func main() {
+	/*
+	 * The server's subcommands run the server program (ADR 0080).
+	 *
+	 * This executable is becoming the only one: `LANcast service install`,
+	 * `LANcast serve`, `LANcast reset-auth` and the rest are the server's, and
+	 * are handed over before a single flag is defined here. Both programs use
+	 * the default flag set, and defining -addr twice in one process panics.
+	 */
+	if len(os.Args) > 1 && serverapp.IsCommand(os.Args[1]) {
+		serverapp.Main()
+		return
+	}
+
 	addr := flag.String("addr", ":8080", "server listen address")
 	// LANcast's own window is the front door (ADR 0023). The browser is the
 	// fallback, not the destination: it cannot be told what its close button
