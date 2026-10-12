@@ -2,6 +2,8 @@ package api
 
 import (
 	"net/http"
+
+	"lancast/internal/store"
 )
 
 /*
@@ -31,11 +33,24 @@ func (s *Server) continueShow(w http.ResponseWriter, r *http.Request) {
 	 */
 	w.Header().Set("Cache-Control", "no-store")
 
-	if _, err := s.st.GetItem(r.Context(), id, s.userID(r)); s.notFoundOr(w, err, "get item", "no such item") {
+	it, err := s.st.GetItem(r.Context(), id, s.userID(r))
+	if s.notFoundOr(w, err, "get item", "no such item") {
 		return
 	}
 
-	next, err := s.st.NextEpisodeFor(r.Context(), id, s.userID(r))
+	/*
+	 * A collection continues the way a show does, film by film in release
+	 * order (store.NextInCollectionFor), and answers in the same shape so a
+	 * client asks one question of both. `episode` is the film there: the
+	 * field names what a show answers with, and renaming it would break every
+	 * client already reading it.
+	 */
+	var next store.NextEpisode
+	if it.Kind == "collection" {
+		next, err = s.st.NextInCollectionFor(r.Context(), id, s.userID(r))
+	} else {
+		next, err = s.st.NextEpisodeFor(r.Context(), id, s.userID(r))
+	}
 	if err != nil {
 		s.writeInternal(w, err, "continue show")
 		return

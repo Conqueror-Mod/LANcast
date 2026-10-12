@@ -1403,6 +1403,31 @@ they belong to, and `next_episode` carries the one the show would play — the
 same answer `GET /api/items/{id}/continue` gives, computed by the same query, so
 the shelf and a show's Continue button cannot disagree.
 
+**A collection puts its next film on the shelf.** Finishing a film in a
+collection, inside the shelf's window, lists the film after it by the same rule
+`GET /api/items/{id}/continue` applies to the collection. The row is the
+**film**, not the collection, because the film is what the tile plays. It is
+absent when:
+
+- the collection is finished;
+- that film is already in progress, because then it is listed on its own
+  account;
+- the film's own play state was written after the finish. That is how
+  removing it works, with nothing new to store: "Remove from Continue Watching"
+  writes the film unwatched at position zero, which is later than the finish,
+  and finishing a later film brings the row back for the one after it.
+
+A film reachable twice is listed once. Such a row carries `continues_from`,
+which names the collection and the film just finished:
+
+```json
+{ "id": 702, "kind": "movie", "title": "Film Two", "…": "…",
+  "continues_from": { "collection_id": 800, "collection_title": "A Franchise",
+                      "after_id": 701, "after_title": "Film One" } }
+```
+
+A client can then say "Because you watched Film One" and mean it.
+
 A show qualifies on **any** episode activity, watched or in progress. Finishing
 an episode is the ordinary way to stop watching a series, and a shelf that
 dropped the show at that moment answered "which episode did I stop inside"
@@ -1973,6 +1998,11 @@ The rule, in order:
 
 Progress is per user, so one person finishing a season does not move anybody
 else's place in it.
+
+**A collection answers too**, film by film in release order: the same four
+rules over its films, and the same shape. `episode` is the film there. The field
+names what a show answers with, and renaming it would break every client
+already reading it.
 
 The no-store header is doing real work: a proxy or browser holding this answer
 for thirty seconds reproduces exactly the bug the rule exists to avoid — press

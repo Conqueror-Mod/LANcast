@@ -202,6 +202,44 @@ describe("a film's leading button", () => {
   });
 });
 
+/*
+ * A collection continues film by film, the way a show does (settled
+ * 2026-10-12): part way through, the next film leads, named.
+ */
+describe("a collection's leading button", () => {
+  const collection = {
+    id: 800, title: "A Franchise", kind: "collection", library_id: 1, child_count: 3, artwork: {},
+  };
+  const second = { ...film(), id: 702, title: "Film Two" };
+
+  it("names the next film part way through, and plays it", async () => {
+    stub(collection, { started: true, resume: false, exhausted: false, episode: second });
+    await render(800);
+    expect(labels()).toContain("Up next: Film Two");
+    await act(async () => button("Up next: Film Two")!.click());
+    await settle();
+    expect(landed?.path).toBe("702");
+  });
+
+  it("says Continue for a film in progress", async () => {
+    stub(collection, { started: true, resume: true, exhausted: false, episode: second });
+    await render(800);
+    expect(labels()).toContain("Continue: Film Two");
+  });
+
+  it("offers nothing new on a collection nobody has started", async () => {
+    stub(collection, { started: false, resume: false, exhausted: false, episode: film() });
+    await render(800);
+    expect(labels().some((l) => l.startsWith("Up next") || l.startsWith("Continue"))).toBe(false);
+  });
+
+  it("offers nothing new once every film is watched", async () => {
+    stub(collection, { started: true, resume: false, exhausted: true });
+    await render(800);
+    expect(labels().some((l) => l.startsWith("Up next") || l.startsWith("Continue"))).toBe(false);
+  });
+});
+
 describe("where an entry starts", () => {
   const saved = { positionMs: 1_800_000, watched: false, durationMs: 6_000_000 };
   it("starts at the top when asked to, whatever was saved", () => {

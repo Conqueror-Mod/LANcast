@@ -564,6 +564,21 @@ type Item struct {
 	 * show has no position of its own and never did.
 	 */
 	NextEpisode *Item `json:"next_episode,omitempty"`
+	/*
+	 * ContinuesFrom is set on a Continue Watching row that is a collection's
+	 * next film: which collection, and the film just finished in it. Only
+	 * there. It is what lets the spotlight say "Because you watched" about a
+	 * franchise and mean it, which a genre match cannot.
+	 */
+	ContinuesFrom *Continuation `json:"continues_from,omitempty"`
+}
+
+// Continuation names where a collection's next film follows from.
+type Continuation struct {
+	CollectionID    int64  `json:"collection_id"`
+	CollectionTitle string `json:"collection_title"`
+	AfterID         int64  `json:"after_id"`
+	AfterTitle      string `json:"after_title"`
 }
 
 // Credit is one person's involvement in an item.
@@ -2898,6 +2913,17 @@ func (s *Store) ContinueWatching(ctx context.Context, userID string, limit int, 
 			  AND (ps.position_ms > 0 OR ps.watched = 1)
 			  AND (? = 0 OR ps.updated_at >= ?)
 			GROUP BY sh.id
+
+			UNION ALL
+
+			SELECT ic.collection_id AS id, MAX(ps.updated_at) AS updated_at, 2 AS is_show
+			FROM item_collection ic
+			JOIN media_item f ON f.id = ic.item_id AND f.missing = 0
+			JOIN media_item c ON c.id = ic.collection_id AND c.missing = 0
+			JOIN playback_state ps ON ps.item_id = f.id AND ps.user_id = ?
+			WHERE ps.watched = 1
+			  AND (? = 0 OR ps.updated_at >= ?)
+			GROUP BY ic.collection_id
 		)
 		ORDER BY updated_at DESC
 		LIMIT ?`
@@ -2916,20 +2942,27 @@ func (s *Store) ContinueWatching(ctx context.Context, userID string, limit int, 
 	rows, err := s.db.QueryContext(ctx, q,
 		userID, sinceUnix, sinceUnix,
 		userID, sinceUnix, sinceUnix,
+		userID, sinceUnix, sinceUnix,
 		fetch)
 	if err != nil {
 		return nil, fmt.Errorf("continue watching: %w", err)
 	}
 
+	// What a row stands for: an item of its own, a show, or a collection.
+	const (
+		rowItem       = 0
+		rowShow       = 1
+		rowCollection = 2
+	)
 	type row struct {
-		id     int64
-		isShow bool
+		id      int64
+		updated int64
+		kind    int
 	}
 	var order []row
 	for rows.Next() {
 		var r row
-		var updated int64
-		if err := rows.Scan(&r.id, &updated, &r.isShow); err != nil {
+		if err := rows.Scan(&r.id, &r.updated, &r.kind); err != nil {
 			rows.Close()
 			return nil, fmt.Errorf("continue watching: %w", err)
 		}
@@ -2942,9 +2975,23 @@ func (s *Store) ContinueWatching(ctx context.Context, userID string, limit int, 
 	rows.Close()
 
 	out := []Item{}
+	// A film can be reached twice — on its own and as a collection's next, or
+	// as the next of two collections — and a shelf lists it once.
+	listed := map[int64]bool{}
 	for _, r := range order {
 		if len(out) == limit {
 			break
+		}
+		if r.kind == rowCollection {
+			next, ok, err := s.collectionNext(ctx, r.id, r.updated, userID)
+			if err != nil {
+				return nil, fmt.Errorf("continue watching: %w", err)
+			}
+			if ok && !listed[next.ID] {
+				listed[next.ID] = true
+				out = append(out, *next)
+			}
+			continue
 		}
 		it, err := s.GetItem(ctx, r.id, userID)
 		if err != nil {
@@ -2953,8 +3000,11 @@ func (s *Store) ContinueWatching(ctx context.Context, userID string, limit int, 
 			}
 			return nil, fmt.Errorf("continue watching: %w", err)
 		}
-		if !r.isShow {
-			out = append(out, *it)
+		if r.kind == rowItem {
+			if !listed[it.ID] {
+				listed[it.ID] = true
+				out = append(out, *it)
+			}
 			continue
 		}
 

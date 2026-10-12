@@ -86,6 +86,30 @@ export function useHeroSpotlight(recent: Item[] | undefined): HeroPick | null {
     (i) => i.id !== seedID && !onTheShelf.has(i.id),
   );
 
+  /*
+   * A franchise outranks a genre.
+   *
+   * Reported: the suggestions were generic. Finishing the first film of a
+   * collection and being offered something that merely shares a genre with
+   * it, when the second film is sitting right there, is the clearest case.
+   * The server marks a Continue Watching row that is a collection's next film
+   * (`continues_from`), with the film it follows, so the sentence stays true:
+   * "Because you watched" names the film just finished.
+   */
+  const franchise = wanted
+    ? (continueWatching ?? []).find((i) => i.continues_from && !isMusic(i) && !isPicture(i))
+    : undefined;
+  if (franchise?.continues_from) {
+    const from = franchise.continues_from;
+    return pickHero(mode, {
+      resumable: continueWatching,
+      recent,
+      recommended: [franchise],
+      seed: { ...franchise, id: from.after_id, title: from.after_title, continues_from: undefined },
+      pinned,
+    });
+  }
+
   return pickHero(mode, {
     resumable: continueWatching,
     recent,
