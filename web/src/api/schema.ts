@@ -152,6 +152,46 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/auth/passkey/login/options": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Start signing in with a passkey
+         * @description Public. Lists no credentials: discoverable passkeys say whose they are (ADR 0082).
+         */
+        post: operations["passkeyLoginOptions"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/passkey/login": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Finish signing in with a passkey
+         * @description Public. Issues an ordinary session, like password sign-in. Every refusal is one 401; the reason is logged. Throttled per address.
+         */
+        post: operations["passkeyLogin"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/identity": {
         parameters: {
             query?: never;
@@ -749,6 +789,70 @@ export interface paths {
         options?: never;
         head?: never;
         patch?: never;
+        trace?: never;
+    };
+    "/profile/passkeys": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Your passkeys
+         * @description The caller's own. Works on any connection, so passkeys can be removed from anywhere.
+         */
+        get: operations["listPasskeys"];
+        put?: never;
+        /** Finish adding a passkey */
+        post: operations["addPasskey"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/profile/passkeys/options": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Start adding a passkey
+         * @description Asks for the current password, as changing it does, with the same throttles.
+         */
+        post: operations["passkeyRegisterOptions"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/profile/passkeys/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Remove one of your passkeys
+         * @description No password is asked: removing a way in only makes the account harder to enter.
+         */
+        delete: operations["deletePasskey"];
+        options?: never;
+        head?: never;
+        /** Rename one of your passkeys */
+        patch: operations["renamePasskey"];
         trace?: never;
     };
     "/profile/peer-visibility": {
@@ -5082,6 +5186,7 @@ export interface components {
             can_convert: boolean;
             /** @description Present only when a session is active. */
             user?: components["schemas"]["User"];
+            passkeys?: components["schemas"]["PasskeyAvailability"];
         };
         SetupRequest: {
             username: string;
@@ -7581,6 +7686,60 @@ export interface components {
             /** @description Must be true to enable, unless already agreed for the same CA. */
             agree_terms?: boolean;
         };
+        /** @description Whether passkeys work on this very request: only over TLS at the public certificate's hostname while it is valid (ADR 0082). */
+        PasskeyAvailability: {
+            available: boolean;
+            /** @description The public name passkeys are bound to. Present only when available. */
+            rp_id?: string;
+        };
+        PasskeyOptions: {
+            /** @description Sent back with the answer. Single use, five minutes. */
+            challenge_id: string;
+            /** @description The WebAuthn options for navigator.credentials, with every binary value in base64url without padding. */
+            public_key: {
+                [key: string]: unknown;
+            };
+        };
+        PasskeyLoginRequest: {
+            challenge_id: string;
+            id: string;
+            client_data_json: string;
+            authenticator_data: string;
+            signature: string;
+            user_handle: string;
+        };
+        PasskeyRegisterOptionsRequest: {
+            current_password: string;
+        };
+        PasskeyRegisterRequest: {
+            challenge_id: string;
+            /** @description Trimmed, at most 64 characters; empty becomes "Passkey". */
+            name?: string;
+            client_data_json: string;
+            attestation_object: string;
+        };
+        Passkey: {
+            id: string;
+            name: string;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            last_used_at?: string;
+            /** @description The authenticator reported the passkey as backed up (synced to other devices). */
+            synced: boolean;
+            /** @description The public name it was made for. */
+            rp_id: string;
+            /** @description False for a passkey made for an earlier public name; it cannot sign in here and can only be removed. */
+            usable: boolean;
+        };
+        PasskeyList: {
+            passkeys: components["schemas"]["Passkey"][];
+            /** @description Whether a passkey could be added or used on this connection. */
+            available_here: boolean;
+        };
+        PasskeyRenameRequest: {
+            name: string;
+        };
     };
     responses: {
         /** @description Malformed body or invalid parameter. */
@@ -7915,6 +8074,88 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             /** @description `too_many_requests` — attempts are throttled, sharing one counter with `/auth/login`. This route verifies `current_password` with bcrypt before doing anything else, so an unbounded version is a password oracle for anybody holding a stolen session — the password outlives every session being revoked — and about a hundred milliseconds of deliberate work per request. One counter, so a spent login budget is not refreshed by asking here instead; a correct current password clears it, exactly as a successful login does. */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    passkeyLoginOptions: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description WebAuthn request options. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PasskeyOptions"];
+                };
+            };
+            /** @description Not at the server's public name over HTTPS, where passkeys cannot work. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Too many sign-ins in flight. */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    passkeyLogin: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PasskeyLoginRequest"];
+            };
+        };
+        responses: {
+            /** @description Signed in. The session cookie is set on this response. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LoginResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            /** @description Not at the server's public name over HTTPS, where passkeys cannot work. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Throttled. */
             429: {
                 headers: {
                     [name: string]: unknown;
@@ -9245,6 +9486,155 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
+        };
+    };
+    listPasskeys: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The caller's passkeys. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PasskeyList"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+        };
+    };
+    addPasskey: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PasskeyRegisterRequest"];
+            };
+        };
+        responses: {
+            /** @description The new passkey. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Passkey"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            /** @description Not at the public name, or that credential is already registered. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    passkeyRegisterOptions: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PasskeyRegisterOptionsRequest"];
+            };
+        };
+        responses: {
+            /** @description WebAuthn creation options. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PasskeyOptions"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            /** @description Not at the server's public name over HTTPS, where passkeys cannot work. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Throttled. */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    deletePasskey: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Removed. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    renamePasskey: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PasskeyRenameRequest"];
+            };
+        };
+        responses: {
+            /** @description Renamed. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
         };
     };
     putPeerVisibility: {

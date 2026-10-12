@@ -7,6 +7,7 @@ import {
   type QueryClient,
 } from "@tanstack/react-query";
 import { apiGet, apiPost, apiSend, apiUpload } from "./client";
+import { addPasskey, signInWithPasskey } from "@/lib/webauthn";
 import type {
   BackupFile,
   BackupsResponse,
@@ -56,6 +57,7 @@ import type {
   ScanStatus,
   ServerLog,
   UpdateStatus,
+  PasskeyList,
   PublicCertificate,
   PublicCertificateUpdate,
   Settings,
@@ -170,6 +172,53 @@ export function useLogout() {
 
 // Changes the caller's own password. The server revokes their sessions, so the
 // UI returns to the login screen afterwards.
+/*
+ * Passkeys (ADR 0082). Signing in invalidates auth status, as password login
+ * does. The list has its own key, and every change to it invalidates that key
+ * and nothing it is a sibling of.
+ */
+export function usePasskeyLogin() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => signInWithPasskey(),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["auth-status"] }),
+  });
+}
+
+export function usePasskeys() {
+  return useQuery({
+    queryKey: ["passkeys"],
+    queryFn: ({ signal }) => apiGet<PasskeyList>("/api/profile/passkeys", signal),
+  });
+}
+
+export function useAddPasskey() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (v: { currentPassword: string; name: string }) =>
+      addPasskey(v.currentPassword, v.name),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["passkeys"] }),
+  });
+}
+
+export function useRenamePasskey() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (v: { id: string; name: string }) =>
+      apiSend(`/api/profile/passkeys/${encodeURIComponent(v.id)}`, "PATCH", { name: v.name }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["passkeys"] }),
+  });
+}
+
+export function useRemovePasskey() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) =>
+      apiSend(`/api/profile/passkeys/${encodeURIComponent(id)}`, "DELETE"),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["passkeys"] }),
+  });
+}
+
 export function useChangePassword() {
   const qc = useQueryClient();
   return useMutation({

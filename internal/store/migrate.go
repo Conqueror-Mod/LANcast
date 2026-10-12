@@ -6,7 +6,7 @@ import (
 )
 
 // CurrentSchemaVersion is the revision this build expects.
-const CurrentSchemaVersion = 69
+const CurrentSchemaVersion = 70
 
 // migration is one forward step. There are deliberately no down migrations:
 // rolling a media library's schema backwards loses data that a rescan cannot
@@ -126,6 +126,7 @@ var migrations = []migration{
 	{version: 67, sql: schemaRevision67},
 	{version: 68, sql: schemaRevision68},
 	{version: 69, sql: schemaRevision69},
+	{version: 70, sql: schemaRevision70},
 }
 
 // migrate brings the database up to CurrentSchemaVersion.
@@ -2285,4 +2286,36 @@ CREATE INDEX IF NOT EXISTS idx_item_grid_year
     ON media_item(library_id, parent_id, missing, year DESC, sort_title, kind);
 CREATE INDEX IF NOT EXISTS idx_item_grid_added
     ON media_item(parent_id, missing, added_at DESC, library_id, sort_title, kind);
+`
+
+// Revision 70 — passkeys (ADR 0082).
+//
+// One row per registered credential. A new table rather than columns on user,
+// because an account holds several (a phone, a laptop, a security key) and
+// each is named, listed and removed on its own.
+//
+// rp_id is the name the passkey was made for. A passkey cannot be used from
+// any other name, so when the public name changes, the row stays and is shown
+// as made for the old name rather than failing at sign-in with no explanation.
+//
+// No foreign key to user, for the reason session has none (revision 7): a
+// lookup joins user, so a deleted account's passkeys stop resolving, and
+// DeleteUser removes them explicitly in the same transaction.
+const schemaRevision70 = `
+CREATE TABLE IF NOT EXISTS passkey (
+    id              TEXT    PRIMARY KEY,
+    user_id         TEXT    NOT NULL,
+    credential_id   BLOB    NOT NULL UNIQUE,
+    public_key      BLOB    NOT NULL,
+    algorithm       INTEGER NOT NULL,
+    sign_count      INTEGER NOT NULL DEFAULT 0,
+    aaguid          BLOB,
+    backup_eligible INTEGER NOT NULL DEFAULT 0,
+    backup_state    INTEGER NOT NULL DEFAULT 0,
+    name            TEXT    NOT NULL,
+    rp_id           TEXT    NOT NULL,
+    created_at      INTEGER NOT NULL,
+    last_used_at    INTEGER
+);
+CREATE INDEX IF NOT EXISTS idx_passkey_user ON passkey(user_id);
 `

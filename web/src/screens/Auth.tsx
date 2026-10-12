@@ -1,6 +1,7 @@
 import { useState, type FormEvent, type ReactNode } from "react";
 import { ApiFailure } from "@/api/client";
-import { useSetup, useLogin } from "@/api/hooks";
+import { useSetup, useLogin, useAuthStatus, usePasskeyLogin } from "@/api/hooks";
+import { cancelledByPerson } from "@/lib/webauthn";
 import "./Auth.css";
 
 // The auth screens live outside the AppShell: no nav, just the nebula field and
@@ -139,6 +140,12 @@ export function Setup({ restartRequired }: { restartRequired: boolean }) {
 // Login: an account exists; prove who you are.
 export function Login() {
   const login = useLogin();
+  const passkey = usePasskeyLogin();
+  // Only where the server says a passkey can work on this very connection:
+  // at its public name, over its trusted certificate (ADR 0082). By IP or in
+  // the desktop window there is no button, rather than one that cannot work.
+  const { data: status } = useAuthStatus();
+  const passkeysHere = status?.passkeys?.available === true;
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
 
@@ -181,6 +188,26 @@ export function Login() {
           {login.isPending ? "Signing in…" : "Sign in"}
         </button>
       </form>
+      {passkeysHere && (
+        <div className="auth__passkey">
+          <div className="auth__or">or</div>
+          <button
+            type="button"
+            className="auth__submit auth__submit--secondary"
+            disabled={passkey.isPending}
+            onClick={() => passkey.mutate()}
+          >
+            {passkey.isPending ? "Waiting for your passkey…" : "Sign in with a passkey"}
+          </button>
+          {passkey.isError && (
+            <p className="auth__error" role="alert">
+              {cancelledByPerson(passkey.error)
+                ? "No passkey was used. Try again, or sign in with your password."
+                : errorMessage(passkey.error)}
+            </p>
+          )}
+        </div>
+      )}
     </AuthCard>
   );
 }

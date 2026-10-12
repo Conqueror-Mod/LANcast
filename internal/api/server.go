@@ -18,6 +18,7 @@ import (
 
 	"lancast/internal/artwork"
 	"lancast/internal/auth"
+	"lancast/internal/auth/passkey"
 	"lancast/internal/config"
 	"lancast/internal/coverart"
 	"lancast/internal/crashlog"
@@ -207,6 +208,10 @@ type Server struct {
 	// publicCert is the opt-in public certificate (ADR 0081); nil on a
 	// loopback-only server. Set by SetPublicCert after TLS is prepared.
 	publicCert PublicCertManager
+	// passkeyChallenges holds issued WebAuthn challenges (ADR 0082), and
+	// passkeyRPFor replaces the RP check in tests, whose server has no TLS.
+	passkeyChallenges *passkey.Challenges
+	passkeyRPFor      func(*http.Request) (string, bool)
 	// presence is who is watching what, right now. In memory and never
 	// persisted, which is ADR 0045 §4 and not an optimisation.
 	presence *presence.Tracker
@@ -305,12 +310,13 @@ func New(d Deps) *Server {
 		retro: d.Retro, retroDB: d.RetroDB, retroSoon: d.RetroSoon, retroInstall: &retroJob{}, webCoreInstall: &webCoreJob{},
 		locations: d.Locations, placesSoon: d.PlacesSoon,
 		lanBound: d.LANBound, restartWidens: d.RestartWidens,
-		throttle:    auth.NewThrottle(),
-		accountWait: auth.NewAccountBackoff(),
-		crashes:     crashlog.New(d.DataDir, Version),
-		together:    together.New(),
-		prober:      probe.New(),
-		events:      events.New(0),
+		throttle:          auth.NewThrottle(),
+		accountWait:       auth.NewAccountBackoff(),
+		passkeyChallenges: passkey.NewChallenges(),
+		crashes:           crashlog.New(d.DataDir, Version),
+		together:          together.New(),
+		prober:            probe.New(),
+		events:            events.New(0),
 
 		peerKick:     make(chan string, 16),
 		presenceSeen: map[string]string{},
@@ -353,6 +359,13 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/auth/login", s.authLogin)
 	mux.HandleFunc("POST /api/auth/logout", s.authLogout)
 	mux.HandleFunc("POST /api/auth/password", s.authChangePassword)
+	mux.HandleFunc("POST /api/auth/passkey/login/options", s.passkeyLoginOptions)
+	mux.HandleFunc("POST /api/auth/passkey/login", s.passkeyLogin)
+	mux.HandleFunc("GET /api/profile/passkeys", s.listPasskeys)
+	mux.HandleFunc("POST /api/profile/passkeys/options", s.passkeyRegisterOptions)
+	mux.HandleFunc("POST /api/profile/passkeys", s.passkeyRegister)
+	mux.HandleFunc("PATCH /api/profile/passkeys/{id}", s.renamePasskey)
+	mux.HandleFunc("DELETE /api/profile/passkeys/{id}", s.deletePasskey)
 
 	// Filesystem enumeration is reconnaissance for library creation, so it is an
 	// admin-only power like library creation itself.

@@ -147,3 +147,36 @@
   font-size: 12px;
   word-break: break-all;
 }
+
+/* Passkey sign-in (ADR 0082). Below the password form, separated by a quiet
+   "or". The button is the same shape as Sign in and as quiet at rest; gold
+   still means only focus. */
+.auth__passkey {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.auth__or {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--text-faint);
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.auth__or::before,
+.auth__or::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: currentColor;
+  opacity: 0.35;
+}
+
+.auth__submit--secondary {
+  width: 100%;
+}

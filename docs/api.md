@@ -79,7 +79,8 @@ guarantee at no cost.
 ## Authentication
 
 Every endpoint requires a session cookie except `GET /api/health`,
-`GET /api/auth/status`, `POST /api/auth/setup`, `POST /api/auth/login`, and the
+`GET /api/auth/status`, `POST /api/auth/setup`, `POST /api/auth/login`,
+`POST /api/auth/passkey/login/options`, `POST /api/auth/passkey/login`, and the
 web assets. Unauthenticated calls return `401 unauthorized`.
 
 While no account exists the API is open — but the server binds `127.0.0.1`
@@ -99,7 +100,7 @@ the server still held its session.
 
 | Route | Purpose |
 |---|---|
-| `GET /api/auth/status` | `{configured, authenticated, lan_enabled, restart_required, can_convert, user?}`; `user` carries `sharing` |
+| `GET /api/auth/status` | `{configured, authenticated, lan_enabled, restart_required, can_convert, passkeys, user?}`; `user` carries `sharing`. `passkeys` is `{available, rp_id?}` for **this request** — see Passkeys |
 | `POST /api/auth/setup` | `{username, password, install_media_tools?}` → creates the first admin; only while unconfigured. Answers `media_tools_installing` |
 | `POST /api/auth/login` | `{username, password}` → session cookie. Throttled per IP, and per account from outside the local network — see below |
 
@@ -1615,6 +1616,64 @@ because it changes who can see something about a person.
 
 Turning it off is **retroactive**: past activity stops being visible along with
 future. A switch that cannot take back what it gave is not a switch.
+
+### Passkeys
+
+Passkeys ([ADR 0082](adr/0082-a-passkey-belongs-to-the-public-name.md)) are an
+alternative to the password, never a replacement for it.
+
+**They exist only at the server's public name.** A passkey is bound to a domain
+name, and browsers refuse WebAuthn on an untrusted certificate. A request may
+use passkeys when it arrived over TLS for the public certificate's hostname
+(see `GET /api/settings/public-certificate`) while that certificate is valid.
+`GET /api/auth/status` reports `passkeys: {available: true, rp_id}` exactly
+then, and `{available: false}` everywhere else: by IP, on `localhost`, or with
+no public certificate. Off the name, the ceremony routes below answer `409`.
+
+All binary values are **base64url without padding**. A client turns them into
+`ArrayBuffer`s for `navigator.credentials`, and turns the browser's buffers
+back into base64url to answer.
+
+**Signing in** (public; the passkey says whose it is):
+
+1. `POST /api/auth/passkey/login/options` → `{challenge_id, public_key}`.
+   `public_key` is the `PublicKeyCredentialRequestOptions`: `challenge`,
+   `rpId`, `timeout`, and `userVerification: "required"`. No credentials are
+   listed, so the response says nothing about any account. `429` when too many
+   sign-ins are in flight.
+2. `POST /api/auth/passkey/login` with `{challenge_id, id, client_data_json,
+   authenticator_data, signature, user_handle}`, from the
+   `PublicKeyCredential` the browser returned (`id` is the raw id). Answers
+   like `POST /api/auth/login`: a session cookie and
+   `{authenticated, user}`. Every refusal is `401` with one message; the
+   reason is logged. Throttled per address like password sign-in.
+
+**Adding a passkey** (signed in, at the public name):
+
+1. `POST /api/profile/passkeys/options` with `{current_password}` →
+   `{challenge_id, public_key}`, the `PublicKeyCredentialCreationOptions`.
+   Discoverable credential required, user verification required,
+   `attestation: "none"`, algorithms ES256, EdDSA and RS256, and the account's
+   existing passkeys in `excludeCredentials`. **The password is asked for**,
+   as changing it does, and the same throttles apply: an unattended session is
+   not enough to add a way in. A wrong password is `401`.
+2. `POST /api/profile/passkeys` with `{challenge_id, name, client_data_json,
+   attestation_object}` → `201` with the passkey. A challenge is single use,
+   lasts five minutes, and belongs to the account that asked for it. `409`
+   when that credential is already registered.
+
+**Managing:**
+
+| Route | Purpose |
+|---|---|
+| `GET /api/profile/passkeys` | `{passkeys: [{id, name, created_at, last_used_at?, synced, rp_id, usable}], available_here}`. Works on any connection, so passkeys can be seen and removed from anywhere. `usable` is false for a passkey made for an earlier public name |
+| `PATCH /api/profile/passkeys/{id}` | `{name}` → `204`. Names are trimmed, limited to 64 characters, and default to "Passkey" |
+| `DELETE /api/profile/passkeys/{id}` | `204`. No password is asked: removing a way in only makes the account harder to enter |
+
+All three are the caller's own. Another account's passkey is `404`, the same
+answer as one that does not exist. They are not available to API keys or remote
+guests. Adding, renaming and removing are audited. **Changing the password
+does not remove passkeys**, but it does end every session.
 
 ### `PUT /api/profile/avatar`
 

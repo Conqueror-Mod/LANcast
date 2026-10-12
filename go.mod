@@ -5,6 +5,7 @@ go 1.25.0
 require (
 	fyne.io/systray v1.12.2
 	github.com/bodgit/sevenzip v1.6.5
+	github.com/fxamacker/cbor/v2 v2.9.4
 	github.com/tetratelabs/wazero v1.12.0
 	github.com/yalue/onnxruntime_go v1.35.0
 	golang.org/x/crypto v0.54.0
@@ -29,6 +30,7 @@ require (
 	github.com/spf13/afero v1.15.0 // indirect
 	github.com/stangelandcl/ppmd v0.1.1 // indirect
 	github.com/ulikunitz/xz v0.5.15 // indirect
+	github.com/x448/float16 v0.8.4 // indirect
 	go4.org v0.0.0-20260112195520-a5071408f32f // indirect
 	golang.org/x/text v0.40.0 // indirect
 	modernc.org/libc v1.74.4 // indirect

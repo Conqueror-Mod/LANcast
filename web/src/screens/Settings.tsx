@@ -84,6 +84,7 @@ import { AuditLog } from "@/components/AuditLog";
 import { Review } from "./Review";
 import { UpdateSettings } from "@/components/UpdateSettings";
 import { PublicCertificateSettings } from "@/components/PublicCertificateSettings";
+import { PasskeySettings } from "@/components/PasskeySettings";
 import { DesktopSettings } from "@/components/DesktopSettings";
 import { GamesSettings } from "@/components/GamesSettings";
 import { ClientLog } from "@/components/ClientLog";
@@ -817,6 +818,8 @@ function AccountSection() {
       <HistoryReset />
 
       <APIKeysPanel />
+
+      <PasskeySettings />
 
       <span className="set-sublabel">Password</span>
       <form
