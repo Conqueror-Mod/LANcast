@@ -184,4 +184,61 @@ describe("a progress write at the end of an item", () => {
     // And nothing claimed the second episode was finished.
     expect(writes.some((w) => w.id === "102" && w.watched)).toBe(false);
   });
+
+  /*
+   * One step later, and still the same bug.
+   *
+   * The test above ends before the next source reports itself. In use it
+   * reports at once: the native player opens every file paused, so the next
+   * episode raises `loadedmetadata` and then `pause` before its first
+   * `timeupdate`. From `loadedmetadata` the clock is "this item's" again — but
+   * the position it holds is still the end of the episode before, because only
+   * a `timeupdate` replaces it. The pause forced a save of that position
+   * against the new episode, past every threshold, as watched.
+   *
+   * Seen in the viewing history: Lanterns 1x05 recorded as finished 26 seconds
+   * after 1x04 ended, and a Futurama episode the same way, each then unmarked
+   * by hand. A position is only written for the item it was read from.
+   */
+  it("does not write the last episode's ending onto the next one as it opens", async () => {
+    await mount();
+
+    await act(async () => pb.play(101, [101, 102]));
+    await settle();
+    const video = host.querySelector("video")!;
+    await act(async () => {
+      video.dispatchEvent(new Event("loadedmetadata"));
+    });
+    await settle();
+    await act(async () => reportPosition(DURATION_MS / 1000 - 0.4));
+    await settle();
+    await act(async () => {
+      video.dispatchEvent(new Event("ended"));
+    });
+    await settle();
+    expect(pb.itemID).toBe(102);
+
+    // The next episode's source reports itself, opens paused, and has not
+    // yet said where it is.
+    await act(async () => {
+      video.dispatchEvent(new Event("loadedmetadata"));
+    });
+    await settle();
+    await act(async () => {
+      video.dispatchEvent(new Event("pause"));
+    });
+    await settle();
+
+    expect(writes.filter((w) => w.id === "102")).toEqual([]);
+
+    // Once it does report, its own position is written as normal.
+    await act(async () => reportPosition(120));
+    await act(async () => {
+      video.dispatchEvent(new Event("pause"));
+    });
+    await settle();
+    expect(writes.filter((w) => w.id === "102")).toEqual([
+      { id: "102", positionMS: 120_000, watched: false },
+    ]);
+  });
 });

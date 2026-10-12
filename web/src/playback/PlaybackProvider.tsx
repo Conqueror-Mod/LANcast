@@ -944,6 +944,18 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
        * duplicate of one already made.
        */
       if (clockItem.current !== itemID) return;
+      /*
+       * And the position itself has to have been read from this item.
+       *
+       * The clock check above is not enough on its own: a new source becomes
+       * "this item's clock" at `loadedmetadata`, but the position only moves
+       * on its first `timeupdate`. The native player opens every file paused,
+       * so the next episode raised a pause in between, and that forced save
+       * wrote the end of the episode before onto it — as watched, 26 seconds
+       * into Lanterns 1x05. livePos carries the item each position was read
+       * from (queueAdvanceProgress.test.tsx).
+       */
+      if (livePos.current.id !== itemID) return;
       if (pos <= 0 || !itemID) return;
       /*
        * A position this early is not a bookmark, and writing one does damage.
