@@ -1,6 +1,5 @@
-import { useEffect, useRef } from "react";
+import { useEffect } from "react";
 import { useActivity, useCancelScans } from "@/api/hooks";
-import { usePlayback } from "@/playback/PlaybackProvider";
 
 declare global {
   interface Window {
@@ -26,6 +25,9 @@ declare global {
  * Renders nothing, and does nothing outside the desktop window: a browser
  * tab has no tray to talk to.
  */
+/** Raised on window when ✕ hides the desktop window into the tray. */
+export const WINDOW_HIDDEN = "lancast:window-hidden";
+
 export function TrayBridge() {
   const report = window.lancastTrayScanning;
   const { data } = useActivity();
@@ -46,28 +48,17 @@ export function TrayBridge() {
     return () => report(false);
   }, [report]);
 
-  /*
-   * ✕ hides the window, and a film does not play on in a hidden one.
-   *
-   * Reported as the window "not closing" while something played: the
-   * window went, and the film carried on, heard and not seen, with no
-   * window to stop it from. Stopping saves the place, so Continue picks
-   * it up. Music is different — listening with the window away is the
-   * point of a tray — and keeps playing.
-   */
-  const pb = usePlayback();
-  const playingRef = useRef(pb);
-  playingRef.current = pb;
-
   const mutate = cancel.mutate;
   useEffect(() => {
     if (!report) return;
     window.__lancastTray = (action: string) => {
       if (action === "cancel-scan") mutate();
-      if (action === "window-hidden") {
-        const now = playingRef.current;
-        if (now.itemID && !now.isAudio) now.stop();
-      }
+      /*
+       * ✕ hid the window. Passed on as an event rather than acted on here:
+       * the player decides what that means for what it is playing
+       * (PlaybackProvider), and this bridge stays usable on its own.
+       */
+      if (action === "window-hidden") window.dispatchEvent(new Event(WINDOW_HIDDEN));
     };
     return () => {
       delete window.__lancastTray;
