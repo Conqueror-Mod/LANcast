@@ -1,50 +1,193 @@
-/* Settings › About. No gold here: gold means where you are (docs/design.md),
-   and nothing on this pane is a place. */
-.about__head {
+/*
+ * Settings › About. Panels lit along the top edge (docs/design.md, Depth),
+ * tables for what is tabular, and no gold anywhere: gold means where you are,
+ * and nothing on this pane is a place.
+ */
+.about {
   display: flex;
-  align-items: baseline;
+  flex-direction: column;
+  gap: 28px;
+  max-width: 1100px;
+}
+
+.about__panel {
+  background: var(--surface-raised);
+  box-shadow: var(--elev-1);
+  border-radius: var(--radius-panel);
+  padding: 20px 22px;
+  min-width: 0;
+}
+
+.about__block {
+  display: flex;
+  flex-direction: column;
   gap: 12px;
-  flex-wrap: wrap;
-  margin-bottom: 8px;
+}
+
+/* The header: a mark, the name, one line. */
+.about__hero {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  box-shadow: var(--elev-2);
+}
+.about__mark {
+  flex-shrink: 0;
+  width: 56px;
+  height: 56px;
+  border-radius: 14px;
+  display: grid;
+  place-items: center;
+  font-size: 1.7rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  background: linear-gradient(145deg, rgba(120, 140, 255, 0.35), rgba(80, 40, 160, 0.35));
+  box-shadow: var(--rim-strong);
 }
 .about__name {
-  font-size: 1.4rem;
+  margin: 0;
+  font-size: 1.6rem;
   font-weight: 600;
   color: var(--text-primary);
 }
-.about__version {
-  color: var(--text-muted);
-}
-.about__line {
+.about__tagline {
+  margin: 4px 0 0;
   color: var(--text-secondary);
-  margin: 6px 0;
-  max-width: 70ch;
 }
-.about__muted {
+
+/* Facts: two columns, labels muted, values bright. */
+.about__facts {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 10px;
+}
+.about__facts th,
+.about__facts td {
+  text-align: left;
+  padding: 9px 0;
+  border-bottom: 1px solid rgba(190, 208, 255, 0.07);
+  vertical-align: top;
+}
+.about__facts tr:last-child th,
+.about__facts tr:last-child td {
+  border-bottom: none;
+}
+.about__facts th {
+  width: 9.5rem;
+  font-weight: 500;
   color: var(--text-muted);
+  padding-right: 16px;
 }
+.about__facts td {
+  color: var(--text-primary);
+  overflow-wrap: anywhere;
+}
+.about__facts a {
+  color: var(--text-primary);
+}
+.about__chip {
+  display: inline-block;
+  margin-left: 10px;
+  padding: 1px 8px;
+  border-radius: 999px;
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+  background: rgba(190, 208, 255, 0.08);
+}
+
+/* Release notes and component groups as cards in a grid. */
+.about__cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 16px;
+  align-items: start;
+}
+.about__cards--wide {
+  grid-template-columns: repeat(auto-fit, minmax(380px, 1fr));
+}
+@media (max-width: 520px) {
+  .about__cards,
+  .about__cards--wide {
+    grid-template-columns: 1fr;
+  }
+  .about__panel {
+    padding: 16px;
+  }
+  .about__facts th {
+    width: 7rem;
+  }
+}
+.about__card-title {
+  margin: 0 0 10px;
+  font-size: 1.02rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
 .about__notes {
   color: var(--text-secondary);
-  max-width: 75ch;
-}
-.about__notes h4 {
-  color: var(--text-primary);
-  margin: 18px 0 6px;
-  font-size: 1rem;
-}
-.about__notes h4:first-child {
-  margin-top: 0;
+  line-height: 1.5;
 }
 .about__notes ul {
-  margin: 4px 0 8px;
-  padding-left: 1.2em;
+  margin: 0;
+  padding-left: 1.1em;
 }
 .about__notes li {
-  margin: 3px 0;
+  margin: 0 0 8px;
+}
+.about__notes li li {
+  margin: 4px 0;
+}
+.about__notes p {
+  margin: 0 0 8px;
+}
+.about__notes strong {
+  color: var(--text-primary);
 }
 .about__notes code,
 .about__notice pre {
   font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
+}
+.about__notes code {
+  font-size: 0.9em;
+  padding: 0 4px;
+  border-radius: 4px;
+  background: rgba(190, 208, 255, 0.08);
+}
+
+.about__components {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+}
+.about__components th {
+  text-align: left;
+  font-weight: 500;
+  font-size: 0.72rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  padding: 0 0 8px;
+}
+.about__components td {
+  padding: 7px 12px 7px 0;
+  border-top: 1px solid rgba(190, 208, 255, 0.07);
+  vertical-align: top;
+  color: var(--text-secondary);
+  overflow-wrap: anywhere;
+}
+.about__components td:first-child {
+  color: var(--text-primary);
+  width: 45%;
+}
+.about__note {
+  margin-top: 3px;
+  font-size: 0.8rem;
+  color: var(--text-faint);
+}
+
+.about__muted {
+  color: var(--text-muted);
 }
 .about__notice summary {
   cursor: pointer;
@@ -54,8 +197,31 @@
   white-space: pre-wrap;
   overflow-wrap: anywhere;
   color: var(--text-muted);
-  font-size: 0.82rem;
+  font-size: 0.8rem;
   max-height: 50vh;
   overflow: auto;
   margin-top: 10px;
+}
+
+/*
+ * The release-notes cards flow in columns rather than sitting on a grid.
+ * Sections differ a lot in length, and a grid row is as tall as its tallest
+ * card, which left a hole beside a short one.
+ */
+.about__cards--flow {
+  display: block;
+  columns: 3 300px;
+  column-gap: 16px;
+}
+.about__cards--flow > * {
+  break-inside: avoid;
+  display: block;
+  margin-bottom: 16px;
+}
+@media (max-width: 700px) {
+  /* One column on a phone: three columns of at least 300px do not fit, and
+     overflowing pushed the whole pane past the right edge. */
+  .about__cards--flow {
+    columns: 1;
+  }
 }
