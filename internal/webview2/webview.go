@@ -258,6 +258,7 @@ func (w *webview) callbinding(d rpcMessage) (interface{}, error) {
 
 func wndproc(hwnd, msg, wp, lp uintptr) uintptr {
 	if w, ok := getWindowContext(hwnd).(*webview); ok {
+		w.traceClose(msg, wp)
 		if r, done := w.overlayMessage(msg, wp, lp); done {
 			return r
 		}

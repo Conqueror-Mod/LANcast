@@ -721,6 +721,7 @@ func (w *webview) overlayMessage(msg, wp, lp uintptr) (uintptr, bool) {
 // activateOverlay gives the overlay activation and the page the keyboard,
 // keeping the frame drawn active across the change.
 func (w *webview) activateOverlay() {
+	traceHandOff("main window")
 	w.handingOff = true
 	_, _, _ = procSetActiveWindow.Call(w.overlay)
 	w.handingOff = false
