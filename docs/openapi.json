@@ -2831,6 +2831,34 @@
         }
       }
     },
+    "/libraries/scan/cancel": {
+      "post": {
+        "operationId": "cancelScans",
+        "tags": [
+          "libraries"
+        ],
+        "summary": "Stop every running scan",
+        "description": "Administrators only. Always `200`. A cancelled scan keeps what it found and marks nothing it had not reached as missing: the walk stops before the interrupted location's reconciliation. It never empties the trash.",
+        "responses": {
+          "200": {
+            "description": "The libraries stopped.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScanCancelled"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          }
+        }
+      }
+    },
     "/libraries/{id}/scan": {
       "parameters": [
         {
@@ -13741,7 +13769,7 @@
           },
           "state": {
             "type": "string",
-            "description": "`idle`, `running` or `failed`. **There is no `complete`** — a finished scan is `idle` with `finished_at` set."
+            "description": "`idle`, `running`, `failed` or `cancelled`. **There is no `complete`** — a finished scan is `idle` with `finished_at` set. A `cancelled` scan kept what it found and marked nothing it had not reached as missing."
           },
           "files_seen": {
             "type": "integer"
@@ -18324,6 +18352,22 @@
         "properties": {
           "name": {
             "type": "string"
+          }
+        }
+      },
+      "ScanCancelled": {
+        "type": "object",
+        "required": [
+          "cancelled"
+        ],
+        "properties": {
+          "cancelled": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "format": "int64"
+            },
+            "description": "The libraries whose scans were stopped. Empty when nothing was running."
           }
         }
       }

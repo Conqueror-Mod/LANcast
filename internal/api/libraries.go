@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"lancast/internal/scan"
@@ -321,6 +322,28 @@ func (s *Server) scanAll(w http.ResponseWriter, r *http.Request) {
 		"started": started,
 		"busy":    busy,
 	})
+}
+
+/*
+ * cancelScans stops every running scan (the tray's "Cancel library update",
+ * ADR 0080).
+ *
+ * A cancelled scan keeps what it found and marks nothing it had not reached
+ * as missing: the walk stops inside the location it was in, before that
+ * location's reconciliation (scan.Scanner.Cancel). The answer lists the
+ * libraries it stopped; an empty list is not an error — nothing was running,
+ * which is what somebody pressing Cancel late wanted anyway.
+ */
+func (s *Server) cancelScans(w http.ResponseWriter, r *http.Request) {
+	ids := s.scanner.CancelAll()
+	sort.Slice(ids, func(i, j int) bool { return ids[i] < ids[j] })
+	if len(ids) > 0 {
+		s.audit(r, "library.scan_cancel", "library", "",
+			fmt.Sprintf("Cancelled %d running scan%s", len(ids),
+				map[bool]string{true: "", false: "s"}[len(ids) == 1]),
+			map[string]any{"cancelled": ids})
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"cancelled": ids})
 }
 
 func (s *Server) scanStatus(w http.ResponseWriter, r *http.Request) {

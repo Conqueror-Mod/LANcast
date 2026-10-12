@@ -3,6 +3,7 @@ package scan
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io/fs"
 	"log/slog"
@@ -25,6 +26,10 @@ const (
 	StateIdle    State = "idle"
 	StateRunning State = "running"
 	StateFailed  State = "failed"
+	// StateCancelled is a scan somebody stopped. Like a failure it says
+	// nothing about what is missing: the walk stopped before reconciling the
+	// location it was in, so nothing it had not reached was marked missing.
+	StateCancelled State = "cancelled"
 )
 
 // Progress is a snapshot of a scan, safe to serialize.
@@ -199,6 +204,12 @@ type Scanner struct {
 	 * delete, which is the safe direction for a switch about destroying rows.
 	 */
 	emptyTrash func() bool
+
+	// cancel stops a running scan, by library (Cancel).
+	cancel map[int64]context.CancelFunc
+	// afterFile, when set by a test, runs after each file the walk handles,
+	// so a cancel can be landed at an exact point mid-walk.
+	afterFile func(libraryID int64)
 }
 
 func New(st *store.Store, log *slog.Logger) *Scanner {
@@ -207,7 +218,41 @@ func New(st *store.Store, log *slog.Logger) *Scanner {
 		log:     log,
 		running: map[int64]bool{},
 		last:    map[int64]*Progress{},
+		cancel:  map[int64]context.CancelFunc{},
 	}
+}
+
+/*
+ * Cancel stops a running scan of one library, and reports whether there was
+ * one to stop.
+ *
+ * What a cancelled scan has done stays done: files already found are in the
+ * library, and a location the walk finished before the cancel was reconciled
+ * as normal. What it had not reached is untouched. The walk stops inside the
+ * location it was in and returns before that location's reconciliation, so
+ * nothing unseen is marked missing — the rule that a scan never mistakes
+ * "not looked at yet" for "gone" (CLAUDE.md, #228).
+ */
+func (s *Scanner) Cancel(libraryID int64) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	stop, ok := s.cancel[libraryID]
+	if ok {
+		stop()
+	}
+	return ok
+}
+
+// CancelAll stops every running scan and returns the libraries it stopped.
+func (s *Scanner) CancelAll() []int64 {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	ids := make([]int64, 0, len(s.cancel))
+	for id, stop := range s.cancel {
+		stop()
+		ids = append(ids, id)
+	}
+	return ids
 }
 
 /*
@@ -265,18 +310,28 @@ func (s *Scanner) Start(lib store.Library) (Progress, error) {
 		started:   now,
 	}
 	s.last[lib.ID] = p
+	// Detached from any request context: a scan must outlive the HTTP call
+	// that triggered it. Cancellable by Cancel, and by nothing else.
+	walkCtx, stop := context.WithCancel(context.Background())
+	s.cancel[lib.ID] = stop
 	s.mu.Unlock()
 
-	go s.run(lib, p)
+	go s.run(walkCtx, lib, p)
 	return *p, nil
 }
 
-func (s *Scanner) run(lib store.Library, p *Progress) {
-	// Detached from any request context: a scan must outlive the HTTP call
-	// that triggered it.
+func (s *Scanner) run(walkCtx context.Context, lib store.Library, p *Progress) {
+	err := s.walk(walkCtx, lib, p)
+	/*
+	 * Everything after the walk runs on its own context.
+	 *
+	 * A cancel is a request to stop walking. One that lands after the walk has
+	 * finished cleanly must not then fail the sensitivity refresh or the shape
+	 * check halfway through: those belong to a scan that completed, and leaving
+	 * them half-done would make the cancel worse than not cancelling.
+	 */
 	ctx := context.Background()
-
-	err := s.walk(ctx, lib, p)
+	cancelled := errors.Is(err, context.Canceled)
 
 	s.mu.Lock()
 	end := time.Now()
@@ -307,7 +362,12 @@ func (s *Scanner) run(lib store.Library, p *Progress) {
 	 * on a desk, which is the shape of a race that needs a slow machine.
 	 */
 	finalState := StateIdle
-	if err != nil {
+	if cancelled {
+		finalState = StateCancelled
+		p.Error = "cancelled"
+		s.log.Info("scan cancelled", "library", lib.ID, "elapsed_ms", elapsed,
+			"seen", p.FilesSeen, "changed", p.ItemsChanged)
+	} else if err != nil {
 		finalState = StateFailed
 		p.Error = err.Error()
 		s.log.Error("scan failed", "library", lib.ID, "elapsed_ms", elapsed, "error", err)
@@ -416,6 +476,10 @@ func (s *Scanner) run(lib store.Library, p *Progress) {
 	s.mu.Lock()
 	p.State = finalState
 	delete(s.running, lib.ID)
+	if stop, ok := s.cancel[lib.ID]; ok {
+		stop() // releases the context's resources; the walk is over either way
+		delete(s.cancel, lib.ID)
+	}
 	done := s.onFinish
 	s.mu.Unlock()
 
@@ -642,6 +706,20 @@ func (s *Scanner) walkRoot(ctx context.Context, lib store.Library, root store.Li
 	}
 
 	err = filepath.WalkDir(root.Path, func(path string, d fs.DirEntry, err error) error {
+		/*
+		 * A cancelled scan stops here, on the next entry, and the error it
+		 * returns ends this location before its reconciliation below.
+		 *
+		 * That is the first of two guards, and the second is deliberate: the
+		 * reconciliation writes with this same context, so even if a later
+		 * change let a cancelled walk fall through to it, the write would fail
+		 * on the cancelled context and mark nothing. Measured: with both
+		 * removed, cancelling three files into a twenty-film library marked
+		 * seventeen of them missing. Keep MarkMissing on the walk's context.
+		 */
+		if cerr := ctx.Err(); cerr != nil {
+			return cerr
+		}
 		if err != nil {
 			// A single unreadable directory shouldn't abort the whole scan.
 			s.log.Warn("skipping unreadable path", "path", path, "error", err)
@@ -653,6 +731,9 @@ func (s *Scanner) walkRoot(ctx context.Context, lib store.Library, root store.Li
 		}
 		if d.IsDir() {
 			return nil
+		}
+		if s.afterFile != nil {
+			defer s.afterFile(lib.ID)
 		}
 		// Playlists are not media and never become items on this pass — they are
 		// collected here and imported after the tracks exist, because an import

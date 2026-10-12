@@ -1016,6 +1016,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/libraries/scan/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Stop every running scan
+         * @description Administrators only. Always `200`. A cancelled scan keeps what it found and marks nothing it had not reached as missing: the walk stops before the interrupted location's reconciliation. It never empties the trash.
+         */
+        post: operations["cancelScans"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/libraries/{id}/scan": {
         parameters: {
             query?: never;
@@ -5968,7 +5988,7 @@ export interface components {
         ScanStatus: {
             /** Format: int64 */
             library_id: number;
-            /** @description `idle`, `running` or `failed`. **There is no `complete`** — a finished scan is `idle` with `finished_at` set. */
+            /** @description `idle`, `running`, `failed` or `cancelled`. **There is no `complete`** — a finished scan is `idle` with `finished_at` set. A `cancelled` scan kept what it found and marked nothing it had not reached as missing. */
             state: string;
             files_seen: number;
             items_changed: number;
@@ -7739,6 +7759,10 @@ export interface components {
         };
         PasskeyRenameRequest: {
             name: string;
+        };
+        ScanCancelled: {
+            /** @description The libraries whose scans were stopped. Empty when nothing was running. */
+            cancelled: number[];
         };
     };
     responses: {
@@ -9930,6 +9954,28 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ScanAllResult"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    cancelScans: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The libraries stopped. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ScanCancelled"];
                 };
             };
             401: components["responses"]["Unauthorized"];

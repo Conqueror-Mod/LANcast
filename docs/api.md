@@ -884,6 +884,27 @@ libraries did what.
 A library is also scanned automatically when it is created, so this is for
 "check everything for new media" rather than for setup.
 
+
+### `POST /api/libraries/scan/cancel`
+
+Stops every running scan. Admin only. Always `200`:
+
+```json
+{ "cancelled": [ 1, 3 ] }
+```
+
+An empty list means nothing was running, which is not an error: a Cancel
+pressed a moment after a scan finished wanted exactly that.
+
+**A cancelled scan keeps what it found and marks nothing it had not reached as
+missing.** The walk stops inside the location it was in and returns before that
+location's reconciliation, so a file it never looked at is never mistaken for
+one that is gone. A location the walk had *finished* before the cancel was
+reconciled as normal. The scan's `state` becomes `cancelled`, which, like
+`failed`, is no evidence about what is missing: it never empties the trash, and
+it does not appear in Activity, because nothing needs attention. Somebody chose
+it.
+
 ### `POST /api/libraries/{id}/scan`
 
 Starts an asynchronous scan and returns `202` immediately.
