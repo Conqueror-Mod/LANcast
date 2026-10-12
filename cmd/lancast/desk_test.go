@@ -12,7 +12,7 @@ import (
 type fakeWindow struct {
 	clientwindow.Controller
 	shown, hidden, closed int
-	navigated           []string
+	navigated             []string
 }
 
 func (f *fakeWindow) Show()               { f.shown++ }
