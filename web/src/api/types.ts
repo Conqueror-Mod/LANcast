@@ -154,6 +154,9 @@ export type AuthUser = components["schemas"]["User"];
 
 // GET /api/auth/status. `user` is present only when a session is active.
 export type AuthStatus = components["schemas"]["AuthStatus"];
+// Passkeys (ADR 0082).
+export type Passkey = components["schemas"]["Passkey"];
+export type PasskeyList = components["schemas"]["PasskeyList"];
 
 // Background probing progress. `available` is false when ffprobe is not
 // installed, which is a supported configuration rather than an error.

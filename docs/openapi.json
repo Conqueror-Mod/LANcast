@@ -375,6 +375,108 @@
         }
       }
     },
+    "/auth/passkey/login/options": {
+      "post": {
+        "operationId": "passkeyLoginOptions",
+        "tags": [
+          "auth"
+        ],
+        "summary": "Start signing in with a passkey",
+        "description": "Public. Lists no credentials: discoverable passkeys say whose they are (ADR 0082).",
+        "responses": {
+          "200": {
+            "description": "WebAuthn request options.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PasskeyOptions"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Not at the server's public name over HTTPS, where passkeys cannot work.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too many sign-ins in flight.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        },
+        "security": []
+      }
+    },
+    "/auth/passkey/login": {
+      "post": {
+        "operationId": "passkeyLogin",
+        "tags": [
+          "auth"
+        ],
+        "summary": "Finish signing in with a passkey",
+        "description": "Public. Issues an ordinary session, like password sign-in. Every refusal is one 401; the reason is logged. Throttled per address.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PasskeyLoginRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Signed in. The session cookie is set on this response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LoginResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "409": {
+            "description": "Not at the server's public name over HTTPS, where passkeys cannot work.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Throttled.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        },
+        "security": []
+      }
+    },
     "/identity": {
       "get": {
         "operationId": "getIdentity",
@@ -2146,6 +2248,196 @@
                 }
               }
             }
+          }
+        }
+      }
+    },
+    "/profile/passkeys": {
+      "get": {
+        "operationId": "listPasskeys",
+        "tags": [
+          "profile"
+        ],
+        "summary": "Your passkeys",
+        "description": "The caller's own. Works on any connection, so passkeys can be removed from anywhere.",
+        "responses": {
+          "200": {
+            "description": "The caller's passkeys.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PasskeyList"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      },
+      "post": {
+        "operationId": "addPasskey",
+        "tags": [
+          "profile"
+        ],
+        "summary": "Finish adding a passkey",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PasskeyRegisterRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "The new passkey.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Passkey"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "409": {
+            "description": "Not at the public name, or that credential is already registered.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/profile/passkeys/options": {
+      "post": {
+        "operationId": "passkeyRegisterOptions",
+        "tags": [
+          "profile"
+        ],
+        "summary": "Start adding a passkey",
+        "description": "Asks for the current password, as changing it does, with the same throttles.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PasskeyRegisterOptionsRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "WebAuthn creation options.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PasskeyOptions"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "409": {
+            "description": "Not at the server's public name over HTTPS, where passkeys cannot work.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Throttled.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/profile/passkeys/{id}": {
+      "parameters": [
+        {
+          "name": "id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string"
+          }
+        }
+      ],
+      "patch": {
+        "operationId": "renamePasskey",
+        "tags": [
+          "profile"
+        ],
+        "summary": "Rename one of your passkeys",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PasskeyRenameRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": "Renamed."
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      },
+      "delete": {
+        "operationId": "deletePasskey",
+        "tags": [
+          "profile"
+        ],
+        "summary": "Remove one of your passkeys",
+        "description": "No password is asked: removing a way in only makes the account harder to enter.",
+        "responses": {
+          "204": {
+            "description": "Removed."
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
           }
         }
       }
@@ -11669,6 +11961,9 @@
           "user": {
             "$ref": "#/components/schemas/User",
             "description": "Present only when a session is active."
+          },
+          "passkeys": {
+            "$ref": "#/components/schemas/PasskeyAvailability"
           }
         }
       },
@@ -17861,6 +18156,174 @@
           "agree_terms": {
             "type": "boolean",
             "description": "Must be true to enable, unless already agreed for the same CA."
+          }
+        }
+      },
+      "PasskeyAvailability": {
+        "type": "object",
+        "required": [
+          "available"
+        ],
+        "description": "Whether passkeys work on this very request: only over TLS at the public certificate's hostname while it is valid (ADR 0082).",
+        "properties": {
+          "available": {
+            "type": "boolean"
+          },
+          "rp_id": {
+            "type": "string",
+            "description": "The public name passkeys are bound to. Present only when available."
+          }
+        }
+      },
+      "PasskeyOptions": {
+        "type": "object",
+        "required": [
+          "challenge_id",
+          "public_key"
+        ],
+        "properties": {
+          "challenge_id": {
+            "type": "string",
+            "description": "Sent back with the answer. Single use, five minutes."
+          },
+          "public_key": {
+            "type": "object",
+            "additionalProperties": true,
+            "description": "The WebAuthn options for navigator.credentials, with every binary value in base64url without padding."
+          }
+        }
+      },
+      "PasskeyLoginRequest": {
+        "type": "object",
+        "required": [
+          "challenge_id",
+          "id",
+          "client_data_json",
+          "authenticator_data",
+          "signature",
+          "user_handle"
+        ],
+        "properties": {
+          "challenge_id": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "client_data_json": {
+            "type": "string"
+          },
+          "authenticator_data": {
+            "type": "string"
+          },
+          "signature": {
+            "type": "string"
+          },
+          "user_handle": {
+            "type": "string"
+          }
+        }
+      },
+      "PasskeyRegisterOptionsRequest": {
+        "type": "object",
+        "required": [
+          "current_password"
+        ],
+        "properties": {
+          "current_password": {
+            "type": "string"
+          }
+        }
+      },
+      "PasskeyRegisterRequest": {
+        "type": "object",
+        "required": [
+          "challenge_id",
+          "client_data_json",
+          "attestation_object"
+        ],
+        "properties": {
+          "challenge_id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string",
+            "description": "Trimmed, at most 64 characters; empty becomes \"Passkey\"."
+          },
+          "client_data_json": {
+            "type": "string"
+          },
+          "attestation_object": {
+            "type": "string"
+          }
+        }
+      },
+      "Passkey": {
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "created_at",
+          "synced",
+          "rp_id",
+          "usable"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "last_used_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "synced": {
+            "type": "boolean",
+            "description": "The authenticator reported the passkey as backed up (synced to other devices)."
+          },
+          "rp_id": {
+            "type": "string",
+            "description": "The public name it was made for."
+          },
+          "usable": {
+            "type": "boolean",
+            "description": "False for a passkey made for an earlier public name; it cannot sign in here and can only be removed."
+          }
+        }
+      },
+      "PasskeyList": {
+        "type": "object",
+        "required": [
+          "passkeys",
+          "available_here"
+        ],
+        "properties": {
+          "passkeys": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Passkey"
+            }
+          },
+          "available_here": {
+            "type": "boolean",
+            "description": "Whether a passkey could be added or used on this connection."
+          }
+        }
+      },
+      "PasskeyRenameRequest": {
+        "type": "object",
+        "required": [
+          "name"
+        ],
+        "properties": {
+          "name": {
+            "type": "string"
           }
         }
       }

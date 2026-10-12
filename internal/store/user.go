@@ -257,6 +257,12 @@ func (s *Store) DeleteUser(ctx context.Context, id string) error {
 	if _, err := tx.ExecContext(ctx, `DELETE FROM viewing WHERE user_id = ?`, id); err != nil {
 		return fmt.Errorf("delete user viewings: %w", err)
 	}
+	// Passkeys (ADR 0082). Left behind they would be credentials nobody can
+	// list or remove, and a sign-in with one already fails (the lookup joins
+	// user), so they would only ever be clutter that looks like access.
+	if _, err := tx.ExecContext(ctx, `DELETE FROM passkey WHERE user_id = ?`, id); err != nil {
+		return fmt.Errorf("delete user passkeys: %w", err)
+	}
 	res, err := tx.ExecContext(ctx, `DELETE FROM user WHERE id = ?`, id)
 	if err != nil {
 		return fmt.Errorf("delete user: %w", err)

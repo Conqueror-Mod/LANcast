@@ -36,7 +36,9 @@ const (
 // public so a monitor does not need credentials.
 func isPublicPath(p string) bool {
 	switch p {
-	case "/api/health", "/api/auth/status", "/api/auth/login", "/api/auth/setup":
+	case "/api/health", "/api/auth/status", "/api/auth/login", "/api/auth/setup",
+		// Passkey sign-in (ADR 0082): whoever is signing in has no session yet.
+		"/api/auth/passkey/login/options", "/api/auth/passkey/login":
 		return true
 	}
 	if isFederationPath(p) {
@@ -439,6 +441,17 @@ func (s *Server) authStatus(w http.ResponseWriter, r *http.Request) {
 		 * whoever runs this to install ffmpeg".
 		 */
 		"can_convert": s.trans.Available(),
+	}
+	/*
+	 * Whether passkeys work on this very request (ADR 0082). Reported to
+	 * everybody, signed in or not, because the sign-in screen is what needs
+	 * it: only at the public name, over its trusted certificate, can a
+	 * browser use a passkey, and the button should exist exactly there.
+	 */
+	if rp, ok := s.passkeyRP(r); ok {
+		resp["passkeys"] = map[string]any{"available": true, "rp_id": rp}
+	} else {
+		resp["passkeys"] = map[string]any{"available": false}
 	}
 	if sess, ok := s.session(r); ok {
 		s.keepCookie(w, r)
