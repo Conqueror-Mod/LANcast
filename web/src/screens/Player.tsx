@@ -1,3 +1,4 @@
+import { WINDOW_HIDDEN } from "@/components/TrayBridge";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   useLocation,
@@ -249,6 +250,22 @@ export function Player() {
     pb.stop();
     navigate(-1);
   }, [pb, navigate]);
+  /*
+   * ✕ during a film: the player stops it (PlaybackProvider), and this screen
+   * leaves with it, as Stop does. Reported after the close fix: reopening
+   * from the tray came back to this screen with nothing behind it — black,
+   * 0:00 / 0:00 — because the film had stopped and the route had not moved.
+   * Music keeps playing with the window away, so its screen stays.
+   */
+  const leavingRef = useRef({ audio: pb.isAudio, navigate });
+  leavingRef.current = { audio: pb.isAudio, navigate };
+  useEffect(() => {
+    const onHidden = () => {
+      if (!leavingRef.current.audio) leavingRef.current.navigate(-1);
+    };
+    window.addEventListener(WINDOW_HIDDEN, onHidden);
+    return () => window.removeEventListener(WINDOW_HIDDEN, onHidden);
+  }, []);
   useSuspendFocus();
   /*
    * Escape is Back, and Back leaves fullscreen before it leaves the player.

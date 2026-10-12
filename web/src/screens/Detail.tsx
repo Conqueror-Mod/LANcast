@@ -21,6 +21,7 @@ import {
   fetchShowContinue,
   useShowStanding,
   useSetWatchedByID,
+  useContinueWatching,
 } from "@/api/hooks";
 import { resumeSeconds } from "@/playback/resumePoint";
 import { playAllLabel } from "@/lib/playAll";
@@ -457,6 +458,8 @@ export function Detail() {
    * only once the item has loaded is the hook-count crash this page already
    * had once.
    */
+  const forgetPlace = useSetWatchedByID();
+  const { data: onTheShelf } = useContinueWatching();
   const { data: standing } = useShowStanding(
     itemID,
     item?.kind === "show" || item?.kind === "season" || item?.kind === "collection",
@@ -960,13 +963,40 @@ export function Detail() {
                       label="Play from start"
                       className="detail__play detail__play--secondary"
                       onPress={() =>
-                        navigate(`/watch/${item.id}`, { state: { fromStart: true } })
+                        /*
+                         * Forget the saved place first, as the tile menu's
+                         * Play from start does (itemActions). The player
+                         * starts at the top either way, but writes nothing
+                         * for its first stretch, so without this the server
+                         * kept the old position: back out to Home and
+                         * Continue Watching still showed where it had been.
+                         */
+                        void forgetPlace
+                          .mutateAsync({ itemID: item.id, watched: false })
+                          .catch(() => {})
+                          .finally(() =>
+                            navigate(`/watch/${item.id}`, { state: { fromStart: true } }),
+                          )
                       }
                     />
                   </>
                 ) : (
                   <PlayButton onPlay={() => navigate(`/watch/${item.id}`)} />
                 ))}
+              {/*
+               * Taking a title off Continue Watching from its own page.
+               *
+               * Reported after 0.9.80: a collection's next film appears on the
+               * shelf and in the spotlight unasked, and its page had no way to
+               * say no. The same write the shelf's menu makes: forget the
+               * place, claim nothing about whether it was seen.
+               */}
+              {!container && (onTheShelf ?? []).some((i) => i.id === item.id) && (
+                <SecondaryButton
+                  label={isMusic ? "Remove from Continue Listening" : "Remove from Continue Watching"}
+                  onPress={() => forgetPlace.mutate({ itemID: item.id, watched: false })}
+                />
+              )}
               {/*
                * A season leads with Continue, matching the show page so the
                * two do not disagree about what a season offers. It asks the

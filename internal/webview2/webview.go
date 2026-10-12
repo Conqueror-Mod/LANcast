@@ -82,6 +82,10 @@ type webview struct {
 	// handingOff is set while this package moves activation to the overlay,
 	// so the frame is not drawn inactive for the instant between (overlay.go).
 	handingOff bool
+	// framePress is set by a mouse press on the main window's frame (its
+	// title bar, buttons or borders) while the page is in the overlay, and
+	// read by the activation that press causes. See overlayMessage.
+	framePress bool
 }
 
 type WindowOptions struct {

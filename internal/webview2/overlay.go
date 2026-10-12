@@ -124,6 +124,7 @@ const (
 	wmTimer                 = 0x0113
 	waClickActive           = 2
 	maNoActivate            = 3
+	htClient                = 1
 	wsPopup                 = 0x80000000
 	wsExToolWindow          = 0x00000080
 	wsExNoActivate          = 0x08000000
@@ -691,24 +692,43 @@ func (w *webview) overlayMessage(msg, wp, lp uintptr) (uintptr, bool) {
 			_, _, _ = w32.User32ShowWindow.Call(w.overlay, swShowNA)
 		}
 		w.syncVideo()
+	case wmMouseActivate:
+		/*
+		 * A press on the frame, noted before the activation it causes.
+		 *
+		 * The case below used to trust WA_CLICKACTIVE to say a click caused
+		 * the activation, and Windows does not always say so. Traced on
+		 * 2026-10-12 with a film playing full and another application in
+		 * the foreground: the press on ✕ arrived as WM_MOUSEACTIVATE on the
+		 * close button, then WM_ACTIVATE with WA_ACTIVE, so activation was
+		 * handed straight back to the overlay in the middle of the press.
+		 * That cancelled it: the main window got a button-up on ✕ and never
+		 * the button-down, so the close button did nothing while a film was
+		 * up, and worked once the film was docked (no overlay). The hit
+		 * code here is the reliable signal, so it is what decides.
+		 */
+		w.framePress = w.overlay != 0 && lp&0xFFFF != htClient
+		return 0, false
 	case w32.WMActivate:
 		if w.overlay == 0 {
 			break
 		}
+		press := w.framePress
+		w.framePress = false
 		// The low word is the state; the high word says whether it is minimised.
-		switch wp & 0xffff {
-		case w32.WAInactive:
+		switch activationHandOff(wp&0xffff, press) {
+		case handOffNone:
 			// The overlay taking over is not this window going to the
 			// background; any other window taking over is.
 			if w.ours(lp) {
 				w.drawCaption(true)
 			}
-		case waClickActive:
-			// A click on the frame. Handing activation away now is what
-			// swallowed the caption buttons; hand it over once the click ends.
+		case handOffAfterPress:
+			// A press on the frame. Handing activation away now is what
+			// swallowed the caption buttons; hand it over once it ends.
 			_, _, _ = procSetTimer.Call(w.hwnd, refocusTimer, refocusInterval, 0)
 			return 0, true
-		default:
+		case handOffNow:
 			// Alt-Tab and taskbar clicks land here, on the main window; the
 			// keyboard belongs to the page in the overlay.
 			w.activateOverlay()
@@ -716,6 +736,32 @@ func (w *webview) overlayMessage(msg, wp, lp uintptr) (uintptr, bool) {
 		}
 	}
 	return 0, false
+}
+
+type handOff int
+
+const (
+	handOffNone       handOff = iota // this window is going inactive
+	handOffNow                       // give the overlay activation at once
+	handOffAfterPress                // once the press on the frame is over
+)
+
+/*
+ * activationHandOff decides when the main window passes activation to the
+ * page overlay, from the activation state and whether a press on the frame
+ * caused it. The press decides, not the state: Windows reported a press on ✕
+ * as WA_ACTIVE rather than WA_CLICKACTIVE, and handing over at once cancelled
+ * the press (see the WM_MOUSEACTIVATE case).
+ */
+func activationHandOff(state uintptr, framePress bool) handOff {
+	switch {
+	case state == w32.WAInactive:
+		return handOffNone
+	case framePress || state == waClickActive:
+		return handOffAfterPress
+	default:
+		return handOffNow
+	}
 }
 
 // activateOverlay gives the overlay activation and the page the keyboard,
