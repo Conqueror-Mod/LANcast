@@ -37,6 +37,11 @@ type desk struct {
 	openReq  chan struct{}
 	exitReq  chan struct{}
 	exitOnce sync.Once
+
+	// onScanning, set by the tray, enables or greys its Cancel item. The page
+	// is the only thing that knows whether a scan is running, so it reports
+	// through a binding (trayBindings) and this passes it on.
+	onScanning func(bool)
 }
 
 func newDesk(base string, browser bool) *desk {
@@ -83,6 +88,41 @@ func (d *desk) open(url string) {
 		case d.openReq <- struct{}{}:
 		default: // already asked; one window is enough
 		}
+	}
+}
+
+// setScanning is the page telling the tray whether a scan is running.
+func (d *desk) setScanning(on bool) {
+	d.mu.Lock()
+	fn := d.onScanning
+	d.mu.Unlock()
+	if fn != nil {
+		fn(on)
+	}
+}
+
+/*
+ * cancelScan asks the page to stop every running scan.
+ *
+ * Without showing the window: the Cancel item is only enabled while the page
+ * has reported a scan, so the page exists and is signed in, and it can make
+ * the call itself (ADR 0080 §3) — no window needs to come forward to cancel
+ * something. A fixed action name is the whole message; the page owns what it
+ * means.
+ */
+func (d *desk) cancelScan() {
+	d.mu.Lock()
+	w := d.win
+	d.mu.Unlock()
+	if w != nil {
+		w.Eval(`window.__lancastTray && window.__lancastTray("cancel-scan")`)
+	}
+}
+
+// trayBindings are the page's half of the tray: how it reports scanning.
+func trayBindings(d *desk) map[string]any {
+	return map[string]any{
+		"lancastTrayScanning": func(on bool) { d.setScanning(on) },
 	}
 }
 

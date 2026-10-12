@@ -449,7 +449,9 @@ func runWindow(l *launcher, d *desk) {
 		DataDir:  clientDataDir(),
 		CertPin:  pin,
 		DevTools: devToolsWanted(),
-		Bindings: withServerBindings(l.desktopBindings(native), l.serverBindings(windowNow)),
+		Bindings: withServerBindings(
+			withServerBindings(l.desktopBindings(native), l.serverBindings(windowNow)),
+			trayBindings(d)),
 	})
 	if err != nil {
 		alert("LANcast", err.Error())
