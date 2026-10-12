@@ -273,6 +273,28 @@ export function Player() {
   }, [pb, close]);
   useBackHandler(back);
 
+  /*
+   * And any other way out ends fullscreen too.
+   *
+   * Escape is handled above, but the player's own close and dock buttons, a
+   * mouse back button and anything else that navigates away unmount this
+   * screen without asking. In the desktop window fullscreen is the *window*,
+   * borderless and the size of the monitor, so leaving the player that way
+   * left Home under a window with no title bar, no minimize, maximize or close
+   * — and no fullscreen control, because only this screen has one. Reported
+   * as having to start another film just to get out.
+   */
+  const fullscreenNow = useRef(pb.fullscreen);
+  fullscreenNow.current = pb.fullscreen;
+  const exitFullscreenNow = useRef(pb.exitFullscreen);
+  exitFullscreenNow.current = pb.exitFullscreen;
+  useEffect(
+    () => () => {
+      if (fullscreenNow.current) exitFullscreenNow.current();
+    },
+    [],
+  );
+
   // ---- auto-hide chrome -----------------------------------------------------
   const idleTimer = useRef<number>();
   // Set by a click on the picture, cancelled by a second one. See the handlers.
