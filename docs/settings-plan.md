@@ -1,6 +1,7 @@
 # Settings: what is missing, and how to reorganise it
 
-Status: proposal, 2026-10-12. Nothing here is built yet. It answers two
+Status: proposal, 2026-10-12, revised the same day with Chris's decisions and
+his own list (§6, §7). Nothing here is built yet. It answers two
 questions Chris asked: what settings LANcast lacks, and how Settings should be
 reorganised to hold them. He named Network, Scheduled Tasks, Transcode,
 Troubleshooting, Languages and Dashboard as categories he expects.
@@ -235,3 +236,73 @@ Each step is one or more small PRs and leaves Settings usable.
 5. **Automatic intro skip:** offer it, off by default, or keep the button as
    the only way, as ADR 0054 decided?
 6. Anything from Chris's own list that is not here.
+
+## 6. Decisions taken (2026-10-12)
+
+1. **Groups:** at least three; four is fine, two is too few. The revision in
+   §7 uses four: Status, Server, Your account, This device.
+2. **Dashboard is the first pane an administrator sees.**
+3. **Subtitle style is per account.** It follows the person to every device,
+   alongside their audio and subtitle languages.
+4. **Per-user library access:** Chris wants it explained before deciding.
+   Still open.
+5. **Intro skip happens automatically by default.** That amends ADR 0054
+   decision 3, which made skipping a button only; it needs its own ADR.
+   - **What stays from 0054:** the skip happens only where the player would
+     have offered the button, so only for markers that pass the detector's
+     trust rules.
+   - **What changes:** a per-account switch turns it off.
+   - **What it costs:** the measured risk 0054 records, a wrong skip landing
+     mid-scene, becomes a jump the viewer did not ask for, so the threshold
+     deserves a second look before shipping.
+   - Credits keep the button; skipping credits automatically would end
+     films early.
+
+## 7. Chris's list, mapped
+
+| Chris's item | Where it lands | New? |
+|---|---|---|
+| **Authorized Devices** | Your account › Security: every device signed in as you, by name, browser or app, and last seen, each with **Sign out**. Server-wide under Users & access for an administrator. | New. Server work: sessions record a device name and last-seen time (nullable columns). |
+| **Watchlist** | A feature first: a per-account list of things to watch later, with a Home shelf. Its settings sit in Display & home (show the shelf) and Privacy (whether friends' servers may see it). | New feature; needs an ADR (it is a new kind of per-user list, like favourites, ADR 0062). |
+| **Scheduled tasks** | Status › Scheduled tasks. | In §2. |
+| **DLNA** | Server › DLNA: on or off, which libraries, as which account, the name TVs see. | New feature; needs an ADR (below). |
+| **Transcode** | Server › Transcoding. | In §2. |
+| **Network** | Server › Network: this machine and the LAN. | In §2. |
+| **Troubleshooting** | Status › Troubleshooting. | In §2. |
+| **Privacy** | Your account › Privacy, plus a server-side section: audit-log retention, and what friends' servers are told. | In §2, widened. |
+| **Quality** | Server › Quality: the quality ceiling for everyone, a separate ceiling for viewers away from home, per-account caps. This device › Player keeps the quality *this* device asks for. | Split out of Transcoding. Remote and per-account caps are server work. |
+| **Debug** | Status › Debug: debug logging, ffmpeg's own logs, the statistics overlay default, the desktop app's developer tools. Kept apart from Troubleshooting, which is for fixing a problem rather than looking inside. | Mostly existing settings, moved. |
+| **Player** | This device › Player. | In §2. |
+| **Conversions** | Status › Conversions: what is converting now and the limit. If Chris means **pre-converted copies** (Plex's "optimized versions": convert a film once ahead of time for a phone or a slow link), that is a new feature with its own storage and schedule. | Needs Chris's meaning. |
+| **Remote Access** | Server › Remote access, separate from Network: the public name and certificate, port 443, whether the server answers from outside, what friends need. Network stays about this machine and the LAN. | Public certificate moves here from General; the rest is new. |
+
+### DLNA, briefly
+
+DLNA lets a TV, console or speaker browse and play the library with no
+LANcast app at all. Two things make it a decision rather than a toggle.
+
+- **It has no sign-in.** Anything on the network may browse. LANcast's rule
+  is that every request is someone's. So DLNA would answer **as one chosen
+  account**, with that account's ceiling and visible libraries, and only on
+  the LAN. It would be off by default.
+- **It announces the server.** Devices discover it by broadcasting on the
+  network. That stays on the LAN and is not phone-home, but it is the first
+  thing LANcast would do unasked.
+
+### The four groups, revised
+
+- **Status:** Dashboard · Scheduled tasks · Conversions · Troubleshooting ·
+  Debug
+- **Server:**
+  - General · Network · Remote access · Users & access
+  - Libraries · Metadata · Transcoding · Quality · Playback & progress
+  - Live TV · Pictures · Retro games · Other servers · DLNA · Add-ons
+  - Backup & storage
+- **Your account:** Profile · Security (with Authorized devices) · Languages
+  & subtitles (with subtitle style) · Privacy · Watchlist
+- **This device:** Player · Display & home · Keyboard · This app · PC Games ·
+  About
+
+Activity folds into the Dashboard, and Logs into Troubleshooting and Debug, as
+in §2.
+
