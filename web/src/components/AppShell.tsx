@@ -1,3 +1,4 @@
+import { TrayBridge } from "./TrayBridge";
 import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import { PeerLibraryLinks } from "@/components/PeerLibraryLinks";
 import { AvatarGlyph } from "@/components/Avatar";
@@ -444,6 +445,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         </header>
         <UpdateBanner />
       <RestartBanner />
+      <TrayBridge />
       <KeyHelp />
         <main className="app-shell__main">{children}</main>
       </div>

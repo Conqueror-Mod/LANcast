@@ -13,12 +13,14 @@ type fakeWindow struct {
 	clientwindow.Controller
 	shown, hidden, closed int
 	navigated             []string
+	evals                 []string
 }
 
 func (f *fakeWindow) Show()               { f.shown++ }
 func (f *fakeWindow) Hide()               { f.hidden++ }
 func (f *fakeWindow) Close()              { f.closed++ }
 func (f *fakeWindow) Navigate(url string) { f.navigated = append(f.navigated, url) }
+func (f *fakeWindow) Eval(js string)      { f.evals = append(f.evals, js) }
 
 func requested(d *desk) bool {
 	select {
@@ -111,5 +113,34 @@ func TestExitBeforeAnyWindow(t *testing.T) {
 	}
 	if requested(d) {
 		t.Fatal("Exit asked for a window")
+	}
+}
+
+// The page reports scanning, and the tray hears it: Cancel is enabled
+// exactly while the page says a scan is running.
+func TestThePageTellsTheTrayAboutScanning(t *testing.T) {
+	d := newDesk("x", false)
+	var got []bool
+	d.onScanning = func(on bool) { got = append(got, on) }
+	report := trayBindings(d)["lancastTrayScanning"].(func(bool))
+	report(true)
+	report(false)
+	if len(got) != 2 || !got[0] || got[1] {
+		t.Fatalf("tray heard %v, want [true false]", got)
+	}
+}
+
+// Cancel asks the page, and does not bring the window forward to do it.
+func TestCancelAsksThePageWithoutShowingTheWindow(t *testing.T) {
+	d := newDesk("x", false)
+	d.cancelScan() // no window yet: nothing to ask, and nothing must break
+	w := &fakeWindow{}
+	d.attach(w)
+	d.cancelScan()
+	if len(w.evals) != 1 || w.evals[0] != `window.__lancastTray && window.__lancastTray("cancel-scan")` {
+		t.Fatalf("evals %q", w.evals)
+	}
+	if w.shown != 0 || len(w.navigated) != 0 {
+		t.Fatalf("cancel moved the window: shown %d, navigated %v", w.shown, w.navigated)
 	}
 }

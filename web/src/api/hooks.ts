@@ -632,6 +632,27 @@ export function useStartScan() {
  * caller is expected to say so. "Nothing happened" and "all five were already
  * scanning" look identical otherwise.
  */
+/*
+ * Stop every running scan (#847). It changes what Activity shows and what
+ * each library's scan status says, so both are invalidated — the same two
+ * keys starting a scan touches. A cancelled scan also keeps what it found, so
+ * the lists that finished work refreshes are refreshed too.
+ */
+export function useCancelScans() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () =>
+      apiPost<{ cancelled: number[] }>("/api/libraries/scan/cancel", {}),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["activity"] });
+      qc.invalidateQueries({ queryKey: ["scan"] });
+      for (const key of workFinishedKeys) {
+        qc.invalidateQueries({ queryKey: [key] });
+      }
+    },
+  });
+}
+
 export function useScanAllLibraries() {
   const qc = useQueryClient();
   return useMutation({

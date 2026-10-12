@@ -52,6 +52,22 @@ func buildTrayMenu(d *desk, log *slog.Logger) {
 		"Put LANcast in the notification area when you sign in", false)
 	systray.AddSeparator()
 	mScan := systray.AddMenuItem("Update libraries", "Scan every library for changes")
+	/*
+	 * Greyed except while a scan is running, which only the page can say
+	 * (desk.setScanning). Cancelling keeps what was found and marks nothing
+	 * the scan had not reached as missing (#847).
+	 */
+	mCancel := systray.AddMenuItem("Cancel library update", "Stop the scans that are running")
+	mCancel.Disable()
+	d.mu.Lock()
+	d.onScanning = func(on bool) {
+		if on {
+			mCancel.Enable()
+		} else {
+			mCancel.Disable()
+		}
+	}
+	d.mu.Unlock()
 	systray.AddSeparator()
 	mUpdates := systray.AddMenuItem("Check for updates…", "Open the update settings")
 	mAbout := systray.AddMenuItem("About LANcast…", "Version and licence")
@@ -88,6 +104,7 @@ func buildTrayMenu(d *desk, log *slog.Logger) {
 	watch(mOpen.ClickedCh, func() { d.open("") })
 	watch(mLogin.ClickedCh, func() { toggleLogin(mLogin, log) })
 	watch(mScan.ClickedCh, func() { d.open(d.base + "/settings?pane=libraries&tray=scan") })
+	watch(mCancel.ClickedCh, func() { d.cancelScan() })
 	watch(mUpdates.ClickedCh, func() { d.open(d.base + "/settings?pane=updates") })
 	watch(mAbout.ClickedCh, func() { d.open(d.base + "/settings?pane=general") })
 	watch(mExit.ClickedCh, func() { d.exit() })
