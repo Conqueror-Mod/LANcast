@@ -50,7 +50,18 @@ func (s *Server) playback(w http.ResponseWriter, r *http.Request) {
 	 */
 	version := ""
 	if copyRes := s.optimizedFor(r.Context(), id); copyRes != nil {
-		if d, ok := optimize.Prefer(decision, copyRes, prof, audioIndex); ok {
+		/*
+		 * Naming the default track is not choosing another one. The player
+		 * always sends ?audio=, the default's index included, and the copy is
+		 * made from the default — so only a *different* track keeps the
+		 * original. Found on a phone: the copy was offered without ?audio=
+		 * and refused with it, and a live conversion started instead.
+		 */
+		other := audioIndex
+		if def := res.Audio(); res != nil && def != nil && def.Index == audioIndex {
+			other = -1
+		}
+		if d, ok := optimize.Prefer(decision, copyRes, prof, other); ok {
 			decision, version = d, "optimized"
 		}
 	}

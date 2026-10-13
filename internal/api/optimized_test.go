@@ -91,9 +91,14 @@ func TestPlaybackSwitchesToTheCopyOnlyWhenItHelps(t *testing.T) {
 		t.Errorf("the plain stream served %q, want the original", body)
 	}
 
-	// A particular audio track keeps the original: the copy has one.
+	// A different audio track keeps the original: the copy has one.
 	if a := ask("?audio=2"); a.Version != "" {
 		t.Errorf("with audio=2 = %+v, want the original", a)
+	}
+	// Naming the default track is not choosing another: the player always
+	// sends ?audio=, and the copy was made from the default (index 1 here).
+	if a := ask("?audio=1"); a.Version != "optimized" {
+		t.Errorf("with the default track named = %+v, want the copy", a)
 	}
 
 	// Taking the copy away removes its file at the next sweep.

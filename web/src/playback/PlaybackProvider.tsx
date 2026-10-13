@@ -249,10 +249,12 @@ function sourceURL(
   if (method === "direct") {
     // A direct source is the file's own bytes; there is no encode to constrain,
     // and the server would not have said "direct" if the ceiling applied.
-    if (a) return `/api/stream/${id}?${a}`;
-    // The optimized copy, when the answer said so — never with a chosen audio
-    // track, since the copy has one and the server never offers it then.
-    return optimizedCopies.has(id) ? `/api/stream/${id}?version=optimized` : `/api/stream/${id}`;
+    // The optimized copy, when the answer said so. The server offers it only
+    // for the default audio track, which the player names too, so ?audio= may
+    // ride along; the copy route ignores it.
+    const v = optimizedCopies.has(id) ? "version=optimized" : "";
+    const q = [a, v].filter(Boolean).join("&");
+    return q ? `/api/stream/${id}?${q}` : `/api/stream/${id}`;
   }
   const parts = [offset > 0 ? `t=${Math.floor(offset)}` : "", a, cap].filter(
     Boolean,
