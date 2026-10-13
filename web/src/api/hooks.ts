@@ -4120,6 +4120,14 @@ export function useAllSessions(enabled = true) {
   });
 }
 
+export function useSignOutOtherDevices() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => apiSend("/api/profile/sessions", "DELETE"),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["sessions"] }),
+  });
+}
+
 export function useSignOutDevice() {
   const qc = useQueryClient();
   return useMutation({

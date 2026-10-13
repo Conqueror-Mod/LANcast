@@ -7,7 +7,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { AuthorizedDevices } from "./AuthorizedDevices";
+import { AuthorizedDevices, lastUsed, place } from "./AuthorizedDevices";
 
 declare global {
   // eslint-disable-next-line no-var
@@ -98,5 +98,37 @@ describe("authorized devices", () => {
     expect(rows()[3].textContent).toContain("Georgia");
     await act(async () => rows()[3].querySelector("button")!.click());
     expect(deletes).toEqual(["/api/sessions/dddddddddddddddd"]);
+  });
+
+  it("signs out every other device only after a second press", async () => {
+    await render();
+    const find = (label: string) =>
+      [...host.querySelectorAll("button")].find((b) => b.textContent === label);
+    await act(async () => find("Sign out every other device")!.click());
+    expect(deletes).toEqual([]);
+    expect(host.textContent).toContain("Sign out 2 other devices?");
+    await act(async () => find("Cancel")!.click());
+    expect(find("Sign them out")).toBeUndefined();
+    await act(async () => find("Sign out every other device")!.click());
+    await act(async () => find("Sign them out")!.click());
+    expect(deletes).toEqual(["/api/profile/sessions"]);
+  });
+
+  it("offers no sign-out-everything on the administrator's list", async () => {
+    await render(true);
+    expect(host.textContent).not.toContain("Sign out every other device");
+  });
+
+  it("calls loopback this computer", () => {
+    expect(place("::1")).toBe("this computer");
+    expect(place("127.0.0.1")).toBe("this computer");
+    expect(place("192.168.1.20")).toBe("192.168.1.20");
+  });
+
+  it("lowercases relative days but not month names", () => {
+    const now = new Date(2026, 9, 12, 20, 0);
+    const sec = (d: Date) => Math.floor(d.getTime() / 1000);
+    expect(lastUsed(sec(new Date(2026, 9, 11, 9, 0)), now)).toMatch(/^yesterday /);
+    expect(lastUsed(sec(new Date(2026, 8, 28, 9, 0)), now)).toMatch(/^[A-Z0-9]/);
   });
 });
