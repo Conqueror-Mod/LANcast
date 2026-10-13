@@ -8216,6 +8216,45 @@
         }
       }
     },
+    "/items/{id}/watchlist": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/ItemId"
+        }
+      ],
+      "put": {
+        "operationId": "addToWatchlist",
+        "tags": [
+          "tags"
+        ],
+        "summary": "Put a title on the caller's watchlist",
+        "description": "Films and shows only (ADR 0085); anything else is **400**. A title the caller cannot see answers **404**, as for one that does not exist. Adding one already there changes nothing. A finished title leaves the list by itself: a film when it is watched, a show when its last episode is.",
+        "responses": {
+          "204": {
+            "description": "On the list."
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      },
+      "delete": {
+        "operationId": "removeFromWatchlist",
+        "tags": [
+          "tags"
+        ],
+        "summary": "Take a title off the caller's watchlist",
+        "description": "Removing one that is not there is not an error. Works for a title the caller can no longer see.",
+        "responses": {
+          "204": {
+            "description": "Off the list."
+          }
+        }
+      }
+    },
     "/plugins/{name}/secrets/{secret}": {
       "parameters": [
         {
@@ -12042,6 +12081,37 @@
             "streamTicket": []
           }
         ]
+      }
+    },
+    "/watchlist": {
+      "get": {
+        "operationId": "getWatchlist",
+        "tags": [
+          "tags"
+        ],
+        "summary": "The caller's watchlist",
+        "description": "Newest first, in the shape of `GET /api/items`, with progress and artwork. The caller's own: there is no route to another account's (ADR 0085). The account's limits apply (ADR 0084), and titles whose files are missing are left out until they return.",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The list.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ItemsPage"
+                }
+              }
+            }
+          }
+        }
       }
     }
   },
