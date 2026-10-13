@@ -19,7 +19,6 @@ globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
 let host: HTMLDivElement;
 let root: Root;
-let sent: string[];
 
 let network: Record<string, unknown>;
 
