@@ -1917,6 +1917,46 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/tasks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Every background job, and when it last ran
+         * @description Administrators only. The board behind Status › Scheduled tasks. It schedules nothing: each job keeps its own trigger and reports here when it starts and finishes. Last runs are kept in memory, except the library scan and maintenance, which the database records; after a restart the others have none until they run again.
+         */
+        get: operations["listTasks"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/tasks/{id}/run": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Run a background job now
+         * @description Administrators only. Starts the job in the background and answers at once; the list shows it running. A job already running is not started twice.
+         */
+        post: operations["runTask"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/transcodes/{id}": {
         parameters: {
             query?: never;
@@ -7856,6 +7896,33 @@ export interface components {
             /** @description Null for an account that has never chosen one; a client then keeps its own device's style. */
             style: components["schemas"]["SubtitleStyle"] | null;
         };
+        Task: {
+            /** @description Stable, for POST /api/tasks/{id}/run. */
+            id: string;
+            name: string;
+            description: string;
+            /**
+             * @description What sets the job off: a scan finishing (and startup), a timer, or only a request.
+             * @enum {string}
+             */
+            trigger: "after-scan" | "interval" | "on-demand";
+            /** @description An interval job's period as currently set. Absent when it has none, such as a library scan set to Never. */
+            every_hours?: number;
+            /** @description False when a setting has switched the job off, such as credit detection or update checks. */
+            enabled: boolean;
+            running: boolean;
+            /** Format: date-time */
+            last_started_at?: string;
+            /** Format: date-time */
+            last_finished_at?: string;
+            /** @description The last run's error; absent when it succeeded. */
+            last_error?: string;
+            /**
+             * Format: date-time
+             * @description When an enabled interval job is next due.
+             */
+            next_at?: string;
+        };
     };
     responses: {
         /** @description Malformed body or invalid parameter. */
@@ -11477,6 +11544,53 @@ export interface operations {
             };
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
+        };
+    };
+    listTasks: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The jobs, in the order a person reads them. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        tasks: components["schemas"]["Task"][];
+                    };
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    runTask: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Started. */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
         };
     };
     stopTranscode: {

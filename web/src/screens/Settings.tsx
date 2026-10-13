@@ -1,3 +1,4 @@
+import { ScheduledTasks } from "@/components/ScheduledTasks";
 import { PlayerSettings, SubtitleStyleSettings } from "@/components/PlayerSettings";
 import { AboutSettings } from "@/components/AboutSettings";
 import { useEffect, useRef, useState } from "react";
@@ -3438,6 +3439,7 @@ interface Pane {
 const STATUS_PANES: Pane[] = [
   // First, for an administrator: what is happening, before how it is set up.
   { id: "dashboard", label: "Dashboard", admin: true },
+  { id: "tasks", label: "Scheduled tasks", admin: true },
   { id: "troubleshooting", label: "Troubleshooting", admin: true },
 ];
 
@@ -3644,6 +3646,7 @@ export function Settings() {
                   <AuditLog />
                 </>
               )}
+              {pane === "tasks" && <ScheduledTasks />}
               {pane === "troubleshooting" && (
                 <>
                   <ServerLogSection />

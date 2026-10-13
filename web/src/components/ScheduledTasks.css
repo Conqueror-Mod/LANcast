@@ -1,0 +1,99 @@
+/* Status › Scheduled tasks. A table on a raised panel; no gold, because a
+   job is not a place. */
+.tasks {
+  /* The table decides its own layout from its own width: Settings is a
+     narrow column, and a query on the window's width laid five columns into
+     it and squeezed every description to a sliver. */
+  container-type: inline-size;
+  margin-top: 12px;
+  border-radius: var(--radius-panel);
+  background: var(--surface-raised);
+  box-shadow: var(--elev-1);
+  overflow: hidden;
+}
+.tasks__row {
+  display: grid;
+  /* minmax(0, …): each row is its own grid, and without a zero floor a long
+     error in one row widened its column and broke the alignment with the
+     rows above it. */
+  grid-template-columns: minmax(0, 2.3fr) minmax(0, 1.1fr) minmax(0, 1.5fr) minmax(0, 1.2fr) 112px;
+  gap: 14px;
+  align-items: center;
+  padding: 12px 18px;
+  border-top: 1px solid rgba(190, 208, 255, 0.07);
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+}
+.tasks__row:first-child {
+  border-top: none;
+}
+.tasks__row--head {
+  font-size: 0.72rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  padding-top: 14px;
+  padding-bottom: 10px;
+}
+.tasks__row.is-off {
+  color: var(--text-faint);
+}
+.tasks__name {
+  color: var(--text-primary);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.is-off .tasks__name {
+  color: var(--text-muted);
+}
+.tasks__desc {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+.tasks__muted {
+  color: var(--text-faint);
+}
+.tasks__running {
+  color: var(--text-primary);
+}
+.tasks__error {
+  display: block;
+  font-size: 0.8rem;
+  color: #ff9a8a;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.tasks__action {
+  justify-self: end;
+}
+
+/* Too narrow for five columns — a phone, or the Settings column itself:
+   each job becomes a short card. */
+@container (max-width: 760px) {
+  .tasks__row {
+    /* Zero floor here too: a long error otherwise pushed Run now out of the
+       card on a phone. */
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 4px 12px;
+  }
+  .tasks__row--head {
+    display: none;
+  }
+  .tasks__row > span:nth-child(2),
+  .tasks__row > span:nth-child(3),
+  .tasks__row > span:nth-child(4) {
+    grid-column: 1;
+    font-size: 0.82rem;
+  }
+  /* Without the column headings, each line says what it is. */
+  .tasks__row > [data-label]::before {
+    content: attr(data-label) ": ";
+    color: var(--text-muted);
+  }
+  .tasks__row > .tasks__action {
+    grid-column: 2;
+    grid-row: 1;
+  }
+}

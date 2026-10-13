@@ -4723,6 +4723,79 @@
         }
       }
     },
+    "/tasks": {
+      "get": {
+        "operationId": "listTasks",
+        "tags": [
+          "operations"
+        ],
+        "summary": "Every background job, and when it last ran",
+        "description": "Administrators only. The board behind Status › Scheduled tasks. It schedules nothing: each job keeps its own trigger and reports here when it starts and finishes. Last runs are kept in memory, except the library scan and maintenance, which the database records; after a restart the others have none until they run again.",
+        "responses": {
+          "200": {
+            "description": "The jobs, in the order a person reads them.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "tasks"
+                  ],
+                  "properties": {
+                    "tasks": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Task"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          }
+        }
+      }
+    },
+    "/tasks/{id}/run": {
+      "post": {
+        "operationId": "runTask",
+        "tags": [
+          "operations"
+        ],
+        "summary": "Run a background job now",
+        "description": "Administrators only. Starts the job in the background and answers at once; the list shows it running. A job already running is not started twice.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "description": "Started."
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
     "/transcodes/{id}": {
       "parameters": [
         {
@@ -18566,6 +18639,66 @@
             ],
             "nullable": true,
             "description": "Null for an account that has never chosen one; a client then keeps its own device's style."
+          }
+        }
+      },
+      "Task": {
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "description",
+          "trigger",
+          "enabled",
+          "running"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Stable, for POST /api/tasks/{id}/run."
+          },
+          "name": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "trigger": {
+            "type": "string",
+            "enum": [
+              "after-scan",
+              "interval",
+              "on-demand"
+            ],
+            "description": "What sets the job off: a scan finishing (and startup), a timer, or only a request."
+          },
+          "every_hours": {
+            "type": "number",
+            "description": "An interval job's period as currently set. Absent when it has none, such as a library scan set to Never."
+          },
+          "enabled": {
+            "type": "boolean",
+            "description": "False when a setting has switched the job off, such as credit detection or update checks."
+          },
+          "running": {
+            "type": "boolean"
+          },
+          "last_started_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "last_finished_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "last_error": {
+            "type": "string",
+            "description": "The last run's error; absent when it succeeded."
+          },
+          "next_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "When an enabled interval job is next due."
           }
         }
       }

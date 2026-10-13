@@ -37,6 +37,7 @@ import (
 	"lancast/internal/scan"
 	"lancast/internal/store"
 	"lancast/internal/subtitle"
+	"lancast/internal/tasks"
 	"lancast/internal/together"
 	"lancast/internal/transcode"
 	"lancast/internal/update"
@@ -98,8 +99,11 @@ type Deps struct {
 	// exactly when the update completes; it should say so.
 	Relaunch func() error
 
-	Trans    *transcode.Manager
-	Updates  *update.Checker
+	Trans   *transcode.Manager
+	Updates *update.Checker
+	// Tasks is the board behind Status › Scheduled tasks. Nil means no
+	// board, and the routes answer an empty list.
+	Tasks    *tasks.Board
 	Subs     *subtitle.Extractor
 	Settings *config.SettingsStore
 	// DataDir is the server data directory: where downloaded subtitles are
@@ -181,6 +185,7 @@ type Server struct {
 	relaunch       func() error
 	trans          *transcode.Manager
 	updates        *update.Checker
+	tasks          *tasks.Board
 	subs           *subtitle.Extractor
 	settings       *config.SettingsStore
 	// tools is the one media-tools install that may be running (ADR 0043).
@@ -292,6 +297,7 @@ func New(d Deps) *Server {
 		st: d.Store, scanner: d.Scanner, reg: d.Registry, art: d.Artwork,
 		worker: d.Worker, probes: d.Probes, markers: d.Markers, facesW: d.Faces, faceTool: d.FaceTool, faceModelJob: &faceJob{}, semanticModelJob: &faceJob{}, embedder: d.Embedder, covers: d.Covers, photos: d.Photos, serviceManaged: d.ServiceManaged, relaunch: d.Relaunch, trans: d.Trans, subs: d.Subs,
 		updates:  d.Updates,
+		tasks:    d.Tasks,
 		settings: d.Settings, dataDir: d.DataDir, log: d.Log, web: web,
 		ident:      d.Identity,
 		listenAddr: d.ListenAddr,
@@ -762,6 +768,8 @@ func (s *Server) Handler() http.Handler {
 	 * careful to keep private.
 	 */
 	mux.HandleFunc("GET /api/transcodes", s.adminOnly(s.transcodes))
+	mux.HandleFunc("GET /api/tasks", s.adminOnly(s.listTasks))
+	mux.HandleFunc("POST /api/tasks/{id}/run", s.adminOnly(s.runTask))
 	mux.HandleFunc("DELETE /api/transcodes/{id}", s.adminOnly(s.stopTranscode))
 	mux.HandleFunc("GET /api/logs", s.adminOnly(s.serverLog))
 	mux.HandleFunc("GET /api/crashes", s.adminOnly(s.listCrashes))
