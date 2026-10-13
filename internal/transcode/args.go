@@ -24,6 +24,9 @@ const (
 	// no seeking beyond what has been produced — but it plays in any browser
 	// with no client-side library, which HLS does not.
 	Progressive Output = "progressive"
+	// File writes one finished MP4 to OutputPath, with its index at the front
+	// so it streams and seeks like any file: an optimized copy (ADR 0087).
+	File Output = "file"
 )
 
 // SegmentSeconds is the target segment length. Six seconds is the common
@@ -48,7 +51,11 @@ type Options struct {
 	StartAt      float64 // seconds into the file
 	Duration     float64 // the whole file's length in seconds; 0 when unknown
 	OutputDir    string  // HLS only
-	AudioIndex   int     // absolute stream index; -1 means let ffmpeg choose
+	OutputPath   string  // File only: where the finished MP4 is written
+	// MaxRateKbps caps the video bit rate, File only: the optimized preset's
+	// "about 8 Mbit/s" (ADR 0087). Zero is no cap, as live output has.
+	MaxRateKbps int
+	AudioIndex  int // absolute stream index; -1 means let ffmpeg choose
 
 	// AudioBitrate for re-encoded audio, in kbit/s.
 	AudioBitrate int
@@ -879,6 +886,18 @@ func Args(o Options) []string {
 	}
 
 	switch o.Output {
+	case File:
+		if o.MaxRateKbps > 0 {
+			a = append(a,
+				"-maxrate", strconv.Itoa(o.MaxRateKbps)+"k",
+				"-bufsize", strconv.Itoa(2*o.MaxRateKbps)+"k")
+		}
+		// faststart moves the index to the front once the encode finishes,
+		// so the copy plays and seeks from its first byte, as a file should.
+		// -progress reports how far it has got on stdout, which is otherwise
+		// unused here (ConvertFile reads it for Status › Conversions).
+		a = append(a, "-progress", "pipe:1", "-nostats",
+			"-movflags", "+faststart", "-f", "mp4", "-y", o.OutputPath)
 	case HLS:
 		/*
 		 * The playlist type is a claim about the playlist, not about the source.

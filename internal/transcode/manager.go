@@ -1,6 +1,7 @@
 package transcode
 
 import (
+	"bufio"
 	"context"
 	"crypto/rand"
 	"encoding/hex"
@@ -11,9 +12,12 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
+
+	"lancast/internal/childproc"
 )
 
 // ErrNotInstalled is returned when ffmpeg cannot be found.
@@ -1090,4 +1094,55 @@ func newID() string {
 		return fmt.Sprintf("s%d", time.Now().UnixNano())
 	}
 	return hex.EncodeToString(b)
+}
+
+/*
+ * ConvertFile runs one conversion to a finished file and waits for it: an
+ * optimized copy (ADR 0087).
+ *
+ * The same encoder and colour handling every live session gets, filled in
+ * here exactly as Progressive and EnsureHLS fill theirs, so a copy is made by
+ * the encoder this process proved at startup and never by one ffmpeg picks
+ * (CLAUDE.md: never let ffmpeg choose). progress is told how far into the
+ * film the encode has reached, from ffmpeg's own -progress output.
+ *
+ * Not a session: it is not counted against MaxSessions and not reaped. The
+ * caller owns its lifetime through ctx, and decides when to run it.
+ */
+func (m *Manager) ConvertFile(ctx context.Context, o Options, progress func(done time.Duration)) error {
+	bin := m.binary()
+	if bin == "" {
+		return ErrNotInstalled
+	}
+	o.Output = File
+	o.Encoder = m.Encoder()
+	o.CanTonemap, o.CanTagSDR, o.CanTonemapOpenCL = m.colourFor()
+
+	cmd := exec.CommandContext(ctx, bin, Args(o)...)
+	childproc.Hide(cmd)
+	stderr := newRingBuffer(8 << 10)
+	cmd.Stderr = stderr
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		return fmt.Errorf("convert: stdout pipe: %w", err)
+	}
+	if err := cmd.Start(); err != nil {
+		return fmt.Errorf("convert: start ffmpeg: %w", err)
+	}
+	sc := bufio.NewScanner(stdout)
+	for sc.Scan() {
+		line := sc.Text()
+		if v, ok := strings.CutPrefix(line, "out_time_us="); ok && progress != nil {
+			if us, err := strconv.ParseInt(v, 10, 64); err == nil && us > 0 {
+				progress(time.Duration(us) * time.Microsecond)
+			}
+		}
+	}
+	if err := cmd.Wait(); err != nil {
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+		return fmt.Errorf("convert: ffmpeg: %w: %s", err, stderr.String())
+	}
+	return nil
 }
