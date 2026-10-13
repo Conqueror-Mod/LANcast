@@ -502,6 +502,9 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/sessions", s.adminOnly(s.allSessions))
 	mux.HandleFunc("DELETE /api/sessions/{id}", s.adminOnly(s.signOutAny))
 	mux.HandleFunc("PUT /api/profile/subtitle-style", s.setSubtitleStyle)
+	// Whether an intro skips itself, per account (ADR 0083).
+	mux.HandleFunc("GET /api/profile/playback", s.playbackPreferences)
+	mux.HandleFunc("PUT /api/profile/playback", s.setPlaybackPreferences)
 	mux.HandleFunc("GET /api/profile/ratings", s.listMyRatings)
 	mux.HandleFunc("PUT /api/profile/sharing", s.putSharing)
 	mux.HandleFunc("PUT /api/profile/avatar", s.putAvatar)

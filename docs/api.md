@@ -1675,6 +1675,30 @@ It is the answer to a list of sign-ins nobody recognises.
 The same, for every account on the server. Administrators only. A sign-out
 here is recorded in the audit log.
 
+### `GET /api/profile/playback` and `PUT /api/profile/playback`
+
+The caller's own playback preferences (ADR 0083). One so far:
+
+```json
+{ "skip_intros": true }
+```
+
+`skip_intros`: when playback reaches an intro the player would offer **Skip
+intro** on, the player skips it and shows *Intro skipped* with **Watch intro**
+for a few seconds. The rule is the button's rule, unchanged (`skipTarget` in
+`web/src/lib/skip.ts`), so a marker the button would refuse is never skipped.
+It skips once per playback, going forwards only: seeking back into an intro
+offers the button and does not jump. Credits are never skipped automatically.
+
+**On by default.** An account that has never chosen reads `true`, and so does
+a server with no accounts yet. Stored as nullable, so an account that never
+chose follows the default if it ever changes.
+
+`PUT` takes the same shape. `skip_intros` is **required**: a body without it is
+`400`, not read as `false`, because a client that sent nothing has not chosen
+anything. Acts on the session only; no route sets another account's. Not
+audited. `409` on a server with no accounts.
+
 ### `GET /api/profile/subtitle-style` and `PUT /api/profile/subtitle-style`
 
 How subtitles look for the calling account. It follows the person to every

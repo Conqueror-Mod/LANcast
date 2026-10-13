@@ -3901,6 +3901,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/profile/playback": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The caller's playback preferences
+         * @description Whether an intro skips itself (ADR 0083). An account that has never chosen gets the default, which is on; so does a server with no accounts yet.
+         */
+        get: operations["getPlaybackPreferences"];
+        /**
+         * Set the caller's playback preferences
+         * @description Acts on the session; there is no route by which one account sets another's. `skip_intros` is required: a body without it is **400**, not read as off. Not audited.
+         */
+        put: operations["setPlaybackPreferences"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/profile/sessions": {
         parameters: {
             query?: never;
@@ -8036,6 +8060,10 @@ export interface components {
             last_seen: number;
             /** @description This is the device asking. */
             current: boolean;
+        };
+        PlaybackPreferences: {
+            /** @description When playback reaches an intro the player would offer to skip, skip it and say so, with one press to go back. On unless the account turned it off. */
+            skip_intros: boolean;
         };
     };
     responses: {
@@ -14426,6 +14454,64 @@ export interface operations {
                 };
             };
             /** @description A style no player can draw. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description This server has no accounts yet. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    getPlaybackPreferences: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The caller's preferences. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlaybackPreferences"];
+                };
+            };
+        };
+    };
+    setPlaybackPreferences: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PlaybackPreferences"];
+            };
+        };
+        responses: {
+            /** @description Saved; the preferences as stored. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlaybackPreferences"];
+                };
+            };
+            /** @description `skip_intros` missing or not a boolean. */
             400: {
                 headers: {
                     [name: string]: unknown;
