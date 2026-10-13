@@ -74,6 +74,12 @@ func (w *Worker) Stats() Stats {
 // Available reports whether probing can run at all.
 func (w *Worker) Available() bool { return w.prober.Available() }
 
+// ProbeFile reads one file that is not a library item: an optimized copy,
+// checked once it is written (ADR 0087).
+func (w *Worker) ProbeFile(ctx context.Context, path string) (*Result, error) {
+	return w.prober.Probe(ctx, path)
+}
+
 // Run probes pending items until the queue drains or ctx is done.
 func (w *Worker) Run(ctx context.Context) error {
 	if !w.prober.Available() {

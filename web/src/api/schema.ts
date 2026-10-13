@@ -3713,6 +3713,33 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/items/{id}/optimized": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The item's id. */
+                id: components["parameters"]["ItemId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Ask for an optimized copy
+         * @description Administrators only (ADR 0087). A film or an episode queues itself; a show, a season or a collection queues every episode or film in it. A copy already queued, converting or ready is left alone; a failed one is queued again. Audited as `optimized.request`.
+         */
+        put: operations["requestOptimized"];
+        post?: never;
+        /**
+         * Take an optimized copy away
+         * @description Administrators only. Covers the same titles as PUT. A conversion in progress stops; the files are removed by the worker's next sweep. Audited as `optimized.remove`.
+         */
+        delete: operations["removeOptimized"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/plugins/{name}/secrets/{secret}": {
         parameters: {
             query?: never;
@@ -5430,6 +5457,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/optimized": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Optimized copies and the queue
+         * @description Administrators only (ADR 0087). Converting first, then queued in the order they will run, then the rest newest first.
+         */
+        get: operations["listOptimized"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -5945,6 +5992,8 @@ export interface components {
             /** @description The resolved profile, echoed back. */
             profile: string;
             decision: components["schemas"]["Decision"];
+            /** @description `optimized` when the answer is direct play of the title's optimized copy (ADR 0087): ask `GET /api/stream/{id}?version=optimized`. Empty for the original. Only set when the device would otherwise have had the original converted, and never when a particular audio track was asked for. */
+            version?: string;
         };
         ProbeStatus: {
             /** @description False when ffprobe is not installed. **That is a supported configuration, not an error**: playback decisions fall back to direct play. */
@@ -6157,6 +6206,10 @@ export interface components {
             dlna_account?: string;
             /** @description The name TVs list. Empty means "LANcast". */
             dlna_name?: string;
+            /** @description Where optimized copies live (ADR 0087). Empty is `optimized` in the data folder. Must be a full path and not inside any library. */
+            optimized_dir?: string;
+            /** @description The size limit for optimized copies, in GB. At the limit new requests wait; nothing is deleted. 200 by default. */
+            optimized_limit_gb: number;
             /**
              * @description Whose certificate is preferred on films and programmes, as an ISO 3166-1 alpha-2 code. Empty means the default order: the US certificate, falling back to the British one.
              *
@@ -6257,6 +6310,8 @@ export interface components {
             dlna_enabled?: boolean;
             dlna_account?: string;
             dlna_name?: string;
+            optimized_dir?: string;
+            optimized_limit_gb?: number;
             /**
              * @description Prefer this country's certificate. Must be one of the codes reported in `certification_countries`, or empty to return to the default order; anything else is rejected with 400 rather than stored and ignored.
              *
@@ -8220,6 +8275,44 @@ export interface components {
             /** @description The plain-HTTP port DLNA serves on (8200). */
             port: number;
         };
+        OptimizedVersion: {
+            /** Format: int64 */
+            item_id: number;
+            title: string;
+            kind: string;
+            /** @enum {string} */
+            state: "queued" | "converting" | "ready" | "failed";
+            /** Format: int64 */
+            size_bytes: number;
+            /** @description Why it failed, when it did. */
+            error?: string;
+            /** Format: int64 */
+            requested_at: number;
+            /** Format: int64 */
+            finished_at?: number;
+            /** Format: int64 */
+            duration_ms?: number;
+        };
+        OptimizedList: {
+            items: components["schemas"]["OptimizedVersion"][];
+            /**
+             * Format: int64
+             * @description Space finished copies take.
+             */
+            used_bytes: number;
+            /** Format: int64 */
+            limit_bytes: number;
+            folder: string;
+            /**
+             * Format: int64
+             * @description The title converting now, 0 for none.
+             */
+            current: number;
+            /** @description How far into it, 0 to 1. */
+            progress: number;
+            /** @description Why the queue is not moving, empty when it is: the size limit, live playback, or no ffmpeg. */
+            waiting: string;
+        };
     };
     responses: {
         /** @description Malformed body or invalid parameter. */
@@ -9437,7 +9530,10 @@ export interface operations {
     };
     streamItem: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description `optimized` serves the title's optimized copy instead of the original (ADR 0087), with the same permission check. 404 when it has none. */
+                version?: "optimized";
+            };
             header?: never;
             path: {
                 /** @description The item's id. */
@@ -14489,6 +14585,62 @@ export interface operations {
             };
         };
     };
+    requestOptimized: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The item's id. */
+                id: components["parameters"]["ItemId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Queued. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @description Newly queued. */
+                        queued: number;
+                        /** @description Titles the item covers. */
+                        titles: number;
+                    };
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    removeOptimized: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The item's id. */
+                id: components["parameters"]["ItemId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Removed. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
     setPluginSecret: {
         parameters: {
             query?: never;
@@ -16859,6 +17011,28 @@ export interface operations {
                     "application/json": components["schemas"]["ItemsPage"];
                 };
             };
+        };
+    };
+    listOptimized: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The copies. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OptimizedList"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
         };
     };
 }

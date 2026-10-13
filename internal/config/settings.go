@@ -264,6 +264,15 @@ type Settings struct {
 	DLNAAccount string `json:"dlna_account,omitempty"`
 	DLNAName    string `json:"dlna_name,omitempty"`
 
+	// Optimized copies (ADR 0087). OptimizedDir is where they live; empty is
+	// "optimized" in the data folder. It may not be inside a library — the
+	// API refuses that, because a scan would take a copy for a new film.
+	// OptimizedLimitGB caps their total; at the cap new requests wait rather
+	// than anything being deleted (Chris's decision). No omitempty, for the
+	// reason ContinueWeeks has none.
+	OptimizedDir     string `json:"optimized_dir,omitempty"`
+	OptimizedLimitGB int    `json:"optimized_limit_gb"`
+
 	// DebugLogging raises the server's log level to debug, at runtime and
 	// across restarts. Persisted rather than a one-shot toggle because the
 	// faults worth debug logging for are usually the intermittent ones: turning
@@ -340,7 +349,7 @@ func Defaults() Settings {
 		WatchedThreshold: 90, ContinueWeeks: 16, ContinueLimit: 40,
 		AllowMediaDeletion: true, ScanIntervalHours: 0,
 		AuditRetentionDays: 90, MaxTranscodes: DefaultMaxTranscodes,
-		BackupEveryDays: 7, BackupKeep: 4}
+		BackupEveryDays: 7, BackupKeep: 4, OptimizedLimitGB: 200}
 }
 
 // SettingsStore reads and writes the settings file.
@@ -479,6 +488,10 @@ func clamp(s *Settings) {
 	}
 	if s.BackupKeep > MaxBackupKeep {
 		s.BackupKeep = MaxBackupKeep
+	}
+	// A limit of nothing would refuse every copy; it reads as unset.
+	if s.OptimizedLimitGB < 1 {
+		s.OptimizedLimitGB = d.OptimizedLimitGB
 	}
 }
 

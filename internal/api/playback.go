@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"strconv"
 
+	"lancast/internal/optimize"
 	"lancast/internal/probe"
 )
 
@@ -42,6 +43,28 @@ func (s *Server) playback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	decision := probe.DecideTrack(res, prof, audioIndex)
+	/*
+	 * An optimized copy, when it turns a conversion into direct play for this
+	 * device (ADR 0087 §6). The answer is then direct play of the copy, and
+	 * `version` tells the client to ask the stream route for it.
+	 */
+	version := ""
+	if copyRes := s.optimizedFor(r.Context(), id); copyRes != nil {
+		/*
+		 * Naming the default track is not choosing another one. The player
+		 * always sends ?audio=, the default's index included, and the copy is
+		 * made from the default — so only a *different* track keeps the
+		 * original. Found on a phone: the copy was offered without ?audio=
+		 * and refused with it, and a live conversion started instead.
+		 */
+		other := audioIndex
+		if def := res.Audio(); res != nil && def != nil && def.Index == audioIndex {
+			other = -1
+		}
+		if d, ok := optimize.Prefer(decision, copyRes, prof, other); ok {
+			decision, version = d, "optimized"
+		}
+	}
 	s.logDecision(r, it, prof.Name, audioIndex, decision)
 
 	writeJSON(w, http.StatusOK, map[string]any{
@@ -49,6 +72,7 @@ func (s *Server) playback(w http.ResponseWriter, r *http.Request) {
 		"probed":   it.ProbedAt != nil,
 		"profile":  prof.Name,
 		"decision": decision,
+		"version":  version,
 	})
 }
 

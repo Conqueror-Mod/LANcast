@@ -1125,3 +1125,25 @@ func TestAShortSeekOnACopyIsAlsoOnTheInput(t *testing.T) {
 		t.Errorf("input seek = %s, want 4.000", args[ss+1])
 	}
 }
+
+// An optimized copy (ADR 0087) is one finished, seekable MP4 at a capped
+// rate, written where it was told — and nothing about segments or pipes.
+func TestFileOutputIsOneFinishedMP4(t *testing.T) {
+	a := strings.Join(Args(Options{
+		Input: "in.mkv", Output: File, OutputPath: "out.mp4.part", MaxRateKbps: 8000,
+		Decision: probe.Decision{Method: probe.Transcode},
+	}), " ")
+	for _, want := range []string{"-maxrate 8000k", "-bufsize 16000k", "-progress pipe:1", "-movflags +faststart", "-f mp4 -y out.mp4.part"} {
+		if !strings.Contains(a, want) {
+			t.Errorf("args lack %q:\n%s", want, a)
+		}
+	}
+	for _, not := range []string{"-f mp4 pipe:1", "-f hls", "frag_"} {
+		if strings.Contains(a, not) {
+			t.Errorf("file output has %q:\n%s", not, a)
+		}
+	}
+	if !strings.HasSuffix(a, "out.mp4.part") {
+		t.Errorf("the output path is not last:\n%s", a)
+	}
+}

@@ -54,6 +54,12 @@ func (s *Server) stream(w http.ResponseWriter, r *http.Request) {
 	if s.notFoundOr(w, err, "get item", "no such item") {
 		return
 	}
+	// The optimized copy instead of the original, when the playback answer
+	// said so (ADR 0087). Same permission: GetItem has answered it above.
+	if r.URL.Query().Get("version") == "optimized" {
+		s.serveOptimized(w, r, it)
+		return
+	}
 	s.serveItemFile(w, r, it)
 }
 

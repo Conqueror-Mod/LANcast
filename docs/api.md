@@ -1719,6 +1719,36 @@ It is the answer to a list of sign-ins nobody recognises.
 The same, for every account on the server. Administrators only. A sign-out
 here is recorded in the audit log.
 
+### Optimized copies: `GET /api/optimized`, `PUT` and `DELETE /api/items/{id}/optimized`
+
+A copy of a title converted once, ahead of time, to H.264 and AAC in MP4 at up
+to 1080p and about 8 Mbit/s, so a device that would need the original
+converted plays the copy directly instead ([ADR 0087](adr/0087-an-optimized-copy-is-converted-once.md)).
+**Administrators only**, since each copy is hours of work.
+
+- `PUT /api/items/{id}/optimized` asks for one: `{queued, titles}`. A film or
+  an episode is itself; a show, a season or a collection covers every episode
+  or film in it. A copy already queued, converting or ready is left alone; a
+  failed one is queued again. Audited.
+- `DELETE /api/items/{id}/optimized` takes them away (`204`). A conversion in
+  progress stops, and the files go at the worker's next sweep. Audited.
+- `GET /api/optimized` lists them, with `used_bytes`, `limit_bytes`,
+  `folder`, the title converting now (`current`, `progress` from 0 to 1), and
+  `waiting`, which says why the queue is not moving: the size limit, live
+  playback, or no ffmpeg.
+
+One conversion runs at a time, and **never while anything is being converted
+live**: someone watching now outranks a copy for later. At the size limit
+(`optimized_limit_gb`) new requests **wait**; nothing is deleted to make
+room. Deleting a title deletes its copy.
+
+**Playback.** `GET /api/items/{id}/playback` answers `version: "optimized"`
+with a direct-play decision when the device would otherwise have had the
+original converted and the copy plays directly for it. The client then asks
+`GET /api/stream/{id}?version=optimized`. A device that plays the original
+directly keeps the original, and so does a request for a particular audio
+track (`?audio=`), because the copy has one.
+
 ### The watchlist: `GET /api/watchlist`, `PUT` and `DELETE /api/items/{id}/watchlist`
 
 Titles the caller means to watch ([ADR 0085](adr/0085-a-watchlist-is-a-list-of-promises.md)).
@@ -4910,6 +4940,8 @@ to "have I watched this".
 | `dlna_enabled` | `false` | — | DLNA, so TVs, consoles and VLC can find and play the library with no LANcast app ([ADR 0086](adr/0086-a-tv-browses-as-somebody.md)). **Off by default.** Runs only when `dlna_account` is set and the server is bound to the LAN; never widens the loopback rule. Serves plain HTTP on **8200** and discovery on UDP **1900**, to LAN clients only. Takes effect within seconds, no restart. Audited |
 | `dlna_account` | `""` | an account id | The account a TV browses **as**: it sees exactly what that account sees, rating limit and hidden libraries included. An id that is not an account is `400`. Audited |
 | `dlna_name` | `""` | up to 64 characters | The name TVs list. Empty means "LANcast". Audited |
+| `optimized_dir` | `""` | a full path | Where optimized copies live ([ADR 0087](adr/0087-an-optimized-copy-is-converted-once.md)). Empty is `optimized` in the data folder. **Refused (`400`) inside any library location**, or a scan would take the copies for new films. Created if it does not exist. Audited |
+| `optimized_limit_gb` | `200` | 1–100000 | The size limit for optimized copies. At the limit new requests wait and say so; **nothing is deleted to make room**. Audited |
 
 Out-of-range values are **rejected with 400**, not clamped — a client sending
 `200` has a bug, and silently storing `90` hides it. The config file is also

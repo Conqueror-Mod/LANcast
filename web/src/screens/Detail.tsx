@@ -47,7 +47,8 @@ import {
 import { platformLabel } from "@/lib/platforms";
 import { retroAvailability } from "@/playback/retro";
 import { WEB_STATE_PREFIX, webStateCore } from "@/playback/retroWeb";
-import { useGameSaves, useOnWatchlist, useSetWatchlist } from "@/api/hooks";
+import { useGameSaves, useOnWatchlist, useSetWatchlist, useOptimized, useSetOptimized, optimizedOf } from "@/api/hooks";
+import type { OptimizedList } from "@/api/types";
 import { useQuery } from "@tanstack/react-query";
 import type { Item } from "@/api/types";
 import { FixMatch } from "@/components/FixMatch";
@@ -228,6 +229,31 @@ function WatchlistButton({ id }: { id: number }) {
   );
 }
 
+/*
+ * More Options' optimized-copy entry (ADR 0087), for an administrator: a film
+ * or an episode toggles its own, saying what state it is in; a show, a season
+ * or a collection asks for every title inside it.
+ */
+function optimizedMenu(
+  item: Item,
+  isAdmin: boolean,
+  list: OptimizedList | undefined,
+  set: (v: { id: number; on: boolean }) => void,
+): MenuAction | null {
+  if (!isAdmin || item.missing) return null;
+  if (item.kind === "movie" || item.kind === "episode") {
+    const v = optimizedOf(list, item.id);
+    if (!v) return { label: "Make optimized version", onSelect: () => set({ id: item.id, on: true }) };
+    const state =
+      v.state === "ready" ? "" : v.state === "failed" ? " (failed)" : v.state === "converting" ? " (converting)" : " (queued)";
+    return { label: `Remove optimized version${state}`, onSelect: () => set({ id: item.id, on: false }) };
+  }
+  if (item.kind === "show" || item.kind === "season" || item.kind === "collection") {
+    return { label: "Make optimized versions", onSelect: () => set({ id: item.id, on: true }) };
+  }
+  return null;
+}
+
 /** Films and shows go on a watchlist; nothing else does (ADR 0085). */
 export function watchlistable(item: Item): boolean {
   return (item.kind === "movie" || item.kind === "show") && !item.missing;
@@ -337,6 +363,7 @@ function detailActions(o: {
   addToPlaylist: () => void;
   watched: MenuAction | null;
   watchlist: { on: boolean; toggle: () => void } | null;
+  optimized: MenuAction | null;
   pin: { pinned: boolean; toggle: () => void } | null;
   rename: (() => void) | null;
   remove: (() => void) | null;
@@ -358,6 +385,7 @@ function detailActions(o: {
       onSelect: o.watchlist.toggle,
     });
   }
+  if (o.optimized) out.push(o.optimized);
   // Anything that plays on its own can go in a playlist; a container cannot,
   // since a playlist holds entries, not albums. Pictures do not play at all.
   if (!o.container && !isPicture(item) && !isROM(item)) {
@@ -498,6 +526,9 @@ export function Detail() {
   const [trailerOpen, setTrailerOpen] = useState(false);
   const [removeOpen, setRemoveOpen] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
+  // Optimized copies (ADR 0087), for administrators' More Options.
+  const { data: optimizedList } = useOptimized(useIsAdmin());
+  const setOptimized = useSetOptimized();
   // On or off the watchlist, for More Options (the button reads it itself).
   const onWatchlist = useOnWatchlist(item?.id ?? 0);
   const setWatchlist = useSetWatchlist();
@@ -1164,6 +1195,7 @@ export function Detail() {
                     !isMusic && !isPicture(item) && !isROM(item) && !isPlaylist
                       ? watchedAction(item, children, forgetPlace.mutate, markAll, marking)
                       : null,
+                  optimized: optimizedMenu(item, isAdmin, optimizedList, setOptimized.mutate),
                   watchlist: watchlistable(item)
                     ? { on: onWatchlist, toggle: () => setWatchlist.mutate({ id: item.id, on: !onWatchlist }) }
                     : null,

@@ -108,6 +108,14 @@ func registerTasks(b *tasks.Board, d taskDeps) {
 		Run:         func() { go trackedBackup(d.ctx, d.api, b) },
 	})
 	b.Add(tasks.Spec{
+		ID:          "optimized",
+		Name:        "Optimized versions",
+		Description: "Converts the titles you asked for into copies nearly every device plays directly.",
+		Trigger:     tasks.OnDemand,
+		// Run now nudges the queue; it never converts anything nobody asked for.
+		Run: func() { d.api.WakeOptimizer() },
+	})
+	b.Add(tasks.Spec{
 		ID:          "update",
 		Name:        "Check for updates",
 		Description: "Asks GitHub whether a newer LANcast has been released.",

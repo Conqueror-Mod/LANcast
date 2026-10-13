@@ -392,5 +392,8 @@ export type BackupFile = components["schemas"]["BackupFile"];
 export type NetworkStatus = components["schemas"]["NetworkStatus"];
 // Server › DLNA: whether it is running, and why not (ADR 0086).
 export type DLNAStatus = components["schemas"]["DLNAStatus"];
+// Optimized copies and their queue (ADR 0087).
+export type OptimizedList = components["schemas"]["OptimizedList"];
+export type OptimizedVersion = components["schemas"]["OptimizedVersion"];
 
 export type BackupsResponse = components["schemas"]["BackupList"];
