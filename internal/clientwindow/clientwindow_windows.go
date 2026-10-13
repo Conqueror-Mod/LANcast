@@ -400,7 +400,8 @@ func viewOptions(o Options) webview2.WebViewOptions {
 			Height: uint(o.Height),
 			Center: true,
 		},
-		DataPath: o.DataDir,
+		DataPath:        o.DataDir,
+		UserAgentSuffix: userAgentSuffix(o.AppVersion),
 		// The UI owns its own keyboard model (ADR 0004), and a browser's
 		// accelerators would fight it.
 		AutoFocus: true,

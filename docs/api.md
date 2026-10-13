@@ -1637,6 +1637,39 @@ alone rather than picking the first track, and a full subtitle track is
 preferred over a forced one, since a forced track captions three sentences of a
 film and reads as the feature failing.
 
+### `GET /api/profile/sessions` and `DELETE /api/profile/sessions/{id}`
+
+Authorized devices: every device signed in as the caller, most recently used
+first.
+
+```json
+{ "sessions": [
+  { "id": "3f9a1c0b77de2e41", "user_id": "u_3f9", "user_name": "Chris",
+    "device": "LANcast app on Windows", "address": "192.168.1.20",
+    "created_at": 1791500000, "last_seen": 1791861000, "current": true },
+  { "id": "a07b5e19c2d4f810", "user_id": "u_3f9", "user_name": "Chris",
+    "device": "Chrome on Android", "address": "2600:1700:…",
+    "created_at": 1791400000, "last_seen": 1791800000, "current": false } ] }
+```
+
+- **`id`** is a short public handle for signing a device out. It is neither the
+  token nor its hash; neither ever leaves the server.
+- **`device`** names what signed in, from its user agent. It is a label for a
+  person to recognise, never a decision: nothing is allowed or refused on it.
+  Sessions from before this was recorded have an empty `device`.
+- **`address`** is where it was last seen from, taken from the connection
+  itself, not from a forwarded-for header.
+- **`current`** marks the device asking.
+
+`DELETE /api/profile/sessions/{id}` signs out one of the caller's own devices
+and answers **204**. Signing out the device asking is signing out, and clears
+its cookie. Another account's device is **404**, as if it did not exist.
+
+### `GET /api/sessions` and `DELETE /api/sessions/{id}`
+
+The same, for every account on the server. Administrators only. A sign-out
+here is recorded in the audit log.
+
 ### `GET /api/profile/subtitle-style` and `PUT /api/profile/subtitle-style`
 
 How subtitles look for the calling account. It follows the person to every

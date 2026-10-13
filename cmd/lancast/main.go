@@ -361,11 +361,12 @@ func runWindow(l *launcher, d *desk) {
 	}
 
 	err = clientwindow.Open(clientwindow.Options{
-		URL:    url,
-		HTML:   page,
-		Title:  "LANcast",
-		Width:  1280,
-		Height: 800,
+		URL:        url,
+		HTML:       page,
+		Title:      "LANcast",
+		AppVersion: Version,
+		Width:      1280,
+		Height:     800,
 		// Where it was last time, if anywhere. Width and Height above stay the
 		// first-run answer: a remembered placement that cannot be honoured is
 		// refused rather than forced, and a centred default window is always
