@@ -378,6 +378,8 @@ func (s *Server) Handler() http.Handler {
 	// admin-only power like library creation itself.
 	mux.HandleFunc("GET /api/browse", s.adminOnly(s.browse))
 
+	// This machine and the LAN, as a status (Server › Network).
+	mux.HandleFunc("GET /api/network", s.adminOnly(s.networkStatus))
 	mux.HandleFunc("GET /api/libraries", s.listLibraries)
 	mux.HandleFunc("POST /api/libraries", s.adminOnly(s.createLibrary))
 	mux.HandleFunc("PATCH /api/libraries/{id}", s.adminOnly(s.patchLibrary))

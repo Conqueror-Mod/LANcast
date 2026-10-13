@@ -388,5 +388,7 @@ export type Collision = {
  * which is re-fetchable, and no sessions, which are cleared when it is written.
  */
 export type BackupFile = components["schemas"]["BackupFile"];
+// Server › Network: this machine and the LAN, as a status.
+export type NetworkStatus = components["schemas"]["NetworkStatus"];
 
 export type BackupsResponse = components["schemas"]["BackupList"];

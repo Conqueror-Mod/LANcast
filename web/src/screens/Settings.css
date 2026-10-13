@@ -739,3 +739,9 @@
    */
   width: 100%;
 }
+
+/* A certificate fingerprint is one long unbroken string; let it wrap rather
+   than push the pane wider than the column. */
+.set-network__pin {
+  overflow-wrap: anywhere;
+}

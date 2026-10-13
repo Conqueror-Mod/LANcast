@@ -28,6 +28,7 @@ import {
   useRenameSelf,
   useUpdateUser,
   useUserLibraries,
+  useNetworkStatus,
   useSetUserLibraries,
   useCreateUser,
   useDeleteUser,
@@ -3549,6 +3550,8 @@ const STATUS_PANES: Pane[] = [
 
 const SERVER_PANES: Pane[] = [
   { id: "general", label: "General", admin: true },
+  // This machine and the LAN. Remote access is the outside world.
+  { id: "network", label: "Network", admin: true },
   { id: "remote", label: "Remote access", admin: true },
   { id: "users", label: "Users & access", admin: true },
   { id: "libraries", label: "Libraries", admin: true },
@@ -3711,6 +3714,7 @@ export function Settings() {
                   <UpdateCheckSection />
                 </>
               )}
+              {pane === "network" && <NetworkSection />}
               {pane === "remote" && <PublicCertificateSettings />}
               {/* Backup first: what cannot be rebuilt leads, storage follows. */}
               {pane === "backup" && <BackupSettings />}
@@ -3928,6 +3932,81 @@ function MaintenanceSection() {
           </button>
         </div>
       </div>
+    </section>
+  );
+}
+
+/*
+ * Server › Network: this machine and the LAN, as a status.
+ *
+ * Read-only, and the sentence at the top is the point of the pane. Whether
+ * the server answers the network is the loopback rule — no password, no LAN —
+ * which CLAUDE.md says is not a setting, so there is no switch here to look
+ * for. What there is: which side of that rule this server is on, why, and the
+ * addresses somebody on the network would type.
+ */
+function NetworkSection() {
+  const { data: net, isError } = useNetworkStatus();
+  if (isError) {
+    return (
+      <section className="settings__section">
+        <p className="set-error">The server did not answer. Try again in a moment.</p>
+      </section>
+    );
+  }
+  if (!net) return null;
+  const addresses = Array.isArray(net.addresses) ? net.addresses : [];
+  let status: string;
+  if (net.lan_enabled) {
+    status = addresses.length
+      ? `Reachable on your network at ${addresses[0]}`
+      : "Open to your network, but this machine reports no address other devices could use.";
+  } else if (net.restart_required) {
+    status = "A password is set. The network opens the next time the server restarts.";
+  } else if (!net.secured) {
+    status = "Only this computer can reach the server, because no password is set. Setting one opens it to your network.";
+  } else {
+    status = "Only this computer can reach the server: it was started bound to this machine alone.";
+  }
+  return (
+    <section className="settings__section">
+      <span className="section-label">This machine and your network</span>
+      <div className="set-row">
+        <div className="set-row__main">
+          <div className="set-row__title">{status}</div>
+          <div className="set-row__sub">
+            Port {net.port}. Opening the server to your network follows the password:
+            with none set it answers this computer only, and that is not a setting.
+          </div>
+        </div>
+      </div>
+      {addresses.length > 1 && (
+        <div className="set-row">
+          <div className="set-row__main">
+            <div className="set-row__title">Every address</div>
+            <div className="set-row__sub">
+              {addresses.map((a) => (
+                <div key={a}>
+                  <code>{a}</code>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+      {net.certificate_fingerprint && (
+        <div className="set-row">
+          <div className="set-row__main">
+            <div className="set-row__title">Certificate</div>
+            <div className="set-row__sub">
+              {net.custom_certificate ? "One you supplied." : "Made by LANcast for this server."}{" "}
+              A device that asks you to trust it should show this fingerprint:
+              <br />
+              <code className="set-network__pin">{net.certificate_fingerprint}</code>
+            </div>
+          </div>
+        </div>
+      )}
     </section>
   );
 }

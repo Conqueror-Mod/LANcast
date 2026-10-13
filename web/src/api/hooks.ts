@@ -71,6 +71,7 @@ import type {
   PeerPresence,
   SharedLibrary,
   PeerLibrary,
+  NetworkStatus,
 } from "./types";
 
 // ------------------------------------------------------------------ auth
@@ -3519,6 +3520,15 @@ export function useRenameSelf() {
       qc.invalidateQueries({ queryKey: ["auth-status"] });
       qc.invalidateQueries({ queryKey: ["profile"] });
     },
+  });
+}
+
+// Server › Network: this machine and the LAN, as a status. Admin only.
+export function useNetworkStatus() {
+  return useQuery({
+    queryKey: ["network"],
+    queryFn: ({ signal }) =>
+      apiGet<NetworkStatus>("/api/network", signal),
   });
 }
 
