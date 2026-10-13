@@ -126,3 +126,38 @@ gets round is not a restriction at all, which is the ceiling's founding lesson.
 **A per-library "members may see" switch instead of per account.** It is
 coarser in exactly the case that matters: a household where one person's
 library is private from one other person, not from everybody.
+
+## Built — 2026-10-13
+
+All three stages, on one branch, each committed on its own.
+
+- **The chokepoints:**
+  - `MayPlay` refuses an item in a hidden library with the same internal
+    refusal a friend gets for an unshared one, so `GetItem` answers
+    `ErrNotFound`.
+  - `ListItems` applies `HiddenLibraries` beside the ceiling.
+  - `PermittedItems` applies both through one `accountAccess` predicate.
+- **Library-scoped routes.** The twelve `/api/libraries/{id}/` GET routes a
+  member can reach are wrapped by `libraryVisible`. Face clusters and face
+  thumbnails are wrapped by `ownedVisible`, which answers in each route's own
+  "does not exist" shape. `clusterFaces` answers an unknown cluster with an
+  empty list, so a 404 there would have confirmed the cluster exists.
+- **The account's own records:**
+  - Viewing history (page, count and export), ratings and Year in Review
+    exclude a hidden library's items in SQL, so totals match what is shown.
+  - The rows are kept, so lifting the restriction gives them back.
+  - The library ids are written into these queries as integers, not bound,
+    so the clause fits queries whose placeholder order was already fixed.
+- **Lists that go through `PermittedItems`:** Continue Watching, Memories, and
+  the review queue. The review queue is open to members and was not in the
+  first audit. Continue Watching and the review queue now take the ceiling too.
+- **Already covered through `GetItem`:** a collection's next film, a show's
+  next episode, a show's episodes, playlist and collection members.
+- **Judged and left alone:**
+  - The People page shows each account's watched *count*, never titles.
+  - Tags are an account's own labels on its own items.
+  - Search is `ListItems`.
+- **Tests.** Each test asks as the restricted member and as an administrator,
+  as a control. The stage 2 test builds the history before hiding the library
+  and asserts that lifting the restriction restores it. With the rule disabled
+  on purpose, the stage 1 test reports 13 failures and the stage 2 test 3.

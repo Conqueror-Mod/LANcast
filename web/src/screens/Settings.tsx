@@ -27,6 +27,8 @@ import {
   useSetGuideURL,
   useRenameSelf,
   useUpdateUser,
+  useUserLibraries,
+  useSetUserLibraries,
   useCreateUser,
   useDeleteUser,
   useResetUserPassword,
@@ -345,6 +347,78 @@ function UserRow({ user, isSelf }: { user: AuthUser; isSelf: boolean }) {
         <span className="set-error">
           {errorMessage(del.error ?? reset.error)}
         </span>
+      )}
+      {/* Not for administrators, who are never restricted (ADR 0084), and
+          so not for yourself either: you are one. */}
+      {user.role !== "admin" && !isSelf && <UserLibraryAccess user={user} />}
+    </div>
+  );
+}
+
+/*
+ * Which libraries a member can see (ADR 0084). Every library is on by
+ * default; switching one off hides it from this account everywhere — lists,
+ * search, Home, history — and the server refuses it by id as well.
+ *
+ * The summary is on the row, unopened, for the reason the rating limit is:
+ * the question an administrator brings to this pane is "who is limited", and
+ * a limit you have to open each row to find is one nobody audits.
+ */
+function UserLibraryAccess({ user }: { user: AuthUser }) {
+  const access = useUserLibraries(user.id);
+  const { data: libraries } = useLibraries();
+  const save = useSetUserLibraries();
+  const [open, setOpen] = useState(false);
+  // Nothing until both answers are the shapes expected: one malformed reply
+  // must cost this row, not the whole Users pane.
+  if (!Array.isArray(access.data?.hidden) || !Array.isArray(libraries)) return null;
+  const hidden = new Set(access.data.hidden);
+  const visible = libraries.filter((l) => !hidden.has(l.id)).length;
+  const toggle = (id: number, show: boolean) => {
+    const next = new Set(hidden);
+    if (show) next.delete(id);
+    else next.add(id);
+    save.mutate({ id: user.id, hidden: [...next] });
+  };
+  return (
+    <div className="set-access">
+      <div className="set-row">
+        <div className="set-row__main">
+          <div className="set-row__sub">
+            {hidden.size === 0
+              ? "Sees every library"
+              : `Sees ${visible} of ${libraries.length} libraries`}
+          </div>
+        </div>
+        <div className="set-row__actions">
+          <button
+            className="set-btn"
+            aria-expanded={open}
+            onClick={() => setOpen((o) => !o)}
+          >
+            {open ? "Done" : "Libraries"}
+          </button>
+        </div>
+      </div>
+      {open && (
+        <div className="set-access__list" role="group" aria-label={`Libraries ${user.name} can see`}>
+          {libraries.map((l) => (
+            <label className="set-toggle" key={l.id}>
+              <input
+                type="checkbox"
+                checked={!hidden.has(l.id)}
+                disabled={save.isPending}
+                onChange={(e) => toggle(l.id, e.target.checked)}
+              />
+              {l.name}
+            </label>
+          ))}
+          <p className="set-row__sub">
+            A library added later is visible to everyone until you switch it off
+            here.
+          </p>
+          {save.isError && <span className="set-error">{errorMessage(save.error)}</span>}
+        </div>
       )}
     </div>
   );
