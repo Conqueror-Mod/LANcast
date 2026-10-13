@@ -244,8 +244,16 @@ Each step is one or more small PRs and leaves Settings usable.
 2. **Dashboard is the first pane an administrator sees.**
 3. **Subtitle style is per account.** It follows the person to every device,
    alongside their audio and subtitle languages.
-4. **Per-user library access:** Chris wants it explained before deciding.
-   Still open.
+4. **Per-user library access: in scope** (decided after the explanation,
+   2026-10-12), with **every library visible to every account by default**.
+   An administrator narrows an account's libraries; a new library is visible
+   to everyone until somebody narrows it. So nothing changes for anybody until
+   an administrator chooses to restrict an account. It needs its own ADR,
+   amending ADR 0015, which deferred it. The rule has to hold on every listing
+   and route, not only the menu: browse, search, Home shelves, Continue
+   Watching, collections and playlists that span libraries, cast pages, Year
+   in Review, counts, and the play and artwork routes. Friend sharing's scope
+   filter and the item lookup checkpoint are the machinery to extend.
 5. **Intro skip happens automatically by default** (confirmed). That amends ADR 0054
    decision 3, which made skipping a button only; it needs its own ADR.
    - **What stays from 0054:** the skip happens only where the player would
