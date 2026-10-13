@@ -38,7 +38,12 @@ func serviceRun(dataDir, addr string) error {
 		// destination can stop the other. MultiWriter aborts on the first
 		// error, and under the SCM there is no stderr — so it wrote nothing to
 		// the log at all, in exactly the situation the log exists for.
-		log = slog.New(slog.NewTextHandler(applog.Tee(lf, os.Stderr), nil))
+		//
+		// Level: logLevel, the variable Settings › Debug logging moves. With
+		// nil options this handler was fixed at Info, so the switch had never
+		// worked for the installed service — found when a DLNA diagnosis
+		// turned it on and the log held no debug line at all, ever.
+		log = slog.New(slog.NewTextHandler(applog.Tee(lf, os.Stderr), &slog.HandlerOptions{Level: logLevel}))
 		log.Info("logging to file", "path", lf.Path())
 	}
 

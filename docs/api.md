@@ -729,6 +729,26 @@ which side of that rule the server is on (`secured`, `lan_enabled`, and
 it is reachable, where. `addresses` are the stable addresses an invite to a
 friend names, as `https://` URLs; empty when the server is loopback-only.
 
+### `GET /api/dlna`
+
+Administrators only. Whether DLNA is running ([ADR 0086](adr/0086-a-tv-browses-as-somebody.md)):
+
+```json
+{ "running": false, "reason": "no account chosen", "port": 8200 }
+```
+
+`reason` says why not, and is empty when running: `off`, `no account chosen`,
+the loopback rule (the server answers this computer only), the chosen account
+having been deleted, or the port being in use.
+
+**What DLNA serves** is on its own plain-HTTP listener on port 8200, not this
+API: the UPnP device and service descriptions, ContentDirectory `Browse`, and
+files and posters by item id. Every lookup is made as `dlna_account`, so a TV
+sees what that account sees and is refused (`404`, or UPnP error 701 in
+Browse) what it cannot. Connections from addresses that are not private,
+link-local or loopback are refused. Files are sent as they are, with no
+transcoding, and playing over DLNA records nothing in any history.
+
 ### `GET /api/libraries`
 
 ```json
@@ -4887,6 +4907,9 @@ to "have I watched this".
 | `audit_retention_days` | `90` | 0–3650 | Audit events older than this are deleted by a daily pass. **0 means keep for ever**, the same shape of answer `continue_weeks` gives — not "delete now". Takes effect without a restart. Cached provider responses are dropped after **7 days** regardless: that is a cache, every entry refetches, and it is not covered by this setting. Changing this value makes a pass due on the next check rather than a day later — a stamp records the policy it ran under, so shortening a window takes effect promptly instead of looking broken |
 | `backup_every_days` | `7` | 0–90 | Take a backup on a schedule, every this many days (`GET /api/backups`). **0 is off.** On by default, weekly: the database holds every correction made by hand, the one thing a rescan cannot rebuild. Checked every half hour, so turning it on, or shortening the interval past the last scheduled backup, takes one within the half hour. Scheduled backups are named with `-auto` before the extension and listed with `scheduled: true`. Not audited when taken — nobody did it — and logged as `scheduled backup taken`. On the Scheduled tasks board as `backup` |
 | `backup_keep` | `4` | 1–52 | How many **scheduled** backups to keep. After each scheduled backup, older scheduled ones past this count are deleted. **A backup taken by hand is never counted and never deleted**, however many there are: the one somebody took before an upgrade is the one they will come looking for. Lowering it deletes the extras at the next scheduled run, not at once. Rotation runs only after a backup has been written, so a schedule failing on a full disk does not then delete the copies it has |
+| `dlna_enabled` | `false` | — | DLNA, so TVs, consoles and VLC can find and play the library with no LANcast app ([ADR 0086](adr/0086-a-tv-browses-as-somebody.md)). **Off by default.** Runs only when `dlna_account` is set and the server is bound to the LAN; never widens the loopback rule. Serves plain HTTP on **8200** and discovery on UDP **1900**, to LAN clients only. Takes effect within seconds, no restart. Audited |
+| `dlna_account` | `""` | an account id | The account a TV browses **as**: it sees exactly what that account sees, rating limit and hidden libraries included. An id that is not an account is `400`. Audited |
+| `dlna_name` | `""` | up to 64 characters | The name TVs list. Empty means "LANcast". Audited |
 
 Out-of-range values are **rejected with 400**, not clamped — a client sending
 `200` has a bug, and silently storing `90` hides it. The config file is also

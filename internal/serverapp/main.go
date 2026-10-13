@@ -937,6 +937,12 @@ func run(ctx context.Context, addr, dataDir string, log *slog.Logger) error {
 	// somebody changed it.
 	go periodicBackup(ctx, apiSrv, settings, board)
 
+	// DLNA, when switched on, answering as the account Settings names
+	// (ADR 0086). Started and stopped from Settings without a restart.
+	dlnaSup := &dlnaSupervisor{reason: "off"}
+	apiSrv.SetDLNAStatus(dlnaSup.Status)
+	go runDLNA(ctx, dlnaSup, apiSrv, st, settings, ident, lanBound, log)
+
 	// Clears leftover scratch from a previous run and starts reaping idle
 	// sessions. A closed browser tab does not tell the server it has gone.
 	trans.Start(ctx)

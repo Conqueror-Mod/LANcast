@@ -745,3 +745,14 @@
 .set-network__pin {
   overflow-wrap: anywhere;
 }
+/* The DLNA firewall commands: a <pre> keeps their line breaks, and without
+   pre-wrap a long PowerShell line runs off the edge of the column (seen on
+   the first look at the pane). */
+pre.set-network__pin {
+  white-space: pre-wrap;
+  font-size: 12px;
+  margin: 8px 0 0;
+  padding: 10px 12px;
+  border-radius: var(--radius-tile);
+  background: rgba(10, 15, 34, 0.5);
+}

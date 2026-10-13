@@ -257,6 +257,13 @@ type Settings struct {
 	BackupEveryDays int `json:"backup_every_days"`
 	BackupKeep      int `json:"backup_keep"`
 
+	// DLNA (ADR 0086): off by default, and it answers as DLNAAccount — a TV
+	// sees what that account sees. It does not run with no account chosen.
+	// DLNAName is what TVs list; empty means "LANcast".
+	DLNAEnabled bool   `json:"dlna_enabled,omitempty"`
+	DLNAAccount string `json:"dlna_account,omitempty"`
+	DLNAName    string `json:"dlna_name,omitempty"`
+
 	// DebugLogging raises the server's log level to debug, at runtime and
 	// across restarts. Persisted rather than a one-shot toggle because the
 	// faults worth debug logging for are usually the intermittent ones: turning
