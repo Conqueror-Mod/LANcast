@@ -41,6 +41,9 @@ const (
 	TopicLibraries = store.ChangeLibraries
 	// TopicItems: what a library holds changed, by a scan or enrichment.
 	TopicItems = "items"
+	// TopicBackups: the schedule took a backup or rotated old ones out. The
+	// list itself stays admin-only; a member's window holds no such query.
+	TopicBackups = "backups"
 )
 
 /*

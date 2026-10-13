@@ -665,6 +665,7 @@ data but never wrong data.
 | `presence` | what a paired server lets **this** person see changed. Sent only to that person's streams |
 | `libraries` | a library was added, removed, renamed or rescanned |
 | `items` | what a library holds changed |
+| `backups` | the backup schedule took a backup or deleted old scheduled ones (`GET /api/backups`, admin only) |
 
 - Topics published within about 250 ms of each other arrive as one event, so a
   scan touching thousands of files is one `items`, not thousands.
@@ -4815,6 +4816,8 @@ to "have I watched this".
 | `scan_at_hour` | `null` | 0–23 or `null` | The hour of the **local** day a due scan may start. `null` is any time, the default. A **gate on top of `scan_interval_hours`, not a schedule replacing it**: the interval still says how often, this says when a due scan may begin — so `24`+`3` is nightly, and `1`+`3` is also nightly because the gate holds the others back. It does **not** make a scan due: `at 3` on a weekly interval is still weekly. Redefining the interval instead would mean somebody who had set "every 6 hours" and then picked an hour silently got a daily scan, with two settings on screen contradicting each other. **Local time**, because 3am means 3am where the server is; 3am UTC would wake the disk at 10pm for this household, which is the one time of day the setting exists to avoid. Send `null` to clear it; omitting the field leaves it alone |
 | `max_quality` | `""` | one of `quality_rungs` | The ceiling this server imposes on **every** stream. Empty is no limit, the default, and the right answer for a LAN-only server — any rung below Original is a re-encode that makes the picture worse and the machine hotter to solve a problem nobody on a gigabit link has. A **limit, not a target**: it only ever narrows what a client asked for and can never raise it, so a laptop on hotel wifi asking for 480p still gets 480p on a server capped at 1080p. The two halves are compared independently — a client wanting 1080p at 2 Mbps on a server capped at 720p at 4 Mbps gets **720p at 2 Mbps**. Distinct from the quality a client picks for itself, which is a fact about that screen; this is a fact about the server. **Server-wide rather than per network**, deliberately: "cap remote clients only" is the setting people want and needs a way to tell a remote client from a local one that this server does not have — guessing from the peer address would be wrong for a VPN, which is how a household reaches its server from outside. A rung outside `quality_rungs` is **400**, not stored-and-ignored |
 | `audit_retention_days` | `90` | 0–3650 | Audit events older than this are deleted by a daily pass. **0 means keep for ever**, the same shape of answer `continue_weeks` gives — not "delete now". Takes effect without a restart. Cached provider responses are dropped after **7 days** regardless: that is a cache, every entry refetches, and it is not covered by this setting. Changing this value makes a pass due on the next check rather than a day later — a stamp records the policy it ran under, so shortening a window takes effect promptly instead of looking broken |
+| `backup_every_days` | `7` | 0–90 | Take a backup on a schedule, every this many days (`GET /api/backups`). **0 is off.** On by default, weekly: the database holds every correction made by hand, the one thing a rescan cannot rebuild. Checked every half hour, so turning it on, or shortening the interval past the last scheduled backup, takes one within the half hour. Scheduled backups are named with `-auto` before the extension and listed with `scheduled: true`. Not audited when taken — nobody did it — and logged as `scheduled backup taken`. On the Scheduled tasks board as `backup` |
+| `backup_keep` | `4` | 1–52 | How many **scheduled** backups to keep. After each scheduled backup, older scheduled ones past this count are deleted. **A backup taken by hand is never counted and never deleted**, however many there are: the one somebody took before an upgrade is the one they will come looking for. Lowering it deletes the extras at the next scheduled run, not at once. Rotation runs only after a backup has been written, so a schedule failing on a full disk does not then delete the copies it has |
 
 Out-of-range values are **rejected with 400**, not clamped — a client sending
 `200` has a bug, and silently storing `90` hides it. The config file is also
@@ -5180,7 +5183,8 @@ written, so a backup file cannot sign anyone in.
       "bytes": 102834176,
       "taken_at": 1788452729,
       "schema_version": 39,
-      "restorable": true }
+      "restorable": true,
+      "scheduled": false }
   ],
   "folder": "C:\\ProgramData\\LANcast\\backups",
   "restore_command": "LANcast-Server.exe restore -from <file> -yes"
@@ -5201,6 +5205,10 @@ an older one. When it is `false`, `problem` carries a sentence saying why —
 `"taken by a newer LANcast — update before restoring it"`, or that the file is
 not a readable backup.
 
+`scheduled` is whether the backup schedule took it (`backup_every_days` in
+Settings) rather than a person. Only scheduled backups are ever deleted to keep
+the count at `backup_keep`; one taken by hand stays until somebody deletes it.
+
 **An unreadable backup is listed and marked, never omitted.** A backup that has
 gone bad is the single most important thing this endpoint can report, and a list
 that quietly dropped it would say the opposite of the truth.
@@ -5212,7 +5220,8 @@ list element:
 
 ```json
 { "name": "lancast-backup-20260903-144529.db", "bytes": 102834176,
-  "taken_at": 1788452729, "schema_version": 39, "restorable": true }
+  "taken_at": 1788452729, "schema_version": 39, "restorable": true,
+  "scheduled": false }
 ```
 
 **Synchronous**, and deliberately not a background job with progress: it is

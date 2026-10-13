@@ -360,3 +360,18 @@ func TestACallFromAnAddedPeerKicksTheWatcher(t *testing.T) {
 		t.Fatal("a call from an added peer did not kick the watcher")
 	}
 }
+
+// A scheduled backup is written with nobody pressing anything, so an open
+// Backup pane hears about it only through the stream.
+func TestAScheduledBackupReachesAnOpenWindow(t *testing.T) {
+	h := newHarness(t)
+	h.secure(t, "a good long password")
+	r := stream(t, h)
+
+	if err := h.srvAPI.RunScheduledBackup(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	if got := nextTopics(t, r); !has(got, TopicBackups) {
+		t.Fatalf("got %v, want %q", got, TopicBackups)
+	}
+}

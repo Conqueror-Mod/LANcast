@@ -174,7 +174,7 @@
           "events"
         ],
         "summary": "Names of things that changed, as server-sent events",
-        "description": "A `text/event-stream` that stays open. Each event is `event: changed` with `data` a JSON object `{\"topics\": [...]}` naming what changed. It never carries the changed data: a client refetches through the routes it already uses, with their usual checks (ADR 0079).\n\nTopics: `peers` (a pairing added, removed or made mutual, a roster or a share changed), `presence` (what a paired server lets *this* person see changed; sent only to that person's streams), `libraries` (a library added, removed, renamed or rescanned), `items` (what a library holds changed).\n\nTopics published within about 250 ms of each other arrive as one event. An idle stream sends a `: ping` comment every 25 s. The stream opens with `retry: 3000`. Events sent while a client was disconnected are not replayed, so a client should refetch everything it shows when it reconnects. A client that ignores this route and polls loses nothing but freshness.",
+        "description": "A `text/event-stream` that stays open. Each event is `event: changed` with `data` a JSON object `{\"topics\": [...]}` naming what changed. It never carries the changed data: a client refetches through the routes it already uses, with their usual checks (ADR 0079).\n\nTopics: `peers` (a pairing added, removed or made mutual, a roster or a share changed), `presence` (what a paired server lets *this* person see changed; sent only to that person's streams), `libraries` (a library added, removed, renamed or rescanned), `items` (what a library holds changed), `backups` (the backup schedule took a backup or rotated old ones out).\n\nTopics published within about 250 ms of each other arrive as one event. An idle stream sends a `: ping` comment every 25 s. The stream opens with `retry: 3000`. Events sent while a client was disconnected are not replayed, so a client should refetch everything it shows when it reconnects. A client that ignores this route and polls loses nothing but freshness.",
         "responses": {
           "200": {
             "description": "The stream. Never completes on its own; it ends when the client disconnects or the server shuts down.",
@@ -13717,7 +13717,9 @@
           "allow_media_deletion",
           "empty_trash_on_scan",
           "scan_interval_hours",
-          "audit_retention_days"
+          "audit_retention_days",
+          "backup_every_days",
+          "backup_keep"
         ],
         "properties": {
           "tmdb": {
@@ -13854,6 +13856,18 @@
           "audit_retention_days": {
             "type": "integer",
             "description": "How long audit entries are kept (ADR 0026)."
+          },
+          "backup_every_days": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 90,
+            "description": "Take a backup every this many days. 0 is off; 7 by default."
+          },
+          "backup_keep": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 52,
+            "description": "How many scheduled backups to keep. A backup taken by hand is never counted or deleted."
           },
           "certification_country": {
             "type": "string",
@@ -14008,6 +14022,12 @@
             "type": "integer"
           },
           "audit_retention_days": {
+            "type": "integer"
+          },
+          "backup_every_days": {
+            "type": "integer"
+          },
+          "backup_keep": {
             "type": "integer"
           },
           "certification_country": {
@@ -15860,7 +15880,8 @@
           "bytes",
           "taken_at",
           "schema_version",
-          "restorable"
+          "restorable",
+          "scheduled"
         ],
         "properties": {
           "name": {
@@ -15885,6 +15906,10 @@
           "problem": {
             "type": "string",
             "description": "Why not, in a sentence — \"taken by a newer LANcast — update before restoring it\", or that the file is not a readable backup. Absent when there is none."
+          },
+          "scheduled": {
+            "type": "boolean",
+            "description": "Whether the backup schedule took it rather than a person. Only scheduled backups are deleted to keep the count at backup_keep."
           }
         }
       },

@@ -112,3 +112,64 @@ func TestTranscodeCeilingAlwaysHasAValue(t *testing.T) {
 		t.Errorf("defaults = %d, want %d", Defaults().MaxTranscodes, DefaultMaxTranscodes)
 	}
 }
+
+// Zero is a real answer for these: keep the audit trail for ever, never
+// expire Continue Watching. Both default to something else, so a zero that is
+// dropped from the file comes back as the default after a restart — the
+// setting saves, reads back right, and quietly undoes itself later.
+func TestZeroThatMeansForeverSurvivesARestart(t *testing.T) {
+	dir := t.TempDir()
+	s, err := LoadSettings(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	next := s.Get()
+	next.AuditRetentionDays = 0
+	next.ContinueWeeks = 0
+	if err := s.Set(next); err != nil {
+		t.Fatal(err)
+	}
+	again, err := LoadSettings(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := again.Get()
+	if got.AuditRetentionDays != 0 {
+		t.Errorf("audit_retention_days came back as %d, want 0 (keep for ever)", got.AuditRetentionDays)
+	}
+	if got.ContinueWeeks != 0 {
+		t.Errorf("continue_weeks came back as %d, want 0 (never expire)", got.ContinueWeeks)
+	}
+}
+
+func TestBackupScheduleDefaultsAndClamp(t *testing.T) {
+	d := Defaults()
+	if d.BackupEveryDays != 7 || d.BackupKeep != 4 {
+		t.Errorf("defaults = every %d keep %d, want weekly keeping 4", d.BackupEveryDays, d.BackupKeep)
+	}
+	s := Settings{BackupEveryDays: -1, BackupKeep: 0}
+	clamp(&s)
+	if s.BackupEveryDays != 0 || s.BackupKeep != 4 {
+		t.Errorf("clamp = every %d keep %d, want off and the default keep", s.BackupEveryDays, s.BackupKeep)
+	}
+	s = Settings{BackupEveryDays: 999, BackupKeep: 999}
+	clamp(&s)
+	if s.BackupEveryDays != MaxBackupEveryDays || s.BackupKeep != MaxBackupKeep {
+		t.Errorf("clamp = every %d keep %d, want the ceilings", s.BackupEveryDays, s.BackupKeep)
+	}
+}
+
+// Turning the schedule off must stay off: off is zero, and the default is not.
+func TestBackupScheduleOffSurvivesARestart(t *testing.T) {
+	dir := t.TempDir()
+	s, _ := LoadSettings(dir)
+	next := s.Get()
+	next.BackupEveryDays = 0
+	if err := s.Set(next); err != nil {
+		t.Fatal(err)
+	}
+	again, _ := LoadSettings(dir)
+	if got := again.Get().BackupEveryDays; got != 0 {
+		t.Errorf("backup_every_days came back as %d, want 0 (off)", got)
+	}
+}

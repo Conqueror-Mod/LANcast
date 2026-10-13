@@ -2,6 +2,7 @@ package api
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"strings"
 
@@ -54,6 +55,8 @@ func (s *Server) getSettings(w http.ResponseWriter, r *http.Request) {
 		"max_transcodes":       cur.MaxTranscodes,
 		"scan_at_hour":         cur.ScanAtHour,
 		"audit_retention_days": cur.AuditRetentionDays,
+		"backup_every_days":    cur.BackupEveryDays,
+		"backup_keep":          cur.BackupKeep,
 		"write_nfo":            cur.WriteNFO,
 		"auto_enrich":          cur.AutoEnrich,
 		"update_check":         cur.UpdateCheck,
@@ -139,6 +142,8 @@ func (s *Server) putSettings(w http.ResponseWriter, r *http.Request) {
 		ArtworkCacheMB     *int            `json:"artwork_cache_mb"`
 		MaxTranscodes      *int            `json:"max_transcodes"`
 		AuditRetentionDays *int            `json:"audit_retention_days"`
+		BackupEveryDays    *int            `json:"backup_every_days"`
+		BackupKeep         *int            `json:"backup_keep"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeError(w, http.StatusBadRequest, "bad_request", "malformed JSON body")
@@ -316,6 +321,22 @@ func (s *Server) putSettings(w http.ResponseWriter, r *http.Request) {
 		}
 		next.AuditRetentionDays = *req.AuditRetentionDays
 	}
+	if req.BackupEveryDays != nil {
+		if *req.BackupEveryDays < 0 || *req.BackupEveryDays > config.MaxBackupEveryDays {
+			writeError(w, http.StatusBadRequest, "bad_request",
+				fmt.Sprintf("backup_every_days must be between 0 (off) and %d", config.MaxBackupEveryDays))
+			return
+		}
+		next.BackupEveryDays = *req.BackupEveryDays
+	}
+	if req.BackupKeep != nil {
+		if *req.BackupKeep < 1 || *req.BackupKeep > config.MaxBackupKeep {
+			writeError(w, http.StatusBadRequest, "bad_request",
+				fmt.Sprintf("backup_keep must be between 1 and %d", config.MaxBackupKeep))
+			return
+		}
+		next.BackupKeep = *req.BackupKeep
+	}
 
 	encoderChanged := req.HardwareEncoder != nil &&
 		*req.HardwareEncoder != next.HardwareEncoder
@@ -434,6 +455,9 @@ func changedSettings(prev, next config.Settings) []string {
 	add("scan_at_hour", !sameHour(prev.ScanAtHour, next.ScanAtHour))
 	add("artwork_cache_mb", prev.ArtworkCacheMB != next.ArtworkCacheMB)
 	add("audit_retention_days", prev.AuditRetentionDays != next.AuditRetentionDays)
+	// Audited because lowering the count deletes backups at the next run.
+	add("backup_every_days", prev.BackupEveryDays != next.BackupEveryDays)
+	add("backup_keep", prev.BackupKeep != next.BackupKeep)
 	return out
 }
 

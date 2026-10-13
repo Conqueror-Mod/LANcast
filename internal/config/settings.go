@@ -142,7 +142,9 @@ type Settings struct {
 	// A shelf is a promise that these are the things you are in the middle of.
 	// The half-hour of a documentary you abandoned in March is not that, and it
 	// pushes out the thing you paused last night.
-	ContinueWeeks int `json:"continue_weeks,omitempty"`
+	// No omitempty: zero is a choice here and the default is not zero, so a
+	// dropped zero would come back as the default after a restart.
+	ContinueWeeks int `json:"continue_weeks"`
 
 	// ContinueLimit caps how many items that shelf holds.
 	ContinueLimit int `json:"continue_limit,omitempty"`
@@ -237,7 +239,23 @@ type Settings struct {
 	// Ninety days by default. Long enough that "what happened to that library
 	// last month" is still answerable, short enough that the table stops being
 	// a permanent record of every scan the server has ever run.
-	AuditRetentionDays int `json:"audit_retention_days,omitempty"`
+	// No omitempty: zero is a choice here and the default is not zero, so a
+	// dropped zero would come back as the default after a restart.
+	AuditRetentionDays int `json:"audit_retention_days"`
+
+	// BackupEveryDays takes a backup on a schedule, every this many days.
+	// Zero is off. BackupKeep is how many of the scheduled ones to keep; a
+	// backup taken by hand is never counted or deleted (backup.Expired).
+	//
+	// On by default, weekly, four kept. A database holding every correction
+	// made by hand is the one thing on this server that cannot be rebuilt by
+	// rescanning, and before this the only backups were the ones somebody
+	// remembered to take. Four weekly copies of a database measured at about
+	// 45 MB is a month of history for under 200 MB.
+	//
+	// No omitempty on either, for the reason ContinueWeeks has none.
+	BackupEveryDays int `json:"backup_every_days"`
+	BackupKeep      int `json:"backup_keep"`
 
 	// DebugLogging raises the server's log level to debug, at runtime and
 	// across restarts. Persisted rather than a one-shot toggle because the
@@ -314,7 +332,8 @@ func Defaults() Settings {
 		// default.
 		WatchedThreshold: 90, ContinueWeeks: 16, ContinueLimit: 40,
 		AllowMediaDeletion: true, ScanIntervalHours: 0,
-		AuditRetentionDays: 90, MaxTranscodes: DefaultMaxTranscodes}
+		AuditRetentionDays: 90, MaxTranscodes: DefaultMaxTranscodes,
+		BackupEveryDays: 7, BackupKeep: 4}
 }
 
 // SettingsStore reads and writes the settings file.
@@ -440,7 +459,28 @@ func clamp(s *Settings) {
 	if s.AuditRetentionDays < 0 {
 		s.AuditRetentionDays = 0
 	}
+	if s.BackupEveryDays < 0 {
+		s.BackupEveryDays = 0
+	}
+	if s.BackupEveryDays > MaxBackupEveryDays {
+		s.BackupEveryDays = MaxBackupEveryDays
+	}
+	// A keep of zero would mean "take a backup and delete it"; it reads as
+	// unset. The ceiling catches a typed 500 on a small disk.
+	if s.BackupKeep < 1 {
+		s.BackupKeep = d.BackupKeep
+	}
+	if s.BackupKeep > MaxBackupKeep {
+		s.BackupKeep = MaxBackupKeep
+	}
 }
+
+// The bounds on the backup schedule, shared by clamp and the API's validation
+// so a hand-edited file and a request agree about what is allowed.
+const (
+	MaxBackupEveryDays = 90
+	MaxBackupKeep      = 52
+)
 
 // ContinueCutoff is the unix time before which a paused item leaves the
 // Continue Watching shelf, or 0 when nothing ever expires.

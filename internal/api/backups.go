@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"net/http"
@@ -67,26 +68,7 @@ func (s *Server) listBackups(w http.ResponseWriter, r *http.Request) {
  * time the first poll landed.
  */
 func (s *Server) createBackup(w http.ResponseWriter, r *http.Request) {
-	// One at a time. Two backups started together would race for a name, and
-	// the second would fail on a collision that is this server's fault rather
-	// than the caller's — a double-clicked button should take one backup, not
-	// produce an error.
-	s.backupMu.Lock()
-	defer s.backupMu.Unlock()
-
-	dir := s.backupDir()
-	if err := dir.Create(); err != nil {
-		s.writeInternal(w, err, "create backup folder")
-		return
-	}
-
-	path, name, err := s.freeBackupName(dir)
-	if err != nil {
-		s.writeInternal(w, err, "name backup")
-		return
-	}
-
-	snap, err := s.st.Snapshot(r.Context(), path)
+	f, err := s.takeBackup(r.Context(), false)
 	if err != nil {
 		// No space is the one failure worth its own answer: it is the likely
 		// one on a home server, and "unexpected server error" would send
@@ -99,18 +81,92 @@ func (s *Server) createBackup(w http.ResponseWriter, r *http.Request) {
 		s.writeInternal(w, err, "take backup")
 		return
 	}
+	s.audit(r, "backup.create", "backup", f.Name,
+		fmt.Sprintf("Took a backup (%s)", f.Name),
+		map[string]any{"bytes": f.Bytes, "schema_version": f.SchemaVersion})
+	writeJSON(w, http.StatusCreated, f)
+}
 
-	s.audit(r, "backup.create", "backup", name,
-		fmt.Sprintf("Took a backup (%s)", name),
-		map[string]any{"bytes": snap.Bytes, "schema_version": snap.SchemaVersion})
+// takeBackup writes one, by hand or for the schedule; the name says which.
+func (s *Server) takeBackup(ctx context.Context, scheduled bool) (backup.File, error) {
+	// One at a time. Two backups started together would race for a name, and
+	// the second would fail on a collision that is this server's fault rather
+	// than the caller's — a double-clicked button should take one backup, not
+	// produce an error, and nor should a button pressed while the schedule runs.
+	s.backupMu.Lock()
+	defer s.backupMu.Unlock()
 
-	writeJSON(w, http.StatusCreated, backup.File{
+	dir := s.backupDir()
+	if err := dir.Create(); err != nil {
+		return backup.File{}, err
+	}
+	namer := backup.NewName
+	if scheduled {
+		namer = backup.NewScheduledName
+	}
+	path, name, err := s.freeBackupName(dir, namer)
+	if err != nil {
+		return backup.File{}, fmt.Errorf("name backup: %w", err)
+	}
+	snap, err := s.st.Snapshot(ctx, path)
+	if err != nil {
+		return backup.File{}, err
+	}
+	return backup.File{
 		Name:          name,
 		Bytes:         snap.Bytes,
 		TakenAt:       snap.TakenAt,
 		SchemaVersion: snap.SchemaVersion,
 		Restorable:    true,
-	})
+		Scheduled:     scheduled,
+	}, nil
+}
+
+/*
+ * RunScheduledBackup is one turn of the backup schedule: take a backup, then
+ * delete the scheduled ones past the number to keep.
+ *
+ * Not audited. The audit trail is who did what, and nobody did this; the log
+ * line is where it belongs, next to whatever else the server was doing. The
+ * deletions are logged by name for the same reason — a backup that vanished
+ * should be findable as "rotated out", not as a mystery.
+ *
+ * Rotation runs only after a backup has been written. A schedule failing on a
+ * full disk must not then delete the copies it already has.
+ */
+func (s *Server) RunScheduledBackup(ctx context.Context) error {
+	f, err := s.takeBackup(ctx, true)
+	if err != nil {
+		s.log.Error("scheduled backup failed", "error", err)
+		return err
+	}
+	s.log.Info("scheduled backup taken", "name", f.Name, "bytes", f.Bytes)
+
+	dir := s.backupDir()
+	files, err := dir.List()
+	if err != nil {
+		return fmt.Errorf("list backups: %w", err)
+	}
+	for _, name := range backup.Expired(files, s.settings.Get().BackupKeep) {
+		if err := dir.Remove(name); err != nil {
+			s.log.Warn("scheduled backup: remove old one", "name", name, "error", err)
+			continue
+		}
+		s.log.Info("scheduled backup rotated out", "name", name)
+	}
+	// An open Backup pane has no other way to hear about a backup nobody
+	// pressed a button for.
+	s.Publish(TopicBackups)
+	return nil
+}
+
+// LastScheduledBackup is when the schedule last took one, for the task board.
+func (s *Server) LastScheduledBackup() time.Time {
+	files, err := s.backupDir().List()
+	if err != nil {
+		return time.Time{}
+	}
+	return backup.LastScheduled(files)
 }
 
 /*
@@ -122,10 +178,10 @@ func (s *Server) createBackup(w http.ResponseWriter, r *http.Request) {
  * and this is what stops that refusal from reaching somebody who did nothing
  * wrong.
  */
-func (s *Server) freeBackupName(dir *backup.Dir) (path, name string, err error) {
+func (s *Server) freeBackupName(dir *backup.Dir, namer func(time.Time) string) (path, name string, err error) {
 	now := time.Now()
 	for n := 0; n < 60; n++ {
-		name = backup.NewName(now.Add(time.Duration(n) * time.Second))
+		name = namer(now.Add(time.Duration(n) * time.Second))
 		path, err = dir.Resolve(name)
 		if err != nil {
 			return "", "", err

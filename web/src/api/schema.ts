@@ -61,7 +61,7 @@ export interface paths {
          * Names of things that changed, as server-sent events
          * @description A `text/event-stream` that stays open. Each event is `event: changed` with `data` a JSON object `{"topics": [...]}` naming what changed. It never carries the changed data: a client refetches through the routes it already uses, with their usual checks (ADR 0079).
          *
-         *     Topics: `peers` (a pairing added, removed or made mutual, a roster or a share changed), `presence` (what a paired server lets *this* person see changed; sent only to that person's streams), `libraries` (a library added, removed, renamed or rescanned), `items` (what a library holds changed).
+         *     Topics: `peers` (a pairing added, removed or made mutual, a roster or a share changed), `presence` (what a paired server lets *this* person see changed; sent only to that person's streams), `libraries` (a library added, removed, renamed or rescanned), `items` (what a library holds changed), `backups` (the backup schedule took a backup or rotated old ones out).
          *
          *     Topics published within about 250 ms of each other arrive as one event. An idle stream sends a `: ping` comment every 25 s. The stream opens with `retry: 3000`. Events sent while a client was disconnected are not replayed, so a client should refetch everything it shows when it reconnects. A client that ignores this route and polls loses nothing but freshness.
          */
@@ -6007,6 +6007,10 @@ export interface components {
             scan_interval_hours: number;
             /** @description How long audit entries are kept (ADR 0026). */
             audit_retention_days: number;
+            /** @description Take a backup every this many days. 0 is off; 7 by default. */
+            backup_every_days: number;
+            /** @description How many scheduled backups to keep. A backup taken by hand is never counted or deleted. */
+            backup_keep: number;
             /**
              * @description Whose certificate is preferred on films and programmes, as an ISO 3166-1 alpha-2 code. Empty means the default order: the US certificate, falling back to the British one.
              *
@@ -6102,6 +6106,8 @@ export interface components {
             empty_trash_on_scan?: boolean;
             scan_interval_hours?: number;
             audit_retention_days?: number;
+            backup_every_days?: number;
+            backup_keep?: number;
             /**
              * @description Prefer this country's certificate. Must be one of the codes reported in `certification_countries`, or empty to return to the default order; anything else is rejected with 400 rather than stored and ignored.
              *
@@ -6864,6 +6870,8 @@ export interface components {
             restorable: boolean;
             /** @description Why not, in a sentence — "taken by a newer LANcast — update before restoring it", or that the file is not a readable backup. Absent when there is none. */
             problem?: string;
+            /** @description Whether the backup schedule took it rather than a person. Only scheduled backups are deleted to keep the count at backup_keep. */
+            scheduled: boolean;
         };
         /**
          * @description A backup is a snapshot of the database and nothing else (ADR 0058).

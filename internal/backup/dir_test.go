@@ -272,3 +272,70 @@ func TestRemoveRefusesEscapingNames(t *testing.T) {
 func openForWrite(path string) (*sql.DB, error) {
 	return sql.Open("sqlite", path)
 }
+
+func TestScheduledNamesAreRecognisedAndResolvable(t *testing.T) {
+	d := New(t.TempDir())
+	name := NewScheduledName(time.Date(2026, 10, 12, 23, 5, 0, 0, time.Local))
+	if name != "lancast-backup-20261012-230500-auto.db" {
+		t.Errorf("name = %q", name)
+	}
+	if !IsScheduled(name) || IsScheduled(NewName(time.Now())) {
+		t.Error("IsScheduled cannot tell a scheduled backup from a manual one")
+	}
+	if _, err := d.Resolve(name); err != nil {
+		t.Errorf("a scheduled name does not resolve: %v", err)
+	}
+}
+
+// Retention counts and deletes scheduled backups only. A backup somebody
+// took by hand is never rotated away, however many there are.
+func TestExpiredOnlyEverNamesScheduledBackups(t *testing.T) {
+	files := []File{ // newest first, as List returns them
+		{Name: "s5", Scheduled: true},
+		{Name: "m4"},
+		{Name: "s3", Scheduled: true},
+		{Name: "s2", Scheduled: true},
+		{Name: "m1"},
+		{Name: "s0", Scheduled: true},
+	}
+	got := Expired(files, 2)
+	want := []string{"s2", "s0"}
+	if strings.Join(got, ",") != strings.Join(want, ",") {
+		t.Errorf("Expired(keep 2) = %v, want %v", got, want)
+	}
+	// Keep zero would delete the backup just taken; it is treated as one.
+	if got := Expired(files, 0); len(got) != 3 || got[0] != "s3" {
+		t.Errorf("Expired(keep 0) = %v, want everything after the newest", got)
+	}
+}
+
+func TestDue(t *testing.T) {
+	now := time.Date(2026, 10, 12, 12, 0, 0, 0, time.Local)
+	week := 7 * 24 * time.Hour
+	cases := []struct {
+		name  string
+		last  time.Time
+		every time.Duration
+		want  bool
+	}{
+		{"off", time.Time{}, 0, false},
+		{"never taken", time.Time{}, week, true},
+		{"taken yesterday", now.Add(-24 * time.Hour), week, false},
+		{"a week ago", now.Add(-week), week, true},
+	}
+	for _, c := range cases {
+		if got := Due(c.last, now, c.every); got != c.want {
+			t.Errorf("%s: Due = %v, want %v", c.name, got, c.want)
+		}
+	}
+}
+
+func TestLastScheduledIgnoresManualBackups(t *testing.T) {
+	files := []File{{Name: "m", TakenAt: 300}, {Name: "s", TakenAt: 200, Scheduled: true}}
+	if got := LastScheduled(files); got.Unix() != 200 {
+		t.Errorf("LastScheduled = %v, want the scheduled one", got.Unix())
+	}
+	if !LastScheduled([]File{{Name: "m", TakenAt: 300}}).IsZero() {
+		t.Error("a manual backup counted as the schedule's last run")
+	}
+}
