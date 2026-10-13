@@ -35,6 +35,10 @@ type Options struct {
 	HTML string
 	// Title is the window title.
 	Title string
+	// AppVersion is this app's version. The window tells the server it is
+	// the LANcast app, and which one, by adding it to its user agent, so a
+	// sign-in from it is listed as "LANcast app" rather than as Edge.
+	AppVersion string
 	// Width and Height are the initial size in logical pixels. Zero means the
 	// platform default.
 	Width, Height int
@@ -172,3 +176,12 @@ func Check() error { return check() }
 
 // Available is Check as a boolean, for callers that only branch on it.
 func Available() bool { return Check() == nil }
+
+// userAgentSuffix is what the window adds to its user agent: the token
+// internal/auth's DeviceName recognises as the LANcast app.
+func userAgentSuffix(version string) string {
+	if version == "" {
+		version = "dev"
+	}
+	return "LANcast-Desktop/" + version
+}

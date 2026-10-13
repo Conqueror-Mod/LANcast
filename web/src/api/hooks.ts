@@ -4096,6 +4096,53 @@ export function useRunTask() {
   });
 }
 
+export type SessionInfo = import("./schema").components["schemas"]["SessionInfo"];
+
+/*
+ * Authorized devices: the caller's signed-in devices, and, for an
+ * administrator, every account's. One key with two leaves, so signing a
+ * device out from either list refreshes both.
+ */
+export function useMySessions() {
+  return useQuery({
+    queryKey: ["sessions", "mine"],
+    queryFn: ({ signal }) =>
+      apiGet<{ sessions: SessionInfo[] }>("/api/profile/sessions", signal).then((r) => r.sessions),
+  });
+}
+
+export function useAllSessions(enabled = true) {
+  return useQuery({
+    queryKey: ["sessions", "all"],
+    queryFn: ({ signal }) =>
+      apiGet<{ sessions: SessionInfo[] }>("/api/sessions", signal).then((r) => r.sessions),
+    enabled,
+  });
+}
+
+export function useSignOutOtherDevices() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => apiSend("/api/profile/sessions", "DELETE"),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["sessions"] }),
+  });
+}
+
+export function useSignOutDevice() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (v: { id: string; anyAccount?: boolean }) =>
+      apiSend(
+        v.anyAccount
+          ? `/api/sessions/${encodeURIComponent(v.id)}`
+          : `/api/profile/sessions/${encodeURIComponent(v.id)}`,
+        "DELETE",
+      ),
+    // Both lists show the device that just went.
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["sessions"] }),
+  });
+}
+
 export function useSetLanguagePreferences() {
   const qc = useQueryClient();
   return useMutation({

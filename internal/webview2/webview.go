@@ -108,6 +108,12 @@ type WebViewOptions struct {
 	// is focused.
 	AutoFocus bool
 
+	// UserAgentSuffix, when set, is appended to the web view's own user agent.
+	// LOCAL ADDITION (PROVENANCE.md): WebView2 reports exactly what Edge does,
+	// so a server cannot tell the LANcast window from a browser tab without
+	// it — and "which device is this sign-in" needs to.
+	UserAgentSuffix string
+
 	// WindowOptions customizes the window that is created to embed the
 	// WebView2 widget.
 	WindowOptions WindowOptions
@@ -164,6 +170,12 @@ func NewWithOptions(options WebViewOptions) WebView {
 	err = settings.PutAreDevToolsEnabled(options.Debug)
 	if err != nil {
 		log.Fatal(err)
+	}
+	// Before the first navigation, so the very first request carries it.
+	if options.UserAgentSuffix != "" {
+		if ua, err := settings.GetUserAgent(); err == nil && ua != "" {
+			_ = settings.PutUserAgent(ua + " " + options.UserAgentSuffix)
+		}
 	}
 
 	return w

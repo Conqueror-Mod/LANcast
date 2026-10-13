@@ -4796,6 +4796,79 @@
         }
       }
     },
+    "/sessions": {
+      "get": {
+        "operationId": "listAllSessions",
+        "tags": [
+          "users"
+        ],
+        "summary": "Every account's signed-in devices",
+        "description": "Administrators only. Every live session on the server, most recently used first.",
+        "responses": {
+          "200": {
+            "description": "Every device.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "sessions"
+                  ],
+                  "properties": {
+                    "sessions": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/SessionInfo"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          }
+        }
+      }
+    },
+    "/sessions/{id}": {
+      "delete": {
+        "operationId": "signOutAnyDevice",
+        "tags": [
+          "users"
+        ],
+        "summary": "Sign out any account's device",
+        "description": "Administrators only. Recorded in the audit log.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Signed out."
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
     "/transcodes/{id}": {
       "parameters": [
         {
@@ -8505,6 +8578,102 @@
           },
           "409": {
             "description": "This server has no accounts yet."
+          }
+        }
+      }
+    },
+    "/profile/sessions": {
+      "get": {
+        "operationId": "listMySessions",
+        "tags": [
+          "Profile"
+        ],
+        "summary": "Your signed-in devices",
+        "description": "Every device signed in as the caller, most recently used first, with `current` marking the one asking. Empty on a server with no accounts.",
+        "responses": {
+          "200": {
+            "description": "The caller's devices.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "sessions"
+                  ],
+                  "properties": {
+                    "sessions": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/SessionInfo"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "operationId": "signOutOtherDevices",
+        "tags": [
+          "Profile"
+        ],
+        "summary": "Sign out every other device",
+        "description": "Signs out every one of the caller's devices except the one asking, and answers how many went. Recorded in the audit log when any did.",
+        "responses": {
+          "200": {
+            "description": "Signed out.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "signed_out"
+                  ],
+                  "properties": {
+                    "signed_out": {
+                      "type": "integer",
+                      "format": "int64"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      }
+    },
+    "/profile/sessions/{id}": {
+      "delete": {
+        "operationId": "signOutMyDevice",
+        "tags": [
+          "Profile"
+        ],
+        "summary": "Sign out one of your devices",
+        "description": "Signs out one of the caller's own devices. Signing out the device asking is signing out, and clears its cookie. Another account's device is **404**, as if it did not exist.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Signed out."
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
           }
         }
       }
@@ -18699,6 +18868,52 @@
             "type": "string",
             "format": "date-time",
             "description": "When an enabled interval job is next due."
+          }
+        }
+      },
+      "SessionInfo": {
+        "type": "object",
+        "required": [
+          "id",
+          "user_id",
+          "user_name",
+          "device",
+          "created_at",
+          "last_seen",
+          "current"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "A short public handle for signing this device out. Not the token, and not its hash."
+          },
+          "user_id": {
+            "type": "string"
+          },
+          "user_name": {
+            "type": "string"
+          },
+          "device": {
+            "type": "string",
+            "description": "What signed in, in words: \"LANcast app on Windows\", \"Chrome on Android\". Empty for sessions from before this was recorded. A label, never a decision."
+          },
+          "address": {
+            "type": "string",
+            "description": "The address it was last seen from: the connection's own, not a forwarded-for header."
+          },
+          "created_at": {
+            "type": "integer",
+            "format": "int64",
+            "description": "When it signed in, Unix seconds."
+          },
+          "last_seen": {
+            "type": "integer",
+            "format": "int64",
+            "description": "When it was last used, Unix seconds."
+          },
+          "current": {
+            "type": "boolean",
+            "description": "This is the device asking."
           }
         }
       }

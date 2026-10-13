@@ -6,7 +6,7 @@ import (
 )
 
 // CurrentSchemaVersion is the revision this build expects.
-const CurrentSchemaVersion = 71
+const CurrentSchemaVersion = 72
 
 // migration is one forward step. There are deliberately no down migrations:
 // rolling a media library's schema backwards loses data that a rescan cannot
@@ -130,6 +130,13 @@ var migrations = []migration{
 	// Subtitle style per account (docs/settings-plan.md): one nullable column,
 	// JSON, empty for "never set" so a device's own style still applies.
 	{version: 71, columns: []column{{"user", "subtitle_style", "TEXT"}}},
+	// Authorized devices (docs/settings-plan.md, step 4): what signed in and
+	// where it was last seen from, so a person can recognise each session.
+	// Nullable: sessions from before this have neither, and say so.
+	{version: 72, columns: []column{
+		{"session", "device", "TEXT"},
+		{"session", "address", "TEXT"},
+	}},
 }
 
 // migrate brings the database up to CurrentSchemaVersion.

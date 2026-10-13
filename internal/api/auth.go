@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net"
 	"net/http"
 	"strings"
 	"time"
@@ -344,7 +345,7 @@ func (s *Server) session(r *http.Request) (*store.Session, bool) {
 		return nil, false
 	}
 	// Extend on use so an active viewer is never logged out mid-film.
-	_ = s.st.TouchSession(r.Context(), hash, auth.SessionTTL)
+	_ = s.st.TouchSession(r.Context(), hash, auth.SessionTTL, remoteHost(r))
 	return sess, true
 }
 
@@ -811,7 +812,8 @@ func (s *Server) issueSession(w http.ResponseWriter, r *http.Request, userID str
 		s.writeInternal(w, err, "generate session")
 		return err
 	}
-	if err := s.st.CreateSession(r.Context(), hash, userID, auth.SessionTTL); err != nil {
+	if err := s.st.CreateSessionFrom(r.Context(), hash, userID, auth.SessionTTL,
+		auth.DeviceName(r.UserAgent()), remoteHost(r)); err != nil {
 		s.writeInternal(w, err, "create session")
 		return err
 	}
@@ -819,5 +821,22 @@ func (s *Server) issueSession(w http.ResponseWriter, r *http.Request, userID str
 	// serves HTTPS, and marking the cookie Secure there stops it downgrading.
 	http.SetCookie(w, auth.Cookie(token, auth.SessionTTL, r.TLS != nil))
 	s.cookieIssued(token)
+	// An expired session already refuses every request; this only stops its
+	// row piling up. A sign-in is rare enough to carry the sweep, and a
+	// failure here costs nothing but a row.
+	if err := s.st.PurgeExpiredSessions(r.Context()); err != nil {
+		s.log.Warn("purge expired sessions", "err", err)
+	}
 	return nil
+}
+
+// remoteHost is the address a request came from, without its port: what
+// Authorized devices shows as "last seen from". The connection's own address
+// — a forwarded-for header is a claim anyone can send.
+func remoteHost(r *http.Request) string {
+	host, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err != nil {
+		return r.RemoteAddr
+	}
+	return host
 }

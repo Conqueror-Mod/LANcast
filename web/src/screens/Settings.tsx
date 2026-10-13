@@ -1,3 +1,4 @@
+import { AuthorizedDevices } from "@/components/AuthorizedDevices";
 import { ScheduledTasks } from "@/components/ScheduledTasks";
 import { PlayerSettings, SubtitleStyleSettings } from "@/components/PlayerSettings";
 import { AboutSettings } from "@/components/AboutSettings";
@@ -855,6 +856,8 @@ function SecuritySection() {
   return (
     <section className="settings__section">
       <span className="section-label">Security</span>
+
+      <AuthorizedDevices />
 
       <PasskeySettings />
 
@@ -3613,6 +3616,7 @@ export function Settings() {
               <AdminSections pane={pane} />
               {pane === "metadata" && <RateLimitSection />}
               {pane === "users" && <UsersSection />}
+              {pane === "users" && <AuthorizedDevices everyone />}
               {pane === "livetv" && <LiveTVSection />}
               {pane === "addons" && <AddonsSection />}
               {pane === "pictures" && <PicturesSection />}

@@ -1957,6 +1957,46 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/sessions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Every account's signed-in devices
+         * @description Administrators only. Every live session on the server, most recently used first.
+         */
+        get: operations["listAllSessions"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/sessions/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Sign out any account's device
+         * @description Administrators only. Recorded in the audit log.
+         */
+        delete: operations["signOutAnyDevice"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/transcodes/{id}": {
         parameters: {
             query?: never;
@@ -3856,6 +3896,50 @@ export interface paths {
         put: operations["setSubtitleStyle"];
         post?: never;
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/profile/sessions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Your signed-in devices
+         * @description Every device signed in as the caller, most recently used first, with `current` marking the one asking. Empty on a server with no accounts.
+         */
+        get: operations["listMySessions"];
+        put?: never;
+        post?: never;
+        /**
+         * Sign out every other device
+         * @description Signs out every one of the caller's devices except the one asking, and answers how many went. Recorded in the audit log when any did.
+         */
+        delete: operations["signOutOtherDevices"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/profile/sessions/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Sign out one of your devices
+         * @description Signs out one of the caller's own devices. Signing out the device asking is signing out, and clears its cookie. Another account's device is **404**, as if it did not exist.
+         */
+        delete: operations["signOutMyDevice"];
         options?: never;
         head?: never;
         patch?: never;
@@ -7923,6 +8007,28 @@ export interface components {
              */
             next_at?: string;
         };
+        SessionInfo: {
+            /** @description A short public handle for signing this device out. Not the token, and not its hash. */
+            id: string;
+            user_id: string;
+            user_name: string;
+            /** @description What signed in, in words: "LANcast app on Windows", "Chrome on Android". Empty for sessions from before this was recorded. A label, never a decision. */
+            device: string;
+            /** @description The address it was last seen from: the connection's own, not a forwarded-for header. */
+            address?: string;
+            /**
+             * Format: int64
+             * @description When it signed in, Unix seconds.
+             */
+            created_at: number;
+            /**
+             * Format: int64
+             * @description When it was last used, Unix seconds.
+             */
+            last_seen: number;
+            /** @description This is the device asking. */
+            current: boolean;
+        };
     };
     responses: {
         /** @description Malformed body or invalid parameter. */
@@ -11593,6 +11699,53 @@ export interface operations {
             404: components["responses"]["NotFound"];
         };
     };
+    listAllSessions: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Every device. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        sessions: components["schemas"]["SessionInfo"][];
+                    };
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    signOutAnyDevice: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Signed out. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
     stopTranscode: {
         parameters: {
             query?: never;
@@ -14278,6 +14431,74 @@ export interface operations {
                 };
                 content?: never;
             };
+        };
+    };
+    listMySessions: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The caller's devices. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        sessions: components["schemas"]["SessionInfo"][];
+                    };
+                };
+            };
+        };
+    };
+    signOutOtherDevices: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Signed out. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** Format: int64 */
+                        signed_out: number;
+                    };
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+        };
+    };
+    signOutMyDevice: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Signed out. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
         };
     };
     mintGuestTicket: {
