@@ -83,6 +83,9 @@ func Announce(ctx context.Context, d Device, port int, preferredIP func() string
 		if !ok {
 			continue
 		}
+		// At debug, so "is the TV's search reaching us at all" is answered by
+		// the log rather than by guessing at the firewall.
+		log.Debug("dlna: search", "from", from.String(), "target", s.Target)
 		host := localIPFor(from)
 		if host == "" {
 			continue
