@@ -6,7 +6,8 @@ import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { ScheduledTasks, when } from "./ScheduledTasks";
+import { ScheduledTasks } from "./ScheduledTasks";
+import { when } from "@/lib/when";
 
 declare global {
   // eslint-disable-next-line no-var
