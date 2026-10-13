@@ -141,3 +141,35 @@ func TestZeroThatMeansForeverSurvivesARestart(t *testing.T) {
 		t.Errorf("continue_weeks came back as %d, want 0 (never expire)", got.ContinueWeeks)
 	}
 }
+
+func TestBackupScheduleDefaultsAndClamp(t *testing.T) {
+	d := Defaults()
+	if d.BackupEveryDays != 7 || d.BackupKeep != 4 {
+		t.Errorf("defaults = every %d keep %d, want weekly keeping 4", d.BackupEveryDays, d.BackupKeep)
+	}
+	s := Settings{BackupEveryDays: -1, BackupKeep: 0}
+	clamp(&s)
+	if s.BackupEveryDays != 0 || s.BackupKeep != 4 {
+		t.Errorf("clamp = every %d keep %d, want off and the default keep", s.BackupEveryDays, s.BackupKeep)
+	}
+	s = Settings{BackupEveryDays: 999, BackupKeep: 999}
+	clamp(&s)
+	if s.BackupEveryDays != MaxBackupEveryDays || s.BackupKeep != MaxBackupKeep {
+		t.Errorf("clamp = every %d keep %d, want the ceilings", s.BackupEveryDays, s.BackupKeep)
+	}
+}
+
+// Turning the schedule off must stay off: off is zero, and the default is not.
+func TestBackupScheduleOffSurvivesARestart(t *testing.T) {
+	dir := t.TempDir()
+	s, _ := LoadSettings(dir)
+	next := s.Get()
+	next.BackupEveryDays = 0
+	if err := s.Set(next); err != nil {
+		t.Fatal(err)
+	}
+	again, _ := LoadSettings(dir)
+	if got := again.Get().BackupEveryDays; got != 0 {
+		t.Errorf("backup_every_days came back as %d, want 0 (off)", got)
+	}
+}

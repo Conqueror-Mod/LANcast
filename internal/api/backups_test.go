@@ -262,3 +262,48 @@ func TestBackupTakenThroughTheAPIHoldsNoSessions(t *testing.T) {
 		t.Errorf("the downloadable backup carries %d sessions, want 0", n)
 	}
 }
+
+// The schedule rotates its own backups and never one taken by hand.
+func TestScheduledBackupsRotateAndLeaveManualOnesAlone(t *testing.T) {
+	h := newHarness(t)
+	h.secure(t, "correct horse battery staple")
+	next := h.settings.Get()
+	next.BackupKeep = 2
+	if err := h.settings.Set(next); err != nil {
+		t.Fatal(err)
+	}
+
+	resp := h.authed(t, "POST", "/api/backups", nil)
+	var manual backup.File
+	decode(t, resp, &manual)
+
+	ctx := t.Context()
+	for i := 0; i < 3; i++ {
+		if err := h.srvAPI.RunScheduledBackup(ctx); err != nil {
+			t.Fatalf("scheduled run %d: %v", i, err)
+		}
+	}
+
+	var scheduled, kept []string
+	for _, f := range backupsOf(t, h).Backups {
+		if f.Scheduled {
+			scheduled = append(scheduled, f.Name)
+		}
+		kept = append(kept, f.Name)
+	}
+	if len(scheduled) != 2 {
+		t.Errorf("scheduled backups kept = %v, want 2", scheduled)
+	}
+	found := false
+	for _, n := range kept {
+		if n == manual.Name {
+			found = true
+		}
+	}
+	if !found || manual.Scheduled {
+		t.Errorf("the manual backup %q was rotated out or marked scheduled: %v", manual.Name, kept)
+	}
+	if h.srvAPI.LastScheduledBackup().IsZero() {
+		t.Error("LastScheduledBackup is zero after three runs")
+	}
+}

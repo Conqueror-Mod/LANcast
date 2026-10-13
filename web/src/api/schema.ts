@@ -6007,6 +6007,10 @@ export interface components {
             scan_interval_hours: number;
             /** @description How long audit entries are kept (ADR 0026). */
             audit_retention_days: number;
+            /** @description Take a backup every this many days. 0 is off; 7 by default. */
+            backup_every_days: number;
+            /** @description How many scheduled backups to keep. A backup taken by hand is never counted or deleted. */
+            backup_keep: number;
             /**
              * @description Whose certificate is preferred on films and programmes, as an ISO 3166-1 alpha-2 code. Empty means the default order: the US certificate, falling back to the British one.
              *
@@ -6102,6 +6106,8 @@ export interface components {
             empty_trash_on_scan?: boolean;
             scan_interval_hours?: number;
             audit_retention_days?: number;
+            backup_every_days?: number;
+            backup_keep?: number;
             /**
              * @description Prefer this country's certificate. Must be one of the codes reported in `certification_countries`, or empty to return to the default order; anything else is rejected with 400 rather than stored and ignored.
              *
@@ -6864,6 +6870,8 @@ export interface components {
             restorable: boolean;
             /** @description Why not, in a sentence — "taken by a newer LANcast — update before restoring it", or that the file is not a readable backup. Absent when there is none. */
             problem?: string;
+            /** @description Whether the backup schedule took it rather than a person. Only scheduled backups are deleted to keep the count at backup_keep. */
+            scheduled: boolean;
         };
         /**
          * @description A backup is a snapshot of the database and nothing else (ADR 0058).

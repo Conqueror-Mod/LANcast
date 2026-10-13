@@ -12,7 +12,7 @@ import (
 func TestEveryBackgroundJobIsOnTheBoard(t *testing.T) {
 	b := tasks.New()
 	registerTasks(b, taskDeps{})
-	want := []string{"covers", "enrich", "guide", "markers", "photos", "places", "probe", "prune", "roms", "scan", "update"}
+	want := []string{"backup", "covers", "enrich", "guide", "markers", "photos", "places", "probe", "prune", "roms", "scan", "update"}
 	if got := b.IDs(); !reflect.DeepEqual(got, want) {
 		t.Fatalf("board holds %v, want %v", got, want)
 	}

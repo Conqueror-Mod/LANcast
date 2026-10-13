@@ -933,6 +933,10 @@ func run(ctx context.Context, addr, dataDir string, log *slog.Logger) error {
 	// Records whose relevance is their age, dropped once a day.
 	go periodicPrune(ctx, st, settings, filepath.Join(cfg.DataDir, "artwork"), log, board)
 
+	// A backup on the schedule Settings › Backup & storage sets, weekly unless
+	// somebody changed it.
+	go periodicBackup(ctx, apiSrv, settings, board)
+
 	// Clears leftover scratch from a previous run and starts reaping idle
 	// sessions. A closed browser tab does not tell the server it has gone.
 	trans.Start(ctx)

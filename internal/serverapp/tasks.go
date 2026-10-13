@@ -98,6 +98,16 @@ func registerTasks(b *tasks.Board, d taskDeps) {
 		Run: func() { go trackedPrune(d.ctx, d.st, d.settings, d.artworkDir, d.log, b) },
 	})
 	b.Add(tasks.Spec{
+		ID:          "backup",
+		Name:        "Back up the database",
+		Description: "Takes a backup of the library database and keeps the newest few.",
+		Trigger:     tasks.Interval,
+		Every:       func() time.Duration { return backupEvery(d.settings) },
+		Enabled:     func() bool { return d.settings.Get().BackupEveryDays > 0 },
+		Last:        d.api.LastScheduledBackup,
+		Run:         func() { go trackedBackup(d.ctx, d.api, b) },
+	})
+	b.Add(tasks.Spec{
 		ID:          "update",
 		Name:        "Check for updates",
 		Description: "Asks GitHub whether a newer LANcast has been released.",

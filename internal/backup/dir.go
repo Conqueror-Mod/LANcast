@@ -64,6 +64,10 @@ type File struct {
 	Restorable bool `json:"restorable"`
 	// Problem is why not, in a sentence, empty when there is none.
 	Problem string `json:"problem,omitempty"`
+	// Scheduled is whether the schedule took it rather than a person. Only
+	// these are ever deleted to keep the count down: a backup somebody took on
+	// purpose is theirs to remove.
+	Scheduled bool `json:"scheduled"`
 }
 
 /*
@@ -76,6 +80,73 @@ type File struct {
  */
 func NewName(now time.Time) string {
 	return Prefix + now.Format("20060102-150405") + Ext
+}
+
+// ScheduledTag marks a backup the schedule took. It sits before the extension
+// so the name still has the shape every listing and Resolve already accept.
+const ScheduledTag = "-auto"
+
+// NewScheduledName is what the schedule calls the next backup.
+func NewScheduledName(now time.Time) string {
+	return Prefix + now.Format("20060102-150405") + ScheduledTag + Ext
+}
+
+// IsScheduled reports whether a name is one the schedule wrote.
+func IsScheduled(name string) bool {
+	return strings.HasSuffix(name, ScheduledTag+Ext)
+}
+
+// LastScheduled is when the schedule last took a backup, from the files
+// themselves, so it survives a restart without a row of its own. Zero when it
+// never has.
+func LastScheduled(files []File) time.Time {
+	var last int64
+	for _, f := range files {
+		if f.Scheduled && f.TakenAt > last {
+			last = f.TakenAt
+		}
+	}
+	if last == 0 {
+		return time.Time{}
+	}
+	return time.Unix(last, 0)
+}
+
+// Due reports whether a scheduled backup should be taken now. An interval of
+// zero is off; never having taken one is due at once.
+func Due(last, now time.Time, every time.Duration) bool {
+	if every <= 0 {
+		return false
+	}
+	return last.IsZero() || now.Sub(last) >= every
+}
+
+/*
+ * Expired names the scheduled backups past the newest keep, given a list in
+ * List's order (newest first).
+ *
+ * Only scheduled ones are counted and only scheduled ones are named. A backup
+ * somebody took by hand, before an upgrade or a big edit, is the one they
+ * will come looking for, and a schedule that quietly rotated it away would be
+ * deleting the thing the feature exists to keep. A keep below one is treated
+ * as one: the schedule never deletes the backup it has just taken.
+ */
+func Expired(files []File, keep int) []string {
+	if keep < 1 {
+		keep = 1
+	}
+	var out []string
+	seen := 0
+	for _, f := range files {
+		if !f.Scheduled {
+			continue
+		}
+		seen++
+		if seen > keep {
+			out = append(out, f.Name)
+		}
+	}
+	return out
 }
 
 /*
@@ -160,7 +231,8 @@ func (d *Dir) List() ([]File, error) {
 			continue
 		}
 
-		f := File{Name: name, Bytes: info.Size(), TakenAt: info.ModTime().Unix()}
+		f := File{Name: name, Bytes: info.Size(), TakenAt: info.ModTime().Unix(),
+			Scheduled: IsScheduled(name)}
 		snap, err := store.InspectSnapshot(filepath.Join(d.path, name))
 		switch {
 		case err == nil:
