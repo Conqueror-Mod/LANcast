@@ -112,3 +112,32 @@ func TestTranscodeCeilingAlwaysHasAValue(t *testing.T) {
 		t.Errorf("defaults = %d, want %d", Defaults().MaxTranscodes, DefaultMaxTranscodes)
 	}
 }
+
+// Zero is a real answer for these: keep the audit trail for ever, never
+// expire Continue Watching. Both default to something else, so a zero that is
+// dropped from the file comes back as the default after a restart — the
+// setting saves, reads back right, and quietly undoes itself later.
+func TestZeroThatMeansForeverSurvivesARestart(t *testing.T) {
+	dir := t.TempDir()
+	s, err := LoadSettings(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	next := s.Get()
+	next.AuditRetentionDays = 0
+	next.ContinueWeeks = 0
+	if err := s.Set(next); err != nil {
+		t.Fatal(err)
+	}
+	again, err := LoadSettings(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := again.Get()
+	if got.AuditRetentionDays != 0 {
+		t.Errorf("audit_retention_days came back as %d, want 0 (keep for ever)", got.AuditRetentionDays)
+	}
+	if got.ContinueWeeks != 0 {
+		t.Errorf("continue_weeks came back as %d, want 0 (never expire)", got.ContinueWeeks)
+	}
+}

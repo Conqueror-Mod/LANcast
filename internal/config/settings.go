@@ -142,7 +142,9 @@ type Settings struct {
 	// A shelf is a promise that these are the things you are in the middle of.
 	// The half-hour of a documentary you abandoned in March is not that, and it
 	// pushes out the thing you paused last night.
-	ContinueWeeks int `json:"continue_weeks,omitempty"`
+	// No omitempty: zero is a choice here and the default is not zero, so a
+	// dropped zero would come back as the default after a restart.
+	ContinueWeeks int `json:"continue_weeks"`
 
 	// ContinueLimit caps how many items that shelf holds.
 	ContinueLimit int `json:"continue_limit,omitempty"`
@@ -237,7 +239,9 @@ type Settings struct {
 	// Ninety days by default. Long enough that "what happened to that library
 	// last month" is still answerable, short enough that the table stops being
 	// a permanent record of every scan the server has ever run.
-	AuditRetentionDays int `json:"audit_retention_days,omitempty"`
+	// No omitempty: zero is a choice here and the default is not zero, so a
+	// dropped zero would come back as the default after a restart.
+	AuditRetentionDays int `json:"audit_retention_days"`
 
 	// DebugLogging raises the server's log level to debug, at runtime and
 	// across restarts. Persisted rather than a one-shot toggle because the
