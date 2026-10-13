@@ -3177,6 +3177,10 @@ func (s *Store) SaveProgress(ctx context.Context, itemID int64, userID string, p
 		if err := logViewing(ctx, tx, userID, itemID, now); err != nil {
 			return fmt.Errorf("save progress: %w", err)
 		}
+		// Finished things leave the watchlist, on the same edge (ADR 0085).
+		if err := settleWatchlist(ctx, tx, userID, itemID); err != nil {
+			return fmt.Errorf("save progress: %w", err)
+		}
 	}
 	return tx.Commit()
 }

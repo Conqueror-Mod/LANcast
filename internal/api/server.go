@@ -435,6 +435,10 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/items/{id}/tags", s.addItemTag)
 	mux.HandleFunc("DELETE /api/items/{id}/tags/{tag}", s.removeItemTag)
 	mux.HandleFunc("PUT /api/items/{id}/favourite", s.putFavourite)
+	// The watchlist (ADR 0085): the caller's own, like favourites.
+	mux.HandleFunc("GET /api/watchlist", s.watchlist)
+	mux.HandleFunc("PUT /api/items/{id}/watchlist", s.addToWatchlist)
+	mux.HandleFunc("DELETE /api/items/{id}/watchlist", s.removeFromWatchlist)
 
 	mux.HandleFunc("GET /api/keys", s.listAPIKeys)
 	mux.HandleFunc("POST /api/keys", s.createAPIKey)

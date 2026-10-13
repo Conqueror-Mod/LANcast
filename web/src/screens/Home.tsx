@@ -7,6 +7,8 @@ import {
   useRecentPhotos,
   useItems,
   useSetWatchedByID,
+  useWatchlist,
+  watchlistItems,
 } from "@/api/hooks";
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
@@ -301,6 +303,8 @@ export function Home() {
     };
   };
 
+  const { data: watchlist } = useWatchlist();
+
   const hasAnything =
     (continueWatching?.length ?? 0) > 0 ||
     (recentlyAddedVideo?.length ?? 0) > 0 ||
@@ -345,6 +349,9 @@ export function Home() {
           itemOpen={continueOpen}
           wide
         />
+        {/* What you meant to watch, after what you are in the middle of
+            (ADR 0085). Newest first, and empty means no shelf. */}
+        <Shelf title="Watchlist" items={watchlistItems(watchlist)} />
         <Shelf
           title="Continue Listening"
           items={continueAudio}

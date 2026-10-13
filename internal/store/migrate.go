@@ -6,7 +6,7 @@ import (
 )
 
 // CurrentSchemaVersion is the revision this build expects.
-const CurrentSchemaVersion = 74
+const CurrentSchemaVersion = 75
 
 // migration is one forward step. There are deliberately no down migrations:
 // rolling a media library's schema backwards loses data that a rescan cannot
@@ -141,6 +141,7 @@ var migrations = []migration{
 	// which is on, so an account that never chose follows it.
 	{version: 73, columns: []column{{"user", "skip_intros", "INTEGER"}}},
 	{version: 74, sql: schemaRevision74},
+	{version: 75, sql: schemaRevision75},
 }
 
 // migrate brings the database up to CurrentSchemaVersion.
@@ -2349,4 +2350,20 @@ CREATE TABLE IF NOT EXISTS library_hidden (
     hidden_at  INTEGER NOT NULL,
     PRIMARY KEY (user_id, library_id)
 );
+`
+
+// Revision 75 — the watchlist (ADR 0085).
+//
+// One row per title an account means to watch. Cascades from media_item, so a
+// deleted title leaves every list; no foreign key to user, for the reason
+// session and passkey have none: DeleteUser removes the rows itself. The index
+// serves the list, which is read newest first.
+const schemaRevision75 = `
+CREATE TABLE IF NOT EXISTS user_watchlist (
+    user_id  TEXT    NOT NULL,
+    item_id  INTEGER NOT NULL REFERENCES media_item(id) ON DELETE CASCADE,
+    added_at INTEGER NOT NULL,
+    PRIMARY KEY (user_id, item_id)
+);
+CREATE INDEX IF NOT EXISTS idx_user_watchlist_added ON user_watchlist(user_id, added_at DESC);
 `

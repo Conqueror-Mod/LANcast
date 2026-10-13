@@ -189,6 +189,7 @@ describe("the library grid menu", () => {
     expect(labels()).toEqual([
       "Play",
       "Mark as watched",
+      "Add to Watchlist",
       "Play next",
       "Add to queue",
       "Go to details",
@@ -224,6 +225,7 @@ describe("the library grid menu", () => {
       "Shuffle",
       "Mark all as watched",
       "Mark all as unwatched",
+      "Add to Watchlist",
       "Go to details",
       "Remove from library…",
     ]);

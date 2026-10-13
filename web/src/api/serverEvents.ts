@@ -43,6 +43,8 @@ export const topicKeys: Record<string, readonly (readonly string[])[]> = {
     ["recently-added"],
     ["continue"],
     ["recent-photos"],
+    // A rescan can mark a listed title missing, which takes it off the list.
+    ["watchlist"],
   ],
   // The schedule writes and rotates backups with nobody pressing anything.
   backups: [["backups"]],

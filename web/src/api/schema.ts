@@ -3646,6 +3646,33 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/items/{id}/watchlist": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The item's id. */
+                id: components["parameters"]["ItemId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Put a title on the caller's watchlist
+         * @description Films and shows only (ADR 0085); anything else is **400**. A title the caller cannot see answers **404**, as for one that does not exist. Adding one already there changes nothing. A finished title leaves the list by itself: a film when it is watched, a show when its last episode is.
+         */
+        put: operations["addToWatchlist"];
+        post?: never;
+        /**
+         * Take a title off the caller's watchlist
+         * @description Removing one that is not there is not an error. Works for a title the caller can no longer see.
+         */
+        delete: operations["removeFromWatchlist"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/plugins/{name}/secrets/{secret}": {
         parameters: {
             query?: never;
@@ -5336,6 +5363,26 @@ export interface paths {
          *     The one write a stream ticket can make: a game's ticket may store the minting person's saves for that game and nothing else.
          */
         put: operations["putGameSave"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/watchlist": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The caller's watchlist
+         * @description Newest first, in the shape of `GET /api/items`, with progress and artwork. The caller's own: there is no route to another account's (ADR 0085). The account's limits apply (ADR 0084), and titles whose files are missing are left out until they return.
+         */
+        get: operations["getWatchlist"];
+        put?: never;
         post?: never;
         delete?: never;
         options?: never;
@@ -14281,6 +14328,50 @@ export interface operations {
             404: components["responses"]["NotFound"];
         };
     };
+    addToWatchlist: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The item's id. */
+                id: components["parameters"]["ItemId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description On the list. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["BadRequest"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    removeFromWatchlist: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The item's id. */
+                id: components["parameters"]["ItemId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Off the list. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
     setPluginSecret: {
         parameters: {
             query?: never;
@@ -16627,6 +16718,28 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    getWatchlist: {
+        parameters: {
+            query?: {
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The list. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ItemsPage"];
                 };
             };
         };

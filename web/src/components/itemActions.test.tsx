@@ -126,6 +126,7 @@ describe("what a poster offers", () => {
     expect(labels(item({ kind: "movie" }))).toEqual([
       "Play",
       "Mark as watched",
+      "Add to Watchlist",
       "Play next",
       "Add to queue",
       "Go to details",
@@ -195,6 +196,7 @@ describe("what a poster offers", () => {
       "Shuffle",
       "Mark all as watched",
       "Mark all as unwatched",
+      "Add to Watchlist",
       "Go to details",
     ]);
     // Not the leaf's. Queueing a show is not queueing a thing.
@@ -322,5 +324,22 @@ describe("what a poster offers", () => {
         "Remove",
       );
     }
+  });
+});
+
+/*
+ * The watchlist (ADR 0085): films and shows only, and the label is the state.
+ */
+describe("the watchlist entry", () => {
+  it("is offered on films and shows and nowhere else", () => {
+    expect(labels(item({ kind: "movie" }))).toContain("Add to Watchlist");
+    expect(labels(item({ kind: "show", child_count: 2 } as Partial<Item>))).toContain("Add to Watchlist");
+    for (const kind of ["episode", "season", "track", "album", "collection"]) {
+      expect(labels(item({ kind, child_count: 2 } as Partial<Item>)), kind).not.toContain("Add to Watchlist");
+    }
+  });
+
+  it("is not offered for a title whose file is missing", () => {
+    expect(labels(item({ kind: "movie", missing: true } as Partial<Item>))).not.toContain("Add to Watchlist");
   });
 });

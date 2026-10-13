@@ -1681,6 +1681,27 @@ It is the answer to a list of sign-ins nobody recognises.
 The same, for every account on the server. Administrators only. A sign-out
 here is recorded in the audit log.
 
+### The watchlist: `GET /api/watchlist`, `PUT` and `DELETE /api/items/{id}/watchlist`
+
+Titles the caller means to watch ([ADR 0085](adr/0085-a-watchlist-is-a-list-of-promises.md)).
+Private like tags: every route acts on the session, and none reads another
+account's list. Not audited.
+
+- `GET /api/watchlist` answers in the shape of `GET /api/items`, **newest
+  first**, with progress and artwork. The account's limits apply (ADR 0084),
+  and titles whose files are missing are left out until they return.
+- `PUT /api/items/{id}/watchlist` adds a title: `204`. **Films and shows only**;
+  anything else is `400`. A title the caller cannot see is `404`, as for one
+  that does not exist. Adding one already there changes nothing, including its
+  place in the list.
+- `DELETE /api/items/{id}/watchlist` removes it: `204`, and `204` again if it
+  was not there.
+
+**A finished title leaves by itself.** On the write that makes it watched
+(`PUT /api/items/{id}/progress` with `watched`, from playing to the end or from
+*Mark as watched*): a film leaves at once, and a show leaves when the caller
+has no unwatched episode left in it. Un-watching does not put anything back.
+
 ### `GET /api/profile/playback` and `PUT /api/profile/playback`
 
 The caller's own playback preferences (ADR 0083). One so far:

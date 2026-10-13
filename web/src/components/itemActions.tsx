@@ -9,6 +9,9 @@ import {
   invalidateWatchState,
   useSetWatchedByID,
   useSettings,
+  useSetWatchlist,
+  useWatchlist,
+  watchlistItems,
 } from "@/api/hooks";
 import { usePlayback } from "@/playback/PlaybackProvider";
 import { apiGet } from "@/api/client";
@@ -290,6 +293,26 @@ export function useItemActions(): ItemActions {
     [isAdmin, settings?.sensitive_marking, setSensitive],
   );
 
+  /*
+   * On or off the watchlist (ADR 0085), for films and shows. One query for the
+   * whole grid, so every tile's menu reads the same list the title page does.
+   */
+  const { data: watchlist } = useWatchlist();
+  const setWatchlist = useSetWatchlist();
+  const watchlistAction = useCallback(
+    (item: Item): MenuAction[] => {
+      if ((item.kind !== "movie" && item.kind !== "show") || item.missing) return [];
+      const on = watchlistItems(watchlist).some((it) => it.id === item.id);
+      return [
+        {
+          label: on ? "Remove from Watchlist" : "Add to Watchlist",
+          onSelect: () => setWatchlist.mutate({ id: item.id, on: !on }),
+        },
+      ];
+    },
+    [watchlist, setWatchlist],
+  );
+
   const actions = useCallback(
     (item: Item): MenuAction[] => {
       /*
@@ -400,6 +423,7 @@ export function useItemActions(): ItemActions {
                 },
               ]
             : []),
+          ...watchlistAction(item),
           {
             label: "Go to details",
             onSelect: () => navigate(`/item/${item.id}`),
@@ -455,6 +479,7 @@ export function useItemActions(): ItemActions {
           label: seen ? `Mark as ${verb.negated}` : `Mark as ${verb.past}`,
           onSelect: () => setWatched.mutate({ itemID: item.id, watched: !seen }),
         },
+        ...watchlistAction(item),
         { label: "Play next", onSelect: () => pb.playNextUp(item.id) },
         { label: "Add to queue", onSelect: () => pb.addToQueue(item.id) },
         /*
@@ -486,6 +511,7 @@ export function useItemActions(): ItemActions {
       markAll,
       marking,
       sensitiveActions,
+      watchlistAction,
     ],
   );
 

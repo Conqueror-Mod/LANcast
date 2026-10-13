@@ -47,7 +47,7 @@ import {
 import { platformLabel } from "@/lib/platforms";
 import { retroAvailability } from "@/playback/retro";
 import { WEB_STATE_PREFIX, webStateCore } from "@/playback/retroWeb";
-import { useGameSaves } from "@/api/hooks";
+import { useGameSaves, useOnWatchlist, useSetWatchlist } from "@/api/hooks";
 import { useQuery } from "@tanstack/react-query";
 import type { Item } from "@/api/types";
 import { FixMatch } from "@/components/FixMatch";
@@ -196,6 +196,43 @@ function RedetectCreditsButton({ id }: { id: number }) {
   );
 }
 
+/*
+ * On or off the watchlist (ADR 0085), beside Play because it is a decision
+ * about watching. State is a shape — an outline bookmark or a filled one —
+ * and a label, never a colour: gold means where you are and nothing else.
+ */
+function WatchlistButton({ id }: { id: number }) {
+  const on = useOnWatchlist(id);
+  const set = useSetWatchlist();
+  const toggle = () => set.mutate({ id, on: !on });
+  const focusable = useFocusable(toggle);
+  return (
+    <button
+      {...focusable}
+      className="detail__trailer-btn"
+      aria-pressed={on}
+      disabled={set.isPending}
+      onClick={toggle}
+    >
+      <svg width="12" height="14" viewBox="0 0 12 14" aria-hidden="true">
+        <path
+          d="M1.5 1.5h9v11L6 9.5l-4.5 3z"
+          fill={on ? "currentColor" : "none"}
+          stroke="currentColor"
+          strokeWidth="1.4"
+          strokeLinejoin="round"
+        />
+      </svg>
+      {on ? "On Watchlist" : "Watchlist"}
+    </button>
+  );
+}
+
+/** Films and shows go on a watchlist; nothing else does (ADR 0085). */
+export function watchlistable(item: Item): boolean {
+  return (item.kind === "movie" || item.kind === "show") && !item.missing;
+}
+
 function TrailerButton({ onOpen }: { onOpen: () => void }) {
   const focusable = useFocusable(onOpen);
   return (
@@ -299,6 +336,7 @@ function detailActions(o: {
   download: () => void;
   addToPlaylist: () => void;
   watched: MenuAction | null;
+  watchlist: { on: boolean; toggle: () => void } | null;
   pin: { pinned: boolean; toggle: () => void } | null;
   rename: (() => void) | null;
   remove: (() => void) | null;
@@ -314,6 +352,12 @@ function detailActions(o: {
     });
   }
   if (o.watched) out.push(o.watched);
+  if (o.watchlist) {
+    out.push({
+      label: o.watchlist.on ? "Remove from Watchlist" : "Add to Watchlist",
+      onSelect: o.watchlist.toggle,
+    });
+  }
   // Anything that plays on its own can go in a playlist; a container cannot,
   // since a playlist holds entries, not albums. Pictures do not play at all.
   if (!o.container && !isPicture(item) && !isROM(item)) {
@@ -454,6 +498,9 @@ export function Detail() {
   const [trailerOpen, setTrailerOpen] = useState(false);
   const [removeOpen, setRemoveOpen] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
+  // On or off the watchlist, for More Options (the button reads it itself).
+  const onWatchlist = useOnWatchlist(item?.id ?? 0);
+  const setWatchlist = useSetWatchlist();
   // Deleting a playlist asks once, in the button itself. A dialog would be the
   // RemoveDialog's shape and RemoveDialog is about files; a native confirm() is
   // never an option in this application (it steals focus from the web contents
@@ -1087,6 +1134,7 @@ export function Detail() {
                   onPlay={playArtist}
                 />
               )}
+              {watchlistable(item) && <WatchlistButton id={item.id} />}
               {trailer && <TrailerButton onOpen={() => setTrailerOpen(true)} />}
               {/*
                * Everything that is not playing it, behind one button.
@@ -1116,6 +1164,9 @@ export function Detail() {
                     !isMusic && !isPicture(item) && !isROM(item) && !isPlaylist
                       ? watchedAction(item, children, forgetPlace.mutate, markAll, marking)
                       : null,
+                  watchlist: watchlistable(item)
+                    ? { on: onWatchlist, toggle: () => setWatchlist.mutate({ id: item.id, on: !onWatchlist }) }
+                    : null,
                   pin: heroEligible(item)
                     ? {
                         pinned,

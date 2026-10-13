@@ -695,7 +695,7 @@ func (s *Server) listItems(w http.ResponseWriter, r *http.Request) {
 
 // decorateAndWriteItems attaches the per-user and grid data every item listing
 // needs — progress, artwork, and child counts — then writes the page. total is
-// the count for a paged query; pass -1 for a whole set (a collection's members),
+// the count for a paged query; omit it for a whole set (a collection's members),
 // where the response reports len(items).
 func (s *Server) decorateAndWriteItems(w http.ResponseWriter, r *http.Request, items []store.Item, total ...int) {
 	/*
