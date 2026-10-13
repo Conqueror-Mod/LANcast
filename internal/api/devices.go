@@ -100,6 +100,11 @@ func (s *Server) signOutOthers(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusUnauthorized, "unauthorized", "sign in to continue")
 		return
 	}
+	// Sweep the dead rows first, so the count — and the audit line — is of
+	// devices that could still sign in, not of rows that had already expired.
+	if err := s.st.PurgeExpiredSessions(r.Context()); err != nil {
+		s.log.Warn("purge expired sessions", "err", err)
+	}
 	n, err := s.st.DeleteOtherSessions(r.Context(), sess.UserID, auth.HashToken(c.Value))
 	if err != nil {
 		s.writeInternal(w, err, "sign out other sessions")
