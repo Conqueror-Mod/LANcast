@@ -24,6 +24,13 @@ func (s *Server) memories(w http.ResponseWriter, r *http.Request) {
 		s.writeInternal(w, err, "photo memories")
 		return
 	}
+	// Photographs from a library kept from the caller are not their memories
+	// (ADR 0084). The ceiling exempts photographs; the hidden libraries do not.
+	items, err = s.st.PermittedItems(r.Context(), s.userID(r), items)
+	if err != nil {
+		s.writeInternal(w, err, "apply account limits")
+		return
+	}
 	writeJSON(w, http.StatusOK, map[string]any{
 		"items": items,
 		// The date the server resolved, so a client that has been open since

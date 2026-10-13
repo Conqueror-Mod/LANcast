@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -46,6 +47,41 @@ func (s *Server) libraryVisible(h http.HandlerFunc) http.HandlerFunc {
 		}
 		if !visible {
 			writeError(w, http.StatusNotFound, "not_found", "no such library")
+			return
+		}
+		h(w, r)
+	}
+}
+
+// ownedVisible wraps a route whose {id} names something that belongs to one
+// library — a face cluster, a face — so it is refused when that library is
+// kept from the caller. owner turns the id into its library; absent writes
+// exactly what the route answers for an id that does not exist, because a
+// refusal that looked different would confirm the thing is there.
+func (s *Server) ownedVisible(owner func(context.Context, int64) (int64, error),
+	absent http.HandlerFunc, h http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		id, ok := pathID(r)
+		if !ok {
+			h(w, r)
+			return
+		}
+		lib, err := owner(r.Context(), id)
+		if errors.Is(err, store.ErrNotFound) {
+			h(w, r) // the handler's own not-found answer
+			return
+		}
+		if err != nil {
+			s.writeInternal(w, err, "check library access")
+			return
+		}
+		visible, err := s.st.MayOpenLibrary(r.Context(), s.userID(r), lib)
+		if err != nil {
+			s.writeInternal(w, err, "check library access")
+			return
+		}
+		if !visible {
+			absent(w, r)
 			return
 		}
 		h(w, r)
@@ -124,4 +160,18 @@ func (s *Server) setUserLibraries(w http.ResponseWriter, r *http.Request) {
 	s.audit(r, "user.libraries", "user", id, summary, map[string]any{"hidden": *req.Hidden})
 
 	s.userLibraries(w, r)
+}
+
+// The "does not exist" answers of the face routes, for ownedVisible.
+func noClusterFaces(w http.ResponseWriter, _ *http.Request) {
+	// clusterFaces answers an unknown cluster with an empty list, not a 404.
+	writeJSON(w, http.StatusOK, map[string]any{"faces": []any{}})
+}
+
+func noCluster(w http.ResponseWriter, _ *http.Request) {
+	writeError(w, http.StatusNotFound, "not_found", "no such cluster")
+}
+
+func noFace(w http.ResponseWriter, _ *http.Request) {
+	writeError(w, http.StatusNotFound, "not_found", "no such face")
 }

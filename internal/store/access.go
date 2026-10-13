@@ -2,8 +2,12 @@ package store
 
 import (
 	"context"
+	"database/sql"
+	"errors"
 	"fmt"
 	"sort"
+	"strconv"
+	"strings"
 	"time"
 )
 
@@ -177,4 +181,52 @@ func (a accountAccess) predicate() (string, []any) {
 	ceil, ceilArgs := ceilingPredicate(a.ceiling)
 	hid, hidArgs := hiddenPredicate(a.hidden)
 	return ceil + hid, append(ceilArgs, hidArgs...)
+}
+
+/*
+ * hiddenClause excludes rows whose item sits in a library kept from the
+ * account, for queries over that account's own records — its history, its
+ * ratings, its year — which key on an item id rather than listing media_item.
+ *
+ * The ids are written into the SQL rather than bound. They are int64s read
+ * back from the database, so formatting them cannot inject anything, and it
+ * lets the clause drop into queries whose placeholder order is already fixed
+ * without every caller re-threading its arguments. A NULL item (a history row
+ * whose item has since been deleted) is kept: it belongs to no library.
+ *
+ * Empty for an account with nothing hidden, so the ordinary case is unchanged.
+ */
+func (s *Store) hiddenClause(ctx context.Context, userID, col string) (string, error) {
+	hidden, err := s.HiddenLibraries(ctx, userID)
+	if err != nil || len(hidden) == 0 {
+		return "", err
+	}
+	ids := make([]string, len(hidden))
+	for i, id := range hidden {
+		ids[i] = strconv.FormatInt(id, 10)
+	}
+	return ` AND (` + col + ` IS NULL OR ` + col + ` NOT IN (SELECT id FROM media_item WHERE library_id IN (` +
+		strings.Join(ids, ",") + `)))`, nil
+}
+
+// LibraryOfCluster is the library a face cluster belongs to, so its routes can
+// be refused for a library kept from the caller. ErrNotFound for no cluster.
+func (s *Store) LibraryOfCluster(ctx context.Context, clusterID int64) (int64, error) {
+	var id int64
+	err := s.db.QueryRowContext(ctx, `SELECT library_id FROM face_cluster WHERE id = ?`, clusterID).Scan(&id)
+	if errors.Is(err, sql.ErrNoRows) {
+		return 0, ErrNotFound
+	}
+	return id, err
+}
+
+// LibraryOfFace is the library the photograph holding a face belongs to.
+func (s *Store) LibraryOfFace(ctx context.Context, faceID int64) (int64, error) {
+	var id int64
+	err := s.db.QueryRowContext(ctx, `SELECT mi.library_id FROM face f
+		JOIN media_item mi ON mi.id = f.item_id WHERE f.id = ?`, faceID).Scan(&id)
+	if errors.Is(err, sql.ErrNoRows) {
+		return 0, ErrNotFound
+	}
+	return id, err
 }

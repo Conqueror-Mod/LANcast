@@ -406,11 +406,11 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/libraries/{id}/people", s.libraryVisible(s.people))
 	mux.HandleFunc("POST /api/libraries/{id}/faces", s.adminOnly(s.startFacePass))
 	mux.HandleFunc("PUT /api/faces/clusters/{id}", s.adminOnly(s.nameCluster))
-	mux.HandleFunc("GET /api/faces/clusters/{id}/faces", s.clusterFaces)
-	mux.HandleFunc("GET /api/faces/clusters/{id}/suggestions", s.clusterSuggestions)
+	mux.HandleFunc("GET /api/faces/clusters/{id}/faces", s.ownedVisible(s.st.LibraryOfCluster, noClusterFaces, s.clusterFaces))
+	mux.HandleFunc("GET /api/faces/clusters/{id}/suggestions", s.ownedVisible(s.st.LibraryOfCluster, noCluster, s.clusterSuggestions))
 	mux.HandleFunc("DELETE /api/faces/clusters/{id}/faces/{face}", s.adminOnly(s.rejectFace))
 	mux.HandleFunc("DELETE /api/faces/clusters/{id}/suggestions/{other}", s.adminOnly(s.rejectSuggestion))
-	mux.HandleFunc("GET /api/faces/{id}/thumb", s.faceThumb)
+	mux.HandleFunc("GET /api/faces/{id}/thumb", s.ownedVisible(s.st.LibraryOfFace, noFace, s.faceThumb))
 	// The models are an optional download, pinned in faceinstall and never a
 	// parameter — the payload is a model this server loads and a library it
 	// executes (ADR 0052, following ADR 0048).

@@ -196,3 +196,97 @@ func TestOnlyAnAdministratorDecidesWhoSeesALibrary(t *testing.T) {
 		t.Errorf("after hiding = %+v", got)
 	}
 }
+
+/*
+ * Stage 2: the lists built from an account's own records. Each was missed by
+ * the rating ceiling too (ADR 0084, Context), so the member builds real
+ * history in the private library *before* it is hidden — the case that
+ * matters is a film watched last month in a library hidden today.
+ */
+func TestAHiddenLibraryLeavesTheMembersOwnLists(t *testing.T) {
+	a := newAccessHarness(t)
+	ctx := context.Background()
+
+	// A second private film, to finish, so it reaches the viewing log.
+	finished, err := a.st.UpsertItem(ctx, store.ScanFile{
+		LibraryID: a.private, Path: filepath.Join(t.TempDir(), "finished.mkv"), Kind: "movie",
+		Title: "Finished Private", SortTitle: "Finished Private", Container: "mkv", SizeBytes: 1, MTime: 1,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	as := func(method, path string, body any) *http.Response { return a.doAs(t, a.member, method, path, body) }
+	put := func(path string, body any) {
+		t.Helper()
+		if code := status(t, as("PUT", path, body)); code >= 300 {
+			t.Fatalf("PUT %s = %d", path, code)
+		}
+	}
+	put(fmt.Sprintf("/api/items/%d/progress", a.privateFilm), map[string]any{"position_ms": 60000, "watched": false})
+	put(fmt.Sprintf("/api/items/%d/progress", a.openFilm), map[string]any{"position_ms": 60000, "watched": false})
+	put(fmt.Sprintf("/api/items/%d/progress", finished), map[string]any{"position_ms": 0, "watched": true})
+	put(fmt.Sprintf("/api/items/%d/rating", a.privateFilm), map[string]any{"score": 8})
+
+	type counts struct{ continuing, viewings, ratings, yearTitles int }
+	read := func() (counts, string) {
+		var c counts
+		var cont struct {
+			Items []struct {
+				Title string `json:"title"`
+			} `json:"items"`
+		}
+		decode(t, as("GET", "/api/continue", nil), &cont)
+		var names []string
+		for _, it := range cont.Items {
+			names = append(names, it.Title)
+		}
+		c.continuing = len(cont.Items)
+		var vs struct {
+			Total int `json:"total"`
+		}
+		decode(t, as("GET", "/api/profile/viewings", nil), &vs)
+		c.viewings = vs.Total
+		var rs struct {
+			Ratings []any `json:"ratings"`
+		}
+		decode(t, as("GET", "/api/profile/ratings", nil), &rs)
+		c.ratings = len(rs.Ratings)
+		var yr struct {
+			Titles int `json:"titles"`
+		}
+		decode(t, as("GET", "/api/profile/year", nil), &yr)
+		c.yearTitles = yr.Titles
+		return c, strings.Join(names, ",")
+	}
+
+	// The control: before hiding, every list holds the private library.
+	before, names := read()
+	if before.continuing != 2 || before.viewings != 1 || before.ratings != 1 || before.yearTitles < 3 {
+		t.Fatalf("before hiding = %+v (continue: %s); the fixture did not build the history", before, names)
+	}
+
+	if code := status(t, a.hide(t, a.private)); code != http.StatusOK {
+		t.Fatal("hide failed")
+	}
+	after, names := read()
+	if after.continuing != 1 || strings.Contains(names, "Home Video") {
+		t.Errorf("Continue Watching after hiding = %s", names)
+	}
+	if after.viewings != 0 {
+		t.Errorf("viewing history still counts %d from the hidden library", after.viewings)
+	}
+	if after.ratings != 0 {
+		t.Errorf("ratings still list %d from the hidden library", after.ratings)
+	}
+	if after.yearTitles != before.yearTitles-2 {
+		t.Errorf("year in review titles = %d, want %d", after.yearTitles, before.yearTitles-2)
+	}
+
+	// Kept, not deleted: lifting the restriction gives the history back.
+	if code := status(t, a.hide(t)); code != http.StatusOK {
+		t.Fatal("unhide failed")
+	}
+	if again, _ := read(); again != before {
+		t.Errorf("after lifting = %+v, want %+v", again, before)
+	}
+}
