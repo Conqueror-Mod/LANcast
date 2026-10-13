@@ -1,6 +1,10 @@
 /* Status › Scheduled tasks. A table on a raised panel; no gold, because a
    job is not a place. */
 .tasks {
+  /* The table decides its own layout from its own width: Settings is a
+     narrow column, and a query on the window's width laid five columns into
+     it and squeezed every description to a sliver. */
+  container-type: inline-size;
   margin-top: 12px;
   border-radius: var(--radius-panel);
   background: var(--surface-raised);
@@ -65,8 +69,9 @@
   justify-self: end;
 }
 
-/* A phone has no room for five columns: each job becomes a short card. */
-@media (max-width: 720px) {
+/* Too narrow for five columns — a phone, or the Settings column itself:
+   each job becomes a short card. */
+@container (max-width: 760px) {
   .tasks__row {
     /* Zero floor here too: a long error otherwise pushed Run now out of the
        card on a phone. */
@@ -81,6 +86,11 @@
   .tasks__row > span:nth-child(4) {
     grid-column: 1;
     font-size: 0.82rem;
+  }
+  /* Without the column headings, each line says what it is. */
+  .tasks__row > [data-label]::before {
+    content: attr(data-label) ": ";
+    color: var(--text-muted);
   }
   .tasks__row > .tasks__action {
     grid-column: 2;

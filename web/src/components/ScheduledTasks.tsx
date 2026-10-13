@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import { useScheduledTasks, useRunTask, type ScheduledTask } from "@/api/hooks";
 import "./ScheduledTasks.css";
 
@@ -10,7 +11,15 @@ import "./ScheduledTasks.css";
  * schedules here is the plan's next step for this pane.
  */
 export function ScheduledTasks() {
-  const { data: list, isError } = useScheduledTasks();
+  // The job last asked to run, until a few seconds have passed: the button
+  // says Started, and the list is re-read quickly enough to show the result.
+  const [asked, setAsked] = useState<string | null>(null);
+  useEffect(() => {
+    if (!asked) return;
+    const t = window.setTimeout(() => setAsked(null), 8_000);
+    return () => window.clearTimeout(t);
+  }, [asked]);
+  const { data: list, isError } = useScheduledTasks(asked !== null);
   const run = useRunTask();
 
   return (
@@ -36,8 +45,8 @@ export function ScheduledTasks() {
                 {t.name}
                 <span className="tasks__desc">{t.description}</span>
               </span>
-              <span role="cell">{runsLabel(t)}</span>
-              <span role="cell">
+              <span role="cell" data-label="Runs">{runsLabel(t)}</span>
+              <span role="cell" data-label="Last run">
                 {t.running ? (
                   <span className="tasks__running">Running now</span>
                 ) : t.last_finished_at ? (
@@ -53,7 +62,7 @@ export function ScheduledTasks() {
                   <span className="tasks__muted">Not since the server started</span>
                 )}
               </span>
-              <span role="cell">{nextLabel(t)}</span>
+              <span role="cell" data-label="Next">{nextLabel(t)}</span>
               <span role="cell" className="tasks__action">
                 {/* Off is off: a switched-off job checks its own setting and
                     would do nothing, so the button does not pretend. */}
@@ -61,9 +70,12 @@ export function ScheduledTasks() {
                   className="set-btn"
                   disabled={!t.enabled || t.running || (run.isPending && run.variables === t.id)}
                   title={t.enabled ? undefined : "Switched off in Settings"}
-                  onClick={() => run.mutate(t.id)}
+                  onClick={() => {
+                    setAsked(t.id);
+                    run.mutate(t.id);
+                  }}
                 >
-                  {t.running ? "Running…" : "Run now"}
+                  {t.running ? "Running…" : asked === t.id ? "Started" : "Run now"}
                 </button>
               </span>
             </div>
@@ -111,6 +123,10 @@ function everyLabel(hours: number): string {
 export function when(iso: string, now = new Date()): string {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return "";
+  // A run that has only just happened says so: "Today 20:20" beside a button
+  // pressed at 20:20 does not read as an answer to the press.
+  const ago = now.getTime() - d.getTime();
+  if (ago >= 0 && ago < 60_000) return "Just now";
   const time = d.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
   const day = (x: Date) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
   const diff = Math.round((day(d) - day(now)) / 86_400_000);

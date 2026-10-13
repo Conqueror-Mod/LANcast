@@ -4070,13 +4070,20 @@ export type ScheduledTask = import("./schema").components["schemas"]["Task"];
  * Status › Scheduled tasks. Polled quickly while anything runs, so Run now
  * shows the job start and finish without a reload, and slowly otherwise.
  */
-export function useScheduledTasks() {
+export function useScheduledTasks(eager = false) {
   return useQuery({
     queryKey: ["tasks"],
     queryFn: ({ signal }) =>
       apiGet<{ tasks: ScheduledTask[] }>("/api/tasks", signal).then((r) => r.tasks),
+    /*
+     * Quickly while anything runs, and for a few seconds after Run now
+     * (`eager`). A job with nothing to do finishes in milliseconds, before the
+     * re-read the press triggers: without the eager window the list kept the
+     * old last run for thirty seconds, and the press looked like it did
+     * nothing. Reported as exactly that.
+     */
     refetchInterval: (q) =>
-      (q.state.data ?? []).some((t) => t.running) ? 2_000 : 30_000,
+      eager || (q.state.data ?? []).some((t) => t.running) ? 1_500 : 30_000,
   });
 }
 

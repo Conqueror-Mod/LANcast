@@ -92,6 +92,8 @@ describe("the scheduled tasks pane", () => {
     const scan = row("Scan libraries")!.querySelector("button")!;
     await act(async () => scan.click());
     expect(runs).toEqual(["scan"]);
+    // Said, so a job that finishes in milliseconds still visibly answered.
+    expect(row("Scan libraries")!.querySelector("button")!.textContent).toBe("Started");
     const probe = row("Read media files")!.querySelector("button")!;
     expect(probe.disabled).toBe(true);
     expect(probe.textContent).toBe("Running…");
@@ -118,5 +120,6 @@ describe("when", () => {
     expect(when(at(11, 23), base)).toMatch(/^Yesterday /);
     expect(when(at(13, 3), base)).toMatch(/^Tomorrow /);
     expect(when(at(9, 3), base)).not.toMatch(/^(Today|Yesterday|Tomorrow)/);
+    expect(when(new Date(base.getTime() - 20_000).toISOString(), base)).toBe("Just now");
   });
 });
