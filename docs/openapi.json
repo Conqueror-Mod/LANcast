@@ -1688,6 +1688,20 @@
           {
             "streamTicket": []
           }
+        ],
+        "parameters": [
+          {
+            "name": "version",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "optimized"
+              ]
+            },
+            "description": "`optimized` serves the title's optimized copy instead of the original (ADR 0087), with the same permission check. 404 when it has none."
+          }
         ]
       }
     },
@@ -8311,6 +8325,81 @@
         }
       }
     },
+    "/items/{id}/optimized": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/ItemId"
+        }
+      ],
+      "put": {
+        "operationId": "requestOptimized",
+        "tags": [
+          "items"
+        ],
+        "summary": "Ask for an optimized copy",
+        "description": "Administrators only (ADR 0087). A film or an episode queues itself; a show, a season or a collection queues every episode or film in it. A copy already queued, converting or ready is left alone; a failed one is queued again. Audited as `optimized.request`.",
+        "responses": {
+          "200": {
+            "description": "Queued.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "queued",
+                    "titles"
+                  ],
+                  "properties": {
+                    "queued": {
+                      "type": "integer",
+                      "description": "Newly queued."
+                    },
+                    "titles": {
+                      "type": "integer",
+                      "description": "Titles the item covers."
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          }
+        }
+      },
+      "delete": {
+        "operationId": "removeOptimized",
+        "tags": [
+          "items"
+        ],
+        "summary": "Take an optimized copy away",
+        "description": "Administrators only. Covers the same titles as PUT. A conversion in progress stops; the files are removed by the worker's next sweep. Audited as `optimized.remove`.",
+        "responses": {
+          "204": {
+            "description": "Removed."
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          }
+        }
+      }
+    },
     "/plugins/{name}/secrets/{secret}": {
       "parameters": [
         {
@@ -12169,6 +12258,34 @@
           }
         }
       }
+    },
+    "/optimized": {
+      "get": {
+        "operationId": "listOptimized",
+        "tags": [
+          "items"
+        ],
+        "summary": "Optimized copies and the queue",
+        "description": "Administrators only (ADR 0087). Converting first, then queued in the order they will run, then the rest newest first.",
+        "responses": {
+          "200": {
+            "description": "The copies.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OptimizedList"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          }
+        }
+      }
     }
   },
   "components": {
@@ -13548,6 +13665,10 @@
           },
           "decision": {
             "$ref": "#/components/schemas/Decision"
+          },
+          "version": {
+            "type": "string",
+            "description": "`optimized` when the answer is direct play of the title's optimized copy (ADR 0087): ask `GET /api/stream/{id}?version=optimized`. Empty for the original. Only set when the device would otherwise have had the original converted, and never when a particular audio track was asked for."
           }
         }
       },
@@ -13993,7 +14114,8 @@
           "scan_interval_hours",
           "audit_retention_days",
           "backup_every_days",
-          "backup_keep"
+          "backup_keep",
+          "optimized_limit_gb"
         ],
         "properties": {
           "tmdb": {
@@ -14154,6 +14276,14 @@
           "dlna_name": {
             "type": "string",
             "description": "The name TVs list. Empty means \"LANcast\"."
+          },
+          "optimized_dir": {
+            "type": "string",
+            "description": "Where optimized copies live (ADR 0087). Empty is `optimized` in the data folder. Must be a full path and not inside any library."
+          },
+          "optimized_limit_gb": {
+            "type": "integer",
+            "description": "The size limit for optimized copies, in GB. At the limit new requests wait; nothing is deleted. 200 by default."
           },
           "certification_country": {
             "type": "string",
@@ -14324,6 +14454,12 @@
           },
           "dlna_name": {
             "type": "string"
+          },
+          "optimized_dir": {
+            "type": "string"
+          },
+          "optimized_limit_gb": {
+            "type": "integer"
           },
           "certification_country": {
             "type": "string",
@@ -19334,6 +19470,103 @@
           "port": {
             "type": "integer",
             "description": "The plain-HTTP port DLNA serves on (8200)."
+          }
+        }
+      },
+      "OptimizedVersion": {
+        "type": "object",
+        "required": [
+          "item_id",
+          "title",
+          "kind",
+          "state",
+          "size_bytes",
+          "requested_at"
+        ],
+        "properties": {
+          "item_id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "title": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "queued",
+              "converting",
+              "ready",
+              "failed"
+            ]
+          },
+          "size_bytes": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "error": {
+            "type": "string",
+            "description": "Why it failed, when it did."
+          },
+          "requested_at": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "finished_at": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "duration_ms": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
+      "OptimizedList": {
+        "type": "object",
+        "required": [
+          "items",
+          "used_bytes",
+          "limit_bytes",
+          "folder",
+          "current",
+          "progress",
+          "waiting"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OptimizedVersion"
+            }
+          },
+          "used_bytes": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Space finished copies take."
+          },
+          "limit_bytes": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "folder": {
+            "type": "string"
+          },
+          "current": {
+            "type": "integer",
+            "format": "int64",
+            "description": "The title converting now, 0 for none."
+          },
+          "progress": {
+            "type": "number",
+            "description": "How far into it, 0 to 1."
+          },
+          "waiting": {
+            "type": "string",
+            "description": "Why the queue is not moving, empty when it is: the size limit, live playback, or no ffmpeg."
           }
         }
       }

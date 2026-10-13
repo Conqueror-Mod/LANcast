@@ -151,6 +151,9 @@ type Deps struct {
 
 // Server holds the API dependencies.
 type Server struct {
+	// opt is the optimized-copy worker's state (ADR 0087), made on first use.
+	opt     *optimizedState
+	optOnce sync.Once
 	// dlnaStatus reports the DLNA supervisor's state (ADR 0086); nil until
 	// serverapp sets it, which reads as "off".
 	dlnaStatus func() DLNAStatus
@@ -442,6 +445,10 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/items/{id}/tags", s.addItemTag)
 	mux.HandleFunc("DELETE /api/items/{id}/tags/{tag}", s.removeItemTag)
 	mux.HandleFunc("PUT /api/items/{id}/favourite", s.putFavourite)
+	// Optimized copies (ADR 0087): admin only, since each is hours of work.
+	mux.HandleFunc("GET /api/optimized", s.adminOnly(s.listOptimized))
+	mux.HandleFunc("PUT /api/items/{id}/optimized", s.adminOnly(s.requestOptimized))
+	mux.HandleFunc("DELETE /api/items/{id}/optimized", s.adminOnly(s.removeOptimized))
 	// The watchlist (ADR 0085): the caller's own, like favourites.
 	mux.HandleFunc("GET /api/watchlist", s.watchlist)
 	mux.HandleFunc("PUT /api/items/{id}/watchlist", s.addToWatchlist)

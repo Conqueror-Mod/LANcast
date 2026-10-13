@@ -943,6 +943,9 @@ func run(ctx context.Context, addr, dataDir string, log *slog.Logger) error {
 	apiSrv.SetDLNAStatus(dlnaSup.Status)
 	go runDLNA(ctx, dlnaSup, apiSrv, st, settings, ident, lanBound, log)
 
+	// Optimized copies, one at a time, behind live playback (ADR 0087).
+	go apiSrv.RunOptimizer(ctx)
+
 	// Clears leftover scratch from a previous run and starts reaping idle
 	// sessions. A closed browser tab does not tell the server it has gone.
 	trans.Start(ctx)

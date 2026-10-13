@@ -60,6 +60,8 @@ func (s *Server) getSettings(w http.ResponseWriter, r *http.Request) {
 		"dlna_enabled":         cur.DLNAEnabled,
 		"dlna_account":         cur.DLNAAccount,
 		"dlna_name":            cur.DLNAName,
+		"optimized_dir":        cur.OptimizedDir,
+		"optimized_limit_gb":   cur.OptimizedLimitGB,
 		"write_nfo":            cur.WriteNFO,
 		"auto_enrich":          cur.AutoEnrich,
 		"update_check":         cur.UpdateCheck,
@@ -150,6 +152,8 @@ func (s *Server) putSettings(w http.ResponseWriter, r *http.Request) {
 		DLNAEnabled        *bool           `json:"dlna_enabled"`
 		DLNAAccount        *string         `json:"dlna_account"`
 		DLNAName           *string         `json:"dlna_name"`
+		OptimizedDir       *string         `json:"optimized_dir"`
+		OptimizedLimitGB   *int            `json:"optimized_limit_gb"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeError(w, http.StatusBadRequest, "bad_request", "malformed JSON body")
@@ -365,6 +369,23 @@ func (s *Server) putSettings(w http.ResponseWriter, r *http.Request) {
 	if req.DLNAEnabled != nil {
 		next.DLNAEnabled = *req.DLNAEnabled
 	}
+	if req.OptimizedLimitGB != nil {
+		if *req.OptimizedLimitGB < 1 || *req.OptimizedLimitGB > 100000 {
+			writeError(w, http.StatusBadRequest, "bad_request", "optimized_limit_gb must be between 1 and 100000")
+			return
+		}
+		next.OptimizedLimitGB = *req.OptimizedLimitGB
+	}
+	if req.OptimizedDir != nil {
+		dir := strings.TrimSpace(*req.OptimizedDir)
+		if dir != "" {
+			if msg := s.checkOptimizedDir(r.Context(), dir); msg != "" {
+				writeError(w, http.StatusBadRequest, "bad_request", msg)
+				return
+			}
+		}
+		next.OptimizedDir = dir
+	}
 
 	encoderChanged := req.HardwareEncoder != nil &&
 		*req.HardwareEncoder != next.HardwareEncoder
@@ -490,6 +511,8 @@ func changedSettings(prev, next config.Settings) []string {
 	add("dlna_enabled", prev.DLNAEnabled != next.DLNAEnabled)
 	add("dlna_account", prev.DLNAAccount != next.DLNAAccount)
 	add("dlna_name", prev.DLNAName != next.DLNAName)
+	add("optimized_dir", prev.OptimizedDir != next.OptimizedDir)
+	add("optimized_limit_gb", prev.OptimizedLimitGB != next.OptimizedLimitGB)
 	return out
 }
 
