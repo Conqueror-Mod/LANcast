@@ -317,6 +317,31 @@
   border-color: rgba(226, 232, 240, 0.6);
 }
 
+/* "Intro skipped", where Skip intro would have been and from the same
+ * materials (ADR 0083). The label is a fact, not a control, so it sits on the
+ * pill's ground and only the button inside takes focus. */
+.player__skipped {
+  position: absolute;
+  right: 2.5rem;
+  bottom: 7rem;
+  z-index: 3;
+  pointer-events: auto;
+  display: flex;
+  align-items: center;
+  gap: 0.9rem;
+  padding: 0.35rem 0.4rem 0.35rem 1.2rem;
+  font-size: 0.95rem;
+  color: var(--text-secondary, #c8d0dc);
+  background: rgba(12, 16, 24, 0.82);
+  border: 1px solid rgba(226, 232, 240, 0.2);
+  border-radius: 999px;
+  backdrop-filter: blur(6px);
+}
+.player__skip--inline {
+  position: static;
+  padding: 0.45rem 1.1rem;
+}
+
 /* Up Next: where Skip credits sits, and built from the same materials, so the
  * corner reads as one control that grew rather than a second one arriving.
  * No gold: it is a card, not where you are (design.md). The buttons inside

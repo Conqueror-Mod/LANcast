@@ -161,3 +161,76 @@ function creditsSkip(
   }
   return null;
 }
+
+/*
+ * # An intro skips itself (ADR 0083)
+ *
+ * The automatic skip uses `skipTarget` unchanged — a marker the button would
+ * refuse is never jumped — and adds only *when*: once per playback, the first
+ * time playback is inside the intro, and only if it got there by playing or
+ * started there. Somebody who scrubbed back into an intro has said they want
+ * it, so that offers the button and never jumps.
+ *
+ * Pure, and stepped once per position update, so the rule is stated in tests
+ * rather than inferred from effects in the player.
+ */
+
+/** What the automatic skip remembers between position updates. */
+export interface AutoSkipState {
+  itemID: number | null;
+  /** The last position seen while playing, or null before the first. */
+  last: number | null;
+  /** Whether this playback has had its one chance at an automatic skip. */
+  spent: boolean;
+}
+
+export const AUTO_SKIP_IDLE: AutoSkipState = { itemID: null, last: null, spent: false };
+
+/*
+ * How far the playhead may move between two updates and still count as
+ * playing. Updates arrive a few times a second; a gap this size is a seek.
+ */
+const PLAYED_STEP_SECONDS = 3;
+
+export interface AutoSkip {
+  /** Where to seek, from where: the intro's start is where Watch intro goes back to. */
+  toSeconds: number;
+  fromSeconds: number;
+}
+
+export function autoSkipStep(
+  state: AutoSkipState,
+  input: {
+    itemID: number | null;
+    enabled: boolean;
+    playing: boolean;
+    markers: Marker[] | undefined;
+    positionSeconds: number;
+    durationSeconds?: number;
+    itemKind?: string;
+  },
+): { state: AutoSkipState; skip: AutoSkip | null } {
+  let s = state.itemID === input.itemID ? state : { ...AUTO_SKIP_IDLE, itemID: input.itemID };
+  // Paused, buffering or not started: the position is not a playhead moving
+  // forwards yet. A resumed episode reports 0 until its first frame.
+  if (!input.playing || !Number.isFinite(input.positionSeconds)) return { state: s, skip: null };
+
+  const pos = input.positionSeconds;
+  const target = skipTarget(input.markers, pos, input.durationSeconds, input.itemKind);
+  let skip: AutoSkip | null = null;
+
+  if (target?.kind === "intro" && !s.spent) {
+    const played =
+      s.last === null || (pos >= s.last && pos - s.last <= PLAYED_STEP_SECONDS);
+    if (!played) {
+      s = { ...s, spent: true };
+    } else if (input.enabled) {
+      const intro = input.markers?.find(
+        (m) => m.kind === "intro" && m.end_ms != null && m.end_ms / 1000 === target.atSeconds,
+      );
+      s = { ...s, spent: true };
+      skip = { toSeconds: target.atSeconds, fromSeconds: intro ? intro.start_ms / 1000 : 0 };
+    }
+  }
+  return { state: { ...s, last: pos }, skip };
+}

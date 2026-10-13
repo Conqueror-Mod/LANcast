@@ -4053,6 +4053,31 @@ export function useSubtitleStyle(enabled = true) {
   });
 }
 
+/*
+ * The caller's playback preferences (ADR 0083): whether an intro skips itself.
+ * Per account. Until the answer arrives the player treats it as off, so a slow
+ * fetch can only ever cost one skip, never cause one somebody turned off.
+ */
+export function usePlaybackPrefs(enabled = true) {
+  return useQuery({
+    queryKey: ["playback-prefs"],
+    queryFn: ({ signal }) =>
+      apiGet<{ skip_intros: boolean }>("/api/profile/playback", signal),
+    enabled,
+    staleTime: 60_000,
+  });
+}
+
+export function useSetPlaybackPrefs() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (p: { skip_intros: boolean }) =>
+      apiPost<{ skip_intros: boolean }>("/api/profile/playback", p, "PUT"),
+    // The switch itself, and the player that reads it.
+    onSuccess: (r) => qc.setQueryData(["playback-prefs"], r),
+  });
+}
+
 export function useSetSubtitleStyle() {
   const qc = useQueryClient();
   return useMutation({

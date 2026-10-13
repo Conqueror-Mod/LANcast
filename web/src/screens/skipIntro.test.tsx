@@ -41,6 +41,9 @@ function Probe() {
 }
 
 let creditsSource = "blackdetect-gated";
+// The account's switch (ADR 0083). Off here unless a test turns it on, so the
+// button tests below describe an account that chose the button.
+let skipIntros = false;
 
 /**
  * An episode with a detected intro from 87s to 117s, and credits from 1,240s
@@ -80,6 +83,7 @@ function episode() {
 beforeEach(() => {
   seeked = [];
   creditsSource = "blackdetect-gated";
+  skipIntros = false;
   host = document.createElement("div");
   document.body.append(host);
   root = createRoot(host);
@@ -107,6 +111,9 @@ beforeEach(() => {
           status: 200,
           headers: { "Content-Type": "application/json" },
         });
+      if (String(url).includes("/api/profile/playback")) {
+        return json({ skip_intros: skipIntros });
+      }
       if (String(url).includes("/playback")) {
         return json({ decision: { method: "direct", reason: "" } });
       }
@@ -196,13 +203,10 @@ describe("skip intro", () => {
   });
 
   /*
-   * A button that appears, never a jump that happens.
-   *
-   * The backlog and ADR 0054 both require this: an automatic skip a few seconds
-   * wrong is indistinguishable from a broken file, and the first thing it eats
-   * is a cold open. So reaching the intro must move nothing on its own.
+   * An account that turned automatic skipping off gets ADR 0054 exactly: a
+   * button that appears, and reaching the intro moves nothing by itself.
    */
-  it("does not skip on its own", async () => {
+  it("does not skip on its own when the account says not to", async () => {
     await render();
     await at(95);
     expect(seeked).toHaveLength(0);
@@ -305,5 +309,68 @@ describe("skip credits", () => {
     await render();
     await at(1250);
     expect(skipCredits()).toBeUndefined();
+  });
+});
+
+describe("an intro that skips itself (ADR 0083)", () => {
+  const notice = () => host.querySelector(".player__skipped");
+  const watchIntro = button("Watch intro");
+
+  /** The element saying it is playing, as a real one does once it starts. */
+  async function playing() {
+    await act(async () => {
+      host.querySelector("video")?.dispatchEvent(new Event("play"));
+    });
+    await flush();
+  }
+
+  /** Play up to and into the intro a second at a time, as a playhead does. */
+  async function playInto() {
+    await playing();
+    for (const t of [85, 86, 87, 88]) await at(t);
+  }
+
+  it("skips on reaching the intro, says so, and hides the button", async () => {
+    skipIntros = true;
+    await render();
+    await playInto();
+    expect(seeked).toEqual([117]);
+    expect(notice()?.textContent).toContain("Intro skipped");
+    expect(skipButton()).toBeUndefined();
+  });
+
+  it("goes back to the start of the intro on Watch intro, and does not skip again", async () => {
+    skipIntros = true;
+    await render();
+    await playInto();
+    await act(async () => watchIntro()!.click());
+    await flush();
+    expect(seeked).toEqual([117, 87]);
+    expect(notice()).toBeNull();
+    // Playing on through the theme: no second jump, and the button is back.
+    for (const t of [88, 89, 90]) await at(t);
+    expect(seeked).toEqual([117, 87]);
+    expect(skipButton()).toBeDefined();
+  });
+
+  // The control for the test above: the same playhead with the switch off.
+  it("leaves the intro alone, and offers the button, when the account turned it off", async () => {
+    skipIntros = false;
+    await render();
+    await playInto();
+    expect(seeked).toEqual([]);
+    expect(notice()).toBeNull();
+    expect(skipButton()).toBeDefined();
+  });
+
+  it("does not jump when somebody scrubs back into the intro", async () => {
+    skipIntros = true;
+    await render();
+    await playing();
+    await at(200);
+    await at(201);
+    await at(95);
+    expect(seeked).toEqual([]);
+    expect(skipButton()).toBeDefined();
   });
 });
