@@ -19,6 +19,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter } from "react-router-dom";
 import { Settings } from "./Settings";
+import { getPrefs, resetPrefs } from "@/playback/prefs";
 
 declare global {
   // eslint-disable-next-line no-var
@@ -127,6 +128,35 @@ describe("the settings shell", () => {
     // A link to an admin pane, followed by a demotion, must land somewhere.
     render("/settings?pane=not-a-pane");
     expect(host.querySelectorAll(".settings__navitem.is-active").length).toBe(1);
+  });
+});
+
+/*
+ * This device › Player (settings plan, step 2): the player's preferences,
+ * settable before anything plays, writing the same store the player's panel
+ * reads.
+ */
+describe("the Player pane", () => {
+  it("is listed under This device and changes the player's quality", () => {
+    render("/settings?pane=player");
+    expect(activeItem()).toBe("Player");
+    const quality = [...host.querySelectorAll<HTMLLabelElement>("label.set-row")]
+      .find((l) => l.textContent?.includes("Quality on this device"))
+      ?.querySelector("select");
+    expect(quality, "no quality control on the Player pane").toBeTruthy();
+    const set = Object.getOwnPropertyDescriptor(window.HTMLSelectElement.prototype, "value")!.set!;
+    act(() => {
+      set.call(quality, "720p4");
+      quality!.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+    expect(getPrefs().quality).toBe("720p4");
+    act(() => resetPrefs());
+  });
+
+  it("puts subtitle style under Languages & subtitles, with a preview", () => {
+    render("/settings?pane=languages");
+    expect(host.textContent).toContain("Subtitle style");
+    expect(host.querySelector(".subpreview__cue")).toBeTruthy();
   });
 });
 
