@@ -8378,6 +8378,64 @@
         }
       }
     },
+    "/profile/subtitle-style": {
+      "get": {
+        "operationId": "getSubtitleStyle",
+        "summary": "The caller's subtitle style",
+        "description": "Null `style` for an account that has never chosen one, and on a server with no accounts yet.",
+        "tags": [
+          "Profile"
+        ],
+        "responses": {
+          "200": {
+            "description": "The caller's style, or null.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SubtitleStyleResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "operationId": "setSubtitleStyle",
+        "summary": "Set the caller's subtitle style",
+        "description": "All four fields together. Acts on the session; there is no route by which one account sets another's. A colour that is not #rrggbb, an unknown font, or a size or position out of range is **400**.",
+        "tags": [
+          "Profile"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SubtitleStyle"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Saved; the style as stored.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SubtitleStyleResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "A style no player can draw."
+          },
+          "409": {
+            "description": "This server has no accounts yet."
+          }
+        }
+      }
+    },
     "/peers/{fingerprint}/ticket": {
       "parameters": [
         {
@@ -18454,6 +18512,60 @@
           "notes": {
             "type": "string",
             "description": "This version's release notes, Markdown. Absent when none were committed for it."
+          }
+        }
+      },
+      "SubtitleStyle": {
+        "type": "object",
+        "required": [
+          "color",
+          "font",
+          "size",
+          "position"
+        ],
+        "description": "How subtitles look for one account. It follows the person to every device. The subtitle offset is not part of it: that is a timing correction for one file on one device.",
+        "properties": {
+          "color": {
+            "type": "string",
+            "pattern": "^#[0-9a-fA-F]{6}$",
+            "description": "#rrggbb."
+          },
+          "font": {
+            "type": "string",
+            "enum": [
+              "sans",
+              "serif",
+              "mono"
+            ]
+          },
+          "size": {
+            "type": "number",
+            "minimum": 0.5,
+            "maximum": 3,
+            "description": "A multiplier of the player's base size."
+          },
+          "position": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 40,
+            "description": "How far up from the bottom the cues sit, as a percentage of the picture's height."
+          }
+        }
+      },
+      "SubtitleStyleResponse": {
+        "type": "object",
+        "required": [
+          "style"
+        ],
+        "properties": {
+          "style": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/SubtitleStyle"
+              }
+            ],
+            "nullable": true,
+            "description": "Null for an account that has never chosen one; a client then keeps its own device's style."
           }
         }
       }

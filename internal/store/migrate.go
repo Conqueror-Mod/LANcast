@@ -6,7 +6,7 @@ import (
 )
 
 // CurrentSchemaVersion is the revision this build expects.
-const CurrentSchemaVersion = 70
+const CurrentSchemaVersion = 71
 
 // migration is one forward step. There are deliberately no down migrations:
 // rolling a media library's schema backwards loses data that a rescan cannot
@@ -127,6 +127,9 @@ var migrations = []migration{
 	{version: 68, sql: schemaRevision68},
 	{version: 69, sql: schemaRevision69},
 	{version: 70, sql: schemaRevision70},
+	// Subtitle style per account (docs/settings-plan.md): one nullable column,
+	// JSON, empty for "never set" so a device's own style still applies.
+	{version: 71, columns: []column{{"user", "subtitle_style", "TEXT"}}},
 }
 
 // migrate brings the database up to CurrentSchemaVersion.
