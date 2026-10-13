@@ -4064,6 +4064,31 @@ export function useSetSubtitleStyle() {
   });
 }
 
+export type ScheduledTask = import("./schema").components["schemas"]["Task"];
+
+/*
+ * Status › Scheduled tasks. Polled quickly while anything runs, so Run now
+ * shows the job start and finish without a reload, and slowly otherwise.
+ */
+export function useScheduledTasks() {
+  return useQuery({
+    queryKey: ["tasks"],
+    queryFn: ({ signal }) =>
+      apiGet<{ tasks: ScheduledTask[] }>("/api/tasks", signal).then((r) => r.tasks),
+    refetchInterval: (q) =>
+      (q.state.data ?? []).some((t) => t.running) ? 2_000 : 30_000,
+  });
+}
+
+export function useRunTask() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => apiSend(`/api/tasks/${encodeURIComponent(id)}/run`, "POST"),
+    // The list is what is being looked at, and it now has a job running.
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["tasks"] }),
+  });
+}
+
 export function useSetLanguagePreferences() {
   const qc = useQueryClient();
   return useMutation({
