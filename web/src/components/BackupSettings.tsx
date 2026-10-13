@@ -101,7 +101,8 @@ export function BackupSettings() {
 
       {!isLoading && backups.length === 0 && !error && (
         <div className="set-row__sub set-row__sub--standalone">
-          No backups yet. Nothing here is protected until you take one.
+          No backups yet. Nothing here is protected until one is taken — by
+          the schedule below, or by you now.
         </div>
       )}
 
@@ -173,6 +174,7 @@ function BackupRow({
       <div className="set-row__main">
         <div className="set-row__title">{takenAt(backup.taken_at)}</div>
         <div className="set-row__sub">
+          {backup.scheduled ? "Scheduled · " : "Taken by hand · "}
           {humanBytes(backup.bytes)} · {backup.name}
           {/* A backup this build cannot restore is the single most important
               thing this list can say, so it is said on the row rather than

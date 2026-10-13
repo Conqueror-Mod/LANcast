@@ -1417,6 +1417,33 @@ function AdminSections({ pane }: { pane: string }) {
 
       {pane === "backup" && settings && (
         <section className="settings__section">
+          <span className="section-label">Backup schedule</span>
+          <RuleSelect
+            title="Back up automatically"
+            sub="On a timer, so the database is protected without anybody remembering to. Scheduled backups appear in the list above, marked as scheduled."
+            value={settings.backup_every_days ?? 7}
+            options={[
+              { value: 0, label: "Never" },
+              { value: 1, label: "Every day" },
+              { value: 7, label: "Every week" },
+              { value: 14, label: "Every two weeks" },
+              { value: 30, label: "Every month" },
+            ]}
+            onChange={(v) => update.mutate({ backup_every_days: v })}
+          />
+          <RuleSelect
+            title="Scheduled backups to keep"
+            sub="Older scheduled backups past this number are deleted after each new one. A backup you take yourself is never deleted by the schedule."
+            value={settings.backup_keep ?? 4}
+            disabled={(settings.backup_every_days ?? 7) === 0}
+            options={[1, 2, 3, 4, 6, 8, 12].map((n) => ({ value: n, label: String(n) }))}
+            onChange={(v) => update.mutate({ backup_keep: v })}
+          />
+        </section>
+      )}
+
+      {pane === "backup" && settings && (
+        <section className="settings__section">
           <span className="section-label">Storage</span>
           <RuleSelect
             title="Artwork cache limit"

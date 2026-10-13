@@ -29,6 +29,16 @@ const RESTORABLE = {
   taken_at: 1788452729,
   schema_version: 39,
   restorable: true,
+  scheduled: false,
+};
+
+const SCHEDULED = {
+  name: "lancast-backup-20260910-030000-auto.db",
+  bytes: 102834176,
+  taken_at: 1789000000,
+  schema_version: 39,
+  restorable: true,
+  scheduled: true,
 };
 
 const FROM_THE_FUTURE = {
@@ -37,6 +47,7 @@ const FROM_THE_FUTURE = {
   taken_at: 1788500000,
   schema_version: 40,
   restorable: false,
+  scheduled: false,
   problem: "taken by a newer LANcast — update before restoring it",
 };
 
@@ -127,6 +138,13 @@ describe("the backup pane", () => {
   it("says plainly when nothing is protected yet", async () => {
     await render([]);
     expect(host.textContent).toContain("No backups yet");
+  });
+
+  it("says which backups the schedule took and which a person did", async () => {
+    await render([SCHEDULED, RESTORABLE]);
+    const rows = [...host.querySelectorAll(".set-row")].map((r) => r.textContent ?? "");
+    expect(rows.find((t) => t.includes(SCHEDULED.name))).toContain("Scheduled");
+    expect(rows.find((t) => t.includes(RESTORABLE.name))).toContain("Taken by hand");
   });
 
   it("lists a backup with its size and a download link to its own name", async () => {
