@@ -73,6 +73,8 @@ import type {
   PeerLibrary,
   NetworkStatus,
   DLNAStatus,
+  OptimizedList,
+  OptimizedVersion,
 } from "./types";
 
 // ------------------------------------------------------------------ auth
@@ -3521,6 +3523,40 @@ export function useRenameSelf() {
       qc.invalidateQueries({ queryKey: ["auth-status"] });
       qc.invalidateQueries({ queryKey: ["profile"] });
     },
+  });
+}
+
+/*
+ * Optimized copies and the queue (ADR 0087). Admin only. Polled every few
+ * seconds while something is converting or queued, so the progress bar and
+ * the states move without a reload; idle otherwise.
+ */
+export function useOptimized(enabled = true) {
+  return useQuery({
+    queryKey: ["optimized"],
+    queryFn: ({ signal }) => apiGet<OptimizedList>("/api/optimized", signal),
+    enabled,
+    refetchInterval: (q) => {
+      const items = q.state.data?.items;
+      const busy = Array.isArray(items) && items.some((i) => i.state === "queued" || i.state === "converting");
+      return busy ? 3000 : false;
+    },
+  });
+}
+
+/** One title's copy, from the list, or undefined when it has none. */
+export function optimizedOf(list: OptimizedList | undefined, id: number): OptimizedVersion | undefined {
+  return Array.isArray(list?.items) ? list.items.find((v) => v.item_id === id) : undefined;
+}
+
+export function useSetOptimized() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (v: { id: number; on: boolean }) =>
+      apiSend(`/api/items/${v.id}/optimized`, v.on ? "PUT" : "DELETE"),
+    // The list is what a person is looking at: the Conversions pane and the
+    // menus that read it.
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["optimized"] }),
   });
 }
 

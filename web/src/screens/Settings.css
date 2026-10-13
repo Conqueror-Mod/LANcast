@@ -756,3 +756,18 @@ pre.set-network__pin {
   border-radius: var(--radius-tile);
   background: rgba(10, 15, 34, 0.5);
 }
+
+/* A thin bar for optimized copies: space used against the limit, and the one
+   converting now. Neutral, not gold: progress is a fact, not where you are. */
+.set-conv__bar {
+  height: 4px;
+  margin-top: 8px;
+  border-radius: 2px;
+  background: rgba(190, 208, 255, 0.1);
+  overflow: hidden;
+}
+.set-conv__bar > span {
+  display: block;
+  height: 100%;
+  background: rgba(190, 208, 255, 0.55);
+}

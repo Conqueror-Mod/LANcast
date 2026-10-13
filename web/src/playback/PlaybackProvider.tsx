@@ -214,6 +214,15 @@ export function resetMusicDeckForTests(): void {
   sharedDeck = null;
 }
 
+/*
+ * Titles the server said to play as their optimized copy (ADR 0087): recorded
+ * when the playback answer arrives, read by sourceURL for the direct source.
+ * A set rather than a parameter, because every one of sourceURL's callers is
+ * re-entering the same item the answer was about, and threading a flag
+ * through seven call sites is seven chances to drop it.
+ */
+const optimizedCopies = new Set<number>();
+
 function sourceURL(
   id: number,
   method: Decision["method"],
@@ -240,7 +249,10 @@ function sourceURL(
   if (method === "direct") {
     // A direct source is the file's own bytes; there is no encode to constrain,
     // and the server would not have said "direct" if the ceiling applied.
-    return a ? `/api/stream/${id}?${a}` : `/api/stream/${id}`;
+    if (a) return `/api/stream/${id}?${a}`;
+    // The optimized copy, when the answer said so — never with a chosen audio
+    // track, since the copy has one and the server never offers it then.
+    return optimizedCopies.has(id) ? `/api/stream/${id}?version=optimized` : `/api/stream/${id}`;
   }
   const parts = [offset > 0 ? `t=${Math.floor(offset)}` : "", a, cap].filter(
     Boolean,
@@ -1847,7 +1859,7 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
           audioIndex != null ? `audio=${audioIndex}` : "",
           qualityQuery(qualityRef.current),
         ].filter(Boolean);
-        const pb = await apiGet<{ decision: Decision }>(
+        const pb = await apiGet<{ decision: Decision; version?: string }>(
           withCapabilities(
             `/api/items/${item.id}/playback` +
               (ask.length > 0 ? `?${ask.join("&")}` : ""),
@@ -1855,6 +1867,8 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
         );
         if (cancelled) return;
         decision.current = pb.decision;
+        if (pb.version === "optimized") optimizedCopies.add(item.id);
+        else optimizedCopies.delete(item.id);
       } catch {
         decision.current = { method: "direct", reason: "" };
       }

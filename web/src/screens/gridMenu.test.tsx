@@ -190,6 +190,7 @@ describe("the library grid menu", () => {
       "Play",
       "Mark as watched",
       "Add to Watchlist",
+      "Make optimized version",
       "Play next",
       "Add to queue",
       "Go to details",
@@ -226,6 +227,7 @@ describe("the library grid menu", () => {
       "Mark all as watched",
       "Mark all as unwatched",
       "Add to Watchlist",
+      "Make optimized versions",
       "Go to details",
       "Remove from library…",
     ]);

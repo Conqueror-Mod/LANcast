@@ -12,6 +12,9 @@ import {
   useSetWatchlist,
   useWatchlist,
   watchlistItems,
+  useOptimized,
+  useSetOptimized,
+  optimizedOf,
 } from "@/api/hooks";
 import { usePlayback } from "@/playback/PlaybackProvider";
 import { apiGet } from "@/api/client";
@@ -313,6 +316,33 @@ export function useItemActions(): ItemActions {
     [watchlist, setWatchlist],
   );
 
+  /*
+   * Optimized copies (ADR 0087), for administrators: a film or an episode
+   * toggles its own; a show, a season or a collection asks for every title
+   * inside it.
+   */
+  const { data: optimized } = useOptimized(isAdmin);
+  const setOptimized = useSetOptimized();
+  const optimizedAction = useCallback(
+    (item: Item): MenuAction[] => {
+      if (!isAdmin || item.missing) return [];
+      if (item.kind === "movie" || item.kind === "episode") {
+        const has = !!optimizedOf(optimized, item.id);
+        return [
+          {
+            label: has ? "Remove optimized version" : "Make optimized version",
+            onSelect: () => setOptimized.mutate({ id: item.id, on: !has }),
+          },
+        ];
+      }
+      if (item.kind === "show" || item.kind === "season" || item.kind === "collection") {
+        return [{ label: "Make optimized versions", onSelect: () => setOptimized.mutate({ id: item.id, on: true }) }];
+      }
+      return [];
+    },
+    [isAdmin, optimized, setOptimized],
+  );
+
   const actions = useCallback(
     (item: Item): MenuAction[] => {
       /*
@@ -424,6 +454,7 @@ export function useItemActions(): ItemActions {
               ]
             : []),
           ...watchlistAction(item),
+          ...optimizedAction(item),
           {
             label: "Go to details",
             onSelect: () => navigate(`/item/${item.id}`),
@@ -480,6 +511,7 @@ export function useItemActions(): ItemActions {
           onSelect: () => setWatched.mutate({ itemID: item.id, watched: !seen }),
         },
         ...watchlistAction(item),
+        ...optimizedAction(item),
         { label: "Play next", onSelect: () => pb.playNextUp(item.id) },
         { label: "Add to queue", onSelect: () => pb.addToQueue(item.id) },
         /*
@@ -512,6 +544,7 @@ export function useItemActions(): ItemActions {
       marking,
       sensitiveActions,
       watchlistAction,
+      optimizedAction,
     ],
   );
 
