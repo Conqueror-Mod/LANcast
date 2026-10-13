@@ -51,6 +51,7 @@ import (
 	"lancast/internal/singleton"
 	"lancast/internal/store"
 	"lancast/internal/subtitle"
+	"lancast/internal/tasks"
 	"lancast/internal/tlscert"
 	"lancast/internal/transcode"
 	"lancast/internal/update"
@@ -560,6 +561,10 @@ func run(ctx context.Context, addr, dataDir string, log *slog.Logger) error {
 			"hint", "install ffmpeg to enable codec detection")
 	}
 
+	// The board behind Status › Scheduled tasks (internal/tasks): every job
+	// below reports to it when it starts and finishes. It schedules nothing.
+	board := tasks.New()
+
 	// enrichSoon runs a pass in the background, coalescing concurrent requests.
 	var enrichMu sync.Mutex
 	enrichCtx, cancelEnrich := context.WithCancel(context.Background())
@@ -582,7 +587,7 @@ func run(ctx context.Context, addr, dataDir string, log *slog.Logger) error {
 			// just keeps the goroutine count down.
 			enrichMu.Lock()
 			defer enrichMu.Unlock()
-			if err := worker.Run(enrichCtx); err != nil && !errors.Is(err, context.Canceled) {
+			if err := board.Track("enrich", func() error { return worker.Run(enrichCtx) }); err != nil && !errors.Is(err, context.Canceled) {
 				log.Warn("enrichment pass failed", "error", err)
 			}
 		}()
@@ -598,7 +603,7 @@ func run(ctx context.Context, addr, dataDir string, log *slog.Logger) error {
 			defer workers.Done()
 			probeMu.Lock()
 			defer probeMu.Unlock()
-			if err := probes.Run(enrichCtx); err != nil && !errors.Is(err, context.Canceled) {
+			if err := board.Track("probe", func() error { return probes.Run(enrichCtx) }); err != nil && !errors.Is(err, context.Canceled) {
 				log.Warn("probe pass failed", "error", err)
 			}
 		}()
@@ -625,16 +630,23 @@ func run(ctx context.Context, addr, dataDir string, log *slog.Logger) error {
 			defer workers.Done()
 			markerMu.Lock()
 			defer markerMu.Unlock()
-			if err := markers.Run(enrichCtx); err != nil && !errors.Is(err, context.Canceled) {
-				log.Warn("credits detection pass failed", "error", err)
-			}
-			// Intros after credits, under the same setting and the same
-			// mutex. A season is the unit here rather than a file (ADR 0055),
-			// so it is a separate pass rather than another branch inside the
-			// first one.
-			if err := markers.RunIntros(enrichCtx); err != nil && !errors.Is(err, context.Canceled) {
-				log.Warn("intro detection pass failed", "error", err)
-			}
+			// One job on the board, both passes: they share a setting, and a
+			// person turning detection on thinks of it as one thing.
+			_ = board.Track("markers", func() error {
+				credits := markers.Run(enrichCtx)
+				if credits != nil && !errors.Is(credits, context.Canceled) {
+					log.Warn("credits detection pass failed", "error", credits)
+				}
+				// Intros after credits, under the same setting and the same
+				// mutex. A season is the unit here rather than a file (ADR
+				// 0055), so it is a separate pass rather than another branch
+				// inside the first one.
+				intros := markers.RunIntros(enrichCtx)
+				if intros != nil && !errors.Is(intros, context.Canceled) {
+					log.Warn("intro detection pass failed", "error", intros)
+				}
+				return errors.Join(credits, intros)
+			})
 		}()
 	}
 
@@ -645,7 +657,7 @@ func run(ctx context.Context, addr, dataDir string, log *slog.Logger) error {
 			defer workers.Done()
 			photoMu.Lock()
 			defer photoMu.Unlock()
-			if err := photos.Run(enrichCtx); err != nil && !errors.Is(err, context.Canceled) {
+			if err := board.Track("photos", func() error { return photos.Run(enrichCtx) }); err != nil && !errors.Is(err, context.Canceled) {
 				log.Warn("photo thumbnail pass failed", "error", err)
 			}
 		}()
@@ -661,7 +673,7 @@ func run(ctx context.Context, addr, dataDir string, log *slog.Logger) error {
 		workers.Add(1)
 		go func() {
 			defer workers.Done()
-			if err := locations.Run(enrichCtx); err != nil && !errors.Is(err, context.Canceled) {
+			if err := board.Track("places", func() error { return locations.Run(enrichCtx) }); err != nil && !errors.Is(err, context.Canceled) {
 				log.Warn("photo location pass failed", "error", err)
 			}
 		}()
@@ -674,7 +686,7 @@ func run(ctx context.Context, addr, dataDir string, log *slog.Logger) error {
 			defer workers.Done()
 			romMu.Lock()
 			defer romMu.Unlock()
-			if err := roms.Run(enrichCtx); err != nil && !errors.Is(err, context.Canceled) {
+			if err := board.Track("roms", func() error { return roms.Run(enrichCtx) }); err != nil && !errors.Is(err, context.Canceled) {
 				log.Warn("rom identification pass failed", "error", err)
 			}
 		}()
@@ -687,7 +699,7 @@ func run(ctx context.Context, addr, dataDir string, log *slog.Logger) error {
 			defer workers.Done()
 			coverMu.Lock()
 			defer coverMu.Unlock()
-			if err := covers.Run(enrichCtx); err != nil && !errors.Is(err, context.Canceled) {
+			if err := board.Track("covers", func() error { return covers.Run(enrichCtx) }); err != nil && !errors.Is(err, context.Canceled) {
 				log.Warn("album art pass failed", "error", err)
 			}
 		}()
@@ -774,7 +786,10 @@ func run(ctx context.Context, addr, dataDir string, log *slog.Logger) error {
 			}
 			for {
 				if settings.Get().UpdateCheck && updates.Due() {
-					updates.Check(enrichCtx)
+					_ = board.Track("update", func() error {
+						updates.Check(enrichCtx)
+						return nil
+					})
 				}
 				select {
 				case <-time.After(6 * time.Hour):
@@ -854,6 +869,14 @@ func run(ctx context.Context, addr, dataDir string, log *slog.Logger) error {
 		Probe:         probeSoon,
 		DetectMarkers: markerSoon,
 		Cover:         coverSoon,
+		Tasks:         board,
+	})
+
+	registerTasks(board, taskDeps{
+		ctx: ctx, st: st, scanner: scanner, settings: settings, updates: updates,
+		api: apiSrv, artworkDir: filepath.Join(cfg.DataDir, "artwork"), log: log,
+		enrich: enrichSoon, probe: probeSoon, markers: markerSoon, photos: photoSoon,
+		places: placesSoon, roms: romSoon, covers: coverSoon,
 	})
 
 	// Titles and posters land batch by batch after a scan. Each batch tells
@@ -900,7 +923,7 @@ func run(ctx context.Context, addr, dataDir string, log *slog.Logger) error {
 
 	// Guides go stale by themselves; libraries do not. Always on, and not a
 	// setting, because a server with no channel sources does no work here.
-	go periodicGuideRefresh(ctx, apiSrv)
+	go periodicGuideRefresh(ctx, apiSrv, board)
 
 	// Paired servers are asked by the server, on one schedule, rather than by
 	// whichever pages happen to be open (ADR 0079 §5). This is also what makes
@@ -908,7 +931,7 @@ func run(ctx context.Context, addr, dataDir string, log *slog.Logger) error {
 	go apiSrv.WatchPeers(ctx)
 
 	// Records whose relevance is their age, dropped once a day.
-	go periodicPrune(ctx, st, settings, filepath.Join(cfg.DataDir, "artwork"), log)
+	go periodicPrune(ctx, st, settings, filepath.Join(cfg.DataDir, "artwork"), log, board)
 
 	// Clears leftover scratch from a previous run and starts reaping idle
 	// sessions. A closed browser tab does not tell the server it has gone.
@@ -1407,10 +1430,10 @@ func scanDue(last, now time.Time, hours int, atHour *int) (time.Time, bool) {
  * first pass is immediate, because a server that has been off for a week comes
  * back with a guide entirely in the past.
  */
-func periodicGuideRefresh(ctx context.Context, srv *api.Server) {
-	const every = 12 * time.Hour
+func periodicGuideRefresh(ctx context.Context, srv *api.Server, board *tasks.Board) {
+	const every = guideEvery
 
-	srv.RefreshGuides(ctx)
+	refreshGuides(ctx, srv, board)
 
 	t := time.NewTicker(every)
 	defer t.Stop()
@@ -1419,9 +1442,20 @@ func periodicGuideRefresh(ctx context.Context, srv *api.Server) {
 		case <-ctx.Done():
 			return
 		case <-t.C:
-			srv.RefreshGuides(ctx)
+			refreshGuides(ctx, srv, board)
 		}
 	}
+}
+
+// guideEvery is how often the TV guides are fetched again.
+const guideEvery = 12 * time.Hour
+
+// refreshGuides is one guide refresh, reported to the board.
+func refreshGuides(ctx context.Context, srv *api.Server, board *tasks.Board) {
+	_ = board.Track("guide", func() error {
+		srv.RefreshGuides(ctx)
+		return nil
+	})
 }
 
 /*
@@ -1454,7 +1488,7 @@ func periodicGuideRefresh(ctx context.Context, srv *api.Server) {
  * short enough that a restart does not defer maintenance by another day.
  */
 func periodicPrune(ctx context.Context, st *store.Store,
-	settings *config.SettingsStore, artworkDir string, log *slog.Logger) {
+	settings *config.SettingsStore, artworkDir string, log *slog.Logger, board *tasks.Board) {
 
 	const (
 		every    = 24 * time.Hour
@@ -1487,7 +1521,7 @@ func periodicPrune(ctx context.Context, st *store.Store,
 			now := time.Now()
 			want := store.PrunePolicy(settings.Get().AuditRetentionDays)
 			if store.PruneDue(last, now, every) || store.PolicyChanged(policy, want) {
-				runPrune(ctx, st, settings, artworkDir, log)
+				trackedPrune(ctx, st, settings, artworkDir, log, board)
 			}
 		}
 
@@ -1501,6 +1535,23 @@ func periodicPrune(ctx context.Context, st *store.Store,
 
 // runPrune is one pass: drop what is stale, record that it happened, and
 // reclaim the space only if something was actually removed.
+// pruneEvery is how often maintenance runs.
+const pruneEvery = 24 * time.Hour
+
+// pruneMu keeps the timer's run and a Run now from overlapping.
+var pruneMu sync.Mutex
+
+// trackedPrune is one maintenance run, reported to the board.
+func trackedPrune(ctx context.Context, st *store.Store,
+	settings *config.SettingsStore, artworkDir string, log *slog.Logger, board *tasks.Board) {
+	pruneMu.Lock()
+	defer pruneMu.Unlock()
+	_ = board.Track("prune", func() error {
+		runPrune(ctx, st, settings, artworkDir, log)
+		return nil
+	})
+}
+
 func runPrune(ctx context.Context, st *store.Store,
 	settings *config.SettingsStore, artworkDir string, log *slog.Logger) {
 

@@ -2716,6 +2716,41 @@ truth: the workers are in-process and a restart ended their work.
 Reading progress needs no special role. The endpoints that *start* work
 (`POST /api/libraries/{id}/scan`, `POST /api/probe/refresh`) remain admin only.
 
+### `GET /api/tasks` and `POST /api/tasks/{id}/run`
+
+Every background job the server runs, for Status › Scheduled tasks.
+Administrators only.
+
+```json
+{ "tasks": [
+  { "id": "scan", "name": "Scan libraries", "trigger": "interval", "every_hours": 24,
+    "enabled": true, "running": false,
+    "last_started_at": "2026-10-12T03:00:04Z", "last_finished_at": "2026-10-12T03:00:09Z",
+    "next_at": "2026-10-13T03:00:09Z" },
+  { "id": "markers", "name": "Detect credits", "trigger": "after-scan",
+    "enabled": false, "running": false } ] }
+```
+
+**The board schedules nothing.** Each job keeps its own trigger, and reports
+here when it starts and finishes. `trigger` says what that is:
+
+- `after-scan`: a library scan finishing, and startup;
+- `interval`: a timer;
+- `on-demand`: only a request.
+
+`enabled` is false when a setting has switched the job off. `next_at` is only
+for an enabled interval job. `last_error` is the last run's error, absent when
+it succeeded.
+
+Last runs are kept in memory, except the library scan and maintenance, which
+the database records. After a restart the others have none until they next
+run.
+
+`POST /api/tasks/{id}/run` starts a job in the background and answers **202**
+at once; the list then shows it running. An unknown id is **404**. Pressing it
+during a run starts nothing new, because every job already coalesces its own
+requests.
+
 ### `GET /api/transcodes`
 
 What the server is converting right now. **Admin only.**
