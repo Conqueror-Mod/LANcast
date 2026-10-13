@@ -8582,6 +8582,64 @@
         }
       }
     },
+    "/profile/playback": {
+      "get": {
+        "operationId": "getPlaybackPreferences",
+        "summary": "The caller's playback preferences",
+        "description": "Whether an intro skips itself (ADR 0083). An account that has never chosen gets the default, which is on; so does a server with no accounts yet.",
+        "tags": [
+          "Profile"
+        ],
+        "responses": {
+          "200": {
+            "description": "The caller's preferences.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlaybackPreferences"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "operationId": "setPlaybackPreferences",
+        "summary": "Set the caller's playback preferences",
+        "description": "Acts on the session; there is no route by which one account sets another's. `skip_intros` is required: a body without it is **400**, not read as off. Not audited.",
+        "tags": [
+          "Profile"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PlaybackPreferences"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Saved; the preferences as stored.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlaybackPreferences"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`skip_intros` missing or not a boolean."
+          },
+          "409": {
+            "description": "This server has no accounts yet."
+          }
+        }
+      }
+    },
     "/profile/sessions": {
       "get": {
         "operationId": "listMySessions",
@@ -18939,6 +18997,18 @@
           "current": {
             "type": "boolean",
             "description": "This is the device asking."
+          }
+        }
+      },
+      "PlaybackPreferences": {
+        "type": "object",
+        "required": [
+          "skip_intros"
+        ],
+        "properties": {
+          "skip_intros": {
+            "type": "boolean",
+            "description": "When playback reaches an intro the player would offer to skip, skip it and say so, with one press to go back. On unless the account turned it off."
           }
         }
       }

@@ -36,7 +36,8 @@ import {
   StopGlyph,
 } from "@/components/PlayerGlyphs";
 import { usePlayback, useFullSurface } from "@/playback/PlaybackProvider";
-import { skipTarget } from "@/lib/skip";
+import { AUTO_SKIP_IDLE, autoSkipStep, skipTarget, type AutoSkipState } from "@/lib/skip";
+import { usePlaybackPrefs } from "@/api/hooks";
 import { UpNextCard } from "@/components/UpNextCard";
 import { DEFAULTS, DIALOGUE_LEVELS } from "@/playback/prefs";
 import {
@@ -53,6 +54,9 @@ import "./Player.css";
 //
 // What remains here is what belongs to *being on the player screen*: the
 // transport, the idle auto-hide, the subtitle menu, and the keyboard surface.
+// How long "Intro skipped" stays, with its Watch intro button (ADR 0083).
+const INTRO_NOTICE_MS = 8000;
+
 export function Player() {
   const { id } = useParams();
   const itemID = Number(id);
@@ -491,6 +495,42 @@ export function Player() {
    * episode only — the next one asks again.
    */
   const [upNextCancelled, setUpNextCancelled] = useState<number | null>(null);
+
+  /*
+   * The intro skipping itself (ADR 0083). The rule is autoSkipStep, stepped on
+   * every position update; this only performs what it decides and shows what
+   * it did. Off until the account's answer arrives, so a slow fetch can cost
+   * one skip but never cause one somebody turned off.
+   */
+  const skipIntros = usePlaybackPrefs().data?.skip_intros === true;
+  const autoSkip = useRef<AutoSkipState>(AUTO_SKIP_IDLE);
+  const [introSkipped, setIntroSkipped] = useState<{ itemID: number | null; from: number } | null>(
+    null,
+  );
+  const { seekTo } = pb;
+  useEffect(() => {
+    const r = autoSkipStep(autoSkip.current, {
+      itemID: pb.itemID,
+      enabled: skipIntros,
+      playing: pb.playing,
+      markers: item?.markers,
+      positionSeconds: pb.displayTime,
+      durationSeconds: pb.totalDuration,
+      itemKind: item?.kind,
+    });
+    autoSkip.current = r.state;
+    if (r.skip) {
+      seekTo(r.skip.toSeconds);
+      setIntroSkipped({ itemID: pb.itemID, from: r.skip.fromSeconds });
+    }
+  }, [pb.itemID, pb.playing, pb.displayTime, pb.totalDuration, item?.markers, item?.kind, skipIntros, seekTo]);
+  // The notice stays long enough to read and press, then hands the corner back.
+  useEffect(() => {
+    if (!introSkipped) return;
+    const t = setTimeout(() => setIntroSkipped(null), INTRO_NOTICE_MS);
+    return () => clearTimeout(t);
+  }, [introSkipped]);
+  const showIntroSkipped = introSkipped != null && introSkipped.itemID === pb.itemID;
   const showUpNext =
     skip?.kind === "credits" &&
     item?.kind === "episode" &&
@@ -617,11 +657,14 @@ export function Player() {
         </div>
 
         {/*
-          Skip intro, and skip credits: a button that appears, never a jump
-          that happens.
-          ADR 0054 and the feature backlog both insist on that, and the reason
-          is that an automatic skip a few seconds wrong is indistinguishable
-          from a broken file — the first thing it would eat is a cold open.
+          Skip intro and skip credits. Credits are a button that appears and
+          never a jump (ADR 0054): skipping them unasked would end films early.
+
+          An intro skips itself unless the account turned that off (ADR 0083),
+          and says so: a jump with a label beside it is not mistaken for a
+          broken file, which was 0054's objection, and Watch intro undoes a
+          wrong one in a press. After that, or after scrubbing back into an
+          intro, the ordinary button is offered instead.
 
           It sits above the transport rather than among it because it is
           transient: it exists for thirty seconds of a forty-minute episode, and
@@ -640,6 +683,19 @@ export function Player() {
             onPlayNow={() => rollOn(true)}
             onCancel={() => setUpNextCancelled(pb.itemID)}
           />
+        ) : showIntroSkipped ? (
+          <div className="player__skipped" role="status">
+            <span>Intro skipped</span>
+            <button
+              className="player__skip player__skip--inline"
+              onClick={() => {
+                pb.seekTo(introSkipped.from);
+                setIntroSkipped(null);
+              }}
+            >
+              Watch intro
+            </button>
+          </div>
         ) : skip && (
           <button
             className="player__skip"

@@ -1,5 +1,12 @@
 import { describe, it, expect } from "vitest";
-import { CREDITS_LEAD_SECONDS, GATED_CREDITS, skipTarget } from "./skip";
+import {
+  AUTO_SKIP_IDLE,
+  CREDITS_LEAD_SECONDS,
+  GATED_CREDITS,
+  autoSkipStep,
+  skipTarget,
+  type AutoSkipState,
+} from "./skip";
 import type { components } from "@/api/schema";
 
 type Marker = components["schemas"]["Marker"];
@@ -165,5 +172,67 @@ describe("offering a skip", () => {
    */
   it("seeks to the detected end, with nothing added", () => {
     expect(skipTarget([intro(200, 245)], 210)?.atSeconds).toBe(245);
+  });
+});
+
+describe("an intro skips itself (ADR 0083)", () => {
+  const markers = [intro(60, 90)];
+  // Steps through positions as playback would report them, returning every
+  // skip asked for along the way.
+  function play(
+    positions: number[],
+    opts: { enabled?: boolean; playing?: boolean; itemID?: number; from?: AutoSkipState } = {},
+  ) {
+    let state = opts.from ?? AUTO_SKIP_IDLE;
+    const skips = [];
+    for (const p of positions) {
+      const r = autoSkipStep(state, {
+        itemID: opts.itemID ?? 1,
+        enabled: opts.enabled ?? true,
+        playing: opts.playing ?? true,
+        markers,
+        positionSeconds: p,
+      });
+      state = r.state;
+      if (r.skip) skips.push(r.skip);
+    }
+    return { state, skips };
+  }
+
+  it("skips on reaching the intro by playing, once, and says where it began", () => {
+    const { skips } = play([58, 59, 60, 60.5, 90, 91]);
+    expect(skips).toEqual([{ toSeconds: 90, fromSeconds: 60 }]);
+  });
+
+  it("skips when playback starts inside the intro", () => {
+    expect(play([65]).skips).toEqual([{ toSeconds: 90, fromSeconds: 60 }]);
+  });
+
+  it("does nothing when the account turned it off", () => {
+    expect(play([58, 59, 60, 61]).skips).toHaveLength(1);
+    expect(play([58, 59, 60, 61], { enabled: false }).skips).toEqual([]);
+  });
+
+  it("does not jump when somebody seeks back into the intro", () => {
+    // Watching from 100, then scrubbing back to 70 to see the theme.
+    expect(play([100, 101, 70, 71]).skips).toEqual([]);
+  });
+
+  it("does not skip again after Watch intro goes back to the start", () => {
+    // Skipped at 60; Watch intro seeks back to 60 and the theme plays through.
+    const { skips } = play([59, 60, 90, 60, 61, 62, 89, 90]);
+    expect(skips).toHaveLength(1);
+  });
+
+  it("waits for playback before reading the position", () => {
+    // A resumed episode reports 0 until its first frame; paused updates are
+    // not a playhead moving.
+    expect(play([65, 66], { playing: false }).skips).toEqual([]);
+  });
+
+  it("gets a fresh chance on the next item", () => {
+    const first = play([60, 90], { itemID: 1 });
+    const next = play([59, 60], { itemID: 2, from: first.state });
+    expect(next.skips).toHaveLength(1);
   });
 });

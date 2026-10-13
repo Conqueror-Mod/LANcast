@@ -2,6 +2,7 @@ import { usePrefs, QUALITIES, DEFAULTS, DIALOGUE_LEVELS, CROSSFADES, type SubFon
 import { EQ_PRESETS } from "@/playback/elementAudio";
 import { FONTS } from "@/playback/cueVars";
 import { COLORS, SIZES } from "./PlaybackSettings";
+import { usePlaybackPrefs, useSetPlaybackPrefs } from "@/api/hooks";
 import "./PlayerSettings.css";
 
 /*
@@ -77,6 +78,7 @@ export function PlayerSettings() {
           />
           Play the next episode or track automatically
         </label>
+        <SkipIntrosToggle />
       </section>
 
       <section className="settings__section">
@@ -224,5 +226,35 @@ export function SubtitleStyleSettings() {
         not part of it: that corrects timing for one file, and stays in the player.
       </p>
     </section>
+  );
+}
+
+/*
+ * Whether an intro skips itself (ADR 0083). Per account, unlike the rows
+ * around it, so it says so: it follows the person to every device, the way
+ * their subtitle style does. Not drawn until the account's answer is known, so
+ * the box never shows a state the server does not hold.
+ */
+function SkipIntrosToggle() {
+  const prefs = usePlaybackPrefs();
+  const set = useSetPlaybackPrefs();
+  if (!prefs.data) return null;
+  return (
+    <>
+      <label className="set-toggle">
+        <input
+          type="checkbox"
+          checked={prefs.data.skip_intros}
+          disabled={set.isPending}
+          onChange={(e) => set.mutate({ skip_intros: e.target.checked })}
+        />
+        Skip intros automatically
+      </label>
+      <p className="set-row__sub">
+        When an episode reaches its title sequence, it skips it and says so, with
+        Watch intro to go back. Follows your account to every device you sign in
+        on. Credits always keep their button.
+      </p>
+    </>
   );
 }

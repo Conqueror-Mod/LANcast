@@ -6,7 +6,7 @@ import (
 )
 
 // CurrentSchemaVersion is the revision this build expects.
-const CurrentSchemaVersion = 72
+const CurrentSchemaVersion = 73
 
 // migration is one forward step. There are deliberately no down migrations:
 // rolling a media library's schema backwards loses data that a rescan cannot
@@ -137,6 +137,9 @@ var migrations = []migration{
 		{"session", "device", "TEXT"},
 		{"session", "address", "TEXT"},
 	}},
+	// Intros skip themselves (ADR 0083), per account. Null is the default,
+	// which is on, so an account that never chose follows it.
+	{version: 73, columns: []column{{"user", "skip_intros", "INTEGER"}}},
 }
 
 // migrate brings the database up to CurrentSchemaVersion.
