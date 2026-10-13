@@ -6,7 +6,7 @@ import (
 )
 
 // CurrentSchemaVersion is the revision this build expects.
-const CurrentSchemaVersion = 73
+const CurrentSchemaVersion = 74
 
 // migration is one forward step. There are deliberately no down migrations:
 // rolling a media library's schema backwards loses data that a rescan cannot
@@ -140,6 +140,7 @@ var migrations = []migration{
 	// Intros skip themselves (ADR 0083), per account. Null is the default,
 	// which is on, so an account that never chose follows it.
 	{version: 73, columns: []column{{"user", "skip_intros", "INTEGER"}}},
+	{version: 74, sql: schemaRevision74},
 }
 
 // migrate brings the database up to CurrentSchemaVersion.
@@ -2331,4 +2332,21 @@ CREATE TABLE IF NOT EXISTS passkey (
     last_used_at    INTEGER
 );
 CREATE INDEX IF NOT EXISTS idx_passkey_user ON passkey(user_id);
+`
+
+// Revision 74 — a library can be kept from an account (ADR 0084).
+//
+// A deny list: a row hides one library from one account, and no rows means
+// everything is visible, so a new library is visible to everyone until an
+// administrator narrows somebody. Cascades from library, so deleting a
+// library takes its rows with it. No foreign key to user, for the reason
+// session and passkey have none: DeleteUser removes the rows in its own
+// transaction.
+const schemaRevision74 = `
+CREATE TABLE IF NOT EXISTS library_hidden (
+    user_id    TEXT    NOT NULL,
+    library_id INTEGER NOT NULL REFERENCES library(id) ON DELETE CASCADE,
+    hidden_at  INTEGER NOT NULL,
+    PRIMARY KEY (user_id, library_id)
+);
 `

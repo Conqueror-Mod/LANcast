@@ -216,6 +216,21 @@ func (s *Store) resolveCeiling(ctx context.Context, who Principal, itemID int64)
 	if who.account == "" {
 		return "", nil
 	}
+	// A library kept from this account (ADR 0084) refuses everything in it,
+	// whatever its rating, with the same ErrNotShared a friend gets for an
+	// unshared library — MayPlay turns both into a plain refusal.
+	hidden, err := s.HiddenLibraries(ctx, who.account)
+	if err != nil {
+		return "", err
+	}
+	if len(hidden) > 0 {
+		var libraryID int64
+		if err := s.db.QueryRowContext(ctx,
+			`SELECT library_id FROM media_item WHERE id = ?`, itemID).Scan(&libraryID); err == nil &&
+			libraryHidden(hidden, libraryID) {
+			return "", ErrNotShared
+		}
+	}
 	var ceiling string
 	if err := s.db.QueryRowContext(ctx,
 		`SELECT max_content_rating FROM user WHERE id = ?`, who.account).Scan(&ceiling); err != nil {
@@ -347,13 +362,13 @@ func (s *Store) PermittedItems(ctx context.Context, userID string, items []Item)
 	if userID == "" || len(items) == 0 {
 		return items, nil
 	}
-	var ceiling string
-	if err := s.db.QueryRowContext(ctx,
-		`SELECT max_content_rating FROM user WHERE id = ?`, userID).Scan(&ceiling); err != nil {
-		// No account row means no ceiling, for the reason MayPlay records.
-		return items, nil
+	// The ceiling and the hidden libraries together (ADR 0084): one rule, so
+	// a surface that applies one cannot forget the other.
+	access, err := s.accessFor(ctx, userID)
+	if err != nil {
+		return nil, err
 	}
-	pred, ceilArgs := ceilingPredicate(ceiling)
+	pred, ceilArgs := access.predicate()
 	if pred == "" {
 		return items, nil
 	}

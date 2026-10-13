@@ -645,6 +645,15 @@ func (s *Server) listItems(w http.ResponseWriter, r *http.Request) {
 		Limit:     queryInt(r, "limit"),
 		Offset:    queryInt(r, "offset"),
 	}
+	// The libraries kept from the caller (ADR 0084), beside the ceiling. Set
+	// here rather than in the literal so a failed lookup refuses the listing
+	// rather than showing what it was meant to hide.
+	hidden, err := s.hiddenFor(r)
+	if err != nil {
+		s.writeInternal(w, err, "check library access")
+		return
+	}
+	f.HiddenLibraries = hidden
 	/*
 	 * Derived, never accepted from the caller. See TakenMonth above.
 	 *

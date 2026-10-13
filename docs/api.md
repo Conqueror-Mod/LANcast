@@ -578,8 +578,12 @@ delete, `match`, item `refresh`); `GET`/`PUT /api/settings`; and all of
 | `PATCH /api/users/{id}` | `{name?, role?, max_content_rating?}` — rename an account, change its role, set the content rating it may not exceed, or any combination. At least one field is required. The account **id** is unchanged, which is what makes it a rename rather than a replacement: sessions, history, ratings and playlist membership hang off the id and follow silently. `409 last_admin` when it would demote the only administrator, refused in the store inside a transaction with the count. `max_content_rating` is a **ceiling set for the account by an administrator**, and empty clears it; `400` for a label this server cannot place on its scale, because a ceiling that means nothing would leave a household believing a limit was in force. It is deliberately the mirror image of the sharing switch, which has no administrator route at all: a switch somebody else can flip is not consent, and a limit you can lift is not a limit |
 
 **What a ceiling does.** It is enforced on the server, in listings **and in playback authorisation** — a client-side hide is a suggestion and this API serves files. An item above the ceiling answers `404` from every route that turns an id into bytes, and `404` rather than `403` on purpose: "you may not see this" and "this does not exist" must be indistinguishable, or walking the ids becomes a way to enumerate what a household is keeping from somebody. An item with no rating of its own **inherits its parent's, then its grandparent's** — an episode is judged by its show — and anything still unrated after that is **blocked**, on the reasoning that a limit stopping at the catalogued and waving the rest past is a filter that looks like a limit. Music and photographs are exempt: a track and a photograph carry no certificate and never will, so judging them by one would mean a limited account could not see a single song or a single photograph — a lockout rather than a limit.
+
+**What a hidden library does** (ADR 0084). It is the same kind of limit as the ceiling and is enforced in the same places: the library leaves the account's `GET /api/libraries`, every listing, and every route that turns an id into an item or bytes, which answer `404`. Every `/api/libraries/{id}/` route answers `404` for it, exactly as for a library that does not exist. A **deny list**: an account nobody narrowed sees everything, and a library added later is visible to everyone until somebody narrows them. Administrators are never restricted. What a paired server may see is decided by its share and is unaffected.
 | `DELETE /api/users/{id}` | Removes the account, its sessions, and its watch state. `409` if it is the last admin |
 | `POST /api/users/{id}/password` | `{new_password}` → resets that user's password and revokes their sessions |
+| `GET /api/users/{id}/libraries` | `{hidden: [libraryID], applies}` — which libraries this account cannot see ([ADR 0084](adr/0084-a-library-can-be-kept-from-an-account.md)). Empty is the default: every library. `applies` is `false` for an administrator, who is never restricted; the rows are kept, so a demotion puts them back |
+| `PUT /api/users/{id}/libraries` | `{hidden: [libraryID]}` → replaces the set and answers as `GET`. `hidden` is required (`400` without it, rather than lifting everything), and an id that is not a library is `400`. Audited as `user.libraries` |
 
 ---
 
@@ -727,6 +731,8 @@ Windows hidden/system directories are omitted, so `$RECYCLE.BIN` and
 predate multi-root libraries keep working, and superseded by `roots` for
 anything new. On a single-location library the two say the same thing, which is
 every library that existed before this.
+
+A library kept from the caller ([ADR 0084](adr/0084-a-library-can-be-kept-from-an-account.md)) is **left out**, not marked: the list is what this account can see.
 
 `item_count` on a root is what would be removed with it. `item_count` on the
 library is the whole library, and the two are not comparable: the library's
