@@ -195,7 +195,7 @@ describe("the event stream", () => {
   });
 
   it("every topic the server publishes has a row", () => {
-    for (const topic of ["peers", "presence", "libraries", "items"])
+    for (const topic of ["peers", "presence", "libraries", "items", "backups"])
       expect(topicKeys[topic], topic).toBeDefined();
   });
 });

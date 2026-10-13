@@ -665,6 +665,7 @@ data but never wrong data.
 | `presence` | what a paired server lets **this** person see changed. Sent only to that person's streams |
 | `libraries` | a library was added, removed, renamed or rescanned |
 | `items` | what a library holds changed |
+| `backups` | the backup schedule took a backup or deleted old scheduled ones (`GET /api/backups`, admin only) |
 
 - Topics published within about 250 ms of each other arrive as one event, so a
   scan touching thousands of files is one `items`, not thousands.

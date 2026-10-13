@@ -44,6 +44,8 @@ export const topicKeys: Record<string, readonly (readonly string[])[]> = {
     ["continue"],
     ["recent-photos"],
   ],
+  // The schedule writes and rotates backups with nobody pressing anything.
+  backups: [["backups"]],
 };
 
 /** Invalidates what each named topic makes stale. Unknown topics are ignored:

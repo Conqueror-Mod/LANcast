@@ -61,7 +61,7 @@ export interface paths {
          * Names of things that changed, as server-sent events
          * @description A `text/event-stream` that stays open. Each event is `event: changed` with `data` a JSON object `{"topics": [...]}` naming what changed. It never carries the changed data: a client refetches through the routes it already uses, with their usual checks (ADR 0079).
          *
-         *     Topics: `peers` (a pairing added, removed or made mutual, a roster or a share changed), `presence` (what a paired server lets *this* person see changed; sent only to that person's streams), `libraries` (a library added, removed, renamed or rescanned), `items` (what a library holds changed).
+         *     Topics: `peers` (a pairing added, removed or made mutual, a roster or a share changed), `presence` (what a paired server lets *this* person see changed; sent only to that person's streams), `libraries` (a library added, removed, renamed or rescanned), `items` (what a library holds changed), `backups` (the backup schedule took a backup or rotated old ones out).
          *
          *     Topics published within about 250 ms of each other arrive as one event. An idle stream sends a `: ping` comment every 25 s. The stream opens with `retry: 3000`. Events sent while a client was disconnected are not replayed, so a client should refetch everything it shows when it reconnects. A client that ignores this route and polls loses nothing but freshness.
          */

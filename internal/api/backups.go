@@ -154,6 +154,9 @@ func (s *Server) RunScheduledBackup(ctx context.Context) error {
 		}
 		s.log.Info("scheduled backup rotated out", "name", name)
 	}
+	// An open Backup pane has no other way to hear about a backup nobody
+	// pressed a button for.
+	s.Publish(TopicBackups)
 	return nil
 }
 
