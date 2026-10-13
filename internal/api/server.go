@@ -498,6 +498,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/profile/subtitle-style", s.subtitleStyle)
 	mux.HandleFunc("GET /api/profile/sessions", s.mySessions)
 	mux.HandleFunc("DELETE /api/profile/sessions/{id}", s.signOutMine)
+	mux.HandleFunc("DELETE /api/profile/sessions", s.signOutOthers)
 	mux.HandleFunc("GET /api/sessions", s.adminOnly(s.allSessions))
 	mux.HandleFunc("DELETE /api/sessions/{id}", s.adminOnly(s.signOutAny))
 	mux.HandleFunc("PUT /api/profile/subtitle-style", s.setSubtitleStyle)

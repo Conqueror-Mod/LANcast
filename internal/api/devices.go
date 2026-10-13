@@ -89,3 +89,25 @@ func (s *Server) signOut(w http.ResponseWriter, r *http.Request, userID string) 
 		fmt.Sprintf("signed out a device (%s)", handle), nil)
 	w.WriteHeader(http.StatusNoContent)
 }
+
+// signOutOthers signs out every one of the caller's devices except the one
+// asking — the answer to a list of sign-ins nobody recognises, and to a
+// device that has gone missing.
+func (s *Server) signOutOthers(w http.ResponseWriter, r *http.Request) {
+	sess, ok := sessionFromContext(r)
+	c, err := r.Cookie(auth.CookieName)
+	if !ok || err != nil || c.Value == "" {
+		writeError(w, http.StatusUnauthorized, "unauthorized", "sign in to continue")
+		return
+	}
+	n, err := s.st.DeleteOtherSessions(r.Context(), sess.UserID, auth.HashToken(c.Value))
+	if err != nil {
+		s.writeInternal(w, err, "sign out other sessions")
+		return
+	}
+	if n > 0 {
+		s.audit(r, "session.revoke_others", "user", sess.UserID,
+			fmt.Sprintf("signed out %d other devices", n), nil)
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"signed_out": n})
+}

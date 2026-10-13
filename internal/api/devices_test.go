@@ -139,3 +139,40 @@ func TestAnotherAccountsDeviceIsNotYours(t *testing.T) {
 		t.Errorf("the admin was signed out by a member's request: %d", ok.StatusCode)
 	}
 }
+
+// Sign out every other device: everything signed in as you goes except the
+// device asking, and nobody else's sessions are touched.
+func TestSignOutEveryOtherDevice(t *testing.T) {
+	h := langHarness(t)
+	phone := h.loginFrom(t, testUser, "a long enough password", phoneUA)
+	tablet := h.loginFrom(t, testUser, "a long enough password", "curl/8.0")
+	member := h.addMember(t, "viewer", "correct horse battery")
+
+	var out struct {
+		SignedOut int `json:"signed_out"`
+	}
+	decode(t, h.doAs(t, phone, "DELETE", "/api/profile/sessions", nil), &out)
+	if out.SignedOut != 2 {
+		t.Errorf("signed_out = %d, want the setup session and the tablet", out.SignedOut)
+	}
+
+	for name, c := range map[string]*http.Cookie{"tablet": tablet} {
+		resp := h.doAs(t, c, "GET", "/api/profile/sessions", nil)
+		resp.Body.Close()
+		if resp.StatusCode != http.StatusUnauthorized {
+			t.Errorf("the %s still works: %d", name, resp.StatusCode)
+		}
+	}
+	gone := h.authed(t, "GET", "/api/profile/sessions", nil)
+	gone.Body.Close()
+	if gone.StatusCode != http.StatusUnauthorized {
+		t.Errorf("the setup session still works: %d", gone.StatusCode)
+	}
+	for name, c := range map[string]*http.Cookie{"phone": phone, "member": member} {
+		resp := h.doAs(t, c, "GET", "/api/profile/sessions", nil)
+		resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			t.Errorf("the %s was signed out: %d", name, resp.StatusCode)
+		}
+	}
+}

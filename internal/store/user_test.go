@@ -88,6 +88,36 @@ func TestSessionRequiresLiveUser(t *testing.T) {
 	}
 }
 
+// An expired session refuses requests at once, but its row stays until
+// something sweeps it; the sweep takes the dead rows and leaves the live.
+func TestPurgeExpiredSessionsLeavesLiveOnes(t *testing.T) {
+	st := newStore(t)
+	ctx := context.Background()
+	u, err := st.CreateUser(ctx, "", "Chris", "h", RoleMember)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := st.CreateSession(ctx, "dead", u.ID, -time.Hour); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.CreateSession(ctx, "live", u.ID, time.Hour); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.PurgeExpiredSessions(ctx); err != nil {
+		t.Fatal(err)
+	}
+	var n int
+	if err := st.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM session`).Scan(&n); err != nil {
+		t.Fatal(err)
+	}
+	if n != 1 {
+		t.Errorf("%d session rows after the sweep, want 1", n)
+	}
+	if _, err := st.LookupSession(ctx, "live"); err != nil {
+		t.Errorf("the live session was swept: %v", err)
+	}
+}
+
 func TestCountUsersAndAdmins(t *testing.T) {
 	st := newStore(t)
 	ctx := context.Background()

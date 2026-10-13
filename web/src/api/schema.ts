@@ -3915,7 +3915,11 @@ export interface paths {
         get: operations["listMySessions"];
         put?: never;
         post?: never;
-        delete?: never;
+        /**
+         * Sign out every other device
+         * @description Signs out every one of the caller's devices except the one asking, and answers how many went. Recorded in the audit log when any did.
+         */
+        delete: operations["signOutOtherDevices"];
         options?: never;
         head?: never;
         patch?: never;
@@ -14449,6 +14453,30 @@ export interface operations {
                     };
                 };
             };
+        };
+    };
+    signOutOtherDevices: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Signed out. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** Format: int64 */
+                        signed_out: number;
+                    };
+                };
+            };
+            401: components["responses"]["Unauthorized"];
         };
     };
     signOutMyDevice: {

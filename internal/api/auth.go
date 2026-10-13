@@ -821,6 +821,12 @@ func (s *Server) issueSession(w http.ResponseWriter, r *http.Request, userID str
 	// serves HTTPS, and marking the cookie Secure there stops it downgrading.
 	http.SetCookie(w, auth.Cookie(token, auth.SessionTTL, r.TLS != nil))
 	s.cookieIssued(token)
+	// An expired session already refuses every request; this only stops its
+	// row piling up. A sign-in is rare enough to carry the sweep, and a
+	// failure here costs nothing but a row.
+	if err := s.st.PurgeExpiredSessions(r.Context()); err != nil {
+		s.log.Warn("purge expired sessions", "err", err)
+	}
 	return nil
 }
 

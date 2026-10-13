@@ -1665,6 +1665,10 @@ first.
 and answers **204**. Signing out the device asking is signing out, and clears
 its cookie. Another account's device is **404**, as if it did not exist.
 
+`DELETE /api/profile/sessions`, with no id, signs out every one of the
+caller's devices except the one asking, and answers `{ "signed_out": 12 }`.
+It is the answer to a list of sign-ins nobody recognises.
+
 ### `GET /api/sessions` and `DELETE /api/sessions/{id}`
 
 The same, for every account on the server. Administrators only. A sign-out

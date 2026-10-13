@@ -8613,6 +8613,38 @@
             }
           }
         }
+      },
+      "delete": {
+        "operationId": "signOutOtherDevices",
+        "tags": [
+          "Profile"
+        ],
+        "summary": "Sign out every other device",
+        "description": "Signs out every one of the caller's devices except the one asking, and answers how many went. Recorded in the audit log when any did.",
+        "responses": {
+          "200": {
+            "description": "Signed out.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "signed_out"
+                  ],
+                  "properties": {
+                    "signed_out": {
+                      "type": "integer",
+                      "format": "int64"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
       }
     },
     "/profile/sessions/{id}": {

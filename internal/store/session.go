@@ -172,3 +172,15 @@ func (s *Store) DeleteSessionByHandle(ctx context.Context, userID, handle string
 	n, _ := res.RowsAffected()
 	return n > 0, nil
 }
+
+// DeleteOtherSessions signs out every one of userID's sessions except the one
+// whose hash is keep, and reports how many went.
+func (s *Store) DeleteOtherSessions(ctx context.Context, userID, keep string) (int64, error) {
+	res, err := s.db.ExecContext(ctx,
+		`DELETE FROM session WHERE user_id = ? AND token_hash <> ?`, userID, keep)
+	if err != nil {
+		return 0, fmt.Errorf("sign out other sessions: %w", err)
+	}
+	n, _ := res.RowsAffected()
+	return n, nil
+}
