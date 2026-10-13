@@ -711,6 +711,24 @@ Windows hidden/system directories are omitted, so `$RECYCLE.BIN` and
 
 ## Libraries
 
+### `GET /api/network`
+
+Administrators only. This machine and the LAN, as a status, for
+**Server › Network**:
+
+```json
+{ "port": "8080", "lan_enabled": true, "secured": true, "restart_required": false,
+  "addresses": ["https://192.168.1.20:8080", "https://[fd00::20]:8080"],
+  "certificate_fingerprint": "sha256/…", "custom_certificate": false }
+```
+
+**Read-only by design.** Whether the server answers the network is the
+loopback rule, not a setting: no password means `127.0.0.1` only. This reports
+which side of that rule the server is on (`secured`, `lan_enabled`, and
+`restart_required` when a password was set since the server started) and, when
+it is reachable, where. `addresses` are the stable addresses an invite to a
+friend names, as `https://` URLs; empty when the server is loopback-only.
+
 ### `GET /api/libraries`
 
 ```json
