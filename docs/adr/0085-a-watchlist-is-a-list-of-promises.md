@@ -48,8 +48,10 @@ would merge two things a person means differently, so it is its own table.
    button beside Play, which is a shape, not a colour: gold means "where you
    are" and nothing else (`docs/design.md`). There is also an entry in More
    Options and in a tile's right-click menu.
-7. **A Home shelf, "Watchlist",** shown when the list has anything on it. It
-   can be turned off in Display & home, like the other shelves.
+7. **A Home shelf, "Watchlist",** after Next up, shown when the list has
+   anything on it. No Home shelf has an on/off switch: each one is simply
+   absent when it is empty. The watchlist follows that rule, so someone who
+   never uses it never sees it, and a switch would add nothing.
 
 ## Not decided here
 

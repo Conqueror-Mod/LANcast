@@ -612,6 +612,8 @@ const workFinishedKeys = [
   "continue",
   "review",
   "children",
+  // A title whose file went missing leaves the watchlist until it returns.
+  "watchlist",
 ];
 
 export function useStartScan() {
@@ -956,6 +958,7 @@ export function useDeleteItem(id: number) {
         "review",
         "children",
         "collection-members",
+        "watchlist",
         // The collision report is a list of items too, and forgetting a row is
         // the one action taken *from* it — a card that still shows the row it
         // just removed is the stale-view bug this project keeps shipping,
@@ -2964,6 +2967,41 @@ export async function fetchShowContinue(showID: number): Promise<{
 }
 
 /*
+ * The caller's watchlist (ADR 0085), newest first. One query rather than a
+ * flag on every item: the title page and the menus ask "is it on my list" of
+ * this, so adding from one place updates every other place showing it.
+ */
+export function useWatchlist(enabled = true) {
+  return useQuery({
+    queryKey: ["watchlist"],
+    queryFn: ({ signal }) => apiGet<{ items: Item[]; total: number }>("/api/watchlist", signal),
+    enabled,
+  });
+}
+
+/** The list's items, or none for an answer that is not the expected shape:
+ * one malformed reply must cost a bookmark, not the page drawing it. */
+export function watchlistItems(data: { items?: Item[] } | undefined): Item[] {
+  return Array.isArray(data?.items) ? data.items : [];
+}
+
+/** Whether one title is on the caller's watchlist, from the list itself. */
+export function useOnWatchlist(id: number): boolean {
+  const q = useWatchlist(id > 0);
+  return watchlistItems(q.data).some((it) => it.id === id);
+}
+
+export function useSetWatchlist() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (v: { id: number; on: boolean }) =>
+      apiSend(`/api/items/${v.id}/watchlist`, v.on ? "PUT" : "DELETE"),
+    // The list is what a person is looking at: the shelf, the button, the menu.
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["watchlist"] }),
+  });
+}
+
+/*
  * Where a show or season stands for this person, for choosing its button:
  * Play when untouched, Continue watching when part watched, Watch again when
  * finished.
@@ -3028,6 +3066,8 @@ export function invalidateWatchState(qc: QueryClient) {
     "search",
     "profile",
     "history-count",
+    // Finishing something takes it off the watchlist (ADR 0085).
+    "watchlist",
   ]) {
     qc.invalidateQueries({ queryKey: [key] });
   }
