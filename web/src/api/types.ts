@@ -390,5 +390,7 @@ export type Collision = {
 export type BackupFile = components["schemas"]["BackupFile"];
 // Server › Network: this machine and the LAN, as a status.
 export type NetworkStatus = components["schemas"]["NetworkStatus"];
+// Server › DLNA: whether it is running, and why not (ADR 0086).
+export type DLNAStatus = components["schemas"]["DLNAStatus"];
 
 export type BackupsResponse = components["schemas"]["BackupList"];

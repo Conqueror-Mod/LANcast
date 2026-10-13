@@ -72,6 +72,7 @@ import type {
   SharedLibrary,
   PeerLibrary,
   NetworkStatus,
+  DLNAStatus,
 } from "./types";
 
 // ------------------------------------------------------------------ auth
@@ -3520,6 +3521,17 @@ export function useRenameSelf() {
       qc.invalidateQueries({ queryKey: ["auth-status"] });
       qc.invalidateQueries({ queryKey: ["profile"] });
     },
+  });
+}
+
+// Server › DLNA: whether it is running and why not (ADR 0086). Polled while
+// the pane is open, because the supervisor applies a change a few seconds
+// after it is saved and the line should follow without a reload.
+export function useDLNAStatus() {
+  return useQuery({
+    queryKey: ["dlna"],
+    queryFn: ({ signal }) => apiGet<DLNAStatus>("/api/dlna", signal),
+    refetchInterval: 3000,
   });
 }
 
