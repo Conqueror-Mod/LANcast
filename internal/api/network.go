@@ -76,6 +76,10 @@ func (s *Server) networkStatus(w http.ResponseWriter, r *http.Request) {
  * Display only. A friend's invite keeps its own order (peers race every
  * address anyway, since the dead-first-address fix).
  */
+// HomeFirst is homeFirst for the rest of the server: DLNA announces on the
+// same address the Network pane leads with.
+func HomeFirst(ips []string) []string { return homeFirst(ips) }
+
 func homeFirst(ips []string) []string {
 	rank := func(s string) int {
 		ip := net.ParseIP(s)

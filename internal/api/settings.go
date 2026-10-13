@@ -57,6 +57,9 @@ func (s *Server) getSettings(w http.ResponseWriter, r *http.Request) {
 		"audit_retention_days": cur.AuditRetentionDays,
 		"backup_every_days":    cur.BackupEveryDays,
 		"backup_keep":          cur.BackupKeep,
+		"dlna_enabled":         cur.DLNAEnabled,
+		"dlna_account":         cur.DLNAAccount,
+		"dlna_name":            cur.DLNAName,
 		"write_nfo":            cur.WriteNFO,
 		"auto_enrich":          cur.AutoEnrich,
 		"update_check":         cur.UpdateCheck,
@@ -144,6 +147,9 @@ func (s *Server) putSettings(w http.ResponseWriter, r *http.Request) {
 		AuditRetentionDays *int            `json:"audit_retention_days"`
 		BackupEveryDays    *int            `json:"backup_every_days"`
 		BackupKeep         *int            `json:"backup_keep"`
+		DLNAEnabled        *bool           `json:"dlna_enabled"`
+		DLNAAccount        *string         `json:"dlna_account"`
+		DLNAName           *string         `json:"dlna_name"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeError(w, http.StatusBadRequest, "bad_request", "malformed JSON body")
@@ -337,6 +343,28 @@ func (s *Server) putSettings(w http.ResponseWriter, r *http.Request) {
 		}
 		next.BackupKeep = *req.BackupKeep
 	}
+	if req.DLNAAccount != nil {
+		// An account that does not exist would leave DLNA answering as
+		// nobody — the one thing ADR 0086 rules out — so it is refused.
+		if *req.DLNAAccount != "" {
+			if _, err := s.st.UserByID(r.Context(), *req.DLNAAccount); err != nil {
+				writeError(w, http.StatusBadRequest, "bad_request", "dlna_account must be an account on this server")
+				return
+			}
+		}
+		next.DLNAAccount = *req.DLNAAccount
+	}
+	if req.DLNAName != nil {
+		name := strings.TrimSpace(*req.DLNAName)
+		if len(name) > 64 {
+			writeError(w, http.StatusBadRequest, "bad_request", "dlna_name must be 64 characters or fewer")
+			return
+		}
+		next.DLNAName = name
+	}
+	if req.DLNAEnabled != nil {
+		next.DLNAEnabled = *req.DLNAEnabled
+	}
 
 	encoderChanged := req.HardwareEncoder != nil &&
 		*req.HardwareEncoder != next.HardwareEncoder
@@ -458,6 +486,10 @@ func changedSettings(prev, next config.Settings) []string {
 	// Audited because lowering the count deletes backups at the next run.
 	add("backup_every_days", prev.BackupEveryDays != next.BackupEveryDays)
 	add("backup_keep", prev.BackupKeep != next.BackupKeep)
+	// Audited: DLNA opens a port and decides what every TV in the house sees.
+	add("dlna_enabled", prev.DLNAEnabled != next.DLNAEnabled)
+	add("dlna_account", prev.DLNAAccount != next.DLNAAccount)
+	add("dlna_name", prev.DLNAName != next.DLNAName)
 	return out
 }
 

@@ -151,6 +151,9 @@ type Deps struct {
 
 // Server holds the API dependencies.
 type Server struct {
+	// dlnaStatus reports the DLNA supervisor's state (ADR 0086); nil until
+	// serverapp sets it, which reads as "off".
+	dlnaStatus func() DLNAStatus
 	ident      identity.Identity
 	listenAddr string
 	st         *store.Store
@@ -380,6 +383,8 @@ func (s *Server) Handler() http.Handler {
 
 	// This machine and the LAN, as a status (Server › Network).
 	mux.HandleFunc("GET /api/network", s.adminOnly(s.networkStatus))
+	// Whether DLNA is running, and why not (ADR 0086).
+	mux.HandleFunc("GET /api/dlna", s.adminOnly(s.dlnaStatusRoute))
 	mux.HandleFunc("GET /api/libraries", s.listLibraries)
 	mux.HandleFunc("POST /api/libraries", s.adminOnly(s.createLibrary))
 	mux.HandleFunc("PATCH /api/libraries/{id}", s.adminOnly(s.patchLibrary))
