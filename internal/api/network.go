@@ -3,6 +3,7 @@ package api
 import (
 	"net"
 	"net/http"
+	"sort"
 
 	"lancast/internal/tlscert"
 )
@@ -54,9 +55,44 @@ func (s *Server) networkStatus(w http.ResponseWriter, r *http.Request) {
 	// A LAN-bound server serves HTTPS (the TLS work); a loopback-only one has
 	// no address anybody else could use, so it lists none.
 	if s.lanBound && port != "" {
-		for _, ip := range tlscert.StableIPs() {
+		for _, ip := range homeFirst(tlscert.StableIPs()) {
 			out.Addresses = append(out.Addresses, "https://"+net.JoinHostPort(ip, port))
 		}
 	}
 	writeJSON(w, http.StatusOK, out)
+}
+
+/*
+ * homeFirst orders addresses so the one the pane leads with is the one a
+ * phone in the same house would use.
+ *
+ * The system's own order is arbitrary, and the first time this pane was
+ * looked at it led with a ZeroTier address (10.x) while the house's
+ * 192.168.1.x came last. 192.168/16 is what nearly every home router hands
+ * out, so it goes first; then the other private IPv4 ranges, which include
+ * VPN overlays like ZeroTier; then IPv6. Stable within each group, so the
+ * list does not reshuffle between visits.
+ *
+ * Display only. A friend's invite keeps its own order (peers race every
+ * address anyway, since the dead-first-address fix).
+ */
+func homeFirst(ips []string) []string {
+	rank := func(s string) int {
+		ip := net.ParseIP(s)
+		switch {
+		case ip == nil:
+			return 4
+		case ip.To4() != nil && ip.To4()[0] == 192 && ip.To4()[1] == 168:
+			return 0
+		case ip.To4() != nil && ip.IsPrivate():
+			return 1
+		case ip.To4() != nil:
+			return 2
+		default:
+			return 3
+		}
+	}
+	out := append([]string(nil), ips...)
+	sort.SliceStable(out, func(i, j int) bool { return rank(out[i]) < rank(out[j]) })
+	return out
 }

@@ -35,3 +35,13 @@ func TestNetworkStatusFollowsTheLoopbackRule(t *testing.T) {
 		}
 	}
 }
+
+// The pane leads with the address a phone in the same house would use: the
+// first real look at it led with a ZeroTier 10.x and listed 192.168.1.x last.
+func TestTheHomeAddressComesFirst(t *testing.T) {
+	got := homeFirst([]string{"10.121.240.235", "2600:1702::2e", "fd00::5", "192.168.1.160", "172.16.0.9"})
+	want := []string{"192.168.1.160", "10.121.240.235", "172.16.0.9", "2600:1702::2e", "fd00::5"}
+	if strings.Join(got, ",") != strings.Join(want, ",") {
+		t.Errorf("homeFirst = %v, want %v", got, want)
+	}
+}
