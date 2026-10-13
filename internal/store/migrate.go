@@ -6,7 +6,7 @@ import (
 )
 
 // CurrentSchemaVersion is the revision this build expects.
-const CurrentSchemaVersion = 75
+const CurrentSchemaVersion = 76
 
 // migration is one forward step. There are deliberately no down migrations:
 // rolling a media library's schema backwards loses data that a rescan cannot
@@ -142,6 +142,7 @@ var migrations = []migration{
 	{version: 73, columns: []column{{"user", "skip_intros", "INTEGER"}}},
 	{version: 74, sql: schemaRevision74},
 	{version: 75, sql: schemaRevision75},
+	{version: 76, sql: schemaRevision76},
 }
 
 // migrate brings the database up to CurrentSchemaVersion.
@@ -2366,4 +2367,25 @@ CREATE TABLE IF NOT EXISTS user_watchlist (
     PRIMARY KEY (user_id, item_id)
 );
 CREATE INDEX IF NOT EXISTS idx_user_watchlist_added ON user_watchlist(user_id, added_at DESC);
+`
+
+// Revision 76 — optimized copies (ADR 0087).
+//
+// One row per title somebody asked to have converted ahead of time. The file
+// itself lives in the optimized folder as <item_id>.mp4; this row is its
+// state, its size, and the copy's own probe — stored when it is finished, so
+// the playback decision for the copy is the same pure function as for any
+// file. Cascades from media_item: deleting a title takes its row, and a sweep
+// removes the file.
+const schemaRevision76 = `
+CREATE TABLE IF NOT EXISTS optimized_version (
+    item_id      INTEGER PRIMARY KEY REFERENCES media_item(id) ON DELETE CASCADE,
+    state        TEXT    NOT NULL,
+    size_bytes   INTEGER NOT NULL DEFAULT 0,
+    probe_json   TEXT,
+    error        TEXT    NOT NULL DEFAULT '',
+    requested_at INTEGER NOT NULL,
+    finished_at  INTEGER
+);
+CREATE INDEX IF NOT EXISTS idx_optimized_state ON optimized_version(state, requested_at);
 `
