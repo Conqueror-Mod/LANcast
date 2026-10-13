@@ -25,7 +25,14 @@ func Announce(ctx context.Context, d Device, port int, preferredIP func() string
 	if err != nil {
 		return err
 	}
-	listen, err := net.ListenMulticastUDP("udp4", nil, group)
+	// Listen on the LAN address: the one announcements carry, and the one a
+	// TV on the same network searches across (listenSSDP says why it is bound
+	// to it rather than to every address).
+	lan := preferredIP()
+	if lan == "" {
+		return errors.New("ssdp: this machine has no LAN address to listen on")
+	}
+	listen, err := listenSSDP(lan)
 	if err != nil {
 		return err
 	}
