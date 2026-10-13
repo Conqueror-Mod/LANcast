@@ -1,3 +1,4 @@
+import { PlayerSettings, SubtitleStyleSettings } from "@/components/PlayerSettings";
 import { AboutSettings } from "@/components/AboutSettings";
 import { useEffect, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
@@ -823,6 +824,15 @@ function LanguagesSection() {
       <span className="section-label">Languages &amp; subtitles</span>
       <LanguagePreferences />
     </section>
+  );
+}
+
+function LanguagesPane() {
+  return (
+    <>
+      <LanguagesSection />
+      <SubtitleStyleSettings />
+    </>
   );
 }
 
@@ -3473,6 +3483,7 @@ const ACCOUNT_PANES: Pane[] = [
 ];
 
 const DEVICE_PANES: Pane[] = [
+  { id: "player", label: "Player" },
   { id: "display", label: "Display & home" },
   { id: "keyboard", label: "Keyboard" },
   { id: "app", label: "This app" },
@@ -3644,7 +3655,7 @@ export function Settings() {
           )}
           {pane === "profile" && <ProfileSection />}
           {pane === "security" && <SecuritySection />}
-          {pane === "languages" && <LanguagesSection />}
+          {pane === "languages" && <LanguagesPane />}
           {pane === "privacy" && <PrivacySection />}
           {pane === "app" && (
             <>
@@ -3660,6 +3671,7 @@ export function Settings() {
               <ClientLog />
             </>
           )}
+          {pane === "player" && <PlayerSettings />}
           {pane === "games" && <GamesSettings />}
           {pane === "about" && <AboutSettings />}
           {pane === "keyboard" && <KeyBindings />}

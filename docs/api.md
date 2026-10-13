@@ -1637,6 +1637,30 @@ alone rather than picking the first track, and a full subtitle track is
 preferred over a forced one, since a forced track captions three sentences of a
 film and reads as the feature failing.
 
+### `GET /api/profile/subtitle-style` and `PUT /api/profile/subtitle-style`
+
+How subtitles look for the calling account. It follows the person to every
+device, beside their subtitle language.
+
+```json
+{ "style": { "color": "#ffe066", "font": "serif", "size": 1.35, "position": 12 } }
+```
+
+`style` is `null` for an account that has never chosen one, and on a server
+with no accounts yet. A client then keeps the style its own device already
+had, so this changes nothing for anybody until they pick something.
+
+`PUT` takes the four fields together and answers with what was stored:
+
+- `color` is `#rrggbb`;
+- `font` is `sans`, `serif` or `mono`;
+- `size` is a multiplier from 0.5 to 3;
+- `position` is a percentage up from the bottom, from 0 to 40.
+
+Anything else is **400**; with no accounts on the server, **409**. The
+subtitle *offset* is not part of the style: it corrects timing for one file
+on one device, and stays a device preference.
+
 ### `GET /api/people`
 
 The other accounts on this server. "Find Friends" on a self-hosted household

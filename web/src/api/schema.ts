@@ -3797,6 +3797,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/profile/subtitle-style": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The caller's subtitle style
+         * @description Null `style` for an account that has never chosen one, and on a server with no accounts yet.
+         */
+        get: operations["getSubtitleStyle"];
+        /**
+         * Set the caller's subtitle style
+         * @description All four fields together. Acts on the session; there is no route by which one account sets another's. A colour that is not #rrggbb, an unknown font, or a size or position out of range is **400**.
+         */
+        put: operations["setSubtitleStyle"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/peers/{fingerprint}/ticket": {
         parameters: {
             query?: never;
@@ -7816,6 +7840,21 @@ export interface components {
             notice: string;
             /** @description This version's release notes, Markdown. Absent when none were committed for it. */
             notes?: string;
+        };
+        /** @description How subtitles look for one account. It follows the person to every device. The subtitle offset is not part of it: that is a timing correction for one file on one device. */
+        SubtitleStyle: {
+            /** @description #rrggbb. */
+            color: string;
+            /** @enum {string} */
+            font: "sans" | "serif" | "mono";
+            /** @description A multiplier of the player's base size. */
+            size: number;
+            /** @description How far up from the bottom the cues sit, as a percentage of the picture's height. */
+            position: number;
+        };
+        SubtitleStyleResponse: {
+            /** @description Null for an account that has never chosen one; a client then keeps its own device's style. */
+            style: components["schemas"]["SubtitleStyle"] | null;
         };
     };
     responses: {
@@ -14066,6 +14105,64 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["Error"];
                 };
+            };
+        };
+    };
+    getSubtitleStyle: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The caller's style, or null. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SubtitleStyleResponse"];
+                };
+            };
+        };
+    };
+    setSubtitleStyle: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SubtitleStyle"];
+            };
+        };
+        responses: {
+            /** @description Saved; the style as stored. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SubtitleStyleResponse"];
+                };
+            };
+            /** @description A style no player can draw. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description This server has no accounts yet. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };

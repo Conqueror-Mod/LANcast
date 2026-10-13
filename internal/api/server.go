@@ -489,6 +489,8 @@ func (s *Server) Handler() http.Handler {
 	// check — see internal/api/langpref.go.
 	mux.HandleFunc("GET /api/profile/languages", s.languagePreferences)
 	mux.HandleFunc("PUT /api/profile/languages", s.setLanguagePreferences)
+	mux.HandleFunc("GET /api/profile/subtitle-style", s.subtitleStyle)
+	mux.HandleFunc("PUT /api/profile/subtitle-style", s.setSubtitleStyle)
 	mux.HandleFunc("GET /api/profile/ratings", s.listMyRatings)
 	mux.HandleFunc("PUT /api/profile/sharing", s.putSharing)
 	mux.HandleFunc("PUT /api/profile/avatar", s.putAvatar)

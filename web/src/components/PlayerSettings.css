@@ -1,0 +1,29 @@
+/* The subtitle preview: a strip of the dark cue background the players use,
+   with one line drawn in the chosen style. No gold: it is not a place. */
+.subpreview {
+  position: relative;
+  height: 120px;
+  margin: 8px 0 14px;
+  border-radius: var(--radius-tile);
+  background: linear-gradient(180deg, #1a2140, #0b1022);
+  box-shadow: var(--rim);
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  overflow: hidden;
+}
+.subpreview__cue {
+  background: rgba(0, 0, 0, 0.7);
+  padding: 2px 10px;
+  border-radius: 4px;
+  line-height: 1.35;
+}
+.subpreview__cue--sans {
+  font-family: system-ui, sans-serif;
+}
+.subpreview__cue--serif {
+  font-family: Georgia, "Times New Roman", serif;
+}
+.subpreview__cue--mono {
+  font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
+}

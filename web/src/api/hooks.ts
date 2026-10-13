@@ -4035,6 +4035,35 @@ export function useLanguagePreferences() {
   });
 }
 
+export type SubtitleStyle = import("./schema").components["schemas"]["SubtitleStyle"];
+
+/*
+ * The account's subtitle style (docs/settings-plan.md: per account). Null
+ * when the account has never chosen one, and the device keeps its own.
+ */
+export function useSubtitleStyle(enabled = true) {
+  return useQuery({
+    queryKey: ["subtitle-style"],
+    queryFn: ({ signal }) =>
+      apiGet<{ style: SubtitleStyle | null }>("/api/profile/subtitle-style", signal).then(
+        (r) => r.style,
+      ),
+    enabled,
+    staleTime: 60_000,
+  });
+}
+
+export function useSetSubtitleStyle() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (style: SubtitleStyle) =>
+      apiPost<{ style: SubtitleStyle }>("/api/profile/subtitle-style", style, "PUT"),
+    // What a person could be looking at: the style itself, which every
+    // signed-in device reads on its next fetch.
+    onSuccess: (r) => qc.setQueryData(["subtitle-style"], r?.style ?? null),
+  });
+}
+
 export function useSetLanguagePreferences() {
   const qc = useQueryClient();
   return useMutation({

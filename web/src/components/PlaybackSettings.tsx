@@ -40,7 +40,7 @@ const SPEEDS = [0.5, 0.75, 1, 1.25, 1.5, 1.75, 2];
 // Deliberately few, and all high-contrast against the dark cue background.
 // A full colour picker for subtitles is a control whose useful range is about
 // six values and whose failure mode is dark grey text on a dark grey box.
-const COLORS = [
+export const COLORS = [
   { value: "#ffffff", label: "White" },
   { value: "#f4e2b8", label: "Cream" },
   { value: "#ffe066", label: "Yellow" },
@@ -48,7 +48,7 @@ const COLORS = [
   { value: "#8fd3ff", label: "Blue" },
 ];
 
-const SIZES = [
+export const SIZES = [
   { value: 0.75, label: "Small" },
   { value: 1, label: "Normal" },
   { value: 1.35, label: "Large" },
