@@ -1826,6 +1826,35 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/users/{id}/libraries": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The account id. */
+                id: components["parameters"]["UserId"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Which libraries an account cannot see
+         * @description Administrators only (ADR 0084). `hidden` is the library ids kept from the account; empty means it sees every library, which is the default. `applies` is false for an administrator, whose stored rows are kept but ignored.
+         */
+        get: operations["getUserLibraries"];
+        /**
+         * Set which libraries an account cannot see
+         * @description Administrators only (ADR 0084). Replaces the whole set. `hidden` is **required**: a body without it is **400**, not read as "hide nothing". An id that is not a library is **400**. Audited as `user.libraries`.
+         *
+         *     A hidden library leaves the account's library list, every listing, and every route that turns an id into an item or bytes, which answer **404** as for something that does not exist. Every `/api/libraries/{id}/` route answers 404 for it too. Libraries added later are visible to everyone until somebody narrows them.
+         */
+        put: operations["setUserLibraries"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/activity": {
         parameters: {
             query?: never;
@@ -8065,6 +8094,12 @@ export interface components {
             /** @description When playback reaches an intro the player would offer to skip, skip it and say so, with one press to go back. On unless the account turned it off. */
             skip_intros: boolean;
         };
+        UserLibraries: {
+            /** @description Library ids kept from this account. */
+            hidden: number[];
+            /** @description False for an administrator: the rows are kept but ignored, so a promotion lifts them and a demotion puts them back. */
+            applies: boolean;
+        };
     };
     responses: {
         /** @description Malformed body or invalid parameter. */
@@ -11570,6 +11605,65 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    getUserLibraries: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The account id. */
+                id: components["parameters"]["UserId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The account's hidden libraries. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UserLibraries"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    setUserLibraries: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The account id. */
+                id: components["parameters"]["UserId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    hidden: number[];
+                };
+            };
+        };
+        responses: {
+            /** @description Saved; the account's hidden libraries as stored. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UserLibraries"];
+                };
             };
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];

@@ -919,6 +919,15 @@ type ItemFilter struct {
 	MaxContentRating string
 
 	/*
+	 * HiddenLibraries are the libraries kept from the account doing the asking
+	 * (ADR 0084): the second half of the same per-account limit, set by the
+	 * handler from store.HiddenLibraries and applied beside the ceiling for the
+	 * same reason. Empty is no restriction — the opposite sense from Scope
+	 * below, which is why it is a deny list and not a reuse of that field.
+	 */
+	HiddenLibraries []int64
+
+	/*
 	 * Scope is the set of libraries the caller may see *at all*
 	 * ([ADR 0071](../../docs/adr/0071-a-shared-library-is-a-standing-grant.md)
 	 * §3), and Scoped says whether one applies.
@@ -1560,6 +1569,10 @@ func (s *Store) ListItems(ctx context.Context, f ItemFilter) ([]Item, int, error
 	if pred, ceilArgs := ceilingPredicate(f.MaxContentRating); pred != "" {
 		where += pred
 		args = append(args, ceilArgs...)
+	}
+	if pred, hidArgs := hiddenPredicate(f.HiddenLibraries); pred != "" {
+		where += pred
+		args = append(args, hidArgs...)
 	}
 
 	/*

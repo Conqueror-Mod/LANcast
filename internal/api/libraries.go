@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 
@@ -18,6 +19,22 @@ func (s *Server) listLibraries(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		s.writeInternal(w, err, "list libraries")
 		return
+	}
+	// A library kept from the caller is not in their list at all (ADR 0084):
+	// the sidebar, Home and search all start from this.
+	hidden, err := s.hiddenFor(r)
+	if err != nil {
+		s.writeInternal(w, err, "check library access")
+		return
+	}
+	if len(hidden) > 0 {
+		kept := libs[:0:0]
+		for _, l := range libs {
+			if !slices.Contains(hidden, l.ID) {
+				kept = append(kept, l)
+			}
+		}
+		libs = kept
 	}
 	writeJSON(w, http.StatusOK, libs)
 }

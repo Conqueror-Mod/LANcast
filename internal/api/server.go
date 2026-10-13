@@ -385,7 +385,7 @@ func (s *Server) Handler() http.Handler {
 	// A library's locations (ADR 0034). Adding one is filesystem access at a
 	// caller-chosen path, so it is gated exactly as library creation is;
 	// listing is not, because the same paths are already in the library listing.
-	mux.HandleFunc("GET /api/libraries/{id}/roots", s.listRoots)
+	mux.HandleFunc("GET /api/libraries/{id}/roots", s.libraryVisible(s.listRoots))
 	mux.HandleFunc("POST /api/libraries/{id}/roots", s.adminOnly(s.addRoot))
 	mux.HandleFunc("PATCH /api/libraries/{id}/roots/{rootID}", s.adminOnly(s.patchRoot))
 	mux.HandleFunc("DELETE /api/libraries/{id}/roots/{rootID}", s.adminOnly(s.removeRoot))
@@ -393,24 +393,24 @@ func (s *Server) Handler() http.Handler {
 	// Before the {id} form only for readability; the patterns do not overlap.
 	mux.HandleFunc("POST /api/libraries/scan", s.adminOnly(s.scanAll))
 	mux.HandleFunc("POST /api/libraries/scan/cancel", s.adminOnly(s.cancelScans))
-	mux.HandleFunc("GET /api/libraries/{id}/timeline", s.photoTimeline)
+	mux.HandleFunc("GET /api/libraries/{id}/timeline", s.libraryVisible(s.photoTimeline))
 	// Places (ADR 0078): names and counts, never a coordinate.
-	mux.HandleFunc("GET /api/libraries/{id}/places", s.photoPlaces)
-	mux.HandleFunc("GET /api/libraries/{id}/places/{place}", s.placePhotos)
-	mux.HandleFunc("GET /api/libraries/{id}/duplicates", s.photoDuplicates)
-	mux.HandleFunc("GET /api/libraries/{id}/near-copies", s.photoNearCopies)
+	mux.HandleFunc("GET /api/libraries/{id}/places", s.libraryVisible(s.photoPlaces))
+	mux.HandleFunc("GET /api/libraries/{id}/places/{place}", s.libraryVisible(s.placePhotos))
+	mux.HandleFunc("GET /api/libraries/{id}/duplicates", s.libraryVisible(s.photoDuplicates))
+	mux.HandleFunc("GET /api/libraries/{id}/near-copies", s.libraryVisible(s.photoNearCopies))
 
 	// Faces (ADR 0052). Reading who is in a library is available to anyone who
 	// can see the library; starting a pass and naming a group are edits.
 	mux.HandleFunc("GET /api/faces/capabilities", s.facesCapabilities)
-	mux.HandleFunc("GET /api/libraries/{id}/people", s.people)
+	mux.HandleFunc("GET /api/libraries/{id}/people", s.libraryVisible(s.people))
 	mux.HandleFunc("POST /api/libraries/{id}/faces", s.adminOnly(s.startFacePass))
 	mux.HandleFunc("PUT /api/faces/clusters/{id}", s.adminOnly(s.nameCluster))
-	mux.HandleFunc("GET /api/faces/clusters/{id}/faces", s.clusterFaces)
-	mux.HandleFunc("GET /api/faces/clusters/{id}/suggestions", s.clusterSuggestions)
+	mux.HandleFunc("GET /api/faces/clusters/{id}/faces", s.ownedVisible(s.st.LibraryOfCluster, noClusterFaces, s.clusterFaces))
+	mux.HandleFunc("GET /api/faces/clusters/{id}/suggestions", s.ownedVisible(s.st.LibraryOfCluster, noCluster, s.clusterSuggestions))
 	mux.HandleFunc("DELETE /api/faces/clusters/{id}/faces/{face}", s.adminOnly(s.rejectFace))
 	mux.HandleFunc("DELETE /api/faces/clusters/{id}/suggestions/{other}", s.adminOnly(s.rejectSuggestion))
-	mux.HandleFunc("GET /api/faces/{id}/thumb", s.faceThumb)
+	mux.HandleFunc("GET /api/faces/{id}/thumb", s.ownedVisible(s.st.LibraryOfFace, noFace, s.faceThumb))
 	// The models are an optional download, pinned in faceinstall and never a
 	// parameter — the payload is a model this server loads and a library it
 	// executes (ADR 0052, following ADR 0048).
@@ -445,12 +445,12 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/photos/semantic/models/install", s.adminOnly(s.installSemanticModels))
 	mux.HandleFunc("POST /api/photos/semantic/models/install/cancel", s.adminOnly(s.cancelSemanticModelsInstall))
 	mux.HandleFunc("POST /api/libraries/{id}/photos/index", s.adminOnly(s.startSemanticPass))
-	mux.HandleFunc("GET /api/libraries/{id}/photos/index", s.semanticStatus)
-	mux.HandleFunc("GET /api/libraries/{id}/photos/search", s.searchPhotos)
+	mux.HandleFunc("GET /api/libraries/{id}/photos/index", s.libraryVisible(s.semanticStatus))
+	mux.HandleFunc("GET /api/libraries/{id}/photos/search", s.libraryVisible(s.searchPhotos))
 	mux.HandleFunc("POST /api/libraries/{id}/scan", s.adminOnly(s.startScan))
-	mux.HandleFunc("GET /api/libraries/{id}/scan", s.scanStatus)
-	mux.HandleFunc("GET /api/libraries/{id}/facets", s.libraryFacets)
-	mux.HandleFunc("GET /api/libraries/{id}/cast", s.libraryCast)
+	mux.HandleFunc("GET /api/libraries/{id}/scan", s.libraryVisible(s.scanStatus))
+	mux.HandleFunc("GET /api/libraries/{id}/facets", s.libraryVisible(s.libraryFacets))
+	mux.HandleFunc("GET /api/libraries/{id}/cast", s.libraryVisible(s.libraryCast))
 
 	/*
 	 * Backups (ADR 0058). Admin-only throughout: a backup is a complete copy of
@@ -821,6 +821,9 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("DELETE /api/users/{id}", s.adminOnly(s.deleteUser))
 	mux.HandleFunc("PATCH /api/users/{id}", s.adminOnly(s.patchUser))
 	mux.HandleFunc("POST /api/users/{id}/password", s.adminOnly(s.resetUserPassword))
+	// Which libraries an account cannot see (ADR 0084).
+	mux.HandleFunc("GET /api/users/{id}/libraries", s.adminOnly(s.userLibraries))
+	mux.HandleFunc("PUT /api/users/{id}/libraries", s.adminOnly(s.setUserLibraries))
 
 	// A picture is served by item id like a stream, and for the same reason:
 	// the client knows items, not paths, and paths never leave the server.

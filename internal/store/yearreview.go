@@ -116,10 +116,15 @@ const playedPredicate = `ps.user_id = ? AND (ps.position_ms > 0 OR ps.watched = 
  * is a fact rather than an error.
  */
 func (s *Store) WatchYears(ctx context.Context, userID string) ([]int, error) {
+	// A library kept from this account leaves its year too (ADR 0084).
+	hid, herr := s.hiddenClause(ctx, userID, "ps.item_id")
+	if herr != nil {
+		return nil, fmt.Errorf("watch years: %w", herr)
+	}
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT DISTINCT `+localYear+` AS y
 		FROM playback_state ps
-		WHERE `+playedPredicate+`
+		WHERE `+playedPredicate+hid+`
 		ORDER BY y DESC`, userID)
 	if err != nil {
 		return nil, fmt.Errorf("watch years: %w", err)
@@ -141,6 +146,11 @@ func (s *Store) WatchYears(ctx context.Context, userID string) ([]int, error) {
 // nobody else: viewing is private by default (ADR 0035), and there is
 // deliberately no variant of this that takes somebody else's id.
 func (s *Store) YearInReview(ctx context.Context, userID string, year int) (YearInReview, error) {
+	// A library kept from this account leaves its year too (ADR 0084).
+	hid, herr := s.hiddenClause(ctx, userID, "ps.item_id")
+	if herr != nil {
+		return YearInReview{}, fmt.Errorf("year in review: %w", herr)
+	}
 	out := YearInReview{Year: year, Months: emptyMonths(), Kinds: []YearKind{}}
 
 	err := s.db.QueryRowContext(ctx, `
@@ -151,7 +161,7 @@ func (s *Store) YearInReview(ctx context.Context, userID string, year int) (Year
 		  COUNT(DISTINCT mi.library_id)
 		FROM playback_state ps
 		JOIN media_item mi ON mi.id = ps.item_id
-		WHERE `+playedPredicate+` AND `+localYear+` = ?`,
+		WHERE `+playedPredicate+hid+` AND `+localYear+` = ?`,
 		userID, year,
 	).Scan(&out.Titles, &out.Finished, &out.WatchedMS, &out.Libraries)
 	if err != nil {
@@ -185,11 +195,16 @@ func emptyMonths() []YearMonth {
 }
 
 func (s *Store) yearMonths(ctx context.Context, userID string, year int, out *YearInReview) error {
+	// A library kept from this account leaves its year too (ADR 0084).
+	hid, herr := s.hiddenClause(ctx, userID, "ps.item_id")
+	if herr != nil {
+		return fmt.Errorf("year in review: months: %w", herr)
+	}
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT `+localMonth+` AS m, COUNT(*)
 		FROM playback_state ps
 		JOIN media_item mi ON mi.id = ps.item_id
-		WHERE `+playedPredicate+` AND `+localYear+` = ?
+		WHERE `+playedPredicate+hid+` AND `+localYear+` = ?
 		GROUP BY m`, userID, year)
 	if err != nil {
 		return fmt.Errorf("year in review: months: %w", err)
@@ -209,11 +224,16 @@ func (s *Store) yearMonths(ctx context.Context, userID string, year int, out *Ye
 }
 
 func (s *Store) yearKinds(ctx context.Context, userID string, year int, out *YearInReview) error {
+	// A library kept from this account leaves its year too (ADR 0084).
+	hid, herr := s.hiddenClause(ctx, userID, "ps.item_id")
+	if herr != nil {
+		return fmt.Errorf("year in review: kinds: %w", herr)
+	}
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT mi.kind, COUNT(*) AS n
 		FROM playback_state ps
 		JOIN media_item mi ON mi.id = ps.item_id
-		WHERE `+playedPredicate+` AND `+localYear+` = ?
+		WHERE `+playedPredicate+hid+` AND `+localYear+` = ?
 		GROUP BY mi.kind
 		ORDER BY n DESC, mi.kind`, userID, year)
 	if err != nil {
@@ -243,12 +263,17 @@ func (s *Store) yearKinds(ctx context.Context, userID string, year int, out *Yea
  * should not lose the answer.
  */
 func (s *Store) yearEnds(ctx context.Context, userID string, year int, out *YearInReview) error {
+	// A library kept from this account leaves its year too (ADR 0084).
+	hid, herr := s.hiddenClause(ctx, userID, "ps.item_id")
+	if herr != nil {
+		return fmt.Errorf("year in review: ends: %w", herr)
+	}
 	pick := func(order string) (*Item, error) {
 		row := s.db.QueryRowContext(ctx, `
 			SELECT `+itemColsMI+`
 			FROM playback_state ps
 			JOIN media_item mi ON mi.id = ps.item_id
-			WHERE `+playedPredicate+` AND `+localYear+` = ?
+			WHERE `+playedPredicate+hid+` AND `+localYear+` = ?
 			ORDER BY ps.updated_at `+order+`, mi.id
 			LIMIT 1`, userID, year)
 		it, err := scanItem(row)

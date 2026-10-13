@@ -114,11 +114,15 @@ func (s *Store) ListRatings(ctx context.Context, userID string, limit int) ([]Ra
 	if limit <= 0 || limit > 200 {
 		limit = 50
 	}
+	hid, err := s.hiddenClause(ctx, userID, "mi.id")
+	if err != nil {
+		return nil, fmt.Errorf("list ratings: %w", err)
+	}
 	rows, err := s.db.QueryContext(ctx, `SELECT `+itemColsMI+`,
 		    ur.score, ur.review, ur.updated_at
 		FROM media_item mi
 		JOIN user_rating ur ON ur.item_id = mi.id
-		WHERE ur.user_id = ?
+		WHERE ur.user_id = ?`+hid+`
 		-- Same stable tie-break as the history, and for the same reason: seconds
 		-- collide, and an unstable sort under LIMIT shows a row twice.
 		ORDER BY ur.updated_at DESC, mi.id DESC

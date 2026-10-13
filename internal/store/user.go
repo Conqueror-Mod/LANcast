@@ -260,6 +260,9 @@ func (s *Store) DeleteUser(ctx context.Context, id string) error {
 	// Passkeys (ADR 0082). Left behind they would be credentials nobody can
 	// list or remove, and a sign-in with one already fails (the lookup joins
 	// user), so they would only ever be clutter that looks like access.
+	if _, err := tx.ExecContext(ctx, `DELETE FROM library_hidden WHERE user_id = ?`, id); err != nil {
+		return fmt.Errorf("delete user library access: %w", err)
+	}
 	if _, err := tx.ExecContext(ctx, `DELETE FROM passkey WHERE user_id = ?`, id); err != nil {
 		return fmt.Errorf("delete user passkeys: %w", err)
 	}

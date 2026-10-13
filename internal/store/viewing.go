@@ -87,13 +87,19 @@ func (s *Store) Viewings(ctx context.Context, userID string, limit, offset int) 
 	if offset < 0 {
 		offset = 0
 	}
+	// A library kept from this account leaves what it is shown of its own
+	// history, count included; the rows stay, for when it is lifted (ADR 0084).
+	hid, err := s.hiddenClause(ctx, userID, "item_id")
+	if err != nil {
+		return nil, 0, fmt.Errorf("viewings: %w", err)
+	}
 	var total int
 	if err := s.db.QueryRowContext(ctx,
-		`SELECT COUNT(*) FROM viewing WHERE user_id = ?`, userID).Scan(&total); err != nil {
+		`SELECT COUNT(*) FROM viewing WHERE user_id = ?`+hid, userID).Scan(&total); err != nil {
 		return nil, 0, fmt.Errorf("viewings: %w", err)
 	}
 	rows, err := s.db.QueryContext(ctx, `SELECT `+viewingCols+` FROM viewing
-		WHERE user_id = ? ORDER BY finished_at DESC, id DESC LIMIT ? OFFSET ?`,
+		WHERE user_id = ?`+hid+` ORDER BY finished_at DESC, id DESC LIMIT ? OFFSET ?`,
 		userID, limit, offset)
 	if err != nil {
 		return nil, 0, fmt.Errorf("viewings: %w", err)
@@ -114,8 +120,12 @@ func (s *Store) Viewings(ctx context.Context, userID string, limit, offset int) 
 // finished-viewings log is small — years of heavy watching is a few thousand
 // rows — so it is read whole rather than streamed.
 func (s *Store) AllViewings(ctx context.Context, userID string) ([]Viewing, error) {
+	hid, err := s.hiddenClause(ctx, userID, "item_id")
+	if err != nil {
+		return nil, fmt.Errorf("all viewings: %w", err)
+	}
 	rows, err := s.db.QueryContext(ctx, `SELECT `+viewingCols+` FROM viewing
-		WHERE user_id = ? ORDER BY finished_at, id`, userID)
+		WHERE user_id = ?`+hid+` ORDER BY finished_at, id`, userID)
 	if err != nil {
 		return nil, fmt.Errorf("all viewings: %w", err)
 	}

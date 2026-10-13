@@ -645,6 +645,15 @@ func (s *Server) listItems(w http.ResponseWriter, r *http.Request) {
 		Limit:     queryInt(r, "limit"),
 		Offset:    queryInt(r, "offset"),
 	}
+	// The libraries kept from the caller (ADR 0084), beside the ceiling. Set
+	// here rather than in the literal so a failed lookup refuses the listing
+	// rather than showing what it was meant to hide.
+	hidden, err := s.hiddenFor(r)
+	if err != nil {
+		s.writeInternal(w, err, "check library access")
+		return
+	}
+	f.HiddenLibraries = hidden
 	/*
 	 * Derived, never accepted from the caller. See TakenMonth above.
 	 *
@@ -762,6 +771,17 @@ func (s *Server) continueWatching(w http.ResponseWriter, r *http.Request) {
 		cur.ContinueCutoff(time.Now()))
 	if err != nil {
 		s.writeInternal(w, err, "continue watching")
+		return
+	}
+	/*
+	 * The account's limits — the rating ceiling and the libraries kept from it
+	 * (ADR 0084). Continue Watching builds its own SQL, so neither reached it:
+	 * a film paused before a library was hidden stayed on the shelf, naming
+	 * what the library holds. A shelf one short is the cost.
+	 */
+	items, err = s.st.PermittedItems(r.Context(), s.userID(r), items)
+	if err != nil {
+		s.writeInternal(w, err, "apply account limits")
 		return
 	}
 	if err := s.st.AttachArtwork(r.Context(), items); err != nil {

@@ -3482,6 +3482,38 @@ export function useRenameSelf() {
   });
 }
 
+/*
+ * Which libraries an account cannot see (ADR 0084). Administrator-only on the
+ * server; fetched per row because a household has a handful of accounts and
+ * the row says what is hidden without being opened.
+ */
+export function useUserLibraries(userID: string, enabled = true) {
+  return useQuery({
+    queryKey: ["user-libraries", userID],
+    queryFn: ({ signal }) =>
+      apiGet<{ hidden: number[]; applies: boolean }>(
+        `/api/users/${encodeURIComponent(userID)}/libraries`,
+        signal,
+      ),
+    enabled,
+  });
+}
+
+export function useSetUserLibraries() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (v: { id: string; hidden: number[] }) =>
+      apiPost<{ hidden: number[]; applies: boolean }>(
+        `/api/users/${encodeURIComponent(v.id)}/libraries`,
+        { hidden: v.hidden },
+        "PUT",
+      ),
+    // What an administrator is looking at: this row's switches and summary.
+    // The member's own windows refetch their lists on their next load.
+    onSuccess: (r, v) => qc.setQueryData(["user-libraries", v.id], r),
+  });
+}
+
 export function useUpdateUser() {
   const qc = useQueryClient();
   return useMutation({

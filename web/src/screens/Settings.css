@@ -235,6 +235,16 @@
   cursor: pointer;
 }
 
+/* Which libraries a member can see (ADR 0084): the summary line under the
+   account's row, and the checklist it opens. Indented to read as part of the
+   account above it rather than a row of its own. No gold: a library being
+   visible is a fact about the account, not where the focus is. */
+.set-access__list {
+  display: flex;
+  flex-direction: column;
+  padding: 0 14px 10px;
+}
+
 /* A toggle with a paragraph under it. The plain .set-toggle centres a single
    line against its box; once there is a description, the box belongs at the top
    of the text rather than halfway down it. */

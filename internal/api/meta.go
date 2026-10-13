@@ -380,6 +380,13 @@ func (s *Server) reviewQueue(w http.ResponseWriter, r *http.Request) {
 		s.writeInternal(w, err, "review queue")
 		return
 	}
+	// Open to members, so it takes the account's limits like any listing
+	// (ADR 0084): an uncertain match in a hidden library is still in it.
+	items, err = s.st.PermittedItems(r.Context(), s.userID(r), items)
+	if err != nil {
+		s.writeInternal(w, err, "apply account limits")
+		return
+	}
 	// Review-band items matched (and so have a poster); attach it so the queue
 	// can show artwork. Unmatched items simply have none.
 	if err := s.st.AttachArtwork(r.Context(), items); err != nil {
