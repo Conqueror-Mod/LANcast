@@ -191,7 +191,7 @@ describe("a certificate of your own", () => {
     mount({ ...generated, cert_file: "C:/Certs/media.pem", key_file: "C:/Certs/media-key.pem",
       error: "the certificate expired on 2026-01-01" });
     await render();
-    expect(section().textContent).toContain("the certificate expired on 2026-01-01");
+    expect(section().textContent).toContain("The certificate expired on 2026-01-01.");
     expect(section().textContent).toContain("until this is fixed");
   });
 

@@ -941,6 +941,11 @@ func run(ctx context.Context, addr, dataDir string, log *slog.Logger) error {
 	// (ADR 0086). Started and stopped from Settings without a restart.
 	dlnaSup := &dlnaSupervisor{reason: "off"}
 	apiSrv.SetDLNAStatus(dlnaSup.Status)
+	// The port can be changed from Settings only by the installed Windows
+	// service, which owns the command line it is started with (ADR 0089).
+	if serviceManaged && runtime.GOOS == "windows" {
+		apiSrv.SetPortChanger(servicePortChanger{dataDir: cfg.DataDir})
+	}
 	go runDLNA(ctx, dlnaSup, apiSrv, st, settings, ident, lanBound, log)
 
 	// Optimized copies, one at a time, behind live playback (ADR 0087).

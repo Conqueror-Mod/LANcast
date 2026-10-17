@@ -14,3 +14,15 @@ export function errorMessage(err: unknown): string {
   if (err instanceof Error) return err.message;
   return "Something went wrong.";
 }
+
+/*
+ * A server's reason as a sentence. Reasons are written as phrases ("the
+ * certificate expired on …") so they read inside a longer message, and they
+ * are shown on their own in a few places; this capitalises and ends one.
+ */
+export function asSentence(reason: string): string {
+  const r = reason.trim();
+  if (!r) return r;
+  const s = r[0].toUpperCase() + r.slice(1);
+  return /[.!?]$/.test(s) ? s : s + ".";
+}

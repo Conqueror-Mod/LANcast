@@ -3583,6 +3583,18 @@ export function useNetworkStatus() {
 }
 
 /*
+ * Moving the server to another port (ADR 0089). The answer is 202 and the
+ * server then restarts, so nothing is invalidated here: the page that asked
+ * is about to follow it, or to be told it came back.
+ */
+export function useSetPort() {
+  return useMutation({
+    mutationFn: (port: number) =>
+      apiPost<{ port: string; restarting: boolean }>("/api/network/port", { port }, "PUT"),
+  });
+}
+
+/*
  * A certificate of the operator's own (ADR 0088). Its own key, so saving it
  * is not a general settings refetch; but the Network status shows the same
  * certificate's fingerprint, so both writes refresh that too — or the pane

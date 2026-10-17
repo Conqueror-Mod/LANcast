@@ -29,7 +29,7 @@ import (
 func runResetAuth(args []string) error {
 	fs := flag.NewFlagSet("reset-auth", flag.ContinueOnError)
 	dataDir := fs.String("data", "", "data directory (default: the one the server uses)")
-	addr := fs.String("addr", ":8080", "address the server listens on, used only to check it is stopped")
+	addr := fs.String("addr", serviceAddr(), "address the server listens on, used only to check it is stopped")
 	yes := fs.Bool("yes", false, "actually do it; without this the command only reports what it would remove")
 	fs.Usage = func() {
 		fmt.Fprint(fs.Output(), `usage: lancast reset-auth [-data DIR] [-yes]

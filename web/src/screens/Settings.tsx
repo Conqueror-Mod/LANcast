@@ -30,6 +30,7 @@ import {
   useUserLibraries,
   useNetworkStatus,
   useCustomCertificate,
+  useSetPort,
   useSetCustomCertificate,
   useDLNAStatus,
   useOptimized,
@@ -88,7 +89,7 @@ import { CrashReports } from "@/components/CrashReports";
 import { PeerSettings } from "@/components/PeerSettings";
 import { RetroCoreSettings } from "@/components/RetroCoreSettings";
 import { useSetPeerVisibility } from "@/api/hooks";
-import { errorMessage } from "@/lib/errors";
+import { asSentence, errorMessage } from "@/lib/errors";
 import { useBigscreen } from "@/lib/bigscreen";
 import { useSpoilerMode, type SpoilerMode } from "@/lib/spoilers";
 import { useLiveTransport } from "@/lib/liveTransport";
@@ -110,12 +111,15 @@ import {
 import { BackupSettings, humanBytes } from "@/components/BackupSettings";
 import type {
   AuthUser,
+  NetworkStatus,
   OptimizedVersion,
   Plugin,
   Settings as SettingsType,
   SettingsUpdate,
 } from "@/api/types";
 import { LibraryRow, AddLibrary } from "@/components/LibrarySettings";
+import { answersWithin, goTo, urlAtPort } from "@/lib/portMove";
+import { useQueryClient } from "@tanstack/react-query";
 import "./Settings.css";
 
 function ProviderKey({
@@ -3989,11 +3993,12 @@ function NetworkSection() {
         <div className="set-row__main">
           <div className="set-row__title">{status}</div>
           <div className="set-row__sub">
-            Port {net.port}. Opening the server to your network follows the password:
+            Opening the server to your network follows the password:
             with none set it answers this computer only, and that is not a setting.
           </div>
         </div>
       </div>
+      <PortRow net={net} />
       {addresses.length > 1 && (
         <div className="set-row">
           <div className="set-row__main">
@@ -4022,6 +4027,142 @@ function NetworkSection() {
         </div>
       )}
     </section>
+  );
+}
+
+/*
+ * The port, and moving it (ADR 0089).
+ *
+ * Moving it restarts the server, and three things outside LANcast still
+ * point at the old port: the firewall, other devices' bookmarks, and
+ * friends' servers. So the button asks once more, in the page rather than
+ * with confirm() (a native dialog in this window loses keyboard focus), and
+ * says those three things before anything happens.
+ *
+ * Afterwards the page follows the server: it waits for the new port to
+ * answer and goes there. If the old port answers again instead, the server
+ * rolled back, and the page says so. If neither has answered after a minute
+ * it goes to the new port anyway, because a browser that has not yet trusted
+ * the certificate there cannot see it answer, and the page it lands on is
+ * where that question gets asked.
+ */
+function PortRow({ net }: { net: NetworkStatus }) {
+  const setPort = useSetPort();
+  const qc = useQueryClient();
+  const [draft, setDraft] = useState("");
+  const [confirming, setConfirming] = useState(false);
+  const [moving, setMoving] = useState<string | null>(null);
+  const [cameBack, setCameBack] = useState<string | null>(null);
+  const last = net.last_port_change;
+  const port = Number(draft);
+  const valid = Number.isInteger(port) && port >= 1024 && port <= 65535 && draft !== net.port;
+
+  const follow = async (to: string) => {
+    setMoving(to);
+    const target = urlAtPort(to);
+    const started = Date.now();
+    while (Date.now() - started < 60_000) {
+      if (await answersWithin(new URL(target).origin, 1000)) {
+        goTo(target);
+        return;
+      }
+      if (Date.now() - started > 35_000 && (await answersWithin(window.location.origin, 1000))) {
+        setMoving(null);
+        setCameBack(to);
+        qc.invalidateQueries({ queryKey: ["network"] });
+        return;
+      }
+    }
+    goTo(target);
+  };
+
+  if (!net.port_changeable) {
+    return (
+      <div className="set-row">
+        <div className="set-row__main">
+          <div className="set-row__title">Port {net.port}</div>
+          {net.port_fixed_because && <div className="set-row__sub">It can&rsquo;t be changed here: {net.port_fixed_because}.</div>}
+        </div>
+      </div>
+    );
+  }
+  if (moving) {
+    return (
+      <div className="set-row">
+        <div className="set-row__main">
+          <div className="set-row__title" role="status">Restarting on port {moving}&hellip;</div>
+          <div className="set-row__sub">This page moves there when the server answers.</div>
+        </div>
+      </div>
+    );
+  }
+  return (
+    <>
+      <form
+        className="set-row"
+        onSubmit={(e) => {
+          e.preventDefault();
+          if (valid) setConfirming(true);
+        }}
+      >
+        <label className="set-row__main">
+          <span className="set-row__title">Port</span>
+          <input
+            className="set-input"
+            inputMode="numeric"
+            placeholder={net.port}
+            value={draft}
+            onChange={(e) => {
+              setDraft(e.target.value.trim());
+              setConfirming(false);
+            }}
+          />
+        </label>
+        <button className="set-btn" disabled={!valid || setPort.isPending}>
+          Change port
+        </button>
+      </form>
+      {confirming && (
+        <div className="set-row" role="alertdialog" aria-label="Change the port">
+          <div className="set-row__main">
+            <div className="set-row__title">Restart the server on port {draft}?</div>
+            <div className="set-row__sub">
+              Anyone watching is interrupted. Other devices need the new address, and Windows
+              Firewall has to allow port {draft}: LANcast doesn&rsquo;t make firewall rules. Friends&rsquo;
+              servers keep the old port until you send them a new invite. If the server doesn&rsquo;t
+              answer on the new port, it goes back to port {net.port} by itself.
+            </div>
+            <div className="set-row">
+              <button
+                className="set-btn"
+                type="button"
+                disabled={setPort.isPending}
+                onClick={() =>
+                  setPort.mutate(port, {
+                    onSuccess: (r) => {
+                      setConfirming(false);
+                      void follow(r.port);
+                    },
+                  })
+                }
+              >
+                Restart on port {draft}
+              </button>
+              <button className="set-btn" type="button" onClick={() => setConfirming(false)}>
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {setPort.isError && <p className="set-error">{errorMessage(setPort.error)}</p>}
+      {cameBack && (
+        <p className="set-error" role="alert">
+          The server didn&rsquo;t answer on port {cameBack}, so it went back to port {net.port}.
+        </p>
+      )}
+      {!cameBack && last && !last.ok && <p className="set-error">{asSentence(last.error ?? "")}</p>}
+    </>
   );
 }
 
@@ -4091,7 +4232,7 @@ function CustomCertificateSection() {
       </div>
       {cert.error && (
         <p className="set-error" role="alert">
-          {cert.error}.{" "}
+          {asSentence(cert.error)}{" "}
           {cert.serving === "custom"
             ? "Still serving the copy loaded before."
             : "Other devices get LANcast’s certificate until this is fixed."}

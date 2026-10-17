@@ -726,11 +726,38 @@ Administrators only. This machine and the LAN, as a status, for
 loopback rule, not a setting: no password means `127.0.0.1` only. This reports
 which side of that rule the server is on (`secured`, `lan_enabled`, and
 `restart_required` when a password was set since the server started) and, when
-it is reachable, where. `addresses` are the stable addresses an invite to a
+it is reachable, where. `port_changeable` and `port_fixed_because` say
+whether `PUT /api/network/port` can move it. `addresses` are the stable addresses an invite to a
 friend names, as `https://` URLs; empty when the server is loopback-only.
 `certificate_fingerprint` and `custom_certificate` describe the certificate
 other devices are served right now, which is the generated one while a
 configured certificate will not load (`GET /api/settings/custom-certificate`).
+
+### `PUT /api/network/port`
+
+Administrators only. Moves the server to another port
+([ADR 0089](adr/0089-the-port-moves-and-comes-back.md)), for **Server ›
+Network**. Takes `{port}` and answers `202 {port, restarting: true}`; the
+server then restarts.
+
+- **Only the installed Windows service** can do this: it rewrites its own
+  service command line. Anywhere else the port is the `-addr` it was started
+  with, `GET /api/network` says so in `port_fixed_because`
+  (`port_changeable` is false), and this answers `409`.
+- **Only the port changes.** The host part of the address, and the loopback
+  rule that holds a server with no password to `127.0.0.1`, are untouched.
+- **Refused before anything changes** (`400`): below 1024 or above 65535,
+  443 (the public certificate's), 8200 (DLNA's), or the current port. A port
+  something else is listening on is `409`, found by trying it on the address
+  the server would bind.
+- **It comes back if it fails.** If the restarted server does not answer on
+  the new port within 30 seconds, the old port is put back and the server
+  started again. `GET /api/network` then carries `last_port_change`
+  (`{from, to, ok, error, at}`) for a day.
+- **No firewall rule is made** for the new port; other devices reach it once
+  one allows it. Paired servers and invites keep the old port, so friends
+  need a new invite, unless they reach this server by a public name on 443.
+  Audited as `settings.port`.
 
 ### `GET /api/dlna`
 

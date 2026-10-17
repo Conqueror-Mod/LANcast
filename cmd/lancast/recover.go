@@ -6,6 +6,7 @@ import (
 
 	"lancast/internal/clientwindow"
 	"lancast/internal/desktop"
+	"lancast/internal/service"
 )
 
 /*
@@ -40,8 +41,26 @@ const recoveryPoll = 2 * time.Second
  */
 func (l *launcher) watchForRecovery(c clientwindow.Controller, url, pinAtLaunch string) {
 	up := desktop.ServerRunning(l.addr)
+	moved := false
 	for {
 		time.Sleep(recoveryPoll)
+
+		/*
+		 * The local service moved to another port (ADR 0089).
+		 *
+		 * Its old address will never answer again, so the edge below would
+		 * never fire and the window would stay blank until the app was
+		 * reopened. Following the service's own command line keeps watching
+		 * the right place; the page itself also moves to the new port when
+		 * it was the one that asked.
+		 */
+		if l.target.local {
+			if a, ok := service.ConfiguredAddr(); ok && a != l.addr {
+				slog.Info("the server's port changed; following it", "from", l.addr, "to", a)
+				l.addr, l.localAddr = a, a
+				up, moved = false, true
+			}
+		}
 
 		now := desktop.ServerRunning(l.addr)
 		if now && !up {
@@ -75,6 +94,12 @@ func (l *launcher) watchForRecovery(c clientwindow.Controller, url, pinAtLaunch 
 			 * leading suspect and no way to confirm it. A line here settles
 			 * that question in one reading instead.
 			 */
+			if moved {
+				// Asked now rather than when the move was noticed: then the
+				// server was still restarting, and nothing answered to say
+				// whether it speaks https.
+				url, moved = desktop.ResolvedURL(l.addr), false
+			}
 			slog.Info("the server is reachable again; reloading the window", "url", url)
 			c.Navigate(url)
 		}

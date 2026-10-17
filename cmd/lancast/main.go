@@ -147,6 +147,18 @@ func main() {
 			addrGiven = true
 		}
 	})
+	/*
+	 * Where this machine's server is, when nobody said.
+	 *
+	 * The installed service's own command line, read without elevation:
+	 * since the port can be changed from Settings (ADR 0089) ":8080" is only
+	 * the default, and a window that assumed it would open on nothing.
+	 */
+	if !addrGiven {
+		if a, ok := service.ConfiguredAddr(); ok {
+			*addr = a
+		}
+	}
 	l := &launcher{addr: *addr, dataDir: *dataDir, localAddr: *addr}
 	prefs, _ := desktopprefs.Load(clientDataDir())
 	trusted, trustErr := knownserver.Load(clientDataDir())
