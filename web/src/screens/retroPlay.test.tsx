@@ -217,6 +217,9 @@ describe("the game screen", () => {
 
   it("stops the game when the screen goes", async () => {
     await render("/play/41");
+    // The page's own start-up clears any game left from a page before it
+    // (orphanedNative.test.tsx); what is asserted here is the way out.
+    vi.mocked(window.lancastRetroStop!).mockClear();
     act(() => root.unmount());
     expect(window.lancastRetroStop).toHaveBeenCalled();
     root = createRoot(host);
@@ -229,6 +232,10 @@ describe("a film in the corner (ADR 0076)", () => {
     window.lancastMpvLayout = vi.fn(async () => {});
     await render("/play/41");
     expect(isGameOnScreen()).toBe(true);
+    // Start-up hides any orphaned picture (orphanedNative.test.tsx); this is
+    // about leaving the game, so only what happens from here counts.
+    vi.mocked(window.lancastMpvLayout!).mockClear();
+    vi.mocked(window.lancastRetroStop!).mockClear();
     act(() => root.unmount());
     expect(isGameOnScreen()).toBe(false);
     // The video window belongs to whatever film is docked; hiding it here
