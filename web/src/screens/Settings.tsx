@@ -29,6 +29,8 @@ import {
   useUpdateUser,
   useUserLibraries,
   useNetworkStatus,
+  useCustomCertificate,
+  useSetCustomCertificate,
   useDLNAStatus,
   useOptimized,
   useSetOptimized,
@@ -3725,6 +3727,7 @@ export function Settings() {
                 </>
               )}
               {pane === "network" && <NetworkSection />}
+              {pane === "network" && <CustomCertificateSection />}
               {pane === "remote" && <PublicCertificateSettings />}
               {/* Backup first: what cannot be rebuilt leads, storage follows. */}
               {pane === "backup" && <BackupSettings />}
@@ -4018,6 +4021,128 @@ function NetworkSection() {
           </div>
         </div>
       )}
+    </section>
+  );
+}
+
+/*
+ * Server › Network: a certificate of your own (ADR 0088).
+ *
+ * Two paths, because that is what a renewal tool writes to: the server
+ * re-reads the files when they change. The status line is about the
+ * certificate other devices are actually served, which is LANcast's own
+ * while the configured one will not load, and the error says why in the
+ * server's words. Saving checks the pair first, so a mistake comes back here
+ * as a sentence rather than as a browser warning on somebody's phone.
+ */
+function CustomCertificateSection() {
+  const { data: cert } = useCustomCertificate();
+  const save = useSetCustomCertificate();
+  const [certFile, setCertFile] = useState<string | null>(null);
+  const [keyFile, setKeyFile] = useState<string | null>(null);
+  if (!cert) return null;
+  if (!cert.available) {
+    return (
+      <section className="settings__section">
+        <span className="section-label">Your own certificate</span>
+        <p className="set-row__sub">
+          This server answers this computer only, so it serves no HTTPS to put a certificate on.
+        </p>
+      </section>
+    );
+  }
+  const configured = cert.cert_file !== "" || cert.key_file !== "";
+  const certValue = certFile ?? cert.cert_file;
+  const keyValue = keyFile ?? cert.key_file;
+  const expires = cert.not_after ? new Date(cert.not_after).toLocaleDateString() : "";
+  const names = Array.isArray(cert.names) ? cert.names : [];
+  const submit = (e: React.FormEvent) => {
+    e.preventDefault();
+    save.mutate(
+      { cert_file: certValue.trim(), key_file: keyValue.trim() },
+      { onSuccess: () => { setCertFile(null); setKeyFile(null); } },
+    );
+  };
+  return (
+    <section className="settings__section">
+      <span className="section-label">Your own certificate</span>
+      <div className="set-row">
+        <div className="set-row__main">
+          <div className="set-row__title">
+            {cert.serving === "custom"
+              ? `Other devices are served your certificate for ${cert.subject || names[0] || "this server"}.`
+              : "Other devices are served the certificate LANcast made."}
+          </div>
+          <div className="set-row__sub">
+            {cert.serving === "custom" ? (
+              <>
+                {names.length > 0 && <>Covers {names.join(", ")}. </>}
+                {cert.issuer && <>From {cert.issuer}. </>}
+                {expires && <>Expires {expires}.</>}
+              </>
+            ) : (
+              <>
+                Browsers warn about it until they are told to trust it. If you have a certificate
+                for this server, from your own authority or a public one, give its files here.
+              </>
+            )}
+          </div>
+        </div>
+      </div>
+      {cert.error && (
+        <p className="set-error" role="alert">
+          {cert.error}.{" "}
+          {cert.serving === "custom"
+            ? "Still serving the copy loaded before."
+            : "Other devices get LANcast’s certificate until this is fixed."}
+        </p>
+      )}
+      <form onSubmit={submit}>
+        <label className="set-row">
+          <span>Certificate file</span>
+          <input
+            className="set-input"
+            placeholder="C:\Certs\media.pem"
+            value={certValue}
+            onChange={(e) => setCertFile(e.target.value)}
+          />
+        </label>
+        <label className="set-row">
+          <span>Key file</span>
+          <input
+            className="set-input"
+            placeholder="C:\Certs\media-key.pem"
+            value={keyValue}
+            onChange={(e) => setKeyFile(e.target.value)}
+          />
+        </label>
+        <p className="set-row__sub">
+          Full paths to PEM files the server can read. The server re-reads them when they change,
+          so a renewal tool can update them in place. This computer&rsquo;s own LANcast window keeps
+          LANcast&rsquo;s certificate, and the public certificate&rsquo;s name keeps that one.
+        </p>
+        <div className="set-row">
+          <button
+            className="set-btn"
+            disabled={save.isPending || !certValue.trim() || !keyValue.trim()}
+          >
+            Use this certificate
+          </button>
+          {configured && (
+            <button
+              className="set-btn"
+              type="button"
+              disabled={save.isPending}
+              onClick={() =>
+                save.mutate(null, { onSuccess: () => { setCertFile(null); setKeyFile(null); } })
+              }
+            >
+              Use LANcast&rsquo;s certificate
+            </button>
+          )}
+        </div>
+      </form>
+      {save.isError && <span className="set-error">{errorMessage(save.error)}</span>}
     </section>
   );
 }
