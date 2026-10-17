@@ -728,6 +728,9 @@ which side of that rule the server is on (`secured`, `lan_enabled`, and
 `restart_required` when a password was set since the server started) and, when
 it is reachable, where. `addresses` are the stable addresses an invite to a
 friend names, as `https://` URLs; empty when the server is loopback-only.
+`certificate_fingerprint` and `custom_certificate` describe the certificate
+other devices are served right now, which is the generated one while a
+configured certificate will not load (`GET /api/settings/custom-certificate`).
 
 ### `GET /api/dlna`
 
@@ -4895,6 +4898,60 @@ the fingerprint in `GET /api/settings` is the same for both, and a client that
 pinned it keeps trusting the server across renewals. Proving the name needs
 **inbound port 443** reaching LANcast (TLS-ALPN-01); forward it to LANcast's
 port on the router.
+
+### `GET` · `PUT` · `DELETE /api/settings/custom-certificate`
+
+A certificate of the operator's own ([ADR 0088](adr/0088-a-certificate-you-bring-is-followed.md)),
+for **Server › Network**. **Admin only.** All three return the same body:
+
+```json
+{
+  "available": true,
+  "cert_file": "C:/Certs/media.pem",
+  "key_file": "C:/Certs/media-key.pem",
+  "serving": "custom",
+  "subject": "media.home.example",
+  "issuer": "Home CA",
+  "names": ["media.home.example", "192.168.1.20"],
+  "not_after": "2027-01-09T20:00:00Z",
+  "self_signed": false,
+  "fingerprint": "…"
+}
+```
+
+The body describes the certificate **other devices are served**: the
+operator's own when it loads, LANcast's generated one otherwise (`serving`
+is `custom` or `generated`). `error` says why the configured one is not being
+served, or why a newer copy of its files was not taken; it is absent when all
+is well. `available` is `false` and `serving` is `none` on a loopback-only
+server, which serves no HTTPS, and `PUT` and `DELETE` there answer `409`.
+
+`PUT` takes `{cert_file, key_file}`, both full paths to PEM files (the
+certificate may carry its intermediates after it). Surrounding double quotes,
+as Windows' *Copy as path* leaves them, are removed.
+
+- **Checked before it is saved.** Both files must be readable by the server,
+  a matching pair, and in date, or the answer is `400` saying which and
+  nothing changes.
+- **Served at once**, with no restart, to every connection except two: this
+  machine's own (a loopback connection keeps the generated certificate, which
+  the desktop window pins by key), and the public certificate's name, which
+  keeps the public certificate (ADR 0081).
+- **Followed.** The files are re-read when they change, checked every 30
+  seconds, so a renewal tool can rewrite them in place. A copy that will not
+  load keeps the previous one while it is in date.
+- **It cannot stop the server.** At startup, a pair that will not load means
+  the generated certificate is served and `error` says why. That is still
+  HTTPS; other devices see a certificate warning until it is fixed.
+
+`DELETE` clears both paths and serves the generated certificate. The files
+are not touched. Both are audited as `settings.custom_certificate`.
+
+Changing the certificate changes the key other devices see. A LANcast
+desktop app on another machine that already knows this server asks once
+whether to trust the new key (ADR 0070's rotation); browsers that had
+accepted the generated certificate's warning stop warning if the new
+certificate is from an authority they trust.
 
 ### `POST /api/cache/clear`
 

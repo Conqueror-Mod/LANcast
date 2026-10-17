@@ -72,6 +72,8 @@ import type {
   SharedLibrary,
   PeerLibrary,
   NetworkStatus,
+  CustomCertificate,
+  CustomCertificateUpdate,
   DLNAStatus,
   OptimizedList,
   OptimizedVersion,
@@ -3577,6 +3579,35 @@ export function useNetworkStatus() {
     queryKey: ["network"],
     queryFn: ({ signal }) =>
       apiGet<NetworkStatus>("/api/network", signal),
+  });
+}
+
+/*
+ * A certificate of the operator's own (ADR 0088). Its own key, so saving it
+ * is not a general settings refetch; but the Network status shows the same
+ * certificate's fingerprint, so both writes refresh that too — or the pane
+ * would show the new certificate above the old one's fingerprint.
+ */
+export function useCustomCertificate() {
+  return useQuery({
+    queryKey: ["custom-certificate"],
+    queryFn: ({ signal }) =>
+      apiGet<CustomCertificate>("/api/settings/custom-certificate", signal),
+  });
+}
+
+export function useSetCustomCertificate() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (update: CustomCertificateUpdate | null) =>
+      update
+        ? apiPost<CustomCertificate>("/api/settings/custom-certificate", update, "PUT")
+        : apiSend("/api/settings/custom-certificate", "DELETE").then(() => null),
+    onSuccess: (data) => {
+      if (data) qc.setQueryData(["custom-certificate"], data);
+      else qc.invalidateQueries({ queryKey: ["custom-certificate"] });
+      qc.invalidateQueries({ queryKey: ["network"] });
+    },
   });
 }
 

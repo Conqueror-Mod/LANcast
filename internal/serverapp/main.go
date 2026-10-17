@@ -994,12 +994,32 @@ func run(ctx context.Context, addr, dataDir string, log *slog.Logger) error {
 	var tlsConfig *tls.Config
 	var publicCert *publiccert.Manager
 	if lanBound {
-		cert, mode, err := loadTLSCert(cfg, settings.Get(), log)
+		cert, err := generatedCert(cfg)
 		if err != nil {
 			return err
 		}
-		tlsConfig = &tls.Config{Certificates: []tls.Certificate{cert}, MinVersion: tls.VersionTLS12}
-		log.Info("TLS enabled", "certificate", mode)
+		/*
+		 * The operator's own certificate, when there is one (ADR 0088).
+		 *
+		 * The generated certificate exists regardless: it is what this
+		 * machine's own window pins, what the public certificate is issued
+		 * for, and what is served when the operator's files will not load.
+		 * A setting changed in the app must not be able to stop the server
+		 * starting, which is what a bad path used to do.
+		 */
+		serving := tlscert.NewServing(cert, log)
+		cur := settings.Get()
+		serving.Configure(cur.TLSCertFile, cur.TLSKeyFile)
+		tlsConfig = &tls.Config{GetCertificate: serving.GetCertificate, MinVersion: tls.VersionTLS12}
+		apiSrv.SetServingCert(serving)
+		st := serving.Status()
+		log.Info("TLS enabled", "certificate", st.Serving, "error", st.Error)
+		if st.Serving == "generated" {
+			// Honest about what a self-signed certificate does and does not
+			// buy: a first visit from another device shows a browser warning.
+			log.Info("other devices are served a self-signed certificate; browsers will warn until it is trusted",
+				"hint", "Settings > Server > Network takes a certificate of your own")
+		}
 
 		/*
 		 * The opt-in public certificate (ADR 0081).
@@ -1017,7 +1037,7 @@ func run(ctx context.Context, addr, dataDir string, log *slog.Logger) error {
 		if pcm, err := publiccert.New(filepath.Join(cfg.DataDir, "tls", "acme"), cert, log); err != nil {
 			log.Warn("public certificate unavailable", "error", err)
 		} else {
-			tlsConfig.Certificates = nil
+			pcm.SetFallback(serving.For)
 			tlsConfig.GetCertificate = pcm.GetCertificate
 			publicCert = pcm
 		}
@@ -1255,30 +1275,15 @@ func loopbackOnly(addr string) bool {
 	return ip != nil && ip.IsLoopback()
 }
 
-// loadTLSCert returns the certificate to serve and a human-readable description
-// of where it came from. A supplied cert (bring-your-own) is used verbatim;
-// otherwise a self-signed certificate is generated and persisted under the data
-// directory, covering loopback and the machine's LAN addresses (ADR 0014).
-func loadTLSCert(cfg config.Config, s config.Settings, log *slog.Logger) (tls.Certificate, string, error) {
-	if s.CustomTLS() {
-		cert, err := tls.LoadX509KeyPair(s.TLSCertFile, s.TLSKeyFile)
-		if err != nil {
-			return tls.Certificate{}, "", fmt.Errorf("load TLS certificate from %s / %s: %w",
-				s.TLSCertFile, s.TLSKeyFile, err)
-		}
-		return cert, "supplied", nil
-	}
-
-	dir := filepath.Join(cfg.DataDir, "tls")
-	cert, err := tlscert.LoadOrGenerate(dir, tlscert.LocalIPs())
+// generatedCert is the self-signed certificate under the data directory,
+// covering loopback and the machine's LAN addresses (ADR 0014), made on first
+// use and kept.
+func generatedCert(cfg config.Config) (tls.Certificate, error) {
+	cert, err := tlscert.LoadOrGenerate(filepath.Join(cfg.DataDir, "tls"), tlscert.LocalIPs())
 	if err != nil {
-		return tls.Certificate{}, "", fmt.Errorf("prepare self-signed certificate: %w", err)
+		return tls.Certificate{}, fmt.Errorf("prepare self-signed certificate: %w", err)
 	}
-	// Honest about what a self-signed cert does and does not buy, and how to
-	// replace it — a first HTTPS visit will show a browser warning.
-	log.Info("using a self-signed certificate; browsers will warn until it is trusted",
-		"dir", dir, "hint", "set tls_cert_file and tls_key_file in settings to use your own certificate")
-	return cert, "self-signed", nil
+	return cert, nil
 }
 
 // seedLegacyOwner completes the multi-user migration (ADR 0015): with no

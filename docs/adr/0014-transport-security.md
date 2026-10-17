@@ -2,6 +2,12 @@
 
 Date: 2026-07-26 · Status: accepted
 
+> **Amended by [ADR 0088](0088-a-certificate-you-bring-is-followed.md)
+> (2026-10-17):** the certificate paths are now set in Server › Network,
+> applied without a restart and followed when the files change, and a
+> certificate that will not load is served around rather than stopping the
+> server. ACME was separately admitted, opt-in, by ADR 0081.
+
 ## Context
 
 Everything LANcast serves is plaintext HTTP. Since [ADR 0011](0011-single-password-with-server-sessions.md)

@@ -37,7 +37,8 @@ type networkStatus struct {
 	// for somebody checking that what their device trusts is this server.
 	CertificateFingerprint string `json:"certificate_fingerprint"`
 	// CustomCertificate is whether that certificate is one the operator
-	// supplied rather than the one LANcast generated.
+	// supplied rather than the one LANcast generated: the one actually being
+	// served, which is the generated one while the operator's will not load.
 	CustomCertificate bool `json:"custom_certificate"`
 }
 
@@ -50,7 +51,7 @@ func (s *Server) networkStatus(w http.ResponseWriter, r *http.Request) {
 		RestartRequired:        s.restartWidens,
 		Addresses:              []string{},
 		CertificateFingerprint: s.certFingerprint(),
-		CustomCertificate:      s.settings.Get().CustomTLS(),
+		CustomCertificate:      s.servingCustom(),
 	}
 	// A LAN-bound server serves HTTPS (the TLS work); a loopback-only one has
 	// no address anybody else could use, so it lists none.
@@ -60,6 +61,15 @@ func (s *Server) networkStatus(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	writeJSON(w, http.StatusOK, out)
+}
+
+// servingCustom is whether the network is being served the operator's own
+// certificate right now.
+func (s *Server) servingCustom() bool {
+	if s.serving != nil {
+		return s.serving.Status().Serving == "custom"
+	}
+	return s.settings.Get().CustomTLS()
 }
 
 /*

@@ -296,9 +296,12 @@ type Settings struct {
 	PasswordHash string `json:"password_hash,omitempty"`
 
 	// TLSCertFile and TLSKeyFile point at a PEM certificate and private key the
-	// operator supplies (bring-your-own-cert). When both are set, LANcast serves
-	// HTTPS with them. When empty and the server binds beyond loopback, a
-	// self-signed certificate is generated and persisted instead (ADR 0014).
+	// operator supplies (bring-your-own-cert), set in Server › Network. When
+	// both are set and they load, other devices are served them; the files are
+	// re-read when they change, and a pair that will not load is served around
+	// with the generated certificate rather than stopping the server (ADR
+	// 0088). That generated, self-signed certificate always exists once the
+	// server binds beyond loopback (ADR 0014).
 	TLSCertFile string `json:"tls_cert_file,omitempty"`
 	TLSKeyFile  string `json:"tls_key_file,omitempty"`
 

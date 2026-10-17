@@ -390,6 +390,10 @@ export type Collision = {
 export type BackupFile = components["schemas"]["BackupFile"];
 // Server › Network: this machine and the LAN, as a status.
 export type NetworkStatus = components["schemas"]["NetworkStatus"];
+// A certificate of the operator's own, and what is being served (ADR 0088).
+export type CustomCertificate = components["schemas"]["CustomCertificate"];
+export type CustomCertificateUpdate =
+  components["schemas"]["CustomCertificateUpdate"];
 // Server › DLNA: whether it is running, and why not (ADR 0086).
 export type DLNAStatus = components["schemas"]["DLNAStatus"];
 // Optimized copies and their queue (ADR 0087).
