@@ -19,10 +19,10 @@ import (
  */
 func TestAnInviteDropsWhatIsGoingToDisappear(t *testing.T) {
 	const (
-		dhcp      = "2600:1702:5ac7:9200::2e"
-		stable    = "2600:1702:5ac7:9200:a51e:ee8c:6fb1:966b"
-		temporary = "2600:1702:5ac7:9200:e98b:9995:5005:6453"
-		lan       = "192.168.1.66"
+		dhcp      = "2001:db8:1:1::2e"
+		stable    = "2001:db8:1:1:a51e:ee8c:6fb1:966b"
+		temporary = "2001:db8:1:1:e98b:9995:5005:6453"
+		lan       = "192.168.1.21"
 	)
 	all := []string{dhcp, stable, temporary, lan}
 
@@ -46,7 +46,7 @@ func TestAnInviteDropsWhatIsGoingToDisappear(t *testing.T) {
  * the ordinary case rather than an edge.
  */
 func TestNothingKnownMeansNothingDropped(t *testing.T) {
-	all := []string{"192.168.1.66", "2600:1702:5ac7:9200::2e"}
+	all := []string{"192.168.1.21", "2001:db8:1:1::2e"}
 
 	for _, skip := range []map[string]bool{nil, {}} {
 		got := withoutTemporary(all, skip)
@@ -64,7 +64,7 @@ func TestNothingKnownMeansNothingDropped(t *testing.T) {
  * address that expires in a few days.
  */
 func TestAMachineIsNeverLeftWithNoAddress(t *testing.T) {
-	all := []string{"2600:1702:5ac7:9200:e98b:9995:5005:6453"}
+	all := []string{"2001:db8:1:1:e98b:9995:5005:6453"}
 
 	got := withoutTemporary(all, map[string]bool{all[0]: true})
 

@@ -78,11 +78,11 @@ func TestMergingBindingsKeepsBoth(t *testing.T) {
 // one being used — the only thing gold means on this page.
 func TestServerRowsMarkTheCurrentServer(t *testing.T) {
 	l := knownserver.List{}.Accept(knownserver.Server{
-		Address: "192.168.1.66:8080", Name: "Chris", Pin: "p", Accepted: time.Now(),
+		Address: "192.168.1.21:8080", Name: "Chris", Pin: "p", Accepted: time.Now(),
 	})
 	l = l.Accept(knownserver.Server{Address: "other:8080", Pin: "q"})
 
-	rows := serverRows(l, "192.168.1.66:8080")
+	rows := serverRows(l, "192.168.1.21:8080")
 
 	if len(rows) != 2 {
 		t.Fatalf("%d rows, want 2", len(rows))
@@ -91,7 +91,7 @@ func TestServerRowsMarkTheCurrentServer(t *testing.T) {
 	for _, r := range rows {
 		if r["current"] == true {
 			current++
-			if r["address"] != "192.168.1.66:8080" {
+			if r["address"] != "192.168.1.21:8080" {
 				t.Errorf("the wrong row is current: %v", r["address"])
 			}
 		}
@@ -123,11 +123,11 @@ func TestServerRowsDoNotCarryThePin(t *testing.T) {
  * distinction rather than leaving it to whoever edits the strings next.
  */
 func TestARotationAsksRatherThanAccuses(t *testing.T) {
-	msg := rotationMessage("192.168.1.66:8080")
+	msg := rotationMessage("192.168.1.21:8080")
 	lower := strings.ToLower(msg)
 
 	for _, want := range []string{
-		"192.168.1.66:8080",
+		"192.168.1.21:8080",
 		"reissued",
 		"identity fingerprint", // where the value that does not change lives
 		"reinstalled",
@@ -149,10 +149,10 @@ func TestARotationAsksRatherThanAccuses(t *testing.T) {
 // has to say *why* it cannot be checked, or it reads as an accusation nobody
 // can act on.
 func TestTheRefusalExplainsWhyItCannotCheck(t *testing.T) {
-	msg := mismatchMessage("192.168.1.66:8080")
+	msg := mismatchMessage("192.168.1.21:8080")
 
 	for _, want := range []string{
-		"192.168.1.66:8080",
+		"192.168.1.21:8080",
 		"identity",
 		"never got far enough",
 		"forget this server",
@@ -166,7 +166,7 @@ func TestTheRefusalExplainsWhyItCannotCheck(t *testing.T) {
 
 // The strongest one, and the only refusal that is not about a certificate.
 func TestAChangedIdentityIsTheStrongestRefusal(t *testing.T) {
-	msg := identityMismatchMessage("192.168.1.66:8080")
+	msg := identityMismatchMessage("192.168.1.21:8080")
 
 	for _, want := range []string{
 		"identity has changed",

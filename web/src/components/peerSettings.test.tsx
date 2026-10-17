@@ -104,7 +104,7 @@ beforeEach(() => {
           fingerprint: "AAAA4G6X",
           fingerprint_display: "AAAA-4G6X",
           name: "Aither",
-          addrs: ["192.168.1.66:8080"],
+          addrs: ["192.168.1.21:8080"],
         });
       }
       if (url.includes("/api/peers")) return json({ peers });

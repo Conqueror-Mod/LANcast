@@ -7,7 +7,7 @@ import (
 )
 
 const (
-	remoteAddr = "192.168.1.66:8080"
+	remoteAddr = "192.168.1.21:8080"
 	remotePin  = "3Xk0aBcD1efGh2IjKlMn3OpQrStUvWxYz0123456789="
 	diskPin    = "LocalaBcD1efGh2IjKlMn3OpQrStUvWxYz0123456789="
 )
@@ -92,7 +92,7 @@ func TestARememberedServerIsOpenedWithoutAsking(t *testing.T) {
 func TestARememberedAddressIsCanonicalisedBeforeItIsLookedUp(t *testing.T) {
 	got, ask := resolve(facts{
 		flagAddr:   ":8080",
-		lastServer: "https://192.168.1.66:8080/movies",
+		lastServer: "https://192.168.1.21:8080/movies",
 		known:      trusting(remoteAddr, remotePin, "Chris"),
 	})
 
