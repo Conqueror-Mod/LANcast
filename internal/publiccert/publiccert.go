@@ -180,10 +180,13 @@ const (
 type Manager struct {
 	dir      string // <data>/tls/acme
 	fallback *tls.Certificate
-	key      crypto.Signer // the serving key; every CSR is signed with it
-	log      *slog.Logger
-	now      func() time.Time
-	issuer   func(Config, string) (Issuer, error)
+	// fallbackFor, when set, chooses the certificate for every connection the
+	// public one is not for (SetFallback).
+	fallbackFor func(*tls.ClientHelloInfo) *tls.Certificate
+	key         crypto.Signer // the serving key; every CSR is signed with it
+	log         *slog.Logger
+	now         func() time.Time
+	issuer      func(Config, string) (Issuer, error)
 
 	cur        atomic.Pointer[tls.Certificate]
 	challenges sync.Map // hostname -> *tls.Certificate
@@ -333,8 +336,17 @@ func (m *Manager) GetCertificate(hello *tls.ClientHelloInfo) (*tls.Certificate, 
 	if c := m.servable(hello.ServerName); c != nil {
 		return c, nil
 	}
+	if m.fallbackFor != nil {
+		return m.fallbackFor(hello), nil
+	}
 	return m.fallback, nil
 }
+
+// SetFallback hands every other connection to fn: the operator's own
+// certificate when there is one (ADR 0088). The public certificate is still
+// issued for the key given to New, which is the generated one, so choosing a
+// custom certificate never costs a reissue. Set before serving.
+func (m *Manager) SetFallback(fn func(*tls.ClientHelloInfo) *tls.Certificate) { m.fallbackFor = fn }
 
 func (m *Manager) servable(serverName string) *tls.Certificate {
 	m.mu.Lock()

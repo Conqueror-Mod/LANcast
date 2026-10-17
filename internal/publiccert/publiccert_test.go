@@ -360,3 +360,23 @@ func TestAPortThatWillNotOpenIsReportedNotFatal(t *testing.T) {
 		t.Fatal("a port problem turned the certificate off")
 	}
 }
+
+// ADR 0088: with a custom certificate configured, every name but the public
+// one goes to it, and the public certificate is still for the generated key.
+func TestEveryOtherNameGoesToTheFallbackChooser(t *testing.T) {
+	m, _, _ := newTestManager(t)
+	custom := selfSigned(t)
+	m.SetFallback(func(*tls.ClientHelloInfo) *tls.Certificate { return &custom })
+	m.Configure(enabled())
+	m.attempt(context.Background())
+
+	if c := served(t, m, host); c == &custom || c == m.fallback {
+		t.Fatal("the configured name did not get the public certificate")
+	}
+	if served(t, m, "192.168.1.20") != &custom {
+		t.Error("another name did not go to the chooser")
+	}
+	if !samePublicKey(served(t, m, host).Leaf.PublicKey, m.fallback.PrivateKey.(crypto.Signer).Public()) {
+		t.Error("the public certificate is not for the generated key")
+	}
+}

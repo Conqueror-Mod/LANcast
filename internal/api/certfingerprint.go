@@ -26,6 +26,12 @@ import (
  * [ADR 0070]: ../../docs/adr/0070-the-desktop-client-can-trust-a-server-it-did-not-install.md
  */
 func (s *Server) certFingerprint() string {
+	// The certificate being served to the network, whichever it is: the
+	// operator's own falls back to the generated one when it will not load
+	// (ADR 0088), and the answer has to follow what is actually served.
+	if s.serving != nil {
+		return s.serving.Status().Fingerprint
+	}
 	cur := s.settings.Get()
 
 	// A supplied certificate lives where the operator put it; the generated

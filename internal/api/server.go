@@ -219,6 +219,9 @@ type Server struct {
 	// publicCert is the opt-in public certificate (ADR 0081); nil on a
 	// loopback-only server. Set by SetPublicCert after TLS is prepared.
 	publicCert PublicCertManager
+	// serving is the certificate the network is served, the operator's own or
+	// the generated one (ADR 0088); nil on a loopback-only server.
+	serving ServingCert
 	// passkeyChallenges holds issued WebAuthn challenges (ADR 0082), and
 	// passkeyRPFor replaces the RP check in tests, whose server has no TLS.
 	passkeyChallenges *passkey.Challenges
@@ -817,6 +820,9 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/settings", s.adminOnly(s.getSettings))
 	mux.HandleFunc("GET /api/settings/public-certificate", s.adminOnly(s.getPublicCert))
 	mux.HandleFunc("PUT /api/settings/public-certificate", s.adminOnly(s.putPublicCert))
+	mux.HandleFunc("GET /api/settings/custom-certificate", s.adminOnly(s.getCustomCert))
+	mux.HandleFunc("PUT /api/settings/custom-certificate", s.adminOnly(s.putCustomCert))
+	mux.HandleFunc("DELETE /api/settings/custom-certificate", s.adminOnly(s.deleteCustomCert))
 	mux.HandleFunc("PUT /api/settings", s.adminOnly(s.putSettings))
 	mux.HandleFunc("POST /api/settings/reset", s.adminOnly(s.resetSettings))
 	mux.HandleFunc("POST /api/cache/clear", s.adminOnly(s.clearCache))
