@@ -17,12 +17,19 @@ import (
  * lists them in, which is how a franchise is watched:
  *
  *  1. A film in progress wins, most recently touched first.
- *  2. Otherwise the first unwatched film after the furthest one watched.
- *     Forward only: skipping the second film and watching the third does not
- *     send you back to the second every time, which is the backtracking bug
- *     NextEpisodeFor was written against.
+ *  2. Otherwise the first unwatched film after the one finished most
+ *     recently. Forward only: skipping the second film and watching the
+ *     third does not send you back to the second every time, which is the
+ *     backtracking bug NextEpisodeFor was written against.
  *  3. Nothing watched: the first film.
- *  4. Everything after the furthest watched is watched: exhausted.
+ *  4. Everything after the one finished most recently is watched: exhausted.
+ *
+ * Rule 2 was "after the furthest watched", which is the show's rule, and a
+ * franchise is not watched like a show. Reported: finishing Saw V offered
+ * Jigsaw, not Saw VI. Saw 3D had been watched out of order, before Saw IV,
+ * and as the furthest film watched it outranked everything finished after
+ * it. The film just finished is the one the shelf's sentence names
+ * ("Because you watched Saw V"), so it is the one to count from.
  *
  * Computed on every ask, with no cache, for the reason the show's is.
  */
@@ -32,7 +39,7 @@ func (s *Store) NextInCollectionFor(ctx context.Context, collectionID int64, use
 }
 
 // nextInCollection is NextInCollectionFor plus the film the answer follows:
-// the one before it in release order, which rule 2 guarantees is watched.
+// the one finished most recently, which rule 2 counts from.
 func (s *Store) nextInCollection(ctx context.Context, collectionID int64, userID string) (NextEpisode, *Item, error) {
 	members, err := s.CollectionMembers(ctx, collectionID)
 	if err != nil {
@@ -61,15 +68,10 @@ func (s *Store) nextInCollection(ctx context.Context, collectionID int64, userID
 		seen = append(seen, *it)
 		touched = append(touched, at)
 	}
-	next := nextInSequence(seen, touched)
+	next, from := nextInSequence(seen, touched)
 	var after *Item
-	if next.Item != nil {
-		for i := range seen {
-			if seen[i].ID == next.Item.ID && i > 0 {
-				after = &seen[i-1]
-				break
-			}
-		}
+	if next.Item != nil && from >= 0 {
+		after = &seen[from]
 	}
 	return next, after, nil
 }
@@ -77,11 +79,12 @@ func (s *Store) nextInCollection(ctx context.Context, collectionID int64, userID
 /*
  * nextInSequence is the rule, over members already in watching order, with
  * when each one's progress was last written (0 for never). Pure, so the rule
- * is tested without a database.
+ * is tested without a database. from is the index of the film the answer
+ * counts from (the one finished most recently), or -1.
  */
-func nextInSequence(items []Item, touched []int64) NextEpisode {
+func nextInSequence(items []Item, touched []int64) (next NextEpisode, from int) {
 	started := false
-	furthest := -1
+	latest := -1
 	inProgress := -1
 	for i, it := range items {
 		p := it.Progress
@@ -90,7 +93,9 @@ func nextInSequence(items []Item, touched []int64) NextEpisode {
 		}
 		if p.Watched {
 			started = true
-			furthest = i
+			if latest < 0 || touched[i] >= touched[latest] {
+				latest = i
+			}
 			continue
 		}
 		if p.PositionMS > 0 {
@@ -102,19 +107,19 @@ func nextInSequence(items []Item, touched []int64) NextEpisode {
 	}
 	if inProgress >= 0 {
 		it := items[inProgress]
-		return NextEpisode{Item: &it, Resume: true, Started: true}
+		return NextEpisode{Item: &it, Resume: true, Started: true}, -1
 	}
-	for i := furthest + 1; i < len(items); i++ {
+	for i := latest + 1; i < len(items); i++ {
 		if p := items[i].Progress; p != nil && p.Watched {
 			continue
 		}
 		it := items[i]
-		return NextEpisode{Item: &it, Started: started}
+		return NextEpisode{Item: &it, Started: started}, latest
 	}
 	if len(items) == 0 {
-		return NextEpisode{}
+		return NextEpisode{}, -1
 	}
-	return NextEpisode{Exhausted: true, Started: true}
+	return NextEpisode{Exhausted: true, Started: true}, -1
 }
 
 // progressUpdatedAt is when this user's play state for an item was last

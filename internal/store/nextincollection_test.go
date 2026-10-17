@@ -32,16 +32,16 @@ func TestNextInSequence(t *testing.T) {
 		started   bool
 	}{
 		{"nothing watched starts at the first", []string{"", "", ""}, 1, false, false, false},
-		{"after the furthest watched", []string{"watched", "", ""}, 2, false, false, true},
+		{"after the one finished", []string{"watched", "", ""}, 2, false, false, true},
 		{"forward only: a skipped film is not gone back to", []string{"", "watched", ""}, 3, false, false, true},
 		{"in progress wins", []string{"watched", "", "part"}, 3, true, false, true},
-		{"everything after the furthest watched", []string{"", "", "watched"}, 0, false, true, true},
+		{"everything after the one finished most recently", []string{"", "", "watched"}, 0, false, true, true},
 		{"all watched", []string{"watched", "watched"}, 0, false, true, true},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			items, touched := seq(c.states...)
-			got := nextInSequence(items, touched)
+			got, _ := nextInSequence(items, touched)
 			var id int64
 			if got.Item != nil {
 				id = got.Item.ID
@@ -51,6 +51,29 @@ func TestNextInSequence(t *testing.T) {
 					id, got.Resume, got.Exhausted, got.Started, c.want, c.resume, c.exhausted, c.started)
 			}
 		})
+	}
+}
+
+/*
+ * The report this rule was changed for, in its own shape: Saw, Saw II and
+ * Saw III watched in order, then Saw 3D (seventh by release) out of order,
+ * then Saw IV and Saw V. The next film is Saw VI, counted from Saw V, the one
+ * just finished -- not Jigsaw, counted from Saw 3D, the furthest.
+ */
+func TestTheNextFilmFollowsTheOneJustFinished(t *testing.T) {
+	// Release order: Saw, II, III, IV, V, VI, 3D, Jigsaw.
+	items, touched := seq("watched", "watched", "watched", "watched", "watched", "", "watched", "")
+	// When each was finished: 3D (index 6) before IV and V.
+	order := map[int]int64{0: 1, 1: 2, 2: 3, 6: 4, 3: 5, 4: 6}
+	for i := range touched {
+		touched[i] = order[i]
+	}
+	got, from := nextInSequence(items, touched)
+	if got.Item == nil || got.Item.ID != 6 {
+		t.Fatalf("next = %+v, want Saw VI (id 6)", got.Item)
+	}
+	if from != 4 {
+		t.Errorf("counted from index %d, want 4 (Saw V, the one just finished)", from)
 	}
 }
 
