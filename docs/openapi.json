@@ -215,6 +215,29 @@
         }
       }
     },
+    "/auth/accounts": {
+      "get": {
+        "operationId": "loginAccounts",
+        "tags": [
+          "auth"
+        ],
+        "summary": "Accounts to pick from on the sign-in page",
+        "description": "No session needed. Lists every account's name, and nothing else, but only to a request from the home network: this computer, private and link-local addresses, and addresses on a network one of this machine's interfaces is on (a phone on the house Wi-Fi speaking global IPv6 counts; the rest of the internet does not). Any other request, or any request while `login_picker` is off, gets an empty list, which says nothing about whether accounts exist.",
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "The names, or an empty list.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LoginAccounts"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/auth/setup": {
       "post": {
         "operationId": "postAuthSetup",
@@ -14302,7 +14325,8 @@
           "audit_retention_days",
           "backup_every_days",
           "backup_keep",
-          "optimized_limit_gb"
+          "optimized_limit_gb",
+          "login_picker"
         ],
         "properties": {
           "tmdb": {
@@ -14406,6 +14430,10 @@
           "photo_places": {
             "type": "boolean",
             "description": "Read where photographs were taken and group picture libraries by town (ADR 0078). **Off by default.** Turning it on starts the location pass at once; **turning it off deletes every location and place read**, rather than hiding them."
+          },
+          "login_picker": {
+            "type": "boolean",
+            "description": "Show the accounts on the sign-in page to devices on the home network (`GET /api/auth/accounts`). On by default."
           },
           "auto_enrich": {
             "type": "boolean"
@@ -14599,6 +14627,9 @@
           "photo_places": {
             "type": "boolean",
             "description": "Read where photographs were taken and group picture libraries by town (ADR 0078). **Off by default.** Turning it on starts the location pass at once; **turning it off deletes every location and place read**, rather than hiding them."
+          },
+          "login_picker": {
+            "type": "boolean"
           },
           "hardware_encoder": {
             "type": "string"
@@ -19881,6 +19912,28 @@
             "type": "integer",
             "format": "int64",
             "description": "Unix seconds."
+          }
+        }
+      },
+      "LoginAccounts": {
+        "type": "object",
+        "required": [
+          "accounts"
+        ],
+        "properties": {
+          "accounts": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "name"
+              ],
+              "properties": {
+                "name": {
+                  "type": "string"
+                }
+              }
+            }
           }
         }
       }
