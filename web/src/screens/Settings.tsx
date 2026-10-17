@@ -89,7 +89,7 @@ import { CrashReports } from "@/components/CrashReports";
 import { PeerSettings } from "@/components/PeerSettings";
 import { RetroCoreSettings } from "@/components/RetroCoreSettings";
 import { useSetPeerVisibility } from "@/api/hooks";
-import { errorMessage } from "@/lib/errors";
+import { asSentence, errorMessage } from "@/lib/errors";
 import { useBigscreen } from "@/lib/bigscreen";
 import { useSpoilerMode, type SpoilerMode } from "@/lib/spoilers";
 import { useLiveTransport } from "@/lib/liveTransport";
@@ -4161,7 +4161,7 @@ function PortRow({ net }: { net: NetworkStatus }) {
           The server didn&rsquo;t answer on port {cameBack}, so it went back to port {net.port}.
         </p>
       )}
-      {!cameBack && last && !last.ok && <p className="set-error">{last.error}.</p>}
+      {!cameBack && last && !last.ok && <p className="set-error">{asSentence(last.error ?? "")}</p>}
     </>
   );
 }
@@ -4232,7 +4232,7 @@ function CustomCertificateSection() {
       </div>
       {cert.error && (
         <p className="set-error" role="alert">
-          {cert.error}.{" "}
+          {asSentence(cert.error)}{" "}
           {cert.serving === "custom"
             ? "Still serving the copy loaded before."
             : "Other devices get LANcast’s certificate until this is fixed."}

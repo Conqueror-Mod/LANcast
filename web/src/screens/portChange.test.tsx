@@ -187,6 +187,6 @@ describe("moving the server to another port", () => {
     mount({ ...base, last_port_change: { from: "8080", to: "9090", ok: false, at: 1,
       error: "the server did not answer on port 9090, so it went back to port 8080" } });
     await render();
-    expect(host.textContent).toContain("did not answer on port 9090");
+    expect(host.textContent).toContain("The server did not answer on port 9090, so it went back to port 8080.");
   });
 });
