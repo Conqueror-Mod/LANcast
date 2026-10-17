@@ -222,6 +222,9 @@ type Server struct {
 	// serving is the certificate the network is served, the operator's own or
 	// the generated one (ADR 0088); nil on a loopback-only server.
 	serving ServingCert
+	// portChanger moves the installed service to another port (ADR 0089);
+	// nil when this server is not the installed Windows service.
+	portChanger PortChanger
 	// passkeyChallenges holds issued WebAuthn challenges (ADR 0082), and
 	// passkeyRPFor replaces the RP check in tests, whose server has no TLS.
 	passkeyChallenges *passkey.Challenges
@@ -389,6 +392,7 @@ func (s *Server) Handler() http.Handler {
 
 	// This machine and the LAN, as a status (Server › Network).
 	mux.HandleFunc("GET /api/network", s.adminOnly(s.networkStatus))
+	mux.HandleFunc("PUT /api/network/port", s.adminOnly(s.putPort))
 	// Whether DLNA is running, and why not (ADR 0086).
 	mux.HandleFunc("GET /api/dlna", s.adminOnly(s.dlnaStatusRoute))
 	mux.HandleFunc("GET /api/libraries", s.listLibraries)

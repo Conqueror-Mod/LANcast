@@ -40,6 +40,13 @@ type networkStatus struct {
 	// supplied rather than the one LANcast generated: the one actually being
 	// served, which is the generated one while the operator's will not load.
 	CustomCertificate bool `json:"custom_certificate"`
+	// PortChangeable is whether Settings can move this server to another
+	// port (ADR 0089): only the installed Windows service can.
+	PortChangeable bool `json:"port_changeable"`
+	// PortFixedBecause says why not, when it cannot.
+	PortFixedBecause string `json:"port_fixed_because,omitempty"`
+	// LastPortChange is how the last change went, for a day afterwards.
+	LastPortChange *PortChange `json:"last_port_change,omitempty"`
 }
 
 func (s *Server) networkStatus(w http.ResponseWriter, r *http.Request) {
@@ -52,7 +59,10 @@ func (s *Server) networkStatus(w http.ResponseWriter, r *http.Request) {
 		Addresses:              []string{},
 		CertificateFingerprint: s.certFingerprint(),
 		CustomCertificate:      s.servingCustom(),
+		PortFixedBecause:       s.portChangeBlocker(),
+		LastPortChange:         s.lastPortChange(),
 	}
+	out.PortChangeable = out.PortFixedBecause == ""
 	// A LAN-bound server serves HTTPS (the TLS work); a loopback-only one has
 	// no address anybody else could use, so it lists none.
 	if s.lanBound && port != "" {

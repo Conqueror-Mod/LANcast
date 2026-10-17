@@ -43,6 +43,10 @@ func runService(args []string) error {
 	addr := fs.String("addr", ":8080", "listen address")
 	ffmpegDir := fs.String("ffmpeg-dir", "",
 		"directory containing ffmpeg, added to the service PATH")
+	// verify and fallback are for restart after a port change (ADR 0089):
+	// the new address must answer, or the old one is put back.
+	verify := fs.String("verify", "", "restart: the address that must answer afterwards")
+	fallback := fs.String("fallback", "", "restart: the address to go back to if it does not")
 	if err := fs.Parse(args[1:]); err != nil {
 		return err
 	}
@@ -109,6 +113,9 @@ func runService(args []string) error {
 		// of the same binary. Renaming that binary underneath a running process
 		// is permitted on Windows, which is what makes the swap safe while this
 		// helper is still executing.
+		if *verify != "" && *fallback != "" {
+			return restartAndVerify(mgr, *data, *verify, *fallback)
+		}
 		return mgr.Restart(serviceRestartTimeout)
 	case "status":
 		s, err := mgr.Status()

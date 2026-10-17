@@ -256,6 +256,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/network/port": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Move the server to another port
+         * @description Administrators only (ADR 0089), and only on the installed Windows service, which rewrites its own command line and restarts. Only the port changes: the host part, and the loopback rule that holds an unsecured server to 127.0.0.1, are untouched. The port is tried before anything changes. If the restarted server does not answer on it within 30 seconds, the old port is put back and the server started again; `GET /api/network`'s `last_port_change` says which happened. LANcast makes no firewall rule for the new port. Audited as `settings.port`.
+         */
+        put: operations["setPort"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/dlna": {
         parameters: {
             query?: never;
@@ -8294,6 +8314,11 @@ export interface components {
             certificate_fingerprint: string;
             /** @description Whether the certificate other devices are served right now is the operator's own (ADR 0088) rather than the one LANcast generated. False while a configured certificate will not load, because the generated one is served instead. */
             custom_certificate: boolean;
+            /** @description Whether `PUT /api/network/port` can move this server (ADR 0089): only the installed Windows service can. */
+            port_changeable: boolean;
+            /** @description Why the port cannot be changed here, when it cannot. */
+            port_fixed_because?: string;
+            last_port_change?: components["schemas"]["PortChange"];
         };
         DLNAStatus: {
             /** @description Whether TVs can find and browse this server now. */
@@ -8371,6 +8396,20 @@ export interface components {
             cert_file: string;
             /** @description Full path to its PEM private key. */
             key_file: string;
+        };
+        /** @description How the last port change went, reported for a day afterwards. */
+        PortChange: {
+            from: string;
+            to: string;
+            /** @description False when the new port did not answer and the old one was put back. */
+            ok: boolean;
+            /** @description What happened, when it did not work. */
+            error?: string;
+            /**
+             * Format: int64
+             * @description Unix seconds.
+             */
+            at: number;
         };
     };
     responses: {
@@ -8860,6 +8899,48 @@ export interface operations {
             };
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
+        };
+    };
+    setPort: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @description Not 443 (the public certificate's) or 8200 (DLNA's), and not the current one. */
+                    port: number;
+                };
+            };
+        };
+        responses: {
+            /** @description Restarting on the new port. */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        port: string;
+                        restarting: boolean;
+                    };
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            /** @description The port is in use, or this server is not the installed service. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
         };
     };
     getDLNAStatus: {

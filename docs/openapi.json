@@ -555,6 +555,80 @@
         }
       }
     },
+    "/network/port": {
+      "put": {
+        "operationId": "setPort",
+        "tags": [
+          "settings"
+        ],
+        "summary": "Move the server to another port",
+        "description": "Administrators only (ADR 0089), and only on the installed Windows service, which rewrites its own command line and restarts. Only the port changes: the host part, and the loopback rule that holds an unsecured server to 127.0.0.1, are untouched. The port is tried before anything changes. If the restarted server does not answer on it within 30 seconds, the old port is put back and the server started again; `GET /api/network`'s `last_port_change` says which happened. LANcast makes no firewall rule for the new port. Audited as `settings.port`.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "port"
+                ],
+                "properties": {
+                  "port": {
+                    "type": "integer",
+                    "minimum": 1024,
+                    "maximum": 65535,
+                    "description": "Not 443 (the public certificate's) or 8200 (DLNA's), and not the current one."
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Restarting on the new port.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "port",
+                    "restarting"
+                  ],
+                  "properties": {
+                    "port": {
+                      "type": "string"
+                    },
+                    "restarting": {
+                      "type": "boolean"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "409": {
+            "description": "The port is in use, or this server is not the installed service.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/dlna": {
       "get": {
         "operationId": "getDLNAStatus",
@@ -19528,7 +19602,8 @@
           "restart_required",
           "addresses",
           "certificate_fingerprint",
-          "custom_certificate"
+          "custom_certificate",
+          "port_changeable"
         ],
         "properties": {
           "port": {
@@ -19561,6 +19636,17 @@
           "custom_certificate": {
             "type": "boolean",
             "description": "Whether the certificate other devices are served right now is the operator's own (ADR 0088) rather than the one LANcast generated. False while a configured certificate will not load, because the generated one is served instead."
+          },
+          "port_changeable": {
+            "type": "boolean",
+            "description": "Whether `PUT /api/network/port` can move this server (ADR 0089): only the installed Windows service can."
+          },
+          "port_fixed_because": {
+            "type": "string",
+            "description": "Why the port cannot be changed here, when it cannot."
+          },
+          "last_port_change": {
+            "$ref": "#/components/schemas/PortChange"
           }
         }
       },
@@ -19764,6 +19850,37 @@
           "key_file": {
             "type": "string",
             "description": "Full path to its PEM private key."
+          }
+        }
+      },
+      "PortChange": {
+        "type": "object",
+        "description": "How the last port change went, reported for a day afterwards.",
+        "required": [
+          "from",
+          "to",
+          "ok",
+          "at"
+        ],
+        "properties": {
+          "from": {
+            "type": "string"
+          },
+          "to": {
+            "type": "string"
+          },
+          "ok": {
+            "type": "boolean",
+            "description": "False when the new port did not answer and the old one was put back."
+          },
+          "error": {
+            "type": "string",
+            "description": "What happened, when it did not work."
+          },
+          "at": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Unix seconds."
           }
         }
       }
