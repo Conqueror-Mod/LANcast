@@ -25,7 +25,7 @@ let host: HTMLDivElement;
 let root: Root;
 let sent: Array<{ url: string; method: string; body: unknown }>;
 
-const me = { id: "u_admin", name: "chris", role: "admin" };
+const me = { id: "u_admin", name: "dana", role: "admin" };
 const child = { id: "u_kid", name: "kiddo", role: "member" };
 
 function stub(kidCeiling?: string) {
@@ -148,7 +148,7 @@ describe("a limit set for an account", () => {
     // Waited for, so this is an absence beside a present control rather than
     // an absence because nothing had rendered yet.
     await waitFor(() => !!ceilingFor("kiddo"), "the other account's control");
-    expect(ceilingFor("chris")).toBeNull();
+    expect(ceilingFor("dana")).toBeNull();
   });
 
   it("shows what is already in force without opening anything", async () => {

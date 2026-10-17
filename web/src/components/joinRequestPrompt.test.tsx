@@ -59,7 +59,7 @@ function session(members = 1) {
     age_ms: 0,
     created_at: 0,
     members: [
-      { user_id: "u_chris", name: "Chris", host: true, last_seen: 0 },
+      { user_id: "u_chris", name: "Dana", host: true, last_seen: 0 },
       ...(members > 1
         ? [{ user_id: "peer:FP/u_g", name: "Georgia", host: false, last_seen: 0, peer: "FP", server: "Utopia" }]
         : []),
@@ -77,7 +77,7 @@ function mockServer() {
       const json = (v: unknown, status = 200) =>
         new Response(JSON.stringify(v), { status, headers: { "Content-Type": "application/json" } });
       if (url === "/api/auth/status")
-        return json({ authenticated: true, user: { id: "u_chris", name: "Chris", role: "admin" } });
+        return json({ authenticated: true, user: { id: "u_chris", name: "Dana", role: "admin" } });
       if (url === "/api/together/requests") return json({ requests: pending });
       if (url === "/api/together" && method === "POST") return json(session(), 201);
       if (url === "/api/together/requests/q1/accept") {

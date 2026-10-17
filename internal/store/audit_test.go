@@ -65,7 +65,7 @@ func TestAuditOrderingIsStableWithinASecond(t *testing.T) {
 
 	for _, a := range []string{"first", "second", "third"} {
 		if err := st.AppendAudit(ctx, AuditEvent{
-			ActorID: "u1", ActorName: "chris", Action: "item.edit",
+			ActorID: "u1", ActorName: "dana", Action: "item.edit",
 			Summary: a, At: 1000, // identical timestamps on purpose
 		}); err != nil {
 			t.Fatal(err)
@@ -114,15 +114,15 @@ func TestAuditFilters(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	add("chris", "library.delete")
-	add("chris", "item.match")
+	add("dana", "library.delete")
+	add("dana", "item.match")
 	add("sam", "item.match")
 
 	byAction, total, _ := st.ListAudit(ctx, AuditFilter{Action: "item.match"})
 	if total != 2 || len(byAction) != 2 {
 		t.Errorf("action filter: total=%d len=%d, want 2 and 2", total, len(byAction))
 	}
-	byActor, total, _ := st.ListAudit(ctx, AuditFilter{ActorID: "chris"})
+	byActor, total, _ := st.ListAudit(ctx, AuditFilter{ActorID: "dana"})
 	if total != 2 || len(byActor) != 2 {
 		t.Errorf("actor filter: total=%d len=%d, want 2 and 2", total, len(byActor))
 	}

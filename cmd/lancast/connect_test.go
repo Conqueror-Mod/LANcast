@@ -47,7 +47,7 @@ func TestAnExplicitAddressIsAnInstruction(t *testing.T) {
 		localPin:      diskPin,
 		// Even with a remembered remote server, which must not override it.
 		lastServer: remoteAddr,
-		known:      trusting(remoteAddr, remotePin, "Chris"),
+		known:      trusting(remoteAddr, remotePin, "Dana"),
 	})
 
 	if ask {
@@ -67,7 +67,7 @@ func TestARememberedServerIsOpenedWithoutAsking(t *testing.T) {
 		flagAddr:   ":8080",
 		localPin:   diskPin,
 		lastServer: remoteAddr,
-		known:      trusting(remoteAddr, remotePin, "Chris"),
+		known:      trusting(remoteAddr, remotePin, "Dana"),
 	})
 
 	if ask {
@@ -82,7 +82,7 @@ func TestARememberedServerIsOpenedWithoutAsking(t *testing.T) {
 	if got.pin != remotePin {
 		t.Errorf("pin = %q, want the stored pin — not the local one", got.pin)
 	}
-	if got.name != "Chris" {
+	if got.name != "Dana" {
 		t.Errorf("name = %q, want the name it was given", got.name)
 	}
 }
@@ -93,7 +93,7 @@ func TestARememberedAddressIsCanonicalisedBeforeItIsLookedUp(t *testing.T) {
 	got, ask := resolve(facts{
 		flagAddr:   ":8080",
 		lastServer: "https://192.168.1.21:8080/movies",
-		known:      trusting(remoteAddr, remotePin, "Chris"),
+		known:      trusting(remoteAddr, remotePin, "Dana"),
 	})
 
 	if ask {

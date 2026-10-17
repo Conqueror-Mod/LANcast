@@ -108,7 +108,7 @@ describe("sign-in screen", () => {
       challenge_id: "c1",
       public_key: { challenge: "AQID", rpId: "example.dynv6.net", userVerification: "required" },
     };
-    routes["POST /api/auth/passkey/login"] = { authenticated: true, user: { id: "u_1", name: "chris", role: "admin" } };
+    routes["POST /api/auth/passkey/login"] = { authenticated: true, user: { id: "u_1", name: "dana", role: "admin" } };
     const get = vi.fn(async (opts: CredentialRequestOptions) => {
       expect(new Uint8Array(opts.publicKey!.challenge as ArrayBuffer)).toEqual(new Uint8Array([1, 2, 3]));
       return {
@@ -188,7 +188,7 @@ describe("Account passkeys", () => {
       challenge_id: "r1",
       public_key: {
         challenge: "BAU", rp: { id: "example.dynv6.net", name: "LANcast" },
-        user: { id: toB64url(new TextEncoder().encode("u_1")), name: "chris", displayName: "chris" },
+        user: { id: toB64url(new TextEncoder().encode("u_1")), name: "dana", displayName: "dana" },
         excludeCredentials: [{ type: "public-key", id: "CQk" }],
       },
     };

@@ -51,7 +51,7 @@ beforeEach(() => {
       const json = (v: unknown, status = 200) =>
         new Response(JSON.stringify(v), { status, headers: { "Content-Type": "application/json" } });
       if (url.includes("/api/auth/status")) {
-        return json({ authenticated: true, configured: true, user: { id: "u1", name: "chris", role: "admin" } });
+        return json({ authenticated: true, configured: true, user: { id: "u1", name: "dana", role: "admin" } });
       }
       if (url.includes("/api/retro/web-cores")) {
         if (method === "POST") {

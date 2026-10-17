@@ -299,7 +299,7 @@ func TestInspectSnapshotMissingFile(t *testing.T) {
 func TestSnapshotCarriesNoSessions(t *testing.T) {
 	ctx := context.Background()
 	src := openTestStore(t)
-	if _, err := src.CreateUser(ctx, "u_1", "Chris", "hash", "admin"); err != nil {
+	if _, err := src.CreateUser(ctx, "u_1", "Dana", "hash", "admin"); err != nil {
 		t.Fatal(err)
 	}
 	if err := src.CreateSession(ctx, "tokenhash", "u_1", time.Hour); err != nil {
@@ -349,7 +349,7 @@ func TestSnapshotCarriesNoSessions(t *testing.T) {
 func TestSnapshotIsOneSelfContainedFile(t *testing.T) {
 	ctx := context.Background()
 	src := openTestStore(t)
-	if _, err := src.CreateUser(ctx, "u_1", "Chris", "hash", "admin"); err != nil {
+	if _, err := src.CreateUser(ctx, "u_1", "Dana", "hash", "admin"); err != nil {
 		t.Fatal(err)
 	}
 	if err := src.CreateSession(ctx, "tokenhash", "u_1", time.Hour); err != nil {

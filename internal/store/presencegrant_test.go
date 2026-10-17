@@ -13,7 +13,7 @@ func grantFixture(t *testing.T) (*Store, context.Context, string) {
 	st := newStore(t)
 	ctx := context.Background()
 
-	u, err := st.CreateUser(ctx, "chris", "Chris", "hash", "admin")
+	u, err := st.CreateUser(ctx, "dana", "Dana", "hash", "admin")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -30,13 +30,13 @@ func grantFixture(t *testing.T) (*Store, context.Context, string) {
 }
 
 func TestGrantAndRead(t *testing.T) {
-	st, ctx, chris := grantFixture(t)
+	st, ctx, dana := grantFixture(t)
 
-	if err := st.GrantPresence(ctx, chris, fpA, "g-1", time.Unix(1000, 0)); err != nil {
+	if err := st.GrantPresence(ctx, dana, fpA, "g-1", time.Unix(1000, 0)); err != nil {
 		t.Fatal(err)
 	}
 
-	got, err := st.PresenceGrants(ctx, chris)
+	got, err := st.PresenceGrants(ctx, dana)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -51,17 +51,17 @@ func TestGrantAndRead(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(readers) != 1 || readers[0] != chris {
-		t.Errorf("ReadersOf = %v, want [%s]", readers, chris)
+	if len(readers) != 1 || readers[0] != dana {
+		t.Errorf("ReadersOf = %v, want [%s]", readers, dana)
 	}
 }
 
 // ADR 0045 §5: off by default. The absence of a row is the default, so this is
 // really a test that nothing anywhere creates one on somebody's behalf.
 func TestNobodySeesAnybodyByDefault(t *testing.T) {
-	st, ctx, chris := grantFixture(t)
+	st, ctx, dana := grantFixture(t)
 
-	if got, _ := st.PresenceGrants(ctx, chris); len(got) != 0 {
+	if got, _ := st.PresenceGrants(ctx, dana); len(got) != 0 {
 		t.Errorf("a fresh account has grants: %+v", got)
 	}
 	readers, _ := st.ReadersOf(ctx, fpA, "g-1")
@@ -73,16 +73,16 @@ func TestNobodySeesAnybodyByDefault(t *testing.T) {
 // Clicking a switch that is already on has changed nothing, and rewriting the
 // date would misreport when the person actually decided.
 func TestRegrantingDoesNotMoveTheDate(t *testing.T) {
-	st, ctx, chris := grantFixture(t)
+	st, ctx, dana := grantFixture(t)
 
-	if err := st.GrantPresence(ctx, chris, fpA, "g-1", time.Unix(1000, 0)); err != nil {
+	if err := st.GrantPresence(ctx, dana, fpA, "g-1", time.Unix(1000, 0)); err != nil {
 		t.Fatal(err)
 	}
-	if err := st.GrantPresence(ctx, chris, fpA, "g-1", time.Unix(9999, 0)); err != nil {
+	if err := st.GrantPresence(ctx, dana, fpA, "g-1", time.Unix(9999, 0)); err != nil {
 		t.Fatalf("re-granting must not be an error: %v", err)
 	}
 
-	got, _ := st.PresenceGrants(ctx, chris)
+	got, _ := st.PresenceGrants(ctx, dana)
 	if len(got) != 1 {
 		t.Fatalf("grants = %+v, want exactly one", got)
 	}
@@ -92,12 +92,12 @@ func TestRegrantingDoesNotMoveTheDate(t *testing.T) {
 }
 
 func TestRevokeIsImmediateAndIdempotent(t *testing.T) {
-	st, ctx, chris := grantFixture(t)
-	if err := st.GrantPresence(ctx, chris, fpA, "g-1", time.Unix(1000, 0)); err != nil {
+	st, ctx, dana := grantFixture(t)
+	if err := st.GrantPresence(ctx, dana, fpA, "g-1", time.Unix(1000, 0)); err != nil {
 		t.Fatal(err)
 	}
 
-	if err := st.RevokePresence(ctx, chris, fpA, "g-1"); err != nil {
+	if err := st.RevokePresence(ctx, dana, fpA, "g-1"); err != nil {
 		t.Fatal(err)
 	}
 	if readers, _ := st.ReadersOf(ctx, fpA, "g-1"); len(readers) != 0 {
@@ -105,7 +105,7 @@ func TestRevokeIsImmediateAndIdempotent(t *testing.T) {
 	}
 	// Revoking what is not granted is success: the caller asked for this person
 	// not to see them, and afterwards they cannot.
-	if err := st.RevokePresence(ctx, chris, fpA, "g-1"); err != nil {
+	if err := st.RevokePresence(ctx, dana, fpA, "g-1"); err != nil {
 		t.Errorf("second revoke: %v", err)
 	}
 }
@@ -114,12 +114,12 @@ func TestRevokeIsImmediateAndIdempotent(t *testing.T) {
 // anybody's grant. The foreign key is what makes that true rather than
 // something a handler must remember.
 func TestCannotGrantToSomebodyWhoIsNotInTheRoster(t *testing.T) {
-	st, ctx, chris := grantFixture(t)
+	st, ctx, dana := grantFixture(t)
 
-	if err := st.GrantPresence(ctx, chris, fpA, "nobody", time.Unix(1000, 0)); err == nil {
+	if err := st.GrantPresence(ctx, dana, fpA, "nobody", time.Unix(1000, 0)); err == nil {
 		t.Error("granted presence to a person no peer has vouched for")
 	}
-	if err := st.GrantPresence(ctx, chris, fpB, "g-1", time.Unix(1000, 0)); err == nil {
+	if err := st.GrantPresence(ctx, dana, fpB, "g-1", time.Unix(1000, 0)); err == nil {
 		t.Error("granted presence on a peer this server has never been introduced to")
 	}
 }
@@ -131,9 +131,9 @@ func TestCannotGrantToSomebodyWhoIsNotInTheRoster(t *testing.T) {
  * keep correct.
  */
 func TestUnpairingRevokesEveryGrantToThatServer(t *testing.T) {
-	st, ctx, chris := grantFixture(t)
+	st, ctx, dana := grantFixture(t)
 	for _, id := range []string{"g-1", "g-2"} {
-		if err := st.GrantPresence(ctx, chris, fpA, id, time.Unix(1000, 0)); err != nil {
+		if err := st.GrantPresence(ctx, dana, fpA, id, time.Unix(1000, 0)); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -142,7 +142,7 @@ func TestUnpairingRevokesEveryGrantToThatServer(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	got, err := st.PresenceGrants(ctx, chris)
+	got, err := st.PresenceGrants(ctx, dana)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -158,9 +158,9 @@ func TestUnpairingRevokesEveryGrantToThatServer(t *testing.T) {
  * nobody's consent behind it.
  */
 func TestGrantsFollowThePersonOutOfTheRoster(t *testing.T) {
-	st, ctx, chris := grantFixture(t)
+	st, ctx, dana := grantFixture(t)
 	for _, id := range []string{"g-1", "g-2"} {
-		if err := st.GrantPresence(ctx, chris, fpA, id, time.Unix(1000, 0)); err != nil {
+		if err := st.GrantPresence(ctx, dana, fpA, id, time.Unix(1000, 0)); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -170,7 +170,7 @@ func TestGrantsFollowThePersonOutOfTheRoster(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	got, err := st.PresenceGrants(ctx, chris)
+	got, err := st.PresenceGrants(ctx, dana)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -182,13 +182,13 @@ func TestGrantsFollowThePersonOutOfTheRoster(t *testing.T) {
 // Grants belong to the account that made them. One person's list must never
 // include another's, which is also why every method takes the granting id.
 func TestGrantsAreNotSharedBetweenAccounts(t *testing.T) {
-	st, ctx, chris := grantFixture(t)
+	st, ctx, dana := grantFixture(t)
 	other, err := st.CreateUser(ctx, "sam", "Sam", "hash", "member")
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	if err := st.GrantPresence(ctx, chris, fpA, "g-1", time.Unix(1000, 0)); err != nil {
+	if err := st.GrantPresence(ctx, dana, fpA, "g-1", time.Unix(1000, 0)); err != nil {
 		t.Fatal(err)
 	}
 
@@ -199,17 +199,17 @@ func TestGrantsAreNotSharedBetweenAccounts(t *testing.T) {
 	// ReadersOf spans accounts by design — it answers "who agreed to be seen by
 	// this person" — so it must name only the one who actually did.
 	readers, _ := st.ReadersOf(ctx, fpA, "g-1")
-	if len(readers) != 1 || readers[0] != chris {
-		t.Errorf("ReadersOf = %v, want only %s", readers, chris)
+	if len(readers) != 1 || readers[0] != dana {
+		t.Errorf("ReadersOf = %v, want only %s", readers, dana)
 	}
 }
 
 func TestDeletingAnAccountTakesItsGrants(t *testing.T) {
-	st, ctx, chris := grantFixture(t)
-	if err := st.GrantPresence(ctx, chris, fpA, "g-1", time.Unix(1000, 0)); err != nil {
+	st, ctx, dana := grantFixture(t)
+	if err := st.GrantPresence(ctx, dana, fpA, "g-1", time.Unix(1000, 0)); err != nil {
 		t.Fatal(err)
 	}
-	if err := st.DeleteUser(ctx, chris); err != nil {
+	if err := st.DeleteUser(ctx, dana); err != nil {
 		t.Fatal(err)
 	}
 	if readers, _ := st.ReadersOf(ctx, fpA, "g-1"); len(readers) != 0 {

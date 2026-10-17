@@ -32,9 +32,9 @@ func newTest() (*Tracker, *clock) {
 
 func TestSeenMakesSomebodyOnlineButNotWatching(t *testing.T) {
 	tr, _ := newTest()
-	tr.Seen("chris")
+	tr.Seen("dana")
 
-	got, ok := tr.Snapshot("chris")
+	got, ok := tr.Snapshot("dana")
 	if !ok {
 		t.Fatal("no snapshot after Seen")
 	}
@@ -51,9 +51,9 @@ func TestSeenMakesSomebodyOnlineButNotWatching(t *testing.T) {
 
 func TestWatchingDisclosesTheTitleAndImpliesOnline(t *testing.T) {
 	tr, _ := newTest()
-	tr.Watching("chris", "Blade Runner")
+	tr.Watching("dana", "Blade Runner")
 
-	got, _ := tr.Snapshot("chris")
+	got, _ := tr.Snapshot("dana")
 	if got.Watching != "Blade Runner" {
 		t.Errorf("watching = %q, want Blade Runner", got.Watching)
 	}
@@ -73,14 +73,14 @@ func TestWatchingDisclosesTheTitleAndImpliesOnline(t *testing.T) {
 // and took down their own room mid-film for being punctual.
 func TestPunctualHeartbeatSurvives(t *testing.T) {
 	tr, c := newTest()
-	tr.Watching("chris", "Blade Runner")
+	tr.Watching("dana", "Blade Runner")
 
 	// Exactly on the boundary, which is where a sweep-then-record ordering
 	// deletes the entry a moment before refreshing it.
 	c.advance(watchingTimeout)
-	tr.Watching("chris", "Blade Runner")
+	tr.Watching("dana", "Blade Runner")
 
-	got, ok := tr.Snapshot("chris")
+	got, ok := tr.Snapshot("dana")
 	if !ok {
 		t.Fatal("punctual heartbeat was swept: record must happen before sweep")
 	}
@@ -91,14 +91,14 @@ func TestPunctualHeartbeatSurvives(t *testing.T) {
 
 func TestWatchingExpiresButOnlineSurvivesIt(t *testing.T) {
 	tr, c := newTest()
-	tr.Watching("chris", "Blade Runner")
+	tr.Watching("dana", "Blade Runner")
 
 	// Long enough that the film is over, well short of going offline. Somebody
 	// who paused and wandered off is still here.
 	c.advance(watchingTimeout + time.Second)
-	tr.Seen("chris")
+	tr.Seen("dana")
 
-	got, ok := tr.Snapshot("chris")
+	got, ok := tr.Snapshot("dana")
 	if !ok {
 		t.Fatal("want still present")
 	}
@@ -112,14 +112,14 @@ func TestWatchingExpiresButOnlineSurvivesIt(t *testing.T) {
 
 func TestGoingQuietRemovesTheEntryEntirely(t *testing.T) {
 	tr, c := newTest()
-	tr.Watching("chris", "Blade Runner")
+	tr.Watching("dana", "Blade Runner")
 
 	c.advance(onlineTimeout + time.Second)
 
 	// ADR 0045 §4: the sweep must actually delete. Expiry implemented as a
 	// display filter is persistence with a polite UI, so the entry must be
 	// gone rather than merely reported as offline.
-	if _, ok := tr.Snapshot("chris"); ok {
+	if _, ok := tr.Snapshot("dana"); ok {
 		t.Fatal("expired entry is still there; the sweep hid it instead of deleting it")
 	}
 	if got := tr.Online(); len(got) != 0 {
@@ -129,10 +129,10 @@ func TestGoingQuietRemovesTheEntryEntirely(t *testing.T) {
 
 func TestStoppedClearsTheTitleWithoutWaitingForTheSweep(t *testing.T) {
 	tr, _ := newTest()
-	tr.Watching("chris", "Blade Runner")
-	tr.Stopped("chris")
+	tr.Watching("dana", "Blade Runner")
+	tr.Stopped("dana")
 
-	got, ok := tr.Snapshot("chris")
+	got, ok := tr.Snapshot("dana")
 	if !ok {
 		t.Fatal("Stopped must not take the person offline, only the film")
 	}
@@ -149,10 +149,10 @@ func TestStoppedClearsTheTitleWithoutWaitingForTheSweep(t *testing.T) {
 // film called "".
 func TestEmptyTitleIsNotAWork(t *testing.T) {
 	tr, _ := newTest()
-	tr.Watching("chris", "Blade Runner")
-	tr.Watching("chris", "")
+	tr.Watching("dana", "Blade Runner")
+	tr.Watching("dana", "")
 
-	got, _ := tr.Snapshot("chris")
+	got, _ := tr.Snapshot("dana")
 	if got.Watching != "" {
 		t.Errorf("watching = %q, want empty", got.Watching)
 	}
@@ -170,9 +170,9 @@ func TestUnknownAccountHasNothingToSay(t *testing.T) {
 
 func TestForgetRemovesImmediately(t *testing.T) {
 	tr, _ := newTest()
-	tr.Watching("chris", "Blade Runner")
-	tr.Forget("chris")
-	if _, ok := tr.Snapshot("chris"); ok {
+	tr.Watching("dana", "Blade Runner")
+	tr.Forget("dana")
+	if _, ok := tr.Snapshot("dana"); ok {
 		t.Error("Forget must remove the entry outright")
 	}
 }
@@ -192,12 +192,12 @@ func TestEmptyUserIsIgnored(t *testing.T) {
 
 func TestOnlineIsSortedAndStable(t *testing.T) {
 	tr, _ := newTest()
-	for _, id := range []string{"georgia", "chris", "alex"} {
+	for _, id := range []string{"georgia", "dana", "alex"} {
 		tr.Seen(id)
 	}
 	first := tr.Online()
 	second := tr.Online()
-	want := []string{"alex", "chris", "georgia"}
+	want := []string{"alex", "dana", "georgia"}
 	for i, id := range want {
 		if first[i] != id {
 			t.Fatalf("Online() = %v, want %v", first, want)
@@ -221,9 +221,9 @@ func TestConcurrentUseIsSafe(t *testing.T) {
 		go func() {
 			defer wg.Done()
 			for j := 0; j < 200; j++ {
-				tr.Watching("chris", "Blade Runner")
+				tr.Watching("dana", "Blade Runner")
 				tr.Seen("georgia")
-				tr.Snapshot("chris")
+				tr.Snapshot("dana")
 				tr.Online()
 				tr.Stopped("georgia")
 			}

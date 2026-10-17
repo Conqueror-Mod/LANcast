@@ -78,7 +78,7 @@ func TestMergingBindingsKeepsBoth(t *testing.T) {
 // one being used — the only thing gold means on this page.
 func TestServerRowsMarkTheCurrentServer(t *testing.T) {
 	l := knownserver.List{}.Accept(knownserver.Server{
-		Address: "192.168.1.21:8080", Name: "Chris", Pin: "p", Accepted: time.Now(),
+		Address: "192.168.1.21:8080", Name: "Dana", Pin: "p", Accepted: time.Now(),
 	})
 	l = l.Accept(knownserver.Server{Address: "other:8080", Pin: "q"})
 

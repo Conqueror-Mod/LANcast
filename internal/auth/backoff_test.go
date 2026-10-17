@@ -18,13 +18,13 @@ func testBackoff() (*AccountBackoff, *time.Time) {
 func TestBackoffFreeFailuresCostNothing(t *testing.T) {
 	b, _ := testBackoff()
 	for i := 0; i < b.Free; i++ {
-		if ok, _ := b.Allow("chris"); !ok {
+		if ok, _ := b.Allow("dana"); !ok {
 			t.Fatalf("attempt %d refused inside the free allowance", i+1)
 		}
-		b.Fail("chris")
+		b.Fail("dana")
 	}
 	// The fifth failure is still free; the wait starts on the sixth.
-	if ok, _ := b.Allow("chris"); !ok {
+	if ok, _ := b.Allow("dana"); !ok {
 		t.Fatal("refused after only the free failures")
 	}
 }
@@ -32,21 +32,21 @@ func TestBackoffFreeFailuresCostNothing(t *testing.T) {
 func TestBackoffDoublesAndCaps(t *testing.T) {
 	b, clock := testBackoff()
 	for i := 0; i < b.Free; i++ {
-		b.Fail("chris")
+		b.Fail("dana")
 	}
 	want := []time.Duration{
 		30 * time.Second, time.Minute, 2 * time.Minute, 4 * time.Minute,
 		8 * time.Minute, 15 * time.Minute, 15 * time.Minute, 15 * time.Minute,
 	}
 	for i, w := range want {
-		b.Fail("chris")
-		ok, left := b.Allow("chris")
+		b.Fail("dana")
+		ok, left := b.Allow("dana")
 		if ok || left != w {
 			t.Fatalf("failure %d past free: allowed=%v wait=%v, want refused for %v", i+1, ok, left, w)
 		}
 		// Serve the wait, so the next failure is a counted one.
 		*clock = clock.Add(w)
-		if ok, _ := b.Allow("chris"); !ok {
+		if ok, _ := b.Allow("dana"); !ok {
 			t.Fatalf("still refused after serving a %v wait", w)
 		}
 	}
@@ -59,14 +59,14 @@ func TestBackoffRefusedAttemptsDoNotExtendTheWait(t *testing.T) {
 	b, clock := testBackoff()
 	// Far enough in that the wait (4 minutes) outlasts the asking below.
 	for i := 0; i < b.Free+4; i++ {
-		b.Fail("chris")
+		b.Fail("dana")
 	}
-	_, first := b.Allow("chris")
+	_, first := b.Allow("dana")
 	for i := 0; i < 50; i++ {
 		*clock = clock.Add(time.Second)
-		b.Allow("chris")
+		b.Allow("dana")
 	}
-	_, left := b.Allow("chris")
+	_, left := b.Allow("dana")
 	if left != first-50*time.Second {
 		t.Fatalf("wait moved from %v to %v under repeated asking", first, left)
 	}
@@ -75,9 +75,9 @@ func TestBackoffRefusedAttemptsDoNotExtendTheWait(t *testing.T) {
 func TestBackoffNamesFoldCase(t *testing.T) {
 	b, _ := testBackoff()
 	for i := 0; i < b.Free+1; i++ {
-		b.Fail("Chris")
+		b.Fail("Dana")
 	}
-	if ok, _ := b.Allow(" chris "); ok {
+	if ok, _ := b.Allow(" dana "); ok {
 		t.Fatal("a differently cased name escaped the count; the user table is NOCASE")
 	}
 }
@@ -88,10 +88,10 @@ func TestBackoffNamesFoldCase(t *testing.T) {
 func TestBackoffTreatsEveryNameAlike(t *testing.T) {
 	b, _ := testBackoff()
 	for i := 0; i < b.Free+1; i++ {
-		b.Fail("chris")
+		b.Fail("dana")
 		b.Fail("nobody-by-this-name")
 	}
-	_, a := b.Allow("chris")
+	_, a := b.Allow("dana")
 	_, n := b.Allow("nobody-by-this-name")
 	if a != n || a == 0 {
 		t.Fatalf("real name waits %v, invented name waits %v; must be equal and non-zero", a, n)
@@ -101,10 +101,10 @@ func TestBackoffTreatsEveryNameAlike(t *testing.T) {
 func TestBackoffResetOnSuccess(t *testing.T) {
 	b, _ := testBackoff()
 	for i := 0; i < b.Free+3; i++ {
-		b.Fail("chris")
+		b.Fail("dana")
 	}
-	b.Reset("chris")
-	if ok, _ := b.Allow("chris"); !ok {
+	b.Reset("dana")
+	if ok, _ := b.Allow("dana"); !ok {
 		t.Fatal("a correct password did not clear the wait")
 	}
 }
@@ -112,15 +112,15 @@ func TestBackoffResetOnSuccess(t *testing.T) {
 func TestBackoffForgetsAfterQuiet(t *testing.T) {
 	b, clock := testBackoff()
 	for i := 0; i < b.Free+3; i++ {
-		b.Fail("chris")
+		b.Fail("dana")
 	}
 	*clock = clock.Add(b.Forget)
-	if ok, _ := b.Allow("chris"); !ok {
+	if ok, _ := b.Allow("dana"); !ok {
 		t.Fatal("an hour without failures did not clear the count")
 	}
 	// And the count really restarted: the next failure is free again.
-	b.Fail("chris")
-	if ok, _ := b.Allow("chris"); !ok {
+	b.Fail("dana")
+	if ok, _ := b.Allow("dana"); !ok {
 		t.Fatal("first failure after forgetting was not free")
 	}
 }
@@ -131,7 +131,7 @@ func TestBackoffSprayCannotEvictTheTarget(t *testing.T) {
 	b, _ := testBackoff()
 	b.Cap = 100
 	for i := 0; i < b.Free+4; i++ {
-		b.Fail("chris")
+		b.Fail("dana")
 	}
 	for i := 0; i < 1000; i++ {
 		b.Fail(fmt.Sprintf("spray-%d", i))
@@ -139,7 +139,7 @@ func TestBackoffSprayCannotEvictTheTarget(t *testing.T) {
 	if len(b.entries) > b.Cap {
 		t.Fatalf("%d entries, cap %d", len(b.entries), b.Cap)
 	}
-	if ok, _ := b.Allow("chris"); ok {
+	if ok, _ := b.Allow("dana"); ok {
 		t.Fatal("the targeted account was evicted by a spray and its wait reset")
 	}
 }

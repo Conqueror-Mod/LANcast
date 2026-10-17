@@ -11,7 +11,7 @@ func TestSaveAndLoadRoundTrip(t *testing.T) {
 	dir := t.TempDir()
 	accepted := time.Date(2026, 9, 20, 11, 30, 0, 0, time.UTC)
 	want := List{}.Accept(Server{
-		Address: "192.168.1.21:8080", Name: "Chris", Pin: "abc=", Accepted: accepted,
+		Address: "192.168.1.21:8080", Name: "Dana", Pin: "abc=", Accepted: accepted,
 	})
 
 	if err := Save(dir, want); err != nil {
@@ -26,7 +26,7 @@ func TestSaveAndLoadRoundTrip(t *testing.T) {
 		t.Fatalf("%d servers, want 1", len(got.Servers))
 	}
 	s := got.Servers[0]
-	if s.Address != "192.168.1.21:8080" || s.Name != "Chris" || s.Pin != "abc=" {
+	if s.Address != "192.168.1.21:8080" || s.Name != "Dana" || s.Pin != "abc=" {
 		t.Errorf("round trip changed the record: %+v", s)
 	}
 	if !s.Accepted.Equal(accepted) {

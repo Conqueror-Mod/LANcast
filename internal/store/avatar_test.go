@@ -9,7 +9,7 @@ import (
 func TestAnAccountChoosesAndClearsItsAvatar(t *testing.T) {
 	ctx := context.Background()
 	st := newStore(t)
-	if _, err := st.CreateUser(ctx, "u1", "chris", "hash", "admin"); err != nil {
+	if _, err := st.CreateUser(ctx, "u1", "dana", "hash", "admin"); err != nil {
 		t.Fatal(err)
 	}
 	if got, err := st.Avatar(ctx, "u1"); err != nil || got != "" {
@@ -34,7 +34,7 @@ func TestAnAccountChoosesAndClearsItsAvatar(t *testing.T) {
 func TestAnUnknownAvatarIsRefused(t *testing.T) {
 	ctx := context.Background()
 	st := newStore(t)
-	if _, err := st.CreateUser(ctx, "u1", "chris", "hash", "admin"); err != nil {
+	if _, err := st.CreateUser(ctx, "u1", "dana", "hash", "admin"); err != nil {
 		t.Fatal(err)
 	}
 	for _, bad := range []string{"dragon", "https://example.com/me.png", "OWL"} {

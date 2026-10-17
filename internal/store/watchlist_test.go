@@ -34,7 +34,7 @@ func seedWatchlist(t *testing.T) watchFixture {
 		}
 		return id
 	}
-	u, err := st.CreateUser(ctx, "", "chris", "h", RoleMember)
+	u, err := st.CreateUser(ctx, "", "dana", "h", RoleMember)
 	if err != nil {
 		t.Fatal(err)
 	}

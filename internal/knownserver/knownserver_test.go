@@ -85,7 +85,7 @@ func TestCheck(t *testing.T) {
 	const pin = "3Xk0aBcD1efGh2IjKlMn3OpQrStUvWxYz0123456789="
 	const other = "ZZZZaBcD1efGh2IjKlMn3OpQrStUvWxYz0123456789="
 
-	l := List{}.Accept(Server{Address: "192.168.1.21:8080", Name: "Chris", Pin: pin})
+	l := List{}.Accept(Server{Address: "192.168.1.21:8080", Name: "Dana", Pin: pin})
 
 	t.Run("an address never seen is a question, not a failure", func(t *testing.T) {
 		if got := l.Check("192.168.1.99:8080", pin); got != TrustUnknown {
@@ -148,7 +148,7 @@ func TestTheSameKeyInANewCertificateStillMatches(t *testing.T) {
 }
 
 func TestAcceptReplacesAndKeepsTheName(t *testing.T) {
-	l := List{}.Accept(Server{Address: "media-pc:8080", Name: "Chris", Pin: "one"})
+	l := List{}.Accept(Server{Address: "media-pc:8080", Name: "Dana", Pin: "one"})
 	l = l.Accept(Server{Address: "media-pc:8080", Pin: "two"})
 
 	if len(l.Servers) != 1 {
@@ -157,7 +157,7 @@ func TestAcceptReplacesAndKeepsTheName(t *testing.T) {
 	if l.Servers[0].Pin != "two" {
 		t.Errorf("pin = %q, want the new one", l.Servers[0].Pin)
 	}
-	if l.Servers[0].Name != "Chris" {
+	if l.Servers[0].Name != "Dana" {
 		t.Errorf("name = %q, want the name already given to be kept", l.Servers[0].Name)
 	}
 }

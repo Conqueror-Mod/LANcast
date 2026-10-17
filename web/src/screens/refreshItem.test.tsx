@@ -61,7 +61,7 @@ function mount(role: string, queued = 1) {
         return json({
           authenticated: true,
           configured: true,
-          user: { id: "u1", name: "chris", role },
+          user: { id: "u1", name: "dana", role },
         });
       }
       if (url.includes("/children")) return json({ items: [] });
