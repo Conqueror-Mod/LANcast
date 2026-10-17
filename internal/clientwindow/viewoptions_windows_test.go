@@ -51,12 +51,3 @@ func TestDevToolsChangesNothingElse(t *testing.T) {
 		t.Error("AutoFocus lost; the UI's keyboard model (ADR 0004) depends on it")
 	}
 }
-
-// The window is created hidden and first shown by Run, already placed: shown
-// on creation it flashed on the primary display before moving to the one it
-// was on last time.
-func TestTheWindowIsCreatedHidden(t *testing.T) {
-	if !viewOptions(Options{Title: "LANcast"}).WindowOptions.Hidden {
-		t.Error("the window is created visible, so it shows before it is placed")
-	}
-}

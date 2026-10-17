@@ -177,13 +177,3 @@ func (r *placement) get() (Placement, bool) {
 	defer r.mu.Unlock()
 	return r.p, r.got
 }
-
-// showPlaced shows a window created hidden, once it is where it belongs, and
-// gives it the keyboard as the upstream window did on creation. A maximized
-// placement was already shown by applyPlacement's SW_MAXIMIZE, and SW_SHOW
-// leaves it maximized.
-func showPlaced(hwnd uintptr, _ Placement) {
-	_, _, _ = procShowWindow.Call(hwnd, swShow)
-	_, _, _ = procUpdateWindow.Call(hwnd)
-	_, _, _ = procSetFocus.Call(hwnd)
-}

@@ -94,11 +94,12 @@ type WindowOptions struct {
 	Height uint
 	IconId uint
 	Center bool
-	// Hidden creates the window without showing it: the caller places it
-	// and shows it. LOCAL ADDITION (PROVENANCE.md): upstream always shows
-	// at once, centred on the primary display, which flashed there before
-	// LANcast could move it to its remembered place.
-	Hidden bool
+	// At creates the window at X, Y (screen pixels) instead of centred or at
+	// the default position. LOCAL ADDITION (PROVENANCE.md): upstream shows
+	// the window on creation, centred on the primary display, which flashed
+	// there before LANcast could move it to its remembered place.
+	At   bool
+	X, Y int
 }
 
 type WebViewOptions struct {
@@ -406,7 +407,11 @@ func (w *webview) CreateWithOptions(opts WindowOptions) bool {
 	}
 
 	var posX, posY uint
-	if opts.Center {
+	if opts.At {
+		// Two's complement through uint: a monitor left of or above the
+		// primary has negative coordinates, and CreateWindowEx reads int.
+		posX, posY = uint(opts.X), uint(opts.Y)
+	} else if opts.Center {
 		// get screen size
 		screenWidth, _, _ := w32.User32GetSystemMetrics.Call(w32.SM_CXSCREEN)
 		screenHeight, _, _ := w32.User32GetSystemMetrics.Call(w32.SM_CYSCREEN)
@@ -438,11 +443,9 @@ func (w *webview) CreateWithOptions(opts WindowOptions) bool {
 	// window's empty surface (thumbnail.go).
 	w.enableIconicPreview()
 
-	if !opts.Hidden {
-		_, _, _ = w32.User32ShowWindow.Call(w.hwnd, w32.SWShow)
-		_, _, _ = w32.User32UpdateWindow.Call(w.hwnd)
-		_, _, _ = w32.User32SetFocus.Call(w.hwnd)
-	}
+	_, _, _ = w32.User32ShowWindow.Call(w.hwnd, w32.SWShow)
+	_, _, _ = w32.User32UpdateWindow.Call(w.hwnd)
+	_, _, _ = w32.User32SetFocus.Call(w.hwnd)
 
 	if !w.browser.Embed(w.hwnd) {
 		return false

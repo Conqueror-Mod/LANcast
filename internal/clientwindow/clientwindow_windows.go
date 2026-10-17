@@ -68,6 +68,19 @@ func open(o Options) error {
 
 	opts := viewOptions(o)
 	opts.OnClose = onClose
+	/*
+	 * Created where it was last time, not centred on the primary display
+	 * and then moved: that showed a small white window on the wrong screen
+	 * at every start. Resolve refuses a placement it cannot honour, and then
+	 * the window is centred, which is always on a screen somebody is
+	 * looking at.
+	 */
+	if target, ok := Resolve(o.Placement, Monitors()); ok {
+		wo := &opts.WindowOptions
+		wo.At, wo.Center = true, false
+		wo.X, wo.Y = target.Left, target.Top
+		wo.Width, wo.Height = uint(target.Width()), uint(target.Height())
+	}
 	w = webview2.NewWithOptions(opts)
 	if w == nil {
 		return errors.New("client window: the web view could not be created")
@@ -75,20 +88,9 @@ func open(o Options) error {
 	defer w.Destroy()
 
 	/*
-	 * Put the window where it was, and only then show it.
-	 *
-	 * Reported, twice: a small white window appears on the primary display
-	 * and then jumps to the remembered one. The vendored web view used to
-	 * create the window, show it and embed the browser inside NewWithOptions,
-	 * so it had been on screen, centred, for as long as embedding took before
-	 * this line could move it. Hiding it around the move only removed the
-	 * slide. It is now created hidden (WindowOptions.Hidden, a local addition
-	 * recorded in PROVENANCE.md, approved 2026-10-17) and first shown here,
-	 * already in place.
-	 *
-	 * Center: true stays the fallback. Resolve refuses a placement it cannot
-	 * honour, and a centred window is always on a screen somebody is looking
-	 * at, which no remembered position can promise.
+	 * The window was created in place (above). applyPlacement still runs:
+	 * it maximizes a window that was maximized, and sets the exact rectangle
+	 * again after a monitor of another DPI has rescaled it on arrival.
 	 */
 	hwnd := uintptr(w.Window())
 	if o.Placement.Valid() {
@@ -99,7 +101,6 @@ func open(o Options) error {
 		// (dpi_windows.go).
 		scaleForMonitor(hwnd, o.Width, o.Height)
 	}
-	showPlaced(hwnd, o.Placement)
 
 	// Fullscreen is the host's job, not the page's.
 	//
@@ -251,8 +252,6 @@ func check() error {
 var (
 	user32                  = windows.NewLazySystemDLL("user32")
 	procShowWindow          = user32.NewProc("ShowWindow")
-	procUpdateWindow        = user32.NewProc("UpdateWindow")
-	procSetFocus            = user32.NewProc("SetFocus")
 	procSetForegroundWindow = user32.NewProc("SetForegroundWindow")
 )
 
@@ -392,8 +391,6 @@ func viewOptions(o Options) webview2.WebViewOptions {
 			Width:  uint(o.Width),
 			Height: uint(o.Height),
 			Center: true,
-			// Shown by Run once placed, never before (showPlaced).
-			Hidden: true,
 		},
 		DataPath:        o.DataDir,
 		UserAgentSuffix: userAgentSuffix(o.AppVersion),
