@@ -87,6 +87,15 @@ outside. Recorded here because every local change to a vendored copy has to stay
 visible; the alternative was forking the window procedure into the caller, which
 is more code in a worse place.
 
+## Local addition — `WindowOptions.Hidden` (2026-10-17)
+
+Creates the window without showing it, so the caller can place it first and
+show it there. Upstream shows the window inside `CreateWithOptions`, centred
+on the primary display, before returning; LANcast then moved it to the
+monitor it was on last time, and the window was visible on the wrong screen
+for as long as embedding the browser took. Reported as a small white window
+flashing at startup. Unset, the behaviour is upstream's.
+
 ## Local addition — the video overlay (2026-09-16)
 
 `overlay.go`, the `overlay`, `shield` and `handingOff` fields, a branch in

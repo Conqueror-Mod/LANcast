@@ -75,40 +75,31 @@ func open(o Options) error {
 	defer w.Destroy()
 
 	/*
-	 * Put the window back where it was, as early as we are able to.
+	 * Put the window where it was, and only then show it.
 	 *
-	 * Reported: it opens on the primary display for a moment and then jumps to
-	 * the remembered one. That is real and only partly fixable from here. The
-	 * vendored web view creates the window, shows it, and embeds the browser
-	 * inside NewWithOptions — so by the time this line runs it has already
-	 * been on screen, centred, for as long as embedding took.
-	 *
-	 * Hiding it around the move is what removes the *jump*: the window
-	 * disappears and comes back in the right place rather than sliding across
-	 * the desk, and doing it here rather than after the bindings and Navigate
-	 * cuts most of the time it spends in the wrong position.
-	 *
-	 * Removing the appearance entirely means the window being created at the
-	 * right coordinates, which means `WindowOptions` carrying an X and a Y.
-	 * That is a change to a package PROVENANCE.md deliberately keeps as an
-	 * unmodified trimmed copy, and it is not worth spending that property on a
-	 * flicker without saying so out loud first.
+	 * Reported, twice: a small white window appears on the primary display
+	 * and then jumps to the remembered one. The vendored web view used to
+	 * create the window, show it and embed the browser inside NewWithOptions,
+	 * so it had been on screen, centred, for as long as embedding took before
+	 * this line could move it. Hiding it around the move only removed the
+	 * slide. It is now created hidden (WindowOptions.Hidden, a local addition
+	 * recorded in PROVENANCE.md, approved 2026-10-17) and first shown here,
+	 * already in place.
 	 *
 	 * Center: true stays the fallback. Resolve refuses a placement it cannot
 	 * honour, and a centred window is always on a screen somebody is looking
 	 * at, which no remembered position can promise.
 	 */
+	hwnd := uintptr(w.Window())
 	if o.Placement.Valid() {
-		hwnd := uintptr(w.Window())
-		_, _, _ = procShowWindow.Call(hwnd, swHide)
 		applyPlacement(hwnd, o.Placement)
-		_, _, _ = procShowWindow.Call(hwnd, swShow)
 	} else {
 		// No remembered place: the default size is in 96-DPI units, and a
 		// DPI-aware window is created at exactly the pixels asked for
 		// (dpi_windows.go).
-		scaleForMonitor(uintptr(w.Window()), o.Width, o.Height)
+		scaleForMonitor(hwnd, o.Width, o.Height)
 	}
+	showPlaced(hwnd, o.Placement)
 
 	// Fullscreen is the host's job, not the page's.
 	//
@@ -260,6 +251,8 @@ func check() error {
 var (
 	user32                  = windows.NewLazySystemDLL("user32")
 	procShowWindow          = user32.NewProc("ShowWindow")
+	procUpdateWindow        = user32.NewProc("UpdateWindow")
+	procSetFocus            = user32.NewProc("SetFocus")
 	procSetForegroundWindow = user32.NewProc("SetForegroundWindow")
 )
 
@@ -399,6 +392,8 @@ func viewOptions(o Options) webview2.WebViewOptions {
 			Width:  uint(o.Width),
 			Height: uint(o.Height),
 			Center: true,
+			// Shown by Run once placed, never before (showPlaced).
+			Hidden: true,
 		},
 		DataPath:        o.DataDir,
 		UserAgentSuffix: userAgentSuffix(o.AppVersion),
