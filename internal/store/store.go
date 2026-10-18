@@ -2871,6 +2871,26 @@ func (s *Store) CollectionsOf(ctx context.Context, itemID int64) ([]Item, error)
 	return scanItems(rows)
 }
 
+/*
+ * CollectionsShownFor is the collections a title page offers to open: those
+ * the item belongs to that are real (two or more present films, the same
+ * rule every listing applies) and not missing. CollectionsOf answers about
+ * membership, including a provider's collection of one, which is a
+ * duplicate tile of the film rather than a collection.
+ */
+func (s *Store) CollectionsShownFor(ctx context.Context, itemID int64) ([]Item, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT `+itemCols+`
+		FROM media_item
+		WHERE id IN (SELECT collection_id FROM item_collection WHERE item_id = ?)
+		  AND kind = 'collection' AND missing = 0 AND `+collectionIsReal+`
+		ORDER BY sort_title`, itemID)
+	if err != nil {
+		return nil, fmt.Errorf("collections shown for item: %w", err)
+	}
+	defer rows.Close()
+	return scanItems(rows)
+}
+
 // ContinueWatching returns a user's in-progress items, most recently played
 // first: everything they have started but not finished. "Started" means a saved
 // position past zero; "not finished" means the watched flag is unset, so an item

@@ -3490,6 +3490,23 @@ export function useStopTranscode() {
  * and so does finishing something (invalidateWatchState), which are the two
  * ways somebody could be looking at a stale one.
  */
+/*
+ * The collections a title is in, for "View collection" on its page. Real
+ * collections only (the server's rule): a provider's collection of one is not
+ * listed. Membership changes with a rescan or a metadata refresh, which
+ * invalidate ["items"] and ["item"] but not this; a stale entry here opens a
+ * collection page that answers for itself, so it is not worth a sibling key.
+ */
+export function useItemCollections(itemID: number) {
+  return useQuery({
+    queryKey: ["item-collections", itemID],
+    queryFn: ({ signal }) =>
+      apiGet<{ items: Item[] }>(`/api/items/${itemID}/collections`, signal),
+    enabled: itemID > 0,
+    staleTime: 60_000,
+  });
+}
+
 export function useToRate() {
   return useQuery({
     queryKey: ["to-rate"],

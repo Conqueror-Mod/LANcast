@@ -10,6 +10,7 @@ import {
   useSetWatchedByID,
   useWatchlist,
   useToRate,
+  useItemCollections,
   watchlistItems,
 } from "@/api/hooks";
 import { useState } from "react";
@@ -18,6 +19,7 @@ import { usePlayback } from "@/playback/PlaybackProvider";
 import { Shelf } from "@/components/Shelf";
 import type { MenuAction } from "@/components/Menu";
 import { HomeHero } from "@/components/HomeHero";
+import { collectionsMenu } from "@/lib/collectionsMenu";
 import { HomeMasthead } from "@/components/HomeMasthead";
 import { useMarkAll } from "@/components/itemActions";
 import { isMusic, watchedVerb } from "@/lib/kind";
@@ -219,6 +221,10 @@ export function Home() {
    * make them only when they are the chosen one.
    */
   const hero = useHeroSpotlight(recentlyAddedVideo);
+  // The collections the spotlight's title is in, for its More Options.
+  const { data: heroCollections } = useItemCollections(
+    hero && hero.item.kind !== "collection" ? hero.item.id : 0,
+  );
 
   // The hero already shows this item at full size. Repeating it as the first
   // tile of the shelf directly beneath is the kind of duplication that makes a
@@ -331,11 +337,15 @@ export function Home() {
           // The shelf's menu, when the spotlight is showing something from
           // the shelf: the one place a collection's next film or a resumed
           // title can be taken off without opening it.
-          actions={
+          //
+          // And "View collection" for a title in one, on the shelf or not:
+          // the spotlight is often the first place a film is seen.
+          actions={heroActions(
             (continueWatching ?? []).some((i) => i.id === hero.item.id)
               ? continueActions(hero.item)
-              : undefined
-          }
+              : [],
+            collectionsMenu(hero.item, heroCollections?.items, (id) => navigate(`/item/${id}`)),
+          )}
         />
       )}
       <div className="home__shelves">
@@ -389,4 +399,15 @@ export function Home() {
       )}
     </div>
   );
+}
+
+/*
+ * The spotlight's More Options: the shelf's entries when its title is on the
+ * shelf, with the collection entries before "Go to details", which stays last
+ * as it is everywhere. No entries at all means no menu.
+ */
+export function heroActions(shelf: MenuAction[], collections: MenuAction[]): MenuAction[] | undefined {
+  if (shelf.length === 0 && collections.length === 0) return undefined;
+  const last = shelf.length > 0 && shelf[shelf.length - 1].label === "Go to details" ? shelf.length - 1 : shelf.length;
+  return [...shelf.slice(0, last), ...collections, ...shelf.slice(last)];
 }
