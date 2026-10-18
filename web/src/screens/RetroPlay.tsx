@@ -19,6 +19,12 @@ import {
   openGame,
   retroCommand,
   rewindPreferred,
+  gameDisplay,
+  setGameDisplay,
+  nextAspect,
+  aspectLabel,
+  DEFAULT_DISPLAY,
+  type RetroDisplay,
   setRewindPreferred,
   slotLabel,
   stopGame,
@@ -65,6 +71,25 @@ export function RetroPlay() {
   const [fastForward, setFastForward] = useState(false);
   const [rewind, setRewind] = useState(rewindPreferred);
   const [mode, setMode] = useState<"normal" | "fast" | "rewind">("normal");
+  // How the picture is drawn, for this console (2026-10-18).
+  const [display, setDisplay] = useState<RetroDisplay>(DEFAULT_DISPLAY);
+  const platform = item?.platform ?? "";
+  useEffect(() => {
+    if (!platform) return;
+    let live = true;
+    void gameDisplay(platform).then((d) => live && setDisplay(d));
+    return () => {
+      live = false;
+    };
+  }, [platform]);
+  const changeDisplay = useCallback(
+    (patch: Partial<RetroDisplay>) => {
+      const next = { ...display, ...patch };
+      setDisplay(next);
+      void setGameDisplay(platform, next).catch(() => setNotice("The picture setting could not be changed."));
+    },
+    [display, platform],
+  );
 
   // The page is see-through over the picture while this screen is up, and a
   // docked film floats above it rather than above the main window (ADR 0076).
@@ -256,6 +281,27 @@ export function RetroPlay() {
             </div>
           )}
           <MenuButton label={`Game volume: ${volumeLabel(volume)}`} onSelect={cycleVolume} />
+          <div className="retro-play__group" aria-label="Display">
+            <MenuButton
+              label={`Pixels: ${display.smooth ? "Smooth" : "Sharp"}`}
+              onSelect={() => changeDisplay({ smooth: !display.smooth })}
+            />
+            <MenuButton
+              label={`Size: ${display.fill ? "Fill the screen" : "Whole steps"}`}
+              onSelect={() => changeDisplay({ fill: !display.fill })}
+            />
+            <MenuButton
+              label={`Shape: ${aspectLabel(display.aspect)}`}
+              onSelect={() => changeDisplay({ aspect: nextAspect(display.aspect) })}
+            />
+            <MenuButton
+              label={`Scanlines: ${display.scanlines ? "On" : "Off"}`}
+              onSelect={() => changeDisplay({ scanlines: !display.scanlines })}
+            />
+            <p className="retro-play__hint">
+              Remembered for {platformLabel(item?.platform)}. Scanlines don't show on games drawn in 3D, such as N64.
+            </p>
+          </div>
           <div className="retro-play__group" aria-label="Speed">
             <MenuButton
               label={`Fast-forward: ${fastForward ? "On" : "Off"}`}
