@@ -5,7 +5,7 @@ import type { FacePerson } from "@/api/hooks";
 /*
  * One person, one tile.
  *
- * Reported from a real library: "Georgia Bowles" appeared three times, with
+ * Reported from a real library: "Gerda Blake" appeared three times, with
  * counts of 80, 1 and 1 — the result of accepting near-miss suggestions, which
  * names a group rather than merging it. The page read as three different
  * people who happened to share a name.
@@ -83,7 +83,7 @@ describe("collapsing people by name", () => {
   it("keeps different people apart", () => {
     const got = collapsePeople([
       person(1, "Gerda Blake", 5),
-      person(2, "Carl Bowles", 3),
+      person(2, "Carl Hodge", 3),
       person(3, null, 1),
     ]);
     expect(got).toHaveLength(3);

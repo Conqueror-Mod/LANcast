@@ -6,7 +6,7 @@ import type { FacePerson } from "@/api/hooks";
  * Naming does not merge groups, deliberately: a re-cluster seeds named groups
  * as anchors and never renames or dissolves one, which is the locked-fields
  * rule applied to identity. The consequence is that accepting three near-miss
- * suggestions leaves four groups all called Georgia Bowles, and the page
+ * suggestions leaves four groups all called Gerda Blake, and the page
  * listed her four times — with counts of 80, 1, 1 and 1, as though the machine
  * had found four different people who happened to share a name.
  *
@@ -28,7 +28,7 @@ export type CollapsedPerson = {
    * The groups collapsed into this row, largest first.
    *
    * Plural because renaming has to reach all of them. Renaming one of four
-   * groups called Georgia Bowles would split her back into two people, which
+   * groups called Gerda Blake would split her back into two people, which
    * is the bug this function exists to prevent, arriving by a different route.
    */
   clusterIDs: number[];

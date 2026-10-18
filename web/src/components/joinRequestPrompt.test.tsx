@@ -38,7 +38,7 @@ let pending: unknown[] = [];
 
 const request = {
   id: "q1",
-  host_id: "u_chris",
+  host_id: "u_dana",
   peer: "FP",
   person: "u_g",
   name: "Gerda",
@@ -52,14 +52,14 @@ function session(members = 1) {
   return {
     id: "r1",
     item_id: 5,
-    host_id: "u_chris",
+    host_id: "u_dana",
     position_ms: 12_000,
     paused: false,
     updated_at: 0,
     age_ms: 0,
     created_at: 0,
     members: [
-      { user_id: "u_chris", name: "Dana", host: true, last_seen: 0 },
+      { user_id: "u_dana", name: "Dana", host: true, last_seen: 0 },
       ...(members > 1
         ? [{ user_id: "peer:FP/u_g", name: "Gerda", host: false, last_seen: 0, peer: "FP", server: "Utopia" }]
         : []),
@@ -77,7 +77,7 @@ function mockServer() {
       const json = (v: unknown, status = 200) =>
         new Response(JSON.stringify(v), { status, headers: { "Content-Type": "application/json" } });
       if (url === "/api/auth/status")
-        return json({ authenticated: true, user: { id: "u_chris", name: "Dana", role: "admin" } });
+        return json({ authenticated: true, user: { id: "u_dana", name: "Dana", role: "admin" } });
       if (url === "/api/together/requests") return json({ requests: pending });
       if (url === "/api/together" && method === "POST") return json(session(), 201);
       if (url === "/api/together/requests/q1/accept") {

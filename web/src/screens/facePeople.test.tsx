@@ -404,7 +404,7 @@ describe("accepting a suggested match", () => {
 /*
  * A person named across several groups is one tile.
  *
- * Reported: "Georgia Bowles" three times, at 80, 1 and 1 — the result of
+ * Reported: "Gerda Blake" three times, at 80, 1 and 1 — the result of
  * accepting near-miss suggestions, which names a group rather than merging it.
  * The page read as three people who happened to share a name.
  */
