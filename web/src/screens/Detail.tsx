@@ -73,6 +73,7 @@ import { useDownloads, downloadURL } from "@/lib/downloads";
 import { RateItem } from "@/components/RateItem";
 import { TagItem } from "@/components/TagItem";
 import { PointMenu, type MenuAction, type MenuPoint } from "@/components/Menu";
+import { collectionsMenu } from "@/lib/collectionsMenu";
 import type { Credit } from "@/api/types";
 import "./Detail.css";
 
@@ -349,22 +350,6 @@ function MoreOptions({ actions }: { actions: MenuAction[] }) {
       {at && <PointMenu at={at} actions={actions} autoFocus onClose={() => setAt(null)} />}
     </>
   );
-}
-
-/*
- * "View collection", once per collection the title is in. One collection says
- * just that; several name themselves, since "View collection" twice would not
- * say which is which.
- */
-export function collectionsMenu(
-  item: Item,
-  collections: Item[] | undefined,
-  open: (id: number) => void,
-): MenuAction[] {
-  if (item.kind === "collection") return [];
-  const list = Array.isArray(collections) ? collections.filter((c) => c.id !== item.id) : [];
-  if (list.length === 1) return [{ label: "View collection", onSelect: () => open(list[0].id) }];
-  return list.map((c) => ({ label: `View ${c.title}`, onSelect: () => open(c.id) }));
 }
 
 // What the detail page offers under More Options, in the order it lists them.

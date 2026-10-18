@@ -3,7 +3,7 @@
  * name for several, and never on a collection's own page.
  */
 import { describe, it, expect, vi } from "vitest";
-import { collectionsMenu } from "./Detail";
+import { collectionsMenu } from "@/lib/collectionsMenu";
 import type { Item } from "@/api/types";
 
 const film = { id: 5, kind: "movie", title: "Saw V" } as Item;
@@ -30,5 +30,22 @@ describe("View collection", () => {
     expect(collectionsMenu(film, [], vi.fn())).toEqual([]);
     expect(collectionsMenu(film, undefined, vi.fn())).toEqual([]);
     expect(collectionsMenu(saw, [horror], vi.fn())).toEqual([]);
+  });
+});
+
+describe("the spotlight's More Options", () => {
+  it("puts View collection before Go to details, and is no menu with nothing to offer", async () => {
+    const { heroActions } = await import("./Home");
+    const go = { label: "Go to details", onSelect: () => {} };
+    const watched = { label: "Mark as watched", onSelect: () => {} };
+    const view = { label: "View collection", onSelect: () => {} };
+    expect(heroActions([watched, go], [view])?.map((a) => a.label)).toEqual([
+      "Mark as watched",
+      "View collection",
+      "Go to details",
+    ]);
+    // Not on the shelf: the collection entry alone.
+    expect(heroActions([], [view])?.map((a) => a.label)).toEqual(["View collection"]);
+    expect(heroActions([], [])).toBeUndefined();
   });
 });
