@@ -161,7 +161,7 @@ func TestProgressiveLeavesOtherViewersAlone(t *testing.T) {
 	bin := fakeFFmpeg(t, `while true; do printf 'x'; sleep 0.05; done`)
 	m := newManager(t, bin)
 
-	for _, who := range []string{"dana", "georgia"} {
+	for _, who := range []string{"dana", "gerda"} {
 		rc, err := m.Progressive(context.Background(), 7, who, Options{Input: "x.mkv", Decision: remux()})
 		if err != nil {
 			t.Fatalf("%s: %v", who, err)

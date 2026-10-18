@@ -25,7 +25,7 @@ const mine = [
   { id: "bbbbbbbbbbbbbbbb", user_id: "u_1", user_name: "Dana", device: "Chrome on Android", address: "10.0.0.5", created_at: now - 90000, last_seen: now - 3600, current: false },
   { id: "cccccccccccccccc", user_id: "u_1", user_name: "Dana", device: "", created_at: now - 900000, last_seen: now - 86400 * 3, current: false },
 ];
-const everyone = [...mine, { id: "dddddddddddddddd", user_id: "u_2", user_name: "Georgia", device: "Safari on iPhone", created_at: now, last_seen: now, current: false }];
+const everyone = [...mine, { id: "dddddddddddddddd", user_id: "u_2", user_name: "Gerda", device: "Safari on iPhone", created_at: now, last_seen: now, current: false }];
 
 beforeEach(() => {
   deletes = [];
@@ -95,7 +95,7 @@ describe("authorized devices", () => {
   it("shows an administrator every account's devices, and signs out through the admin route", async () => {
     await render(true);
     expect(rows()).toHaveLength(4);
-    expect(rows()[3].textContent).toContain("Georgia");
+    expect(rows()[3].textContent).toContain("Gerda");
     await act(async () => rows()[3].querySelector("button")!.click());
     expect(deletes).toEqual(["/api/sessions/dddddddddddddddd"]);
   });

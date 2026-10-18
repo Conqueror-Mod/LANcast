@@ -43,7 +43,7 @@ func (f redeemFixture) ticketFrom(t *testing.T, id identity.Identity, mutate fun
 	t.Helper()
 	now := time.Now()
 	c := guestticket.Claims{
-		Subject:  "u_georgia",
+		Subject:  "u_gerda",
 		Audience: f.hostFP,
 		Nonce:    "nonce-" + t.Name() + time.Now().Format("150405.000000000"),
 		IssuedAt: now,
@@ -226,7 +226,7 @@ func TestRedemptionWorksCrossOrigin(t *testing.T) {
 		t.Fatal(err)
 	}
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Origin", "https://georgia.example")
+	req.Header.Set("Origin", "https://gerda.example")
 
 	resp, err := f.h.srv.Client().Do(req)
 	if err != nil {

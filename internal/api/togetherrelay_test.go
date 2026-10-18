@@ -81,7 +81,7 @@ func newTwoServers(t *testing.T) twoServers {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := host.st.ReplaceRemotePeople(ctx, guestFP, []store.RemotePerson{{ID: gu.ID, Name: "Georgia"}}); err != nil {
+	if err := host.st.ReplaceRemotePeople(ctx, guestFP, []store.RemotePerson{{ID: gu.ID, Name: "Gerda"}}); err != nil {
 		t.Fatal(err)
 	}
 	if err := host.st.GrantPresence(ctx, hu.ID, guestFP, gu.ID, time.Now()); err != nil {
@@ -175,8 +175,8 @@ func TestARoomCrossesTwoRealServers(t *testing.T) {
 			guest = &s.Members[i]
 		}
 	}
-	if guest == nil || guest.Name != "Georgia" || guest.Server != "Utopia" {
-		t.Errorf("the guest in the room is %+v, want Georgia from Utopia", guest)
+	if guest == nil || guest.Name != "Gerda" || guest.Server != "Utopia" {
+		t.Errorf("the guest in the room is %+v, want Gerda from Utopia", guest)
 	}
 
 	// The film, unshared, as a room member: the bytes arrive intact.

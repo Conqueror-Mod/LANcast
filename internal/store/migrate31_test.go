@@ -75,7 +75,7 @@ func TestRevision31BackfillsFromWatched(t *testing.T) {
 	}{
 		{1, "local", 5400000, 1},
 		{2, "local", 900000, 0},
-		{1, "georgia", 5400000, 1},
+		{1, "gerda", 5400000, 1},
 	}
 	for _, r := range seed {
 		if _, err := db.Exec(`
@@ -97,7 +97,7 @@ func TestRevision31BackfillsFromWatched(t *testing.T) {
 	}{
 		{1, "local", 1, "a finished film starts its tally at one"},
 		{2, "local", 0, "a part-watched film has never been finished"},
-		{1, "georgia", 1, "the tally belongs to each account separately"},
+		{1, "gerda", 1, "the tally belongs to each account separately"},
 	} {
 		var got int
 		if err := db.QueryRow(

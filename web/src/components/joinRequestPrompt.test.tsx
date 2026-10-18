@@ -41,7 +41,7 @@ const request = {
   host_id: "u_chris",
   peer: "FP",
   person: "u_g",
-  name: "Georgia",
+  name: "Gerda",
   server: "Utopia",
   state: "pending",
   created_at: 1_000,
@@ -61,7 +61,7 @@ function session(members = 1) {
     members: [
       { user_id: "u_chris", name: "Dana", host: true, last_seen: 0 },
       ...(members > 1
-        ? [{ user_id: "peer:FP/u_g", name: "Georgia", host: false, last_seen: 0, peer: "FP", server: "Utopia" }]
+        ? [{ user_id: "peer:FP/u_g", name: "Gerda", host: false, last_seen: 0, peer: "FP", server: "Utopia" }]
         : []),
     ],
   };
@@ -141,7 +141,7 @@ describe("a friend asking to join", () => {
   it("asks the host, by name and server, while their film plays", async () => {
     mockServer();
     await render();
-    expect(host.textContent).toContain("Georgia on Utopia would like to watch this with you");
+    expect(host.textContent).toContain("Gerda on Utopia would like to watch this with you");
     // The server's own minute, counted from when this client saw it.
     const left = host.querySelector(".join-prompt__left")?.textContent;
     expect(["60s", "59s"]).toContain(left);

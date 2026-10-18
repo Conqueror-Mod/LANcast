@@ -15,10 +15,10 @@ var (
 func TestANonceSpendsOnce(t *testing.T) {
 	n := NewNonceStore(0)
 
-	if !n.Spend("georgia", "abc", soon, t0) {
+	if !n.Spend("gerda", "abc", soon, t0) {
 		t.Fatal("first use refused")
 	}
-	if n.Spend("georgia", "abc", soon, t0) {
+	if n.Spend("gerda", "abc", soon, t0) {
 		t.Error("second use accepted; the ticket is replayable")
 	}
 }
@@ -36,8 +36,8 @@ func TestOneIssuerCannotSpendAnothersNonce(t *testing.T) {
 	if !n.Spend("mallory", "abc", soon, t0) {
 		t.Fatal("first use refused")
 	}
-	if !n.Spend("georgia", "abc", soon, t0) {
-		t.Error("georgia refused a nonce only mallory had used")
+	if !n.Spend("gerda", "abc", soon, t0) {
+		t.Error("gerda refused a nonce only mallory had used")
 	}
 }
 
@@ -54,17 +54,17 @@ func TestOverTheAllowanceItRefusesRatherThanEvicts(t *testing.T) {
 	n := NewNonceStore(max)
 
 	for i := range max {
-		if !n.Spend("georgia", fmt.Sprintf("n-%d", i), soon, t0) {
+		if !n.Spend("gerda", fmt.Sprintf("n-%d", i), soon, t0) {
 			t.Fatalf("nonce %d refused below the allowance", i)
 		}
 	}
-	if n.Spend("georgia", "one-too-many", soon, t0) {
+	if n.Spend("gerda", "one-too-many", soon, t0) {
 		t.Error("accepted past the allowance")
 	}
 
 	// The first nonce must still be spent. If it were evicted to make room,
 	// this would come back fresh — which is the vulnerability.
-	if n.Spend("georgia", "n-0", soon, t0) {
+	if n.Spend("gerda", "n-0", soon, t0) {
 		t.Error("the oldest nonce was evicted and is spendable again")
 	}
 }
@@ -77,8 +77,8 @@ func TestAFloodingPeerDoesNotRefuseTheOthers(t *testing.T) {
 	for i := range max + 10 {
 		n.Spend("mallory", fmt.Sprintf("n-%d", i), soon, t0)
 	}
-	if !n.Spend("georgia", "hello", soon, t0) {
-		t.Error("georgia refused because mallory was noisy")
+	if !n.Spend("gerda", "hello", soon, t0) {
+		t.Error("gerda refused because mallory was noisy")
 	}
 }
 
@@ -88,14 +88,14 @@ func TestExpiryFreesTheAllowance(t *testing.T) {
 	const max = 2
 	n := NewNonceStore(max)
 
-	n.Spend("georgia", "a", t0.Add(time.Minute), t0)
-	n.Spend("georgia", "b", t0.Add(time.Minute), t0)
-	if n.Spend("georgia", "c", soon, t0) {
+	n.Spend("gerda", "a", t0.Add(time.Minute), t0)
+	n.Spend("gerda", "b", t0.Add(time.Minute), t0)
+	if n.Spend("gerda", "c", soon, t0) {
 		t.Fatal("accepted past the allowance")
 	}
 
 	later := t0.Add(2 * time.Minute)
-	if !n.Spend("georgia", "c", later.Add(time.Minute), later) {
+	if !n.Spend("gerda", "c", later.Add(time.Minute), later) {
 		t.Error("still refused after the earlier nonces expired")
 	}
 }
@@ -105,20 +105,20 @@ func TestExpiryFreesTheAllowance(t *testing.T) {
 func TestAnAlreadyExpiredNonceIsRefused(t *testing.T) {
 	n := NewNonceStore(0)
 
-	if n.Spend("georgia", "old", t0.Add(-time.Second), t0) {
+	if n.Spend("gerda", "old", t0.Add(-time.Second), t0) {
 		t.Error("accepted a nonce that had already expired")
 	}
-	if n.Outstanding("georgia") != 0 {
+	if n.Outstanding("gerda") != 0 {
 		t.Error("stored it anyway")
 	}
 }
 
 func TestSweepForgetsQuietPeers(t *testing.T) {
 	n := NewNonceStore(0)
-	n.Spend("georgia", "a", t0.Add(time.Minute), t0)
+	n.Spend("gerda", "a", t0.Add(time.Minute), t0)
 
 	n.Sweep(t0.Add(2 * time.Minute))
-	if got := n.Outstanding("georgia"); got != 0 {
+	if got := n.Outstanding("gerda"); got != 0 {
 		t.Errorf("outstanding = %d after sweep, want 0", got)
 	}
 }
@@ -136,7 +136,7 @@ func TestConcurrentSpendsAdmitExactlyOne(t *testing.T) {
 	for range racers {
 		go func() {
 			defer wg.Done()
-			if n.Spend("georgia", "same", soon, t0) {
+			if n.Spend("gerda", "same", soon, t0) {
 				mu.Lock()
 				won++
 				mu.Unlock()
