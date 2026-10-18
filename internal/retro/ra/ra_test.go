@@ -87,7 +87,7 @@ func TestErrorsNeverCarryTheKey(t *testing.T) {
 
 func TestOnlyPicturePathsAreFetched(t *testing.T) {
 	for p, want := range map[string]bool{
-		"/UserPic/Player1.png":       true,
+		"/UserPic/Player1.png":     true,
 		"/Badge/123.png":           true,
 		"/Images/000001.png":       true,
 		"/Badge/123.jpg":           false,
