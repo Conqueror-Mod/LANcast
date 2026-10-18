@@ -18,7 +18,19 @@ import (
 type Pad struct {
 	Buttons uint16      // bit n is RetroPad button n (libretro.JoypadB …)
 	Analog  [2][2]int16 // [stick][axis], stick 0 left, 1 right; axis 0 x, 1 y
+	// Hot is the player's own keys, which never reach the game: hold to
+	// fast-forward, hold to rewind (HotFastForward, HotRewind).
+	Hot uint8
 }
+
+// The hold keys (decided 2026-10-18). On a pad, the stick clicks: the right
+// fast-forwards and the left rewinds, as RetroPad R3 and L3 are seldom used by
+// the 8- and 16-bit systems LANcast plays most. On a keyboard, Tab and R
+// (RetroArch's own rewind key; Backspace is Select here).
+const (
+	HotFastForward uint8 = 1 << iota
+	HotRewind
+)
 
 func (p *Pad) set(button int, down bool) {
 	if down {
@@ -95,29 +107,8 @@ const (
  * negative, as on screen.
  */
 func FromXInput(g XInputGamepad) Pad {
-	var p Pad
-	b := g.Buttons
-	p.set(libretro.JoypadUp, b&XInputDPadUp != 0)
-	p.set(libretro.JoypadDown, b&XInputDPadDown != 0)
-	p.set(libretro.JoypadLeft, b&XInputDPadLeft != 0)
-	p.set(libretro.JoypadRight, b&XInputDPadRight != 0)
-	p.set(libretro.JoypadStart, b&XInputStart != 0)
-	p.set(libretro.JoypadSelect, b&XInputBack != 0)
-	p.set(libretro.JoypadL3, b&XInputLeftThumb != 0)
-	p.set(libretro.JoypadR3, b&XInputRightThmb != 0)
-	p.set(libretro.JoypadL, b&XInputLeftShldr != 0)
-	p.set(libretro.JoypadR, b&XInputRightShdr != 0)
-	p.set(libretro.JoypadB, b&XInputA != 0)
-	p.set(libretro.JoypadA, b&XInputB != 0)
-	p.set(libretro.JoypadY, b&XInputX != 0)
-	p.set(libretro.JoypadX, b&XInputY != 0)
-	p.set(libretro.JoypadL2, g.LeftTrigger > triggerThreshold)
-	p.set(libretro.JoypadR2, g.RightTrigger > triggerThreshold)
-	p.Analog[0][0] = deadZone(g.ThumbLX, leftDeadZone)
-	p.Analog[0][1] = invert(deadZone(g.ThumbLY, leftDeadZone))
-	p.Analog[1][0] = deadZone(g.ThumbRX, rightDeadZone)
-	p.Analog[1][1] = invert(deadZone(g.ThumbRY, rightDeadZone))
-	return p
+	// The default layout (mapping.go), which is the one this always was.
+	return fromXInputWith(g, defaultCompiled)
 }
 
 /*
@@ -147,6 +138,7 @@ func invert(v int16) int16 {
 // Virtual key codes used by the keyboard fallback.
 const (
 	VKBack   = 0x08
+	VKTab    = 0x09
 	VKReturn = 0x0D
 	VKShift  = 0x10
 	VKEscape = 0x1B
@@ -156,6 +148,7 @@ const (
 	VKDown   = 0x28
 	VKA      = 0x41
 	VKQ      = 0x51
+	VKR      = 0x52
 	VKS      = 0x53
 	VKW      = 0x57
 	VKX      = 0x58
@@ -169,22 +162,11 @@ const (
  * Enter and Backspace for Start and Select. Escape is the menu, not a button,
  * so it never reaches the game.
  */
-var keyboardMap = map[int]int{
-	VKUp: libretro.JoypadUp, VKDown: libretro.JoypadDown,
-	VKLeft: libretro.JoypadLeft, VKRight: libretro.JoypadRight,
-	VKZ: libretro.JoypadB, VKX: libretro.JoypadA,
-	VKA: libretro.JoypadY, VKS: libretro.JoypadX,
-	VKQ: libretro.JoypadL, VKW: libretro.JoypadR,
-	VKReturn: libretro.JoypadStart, VKBack: libretro.JoypadSelect,
-}
+// The table itself is DefaultMapping's Keys (mapping.go).
 
 // FromKeyboard maps the keys held down onto the RetroPad.
 func FromKeyboard(down func(vk int) bool) Pad {
-	var p Pad
-	for vk, button := range keyboardMap {
-		p.set(button, down(vk))
-	}
-	return p
+	return fromKeyboardWith(down, defaultCompiled)
 }
 
 // Merge combines a pad and the keyboard into one player: either can press a
@@ -192,6 +174,7 @@ func FromKeyboard(down func(vk int) bool) Pad {
 func Merge(a, b Pad) Pad {
 	out := a
 	out.Buttons |= b.Buttons
+	out.Hot |= b.Hot
 	return out
 }
 

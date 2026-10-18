@@ -70,6 +70,8 @@ export interface RetroEvent {
     | "state-loaded"
     | "sram-saved"
     | "message"
+    | "speed"
+    | "captured"
     | "error"
     | "stopped"
     /** A pad move while the menu is open: up, down, left, right, select, back. */
@@ -91,6 +93,8 @@ declare global {
       resume: boolean,
     ) => Promise<void>;
     lancastRetroCommand?: (name: string, slot: string) => Promise<void>;
+    lancastRetroDisplay?: (platform: string) => Promise<RetroDisplay>;
+    lancastRetroSetDisplay?: (platform: string, d: RetroDisplay) => Promise<void>;
     lancastRetroStop?: () => Promise<void>;
     lancastRetroSetCore?: (platform: string, path: string) => Promise<void>;
     lancastRetroCores?: () => Promise<Record<string, string>>;
@@ -159,7 +163,39 @@ export async function openGame(itemID: number, platform: string, resume: boolean
   await window.lancastRetroOpen(itemID, ticket, platform, resume);
 }
 
-export type RetroCommand = "pause" | "resume" | "reset" | "save-state" | "load-state" | "stop";
+export type RetroCommand =
+  | "pause"
+  | "resume"
+  | "reset"
+  | "save-state"
+  | "load-state"
+  | "stop"
+  // The value rides in the second argument, "on" or "off".
+  | "fast-forward"
+  | "rewind";
+
+/*
+ * Whether rewind is on, remembered on this device. Off unless turned on: it
+ * keeps a copy of the game every other frame, which costs memory and time a
+ * person who never rewinds should not pay.
+ */
+const REWIND_KEY = "lancast:retro-rewind";
+
+export function rewindPreferred(): boolean {
+  try {
+    return localStorage.getItem(REWIND_KEY) === "on";
+  } catch {
+    return false;
+  }
+}
+
+export function setRewindPreferred(on: boolean): void {
+  try {
+    localStorage.setItem(REWIND_KEY, on ? "on" : "off");
+  } catch {
+    // Not remembered: it still applies to this game.
+  }
+}
 
 export async function retroCommand(name: RetroCommand, slot = ""): Promise<void> {
   if (!window.lancastRetroCommand) return;
@@ -272,4 +308,47 @@ export function subscribeGameOnScreen(fn: () => void): () => void {
   return () => {
     screenListeners.delete(fn);
   };
+}
+
+/*
+ * How a console's picture is drawn (the game menu's Display), remembered per
+ * console by the desktop app. All off and aspect "" is how it always looked.
+ */
+export interface RetroDisplay {
+  smooth: boolean;
+  fill: boolean;
+  aspect: "" | "4:3" | "square" | "stretch";
+  scanlines: boolean;
+}
+
+export const DEFAULT_DISPLAY: RetroDisplay = { smooth: false, fill: false, aspect: "", scanlines: false };
+
+export async function gameDisplay(platform: string): Promise<RetroDisplay> {
+  if (!window.lancastRetroDisplay) return DEFAULT_DISPLAY;
+  try {
+    return { ...DEFAULT_DISPLAY, ...(await window.lancastRetroDisplay(platform)) };
+  } catch {
+    return DEFAULT_DISPLAY;
+  }
+}
+
+export async function setGameDisplay(platform: string, d: RetroDisplay): Promise<void> {
+  if (!window.lancastRetroSetDisplay) return;
+  await window.lancastRetroSetDisplay(platform, d);
+}
+
+const ASPECTS: RetroDisplay["aspect"][] = ["", "4:3", "square", "stretch"];
+const ASPECT_LABEL: Record<RetroDisplay["aspect"], string> = {
+  "": "Original",
+  "4:3": "4:3",
+  square: "Square pixels",
+  stretch: "Stretch",
+};
+
+export function nextAspect(a: RetroDisplay["aspect"]): RetroDisplay["aspect"] {
+  return ASPECTS[(ASPECTS.indexOf(a) + 1) % ASPECTS.length];
+}
+
+export function aspectLabel(a: RetroDisplay["aspect"]): string {
+  return ASPECT_LABEL[a] ?? "Original";
 }

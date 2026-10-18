@@ -131,7 +131,7 @@ func TestLibmpvStillPlaysAfterAGame(t *testing.T) {
 			Depth: true, Stencil: true}, 64, 32); err != nil {
 			t.Fatalf("GL init: %v", err)
 		}
-		gl.Present(64, 32, 2, true)
+		gl.Present(64, 32, 2, true, Display{})
 		gl.Close()
 	}()
 	dc, _, _ := procGetDC.Call(withGL)

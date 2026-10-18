@@ -60,6 +60,7 @@ const (
 	glTextureMinFilter      = 0x2801
 	glTextureMagFilter      = 0x2800
 	glNearest               = 0x2600
+	glLinear                = 0x2601
 	glRGBA8                 = 0x8058
 	glRGBA                  = 0x1908
 	glUnsignedByte          = 0x1401
@@ -316,7 +317,7 @@ func (g *WGL) makeFramebuffer(w, h int, depth, stencil bool) error {
 
 func (g *WGL) Framebuffer() uintptr { return uintptr(g.fbo) }
 
-func (g *WGL) Present(width, height int, aspect float64, bottomLeftOrigin bool) {
+func (g *WGL) Present(width, height int, aspect float64, bottomLeftOrigin bool, d Display) {
 	if g.rc == 0 || width <= 0 || height <= 0 {
 		return
 	}
@@ -331,7 +332,7 @@ func (g *WGL) Present(width, height int, aspect float64, bottomLeftOrigin bool) 
 		return
 	}
 	ww, wh := int(rc.right-rc.left), int(rc.bottom-rc.top)
-	dst := Layout(ww, wh, width, height, aspect)
+	dst := LayoutFor(ww, wh, width, height, aspect, d)
 
 	call(g.f.bindFramebuffer, glReadFramebuffer, uintptr(g.fbo))
 	if g.CaptureCentre {
@@ -353,7 +354,7 @@ func (g *WGL) Present(width, height int, aspect float64, bottomLeftOrigin bool) 
 		call(g.f.blitFramebuffer,
 			0, uintptr(sy0), uintptr(width), uintptr(sy1),
 			uintptr(dx0), uintptr(dy0), uintptr(dx0+dst.W), uintptr(dy0+dst.H),
-			glColorBufferBit, glNearest)
+			glColorBufferBit, blitFilter(d))
 	}
 	_, _, _ = procSwapBuffers.Call(g.dc)
 	// The core binds its framebuffer from get_current_framebuffer each frame;
@@ -380,4 +381,12 @@ func (g *WGL) Close() {
 	}
 	g.dc, g.rc, g.fbo, g.tex, g.rb = 0, 0, 0, 0, 0
 	g.f = glFuncs{}
+}
+
+// blitFilter is the scaling the menu asked for: square-edged or blended.
+func blitFilter(d Display) uintptr {
+	if d.Smooth {
+		return glLinear
+	}
+	return glNearest
 }

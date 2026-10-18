@@ -140,7 +140,7 @@ type fakeVideo struct {
 	aspect float64
 }
 
-func (v *fakeVideo) Present(b []byte, w, h int, aspect float64) {
+func (v *fakeVideo) Present(b []byte, w, h int, aspect float64, _ Display) {
 	v.mu.Lock()
 	defer v.mu.Unlock()
 	v.frames++

@@ -20,7 +20,7 @@ import (
 // VideoSink shows a frame. Called on the core's thread with BGRA rows the
 // session reuses for the next frame, so it must draw or copy before returning.
 type VideoSink interface {
-	Present(bgra []byte, width, height int, aspect float64)
+	Present(bgra []byte, width, height int, aspect float64, d Display)
 }
 
 // AudioSink plays interleaved stereo samples. Write blocks while its buffer
@@ -46,7 +46,7 @@ type GLSink interface {
 	Framebuffer() uintptr
 	ProcAddress(name string) uintptr
 	// Present shows the part of the framebuffer the core drew this frame.
-	Present(width, height int, aspect float64, bottomLeftOrigin bool)
+	Present(width, height int, aspect float64, bottomLeftOrigin bool, d Display)
 	Close()
 }
 
@@ -82,7 +82,7 @@ type SaveStore interface {
 
 // Event is something the person should hear about.
 type Event struct {
-	Kind string // started, options, paused, resumed, menu, state-saved, state-loaded, sram-saved, message, error, stopped
+	Kind string // started, options, paused, resumed, menu, state-saved, state-loaded, sram-saved, message, error, stopped, speed
 	Slot string
 	Text string
 	Err  error
@@ -117,8 +117,10 @@ type Config struct {
 	// makes and an N64 core cannot run without.
 	GL    GLSink
 	Audio AudioSink // nil runs on a timer instead
-	Input InputSource
-	Saves SaveStore
+	// Display is how the picture starts out drawn; SetDisplay changes it.
+	Display Display
+	Input   InputSource
+	Saves   SaveStore
 	// ResumeState loads this slot after the game starts, typically "auto",
 	// which Stop writes. Empty starts the game fresh.
 	ResumeState string
@@ -133,7 +135,7 @@ type Config struct {
 }
 
 type command struct {
-	kind string // pause, resume, stop, reset, save-state, apply-state, set-option
+	kind string // pause, resume, stop, reset, save-state, apply-state, set-option, fast-forward, rewind
 	slot string
 	key  string
 	val  string
@@ -171,7 +173,41 @@ type Session struct {
 	scaled []int16
 
 	stats frameStats // core thread only
+
+	// Speed and rewind (2026-10-18), core thread only. fastForward is the
+	// menu's toggle; the hold keys arrive in pads[].Hot. rewind holds the
+	// states rewinding steps back through, taken every rewindEvery frames
+	// while rewindOn. skipVideo and muted are set around frames nobody
+	// should see or hear: all but the last of a fast-forwarded tick, and
+	// every rewound one. shown is what the page was last told (the badge).
+	fastForward bool
+	rewindOn    bool
+	rewind      *rewindRing
+	rewindBuf   []byte
+	frameNo     int
+	skipVideo   bool
+	muted       bool
+	shown       string
+
+	// display is how the picture is drawn, set from any goroutine
+	// (SetDisplay); scan is the core thread's scanline buffer.
+	display atomic.Pointer[Display]
+	scan    []byte
 }
+
+// Speed and rewind's numbers. Three times speed is what fast-forward means
+// in most players; a state every other frame steps rewind back at twice
+// real time; twenty seconds, or 128 MB, whichever is reached first; and a
+// core whose single state is larger than rewindMaxState (an N64's runs to
+// many megabytes) does not rewind at all, rather than spending the frame on
+// copying it.
+const (
+	fastFactor     = 3
+	rewindEvery    = 2
+	rewindStates   = 600
+	rewindBytes    = 128 << 20
+	rewindMaxState = 8 << 20
+)
 
 // New prepares a session. Nothing runs until Run.
 func New(cfg Config) *Session {
@@ -184,8 +220,11 @@ func New(cfg Config) *Session {
 	if cfg.OnEvent == nil {
 		cfg.OnEvent = func(Event) {}
 	}
-	s := &Session{cfg: cfg, cmds: make(chan command, 16), vars: map[string]libretro.Variable{}}
+	s := &Session{cfg: cfg, cmds: make(chan command, 16), vars: map[string]libretro.Variable{},
+		rewind: newRewindRing(rewindStates, rewindBytes)}
 	s.volume.Store(math.Float64bits(1))
+	d := cfg.Display
+	s.display.Store(&d)
 	return s
 }
 
@@ -202,7 +241,26 @@ func (s *Session) send(c command) {
 func (s *Session) Pause()  { s.send(command{kind: "pause"}) }
 func (s *Session) Resume() { s.send(command{kind: "resume"}) }
 func (s *Session) Reset()  { s.send(command{kind: "reset"}) }
-func (s *Session) Stop()   { s.send(command{kind: "stop"}) }
+
+// SetDisplay changes how the picture is drawn, from the next frame. Safe
+// from any goroutine.
+func (s *Session) SetDisplay(d Display) { s.display.Store(&d) }
+
+// SetFastForward turns the menu's fast-forward on or off. The hold keys work
+// either way.
+func (s *Session) SetFastForward(on bool) { s.send(command{kind: "fast-forward", val: onOff(on)}) }
+
+// SetRewind turns rewinding on or off. Off by default: it costs a state copy
+// every other frame, and turning it off drops the states it held.
+func (s *Session) SetRewind(on bool) { s.send(command{kind: "rewind", val: onOff(on)}) }
+
+func onOff(b bool) string {
+	if b {
+		return "on"
+	}
+	return "off"
+}
+func (s *Session) Stop() { s.send(command{kind: "stop"}) }
 
 // SaveState writes the game's state to a slot.
 func (s *Session) SaveState(slot string) { s.send(command{kind: "save-state", slot: slot}) }
@@ -394,7 +452,7 @@ func (s *Session) run(ctx context.Context) (err error) {
 			continue
 		}
 		runStart := time.Now()
-		core.Run()
+		s.runTick()
 		s.frameDone(time.Since(runStart))
 		if resume != nil {
 			resumeTries++
@@ -515,6 +573,14 @@ func (s *Session) handle(c command) {
 		s.stopping = true
 	case "reset":
 		core.Reset()
+		s.rewind.clear()
+	case "fast-forward":
+		s.fastForward = c.val == "on"
+	case "rewind":
+		s.rewindOn = c.val == "on"
+		if !s.rewindOn {
+			s.rewind.clear()
+		}
 	case "set-option":
 		if v, ok := s.vars[c.key]; ok {
 			s.cfg.Options = cloneWith(s.cfg.Options, c.key, validOption(v, c.val))
@@ -742,11 +808,17 @@ func (s *Session) Message(text string, _ uint32) {
 func (s *Session) Shutdown() { s.stopping = true }
 
 func (s *Session) VideoRefresh(f libretro.Frame) {
+	if s.skipVideo {
+		return
+	}
 	start := time.Now()
 	defer func() { s.stats.present += time.Since(start) }()
+	d := *s.display.Load()
+	w, h := int(f.Width), int(f.Height)
+	aspect := d.aspectFor(s.aspect(f), w, h)
 	if f.HW {
 		if s.glReady {
-			s.cfg.GL.Present(int(f.Width), int(f.Height), s.aspect(f), s.hw.BottomLeftOrigin)
+			s.cfg.GL.Present(w, h, aspect, s.hw.BottomLeftOrigin, d)
 		}
 		return
 	}
@@ -755,7 +827,12 @@ func (s *Session) VideoRefresh(f libretro.Frame) {
 	}
 	f.Format = s.format
 	s.bgra = ToBGRA(f, s.bgra)
-	s.cfg.Video.Present(s.bgra, int(f.Width), int(f.Height), s.aspect(f))
+	if d.Scanlines {
+		s.scan = Scanlines(s.bgra, w, h, s.scan)
+		s.cfg.Video.Present(s.scan, w, h*2, aspect, d)
+		return
+	}
+	s.cfg.Video.Present(s.bgra, w, h, aspect, d)
 }
 
 /*
@@ -854,6 +931,11 @@ func (s *Session) ProcAddress(name string) uintptr {
 }
 
 func (s *Session) AudioBatch(samples []int16) int {
+	if s.muted {
+		// Fast or backwards: no sound, and nothing for the sound card to
+		// hold the loop back on.
+		return len(samples) / 2
+	}
 	if s.cfg.Audio != nil {
 		start := time.Now()
 		s.cfg.Audio.Write(s.scale(samples))
@@ -937,3 +1019,78 @@ const resumeFrames = 120
 
 // ErrNoCore is returned when a session is started without a core.
 var ErrNoCore = errors.New("retro session: no core")
+
+/*
+ * runTick runs one tick of the frame clock: a frame, three of them, or one
+ * step back.
+ *
+ * Rewinding wins over fast-forward when both are held. A step back restores
+ * the newest state left and runs one silent frame from it, which is what puts
+ * the earlier picture on screen; with nothing left to go back to, the game
+ * holds still and only the controller is read, so letting go is still seen.
+ */
+func (s *Session) runTick() {
+	core := s.cfg.Core
+	hot := s.pads[0].Hot | s.pads[1].Hot
+	rewinding := s.rewindOn && hot&HotRewind != 0
+	fast := !rewinding && (s.fastForward || hot&HotFastForward != 0)
+	switch {
+	case rewinding:
+		s.announceSpeed("rewind")
+		s.muted = true
+		if st, ok := s.rewind.pop(); ok && core.Unserialize(st) {
+			core.Run()
+		} else {
+			s.InputPoll()
+		}
+		s.muted = false
+	case fast:
+		s.announceSpeed("fast")
+		s.muted = true
+		for i := 0; i < fastFactor && !s.paused; i++ {
+			s.skipVideo = i < fastFactor-1
+			core.Run()
+			s.captureRewind()
+		}
+		s.skipVideo, s.muted = false, false
+	default:
+		s.announceSpeed("normal")
+		core.Run()
+		s.captureRewind()
+	}
+}
+
+// captureRewind keeps a state every rewindEvery frames while rewind is on.
+func (s *Session) captureRewind() {
+	if !s.rewindOn {
+		return
+	}
+	s.frameNo++
+	if s.frameNo%rewindEvery != 0 {
+		return
+	}
+	n := s.cfg.Core.SerializeSize()
+	if n <= 0 || n > rewindMaxState {
+		s.rewindOn = false
+		s.rewind.clear()
+		s.cfg.OnEvent(Event{Kind: "error", Text: "Rewind isn't available for this game."})
+		return
+	}
+	if cap(s.rewindBuf) < n {
+		s.rewindBuf = make([]byte, n)
+	}
+	buf := s.rewindBuf[:n]
+	if s.cfg.Core.Serialize(buf) {
+		s.rewind.push(buf)
+	}
+}
+
+// announceSpeed tells the page when the game starts or stops running fast or
+// backwards, for the badge it shows. Only changes are sent.
+func (s *Session) announceSpeed(mode string) {
+	if mode == s.shown || (mode == "normal" && s.shown == "") {
+		return
+	}
+	s.shown = mode
+	s.cfg.OnEvent(Event{Kind: "speed", Text: mode})
+}

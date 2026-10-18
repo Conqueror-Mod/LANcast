@@ -42,7 +42,7 @@ func TestAnUnchangedRosterIsNotAnnounced(t *testing.T) {
 	if err := s.AddPeer(ctx, Peer{Fingerprint: "FP1", Name: "Utopia"}); err != nil {
 		t.Fatal(err)
 	}
-	people := []RemotePerson{{ID: "u_g", Name: "Georgia"}}
+	people := []RemotePerson{{ID: "u_g", Name: "Gerda"}}
 	got := countAnnouncements(s)
 
 	if err := s.ReplaceRemotePeople(ctx, "FP1", people); err != nil {

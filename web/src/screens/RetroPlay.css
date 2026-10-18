@@ -110,3 +110,47 @@ html.lancast-native-video .retro-play {
   color: var(--text-primary);
   font-size: 14px;
 }
+
+/* Running fast or backwards: a small badge in the corner, not over the game. */
+.retro-play__speed {
+  position: fixed;
+  top: 20px;
+  left: 20px;
+  padding: 6px 12px;
+  border-radius: var(--radius-tile);
+  background: rgba(5, 7, 15, 0.75);
+  color: var(--text-primary);
+  font-size: 13px;
+  letter-spacing: 0.04em;
+  pointer-events: none;
+}
+
+/* A sub-page's name, under the game's title (the menu's pages, 2026-10-18). */
+.retro-play__heading {
+  margin: 4px 0 2px;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: var(--text-muted);
+}
+
+/* Waiting for a press on the Controls page. */
+.retro-play__waiting {
+  margin: 12px 0 4px;
+  font-size: 15px;
+  color: var(--text-primary);
+}
+
+/*
+ * The menu scrolls rather than running off a short screen. Its items keep
+ * their height: in a scrolling flex column they would otherwise shrink to
+ * fit, to nothing, instead of overflowing.
+ */
+.retro-play__menu {
+  max-height: calc(100vh - 48px);
+  overflow-y: auto;
+}
+
+.retro-play__menu > * {
+  flex-shrink: 0;
+}

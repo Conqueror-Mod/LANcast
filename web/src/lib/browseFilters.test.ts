@@ -232,11 +232,11 @@ describe("the face pill", () => {
       "face_cluster=6&face_cluster=51&face_cluster=88",
     );
     const pills = activePills(params, {
-      faceNames: new Map([["51", "Georgia"]]),
+      faceNames: new Map([["51", "Gerda"]]),
     });
     const face = pills.filter((p) => p.key === "face_cluster");
     expect(face).toHaveLength(1);
-    expect(face[0].label).toBe("Georgia");
+    expect(face[0].label).toBe("Gerda");
   });
 
   it("is shown even when the name has not arrived", () => {

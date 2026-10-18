@@ -184,7 +184,7 @@ describe("the three empty people pages", () => {
 
 describe("the grid", () => {
   const people = [
-    { id: 1, name: "Georgia", name_locked: true, count: 41, cover_face_id: 9 },
+    { id: 1, name: "Gerda", name_locked: true, count: 41, cover_face_id: 9 },
     { id: 2, name: null, name_locked: false, count: 88, cover_face_id: 10 },
     { id: 3, name: null, name_locked: false, count: 4, cover_face_id: 11 },
   ];
@@ -192,7 +192,7 @@ describe("the grid", () => {
   it("shows a name where there is one and a prompt where there is not", async () => {
     mount({ ready: true, people });
     await render();
-    expect(host.textContent).toContain("Georgia");
+    expect(host.textContent).toContain("Gerda");
     expect(host.textContent).toContain("Who is this?");
   });
 
@@ -245,7 +245,7 @@ describe("naming", () => {
       "value",
     )!.set!;
     await act(async () => {
-      setter.call(input, "Georgia");
+      setter.call(input, "Gerda");
       input.dispatchEvent(new Event("input", { bubbles: true }));
     });
     const save = [...host.querySelectorAll("button")].find(
@@ -262,7 +262,7 @@ describe("naming", () => {
 
     const put = sent.find((s) => s.url.includes("/api/faces/clusters/7"));
     expect(put, `no name was sent; requests: ${JSON.stringify(sent)}`).toBeTruthy();
-    expect(put!.body).toContain("Georgia");
+    expect(put!.body).toContain("Gerda");
   });
 
   /*
@@ -363,7 +363,7 @@ describe("accepting a suggested match", () => {
         window.HTMLInputElement.prototype,
         "value",
       )!.set!;
-      setter.call(input, "Georgia");
+      setter.call(input, "Gerda");
       input.dispatchEvent(new Event("input", { bubbles: true }));
     });
     const save = [...host.querySelectorAll("button")].find(
@@ -404,15 +404,15 @@ describe("accepting a suggested match", () => {
 /*
  * A person named across several groups is one tile.
  *
- * Reported: "Georgia Bowles" three times, at 80, 1 and 1 — the result of
+ * Reported: "Gerda Blake" three times, at 80, 1 and 1 — the result of
  * accepting near-miss suggestions, which names a group rather than merging it.
  * The page read as three people who happened to share a name.
  */
 describe("a person spread across groups", () => {
   const split = [
-    { id: 1, name: "Georgia Bowles", count: 80, cover_face_id: 11 },
-    { id: 2, name: "Georgia Bowles", count: 1, cover_face_id: 22 },
-    { id: 3, name: "Georgia Bowles", count: 1, cover_face_id: 33 },
+    { id: 1, name: "Gerda Blake", count: 80, cover_face_id: 11 },
+    { id: 2, name: "Gerda Blake", count: 1, cover_face_id: 22 },
+    { id: 3, name: "Gerda Blake", count: 1, cover_face_id: 33 },
   ] as unknown as FacePerson[];
 
   it("appears once, with every face counted", async () => {
@@ -421,7 +421,7 @@ describe("a person spread across groups", () => {
     const names = [...host.querySelectorAll(".faceperson__name")].map(
       (n) => n.textContent,
     );
-    expect(names.filter((n) => n === "Georgia Bowles")).toHaveLength(1);
+    expect(names.filter((n) => n === "Gerda Blake")).toHaveLength(1);
 
     const counts = [...host.querySelectorAll(".faceperson__count")].map(
       (n) => n.textContent,
@@ -449,7 +449,7 @@ describe("a person spread across groups", () => {
         window.HTMLInputElement.prototype,
         "value",
       )!.set!;
-      setter.call(input, "Georgia B");
+      setter.call(input, "Gerda B");
       input.dispatchEvent(new Event("input", { bubbles: true }));
     });
     const save = [...host.querySelectorAll("button")].find(
@@ -459,7 +459,7 @@ describe("a person spread across groups", () => {
       save.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     });
 
-    const named = sent.filter((r) => r.body.includes("Georgia B"));
+    const named = sent.filter((r) => r.body.includes("Gerda B"));
     expect(named).toHaveLength(3);
     for (const id of [1, 2, 3]) {
       expect(named.some((r) => r.url.includes(`/clusters/${id}`))).toBe(true);
@@ -578,7 +578,7 @@ describe("dismissing a suggested match", () => {
         window.HTMLInputElement.prototype,
         "value",
       )!.set!;
-      setter.call(input, "Georgia");
+      setter.call(input, "Gerda");
       input.dispatchEvent(new Event("input", { bubbles: true }));
     });
     const save = [...host.querySelectorAll("button")].find(
@@ -632,8 +632,8 @@ describe("dismissing a suggested match", () => {
  */
 describe("opening a person's photographs", () => {
   const twoGroups: FacePerson[] = [
-    { id: 6, name: "Georgia", name_locked: true, count: 277, cover_face_id: 1 },
-    { id: 51, name: "Georgia", name_locked: true, count: 73, cover_face_id: 2 },
+    { id: 6, name: "Gerda", name_locked: true, count: 277, cover_face_id: 1 },
+    { id: 51, name: "Gerda", name_locked: true, count: 73, cover_face_id: 2 },
   ];
 
   it("links to every group the person was collapsed from", async () => {
@@ -642,7 +642,7 @@ describe("opening a person's photographs", () => {
 
     // Open the person, the way somebody would.
     const tile = [...host.querySelectorAll("button")].find((b) =>
-      (b.getAttribute("aria-label") ?? "").startsWith("Georgia"),
+      (b.getAttribute("aria-label") ?? "").startsWith("Gerda"),
     );
     if (!tile) throw new Error("no tile for the named person");
     await act(async () => {

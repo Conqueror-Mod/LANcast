@@ -189,7 +189,7 @@ func TestAGuestCanReadWhoItIs(t *testing.T) {
 	if me.Peer != identity.Normalize(f.georgia.Fingerprint()) {
 		t.Errorf("peer = %q, want the issuing server", me.Peer)
 	}
-	if me.Subject != "u_georgia" {
+	if me.Subject != "u_gerda" {
 		t.Errorf("subject = %q, want the person the ticket named", me.Subject)
 	}
 }
