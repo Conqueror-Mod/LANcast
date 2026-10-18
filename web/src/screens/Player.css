@@ -64,13 +64,6 @@
   font-weight: 500;
 }
 
-/* Artist — album, under the track title. */
-.player__subtitle {
-  font-size: 12px;
-  font-weight: 400;
-  color: var(--text-muted);
-}
-
 /* ---- audio mode ---------------------------------------------------------
    The cover that stands in for the picture is drawn by the media surface
    (playback.css), because it has to dock into the corner with the element it

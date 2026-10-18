@@ -2,6 +2,44 @@
    surfaces with CSS. React would unmount it on a re-parent, and an unmounted
    media element stops playing — see PlaybackProvider. */
 
+/*
+ * Now Playing's geometry (docs/now-playing-plan.md), in one place.
+ *
+ * A track's full screen is two layers that never share a parent: the cover is
+ * drawn here, on the media surface, and the column beside it is the player
+ * screen's chrome (NowPlaying.css), on top. They line up only because both
+ * read these.
+ *
+ * Wide: the cover's right edge and the column's left edge sit --np-gap either
+ * side of the middle, so the pair is centred as a group rather than each in a
+ * half of its own. Phone: stacked, the cover at --np-top and the column under
+ * it.
+ */
+:root {
+  --np-art: min(52vh, 36vw);
+  --np-gap: 56px;
+  --np-top: 0px;
+  /*
+   * Laid over the blurred cover: screened into the field and vignetted, as
+   * design.md asks of any full-bleed artwork. Untinted, the screen is a
+   * photograph with an app around it. A variable, so the inline style that
+   * carries the cover's url keeps the colours here.
+   */
+  /* Low alpha on purpose: at 0.38 the field swallowed a sepia cover whole and
+     every record came out the same blue-grey. The cover's own colour is the
+     point; the tint only has to stop it reading as pasted on. */
+  --np-cover-tint:
+    radial-gradient(ellipse 85% 75% at 50% 50%, transparent 50%, rgba(5, 7, 15, 0.7) 100%),
+    linear-gradient(160deg, rgba(90, 74, 158, 0.16), rgba(38, 88, 168, 0.12));
+}
+
+@media (max-width: 600px) {
+  :root {
+    --np-art: min(72vw, 36vh);
+    --np-top: 72px;
+  }
+}
+
 .playback {
   position: fixed;
   background: #000;
@@ -110,9 +148,27 @@
   transform: scale(1.1);
 }
 
+/* Full screen, the cover moves left of the middle to make room for Now
+   Playing's column. Padding rather than a position, so the flex centring above
+   still does the vertical half and the no-art title still centres in the
+   same box. The wash is absolute and ignores the padding. */
+.playback--full.playback--audio .playback__cover {
+  justify-content: flex-end;
+  padding-right: calc(50% + var(--np-gap) / 2);
+}
+
+@media (max-width: 600px) {
+  .playback--full.playback--audio .playback__cover {
+    justify-content: center;
+    align-items: flex-start;
+    padding-right: 0;
+    padding-top: var(--np-top);
+  }
+}
+
 .playback__cover-art {
   position: relative;
-  width: min(46vh, 46vw);
+  width: var(--np-art);
   aspect-ratio: 1 / 1;
   object-fit: cover;
   border-radius: var(--radius-panel);

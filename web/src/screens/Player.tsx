@@ -13,7 +13,7 @@ import { clock } from "@/lib/format";
 import { showsSubtitleButton } from "@/lib/subtitleButton";
 import { matchesBinding, bindingKeys } from "@/lib/keys";
 import { Scrubber } from "@/components/Scrubber";
-import { LyricsPanel } from "@/components/LyricsPanel";
+import { NowPlaying } from "@/components/NowPlaying";
 import { PlaybackStats } from "@/components/PlaybackStats";
 import { PlaybackSettings } from "@/components/PlaybackSettings";
 import { QueuePanel } from "@/components/QueuePanel";
@@ -22,7 +22,6 @@ import { AddToPlaylist } from "@/components/AddToPlaylist";
 import { SkipGlyph } from "@/components/SkipGlyph";
 import {
   ShuffleGlyph,
-  LyricsGlyph,
   RepeatGlyph,
   VolumeGlyph,
   SettingsGlyph,
@@ -188,14 +187,6 @@ export function Player() {
    * serve the rare one that misbehaves.
    */
   const [showStats, setShowStats] = useState(false);
-  /*
-   * Lyrics, on audio only.
-   *
-   * Offered rather than opened: a panel that appears on its own would cover
-   * the artwork of every track somebody plays, and most tracks in most
-   * libraries have no words beside them to show.
-   */
-  const [lyricsOpen, setLyricsOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   /*
    * Whether anything behind the settings button is away from its default.
@@ -581,18 +572,6 @@ export function Player() {
         </div>
       )}
 
-      {lyricsOpen && pb.isAudio && (
-        <LyricsPanel
-          itemID={pb.itemID}
-          /* The clock the chrome already trusts. On a transcode the element's
-             own currentTime restarts at zero after every seek, which is the
-             bug displayTime exists to avoid — and a panel with its own timer
-             would be a second thing to be wrong. */
-          atMS={Math.max(0, Math.floor(pb.displayTime * 1000))}
-          onClose={() => setLyricsOpen(false)}
-        />
-      )}
-
       {showStats && (
         <PlaybackStats
           video={pb.videoRef.current}
@@ -618,17 +597,9 @@ export function Player() {
           <button className="player__icon" onClick={close} aria-label="Close">
             ←
           </button>
-          {/* A song is identified by three things, not one. `series` is the
-              album on a track (ADR 0024), and `artist` the performer — which on
-              a compilation is not the album artist, so it is worth showing. */}
-          <span className="player__title">
-            {item?.title}
-            {pb.isAudio && (item?.artist || item?.series) && (
-              <span className="player__subtitle">
-                {[item?.artist, item?.series].filter(Boolean).join(" — ")}
-              </span>
-            )}
-          </span>
+          {/* A track is named on the page, in Now Playing's column, and
+              naming it here as well would say it twice in 400px. */}
+          {!pb.isAudio && <span className="player__title">{item?.title}</span>}
           {/* While loading, the same note is the centre of the screen
               (player__loading above); saying it twice crowded the title off a
               phone. Once playing, this is the only place it appears, and it
@@ -651,6 +622,10 @@ export function Player() {
             </div>
           )}
         </div>
+
+        {/* A track's screen is Now Playing: what is on, and what comes next,
+            beside the cover (docs/now-playing-plan.md). */}
+        {pb.isAudio && <NowPlaying />}
 
         {/*
           Skip intro and skip credits. Credits are a button that appears and
@@ -856,7 +831,9 @@ export function Player() {
                   >
                     <RepeatGlyph one={pb.repeat === "one"} />
                   </button>
-                  <div className="player__menu">
+                  {/* A track's queue is on the page, in Now Playing; the
+                      popover is for a Play-all over a season. */}
+                  {!pb.isAudio && <div className="player__menu">
                     <button
                       className={"player__icon" + (queueOpen ? " is-on" : "")}
                       onClick={() => setQueueOpen((o) => !o)}
@@ -887,7 +864,7 @@ export function Player() {
                         }}
                       />
                     )}
-                  </div>
+                  </div>}
                 </>
               )}
 
@@ -903,20 +880,8 @@ export function Player() {
                   to. `cycleSub` walks `[null, ...available]`, so with nothing
                   available the click lands and nothing happens — the same empty
                   promise, made by a button instead of a menu. */}
-              {/* Audio only. A film's words are its subtitles, and offering
-                  both would be two buttons for one idea — while on a track,
-                  subtitles are the thing that does not exist. */}
-              {pb.isAudio && (
-                <button
-                  className={"player__icon" + (lyricsOpen ? " is-on" : "")}
-                  onClick={() => setLyricsOpen((o) => !o)}
-                  aria-label="Lyrics"
-                  aria-pressed={lyricsOpen}
-                  title="Lyrics"
-                >
-                  <LyricsGlyph />
-                </button>
-              )}
+              {/* A track's words are a tab in Now Playing's column, not a
+                  button here. */}
               {showsSubtitleButton(pb.isAudio, pb.subtitles) && (
                 <div className="player__subs">
                   <button

@@ -77,6 +77,27 @@
   font-size: 19px;
 }
 
+/* In Now Playing's column: the column is the surface, so no panel of its own. */
+.lyrics--inline {
+  position: static;
+  flex: 1 1 auto;
+  min-height: 0;
+  width: auto;
+  background: none;
+  backdrop-filter: none;
+  border-left: none;
+}
+
+.lyrics--inline .lyrics__head {
+  padding: 4px 0 8px;
+}
+
+/* Half the column below the last line, so it can still be centred; the
+   overlay's 40vh would be most of a column this tall. */
+.lyrics--inline .lyrics__lines {
+  padding: 4px 0 calc(var(--np-art) / 2);
+}
+
 .lyrics__empty {
   margin: 8px 0 0;
   font-size: 13px;

@@ -3344,7 +3344,8 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
               <>
                 <div
                   className="playback__cover-wash"
-                  style={{ backgroundImage: `url(${cover})` }}
+                  // The tint is playback.css's; only the url is ours.
+                  style={{ backgroundImage: `var(--np-cover-tint), url(${cover})` }}
                 />
                 <img className="playback__cover-art" src={cover} alt="" />
               </>
