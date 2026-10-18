@@ -44,8 +44,10 @@ import (
 	"lancast/internal/probe"
 	"lancast/internal/publiccert"
 	"lancast/internal/retro/identify"
+	"lancast/internal/retro/ra"
 	"lancast/internal/retro/retrodb"
 	"lancast/internal/scan"
+	"lancast/internal/secret"
 	"lancast/internal/selfupdate"
 	"lancast/internal/service"
 	"lancast/internal/singleton"
@@ -941,6 +943,21 @@ func run(ctx context.Context, addr, dataDir string, log *slog.Logger) error {
 	// (ADR 0086). Started and stopped from Settings without a restart.
 	dlnaSup := &dlnaSupervisor{reason: "off"}
 	apiSrv.SetDLNAStatus(dlnaSup.Status)
+	/*
+	 * RetroAchievements on the profile page (ADR 0090). The sealing key is
+	 * its own file beside the database, never in it, so a backup carries no
+	 * usable API key. Without it the feature says it is unavailable rather
+	 * than storing keys in the clear.
+	 */
+	if sealer, err := secret.Load(cfg.DataDir); err != nil {
+		log.Warn("retroachievements unavailable: the sealing key could not be prepared", "error", err)
+	} else {
+		apiSrv.SetRetroAchievements(&api.RetroAchievements{
+			Sealer:   sealer,
+			Client:   ra.Client{UserAgent: "LANcast/" + api.Version},
+			MediaDir: filepath.Join(cfg.DataDir, "cache", "retroachievements"),
+		})
+	}
 	// The port can be changed from Settings only by the installed Windows
 	// service, which owns the command line it is started with (ADR 0089).
 	if serviceManaged && runtime.GOOS == "windows" {

@@ -6,7 +6,7 @@ import (
 )
 
 // CurrentSchemaVersion is the revision this build expects.
-const CurrentSchemaVersion = 76
+const CurrentSchemaVersion = 77
 
 // migration is one forward step. There are deliberately no down migrations:
 // rolling a media library's schema backwards loses data that a rescan cannot
@@ -143,6 +143,7 @@ var migrations = []migration{
 	{version: 74, sql: schemaRevision74},
 	{version: 75, sql: schemaRevision75},
 	{version: 76, sql: schemaRevision76},
+	{version: 77, sql: schemaRevision77},
 }
 
 // migrate brings the database up to CurrentSchemaVersion.
@@ -2388,4 +2389,20 @@ CREATE TABLE IF NOT EXISTS optimized_version (
     finished_at  INTEGER
 );
 CREATE INDEX IF NOT EXISTS idx_optimized_state ON optimized_version(state, requested_at);
+`
+
+// Revision 77 — a RetroAchievements account, connected by its owner (ADR 0090).
+//
+// One row per LANcast account that has connected one. The API key is sealed
+// (internal/secret) under a key kept outside the database, so the column holds
+// nothing usable on its own. No foreign key to user, for the reason session
+// and passkey have none: DeleteUser removes the row itself.
+const schemaRevision77 = `
+CREATE TABLE IF NOT EXISTS retro_account (
+    user_id        TEXT    PRIMARY KEY,
+    ra_user        TEXT    NOT NULL,
+    ra_ulid        TEXT    NOT NULL,
+    api_key_sealed BLOB    NOT NULL,
+    connected_at   INTEGER NOT NULL
+);
 `
