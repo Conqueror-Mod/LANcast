@@ -71,6 +71,22 @@ Vendored, with their own licence files beside them:
 
   hls.js                              Apache License 2.0
                                       web/vendor/hls.js/LICENSE
+  butterchurn                         MIT
+                                      web/vendor/butterchurn/LICENSE
+    built with, and inlining:
+    eel-wasm                          MIT (declared in package.json; the
+                                      repository has no licence file)
+                                      web/vendor/butterchurn/LICENSE.eel-wasm
+    @assemblyscript/loader, and the   Apache License 2.0
+    AssemblyScript runtime            web/vendor/butterchurn/LICENSE.assemblyscript
+                                      web/vendor/butterchurn/NOTICE.assemblyscript
+    ecma-proposal-math-extensions     MIT (declared in package.json; the
+                                      repository has no licence file)
+                                      web/vendor/butterchurn/LICENSE.math-extensions
+
+    The MilkDrop engine (ADR 0091), built from a pinned commit with its
+    JavaScript preset path removed; web/vendor/butterchurn/README.md records
+    the build and the patch.
   Microsoft WebView2 loader           Microsoft terms
                                       internal/webview2/LICENSE
                                       internal/webview2/PROVENANCE.md
