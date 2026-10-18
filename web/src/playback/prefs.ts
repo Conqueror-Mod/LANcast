@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import type { TrailId } from "./trailMath";
 
 /*
  * Playback preferences, per device.
@@ -118,12 +119,46 @@ export interface Prefs {
   vizCalm: boolean;
 }
 
-export type Stage = "cover" | "spectrum" | "scope";
-export const STAGES: { id: Stage; label: string }[] = [
-  { id: "cover", label: "Cover" },
-  { id: "spectrum", label: "Spectrum" },
-  { id: "scope", label: "Scope" },
+/*
+ * The stage's choices. Tier 1 is drawn in Canvas 2D and offered wherever a
+ * visualizer is; tier 2 is the feedback trails (step 3), WebGL2 only, and
+ * listed after tier 1 so `,` and `.` step from the classic pair into them.
+ */
+export type Stage = "cover" | "spectrum" | "scope" | TrailId;
+export const STAGES: { id: Stage; label: string; tier: 0 | 1 | 2 }[] = [
+  { id: "cover", label: "Cover", tier: 0 },
+  { id: "spectrum", label: "Spectrum", tier: 1 },
+  { id: "scope", label: "Scope", tier: 1 },
+  { id: "tunnel", label: "Tunnel", tier: 2 },
+  { id: "spiral", label: "Spiral", tier: 2 },
+  { id: "smoke", label: "Smoke", tier: 2 },
+  { id: "bloom", label: "Bloom", tier: 2 },
+  { id: "drift", label: "Drift", tier: 2 },
 ];
+
+/** The visualizers this screen can show, in order: tier 2 only with WebGL2. */
+export function vizStages(webgl2: boolean): Stage[] {
+  return STAGES.filter((s) => s.tier === 1 || (s.tier === 2 && webgl2)).map((s) => s.id);
+}
+
+/** A stage's tier, 0 for the cover and for anything this build does not know. */
+export function stageTier(id: Stage): 0 | 1 | 2 {
+  return STAGES.find((s) => s.id === id)?.tier ?? 0;
+}
+
+/*
+ * cycleStage: the next or previous visualizer, for `,` and `.`. Round the
+ * offered list and back to its start, never onto the cover: those keys move
+ * between visualizers, and the cover is not one. From the cover, or from a
+ * stage this screen cannot offer, the first step lands on the list's first or
+ * last visualizer.
+ */
+export function cycleStage(current: Stage, dir: 1 | -1, offered: Stage[]): Stage {
+  if (offered.length === 0) return current;
+  const at = offered.indexOf(current);
+  if (at < 0) return dir > 0 ? offered[0] : offered[offered.length - 1];
+  return offered[(at + dir + offered.length) % offered.length];
+}
 
 /** The crossfade lengths offered, in seconds; 0 is Off. */
 export const CROSSFADES = [0, 2, 5, 8, 12] as const;
