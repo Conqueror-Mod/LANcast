@@ -42,7 +42,7 @@ beforeEach(() => {
         new Response(JSON.stringify(v), { status: 200, headers: { "Content-Type": "application/json" } });
       const u = String(url);
       if (u.includes("/api/auth/status")) {
-        return json({ authenticated: true, configured: true, user: { id: "u_me", name: "chris", role: "admin" } });
+        return json({ authenticated: true, configured: true, user: { id: "u_me", name: "dana", role: "admin" } });
       }
       const m = u.match(/\/api\/users\/([^/]+)\/libraries/);
       if (m) {
@@ -57,7 +57,7 @@ beforeEach(() => {
       if (u.endsWith("/api/users")) {
         return json({
           users: [
-            { id: "u_me", name: "chris", role: "admin" },
+            { id: "u_me", name: "dana", role: "admin" },
             { id: "u_kid", name: "kid", role: "member" },
             { id: "u_co", name: "partner", role: "admin" },
           ],

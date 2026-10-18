@@ -383,7 +383,7 @@ func TestPasskeysExistOnlyAtTheNameWithAValidCertificate(t *testing.T) {
 		{"the name with a port", pkRP + ":8080", true, valid, true},
 		{"the name in capitals", "EXAMPLE.dynv6.net", true, valid, true},
 		{"a failing renewal while the certificate is still valid", pkRP, true, renewalFailing, true},
-		{"an IP address", "192.168.1.160:8080", true, valid, false},
+		{"an IP address", "192.168.1.20:8080", true, valid, false},
 		{"localhost", "localhost:8080", true, valid, false},
 		{"another name", "evil.example", true, valid, false},
 		{"plain HTTP", pkRP, false, valid, false},

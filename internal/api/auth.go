@@ -39,7 +39,10 @@ func isPublicPath(p string) bool {
 	switch p {
 	case "/api/health", "/api/auth/status", "/api/auth/login", "/api/auth/setup",
 		// Passkey sign-in (ADR 0082): whoever is signing in has no session yet.
-		"/api/auth/passkey/login/options", "/api/auth/passkey/login":
+		"/api/auth/passkey/login/options", "/api/auth/passkey/login",
+		// The sign-in page's account picker: home network only, enforced in
+		// the handler (loginpicker.go).
+		"/api/auth/accounts":
 		return true
 	}
 	if isFederationPath(p) {

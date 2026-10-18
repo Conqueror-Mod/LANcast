@@ -89,7 +89,7 @@ function mount(items: unknown[], role = "admin") {
         return json({
           authenticated: true,
           configured: true,
-          user: { id: "u1", name: "chris", role },
+          user: { id: "u1", name: "dana", role },
         });
       }
       if (url.includes("/api/items")) return json({ items, total: items.length });

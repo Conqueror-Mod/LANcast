@@ -86,7 +86,7 @@ function mount() {
         return json({
           authenticated: true,
           configured: true,
-          user: { id: "u1", name: "chris", role: "admin" },
+          user: { id: "u1", name: "dana", role: "admin" },
         });
       }
       return json({ items: [], total: 0 });

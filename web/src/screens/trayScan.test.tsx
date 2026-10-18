@@ -44,7 +44,7 @@ beforeEach(() => {
         return json({ started: [1], busy: [] }, 202);
       }
       if (url.includes("/api/auth/status")) {
-        return json({ authenticated: true, configured: true, user: { id: "u1", name: "chris", role: "admin" } });
+        return json({ authenticated: true, configured: true, user: { id: "u1", name: "dana", role: "admin" } });
       }
       if (url.includes("/api/libraries")) return json([]);
       return json({ items: [], total: 0 });

@@ -60,7 +60,7 @@ func newTwoServers(t *testing.T) twoServers {
 	t.Cleanup(peerSrv.Close)
 
 	// The guest's server pairs with the host at that listener.
-	inv, err := peer.Encode(host.srvAPI.ident, "Chris's", []string{peerSrv.Listener.Addr().String()})
+	inv, err := peer.Encode(host.srvAPI.ident, "Dana's", []string{peerSrv.Listener.Addr().String()})
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -34,9 +34,9 @@ func TestWhereAPeerConnectedFromBecomesAHint(t *testing.T) {
 		{
 			// IPv6 has to come back bracketed or it is not an address at all.
 			name:   "an IPv6 peer",
-			remote: "[2600:1702:5ac7:9200::30]:51234",
+			remote: "[2001:db8:1:1::30]:51234",
 			known:  []string{"198.51.100.4:8080"},
-			want:   "[2600:1702:5ac7:9200::30]:8080",
+			want:   "[2001:db8:1:1::30]:8080",
 		},
 		{
 			// A peer serving somewhere unusual keeps serving there.

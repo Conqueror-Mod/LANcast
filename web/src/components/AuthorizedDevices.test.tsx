@@ -21,9 +21,9 @@ let deletes: string[];
 
 const now = Math.floor(Date.now() / 1000);
 const mine = [
-  { id: "aaaaaaaaaaaaaaaa", user_id: "u_1", user_name: "Chris", device: "LANcast app on Windows", address: "192.168.1.20", created_at: now - 9000, last_seen: now, current: true },
-  { id: "bbbbbbbbbbbbbbbb", user_id: "u_1", user_name: "Chris", device: "Chrome on Android", address: "10.0.0.5", created_at: now - 90000, last_seen: now - 3600, current: false },
-  { id: "cccccccccccccccc", user_id: "u_1", user_name: "Chris", device: "", created_at: now - 900000, last_seen: now - 86400 * 3, current: false },
+  { id: "aaaaaaaaaaaaaaaa", user_id: "u_1", user_name: "Dana", device: "LANcast app on Windows", address: "192.168.1.20", created_at: now - 9000, last_seen: now, current: true },
+  { id: "bbbbbbbbbbbbbbbb", user_id: "u_1", user_name: "Dana", device: "Chrome on Android", address: "10.0.0.5", created_at: now - 90000, last_seen: now - 3600, current: false },
+  { id: "cccccccccccccccc", user_id: "u_1", user_name: "Dana", device: "", created_at: now - 900000, last_seen: now - 86400 * 3, current: false },
 ];
 const everyone = [...mine, { id: "dddddddddddddddd", user_id: "u_2", user_name: "Georgia", device: "Safari on iPhone", created_at: now, last_seen: now, current: false }];
 

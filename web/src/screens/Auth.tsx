@@ -1,6 +1,6 @@
 import { useState, type FormEvent, type ReactNode } from "react";
 import { ApiFailure } from "@/api/client";
-import { useSetup, useLogin, useAuthStatus, usePasskeyLogin } from "@/api/hooks";
+import { useSetup, useLogin, useAuthStatus, usePasskeyLogin, useLoginAccounts } from "@/api/hooks";
 import { cancelledByPerson } from "@/lib/webauthn";
 import "./Auth.css";
 
@@ -148,28 +148,90 @@ export function Login() {
   const passkeysHere = status?.passkeys?.available === true;
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
+  /*
+   * The account picker: names to pick from, offered by the server only to
+   * the home network. picked is the name chosen from it; typing means
+   * "someone else", which is also where a stranger always is, because the
+   * list they are sent is empty.
+   */
+  const { data: listed } = useLoginAccounts();
+  const accounts = Array.isArray(listed?.accounts) ? listed.accounts : [];
+  const [picked, setPicked] = useState<string | null>(null);
+  const [typing, setTyping] = useState(false);
 
   function submit(e: FormEvent) {
     e.preventDefault();
-    login.mutate({ username: username.trim(), password });
+    login.mutate({ username: (picked ?? username).trim(), password });
+  }
+
+  if (accounts.length > 0 && picked === null && !typing) {
+    return (
+      <AuthCard label="Who's signing in?">
+        <div className="auth__accounts" role="list">
+          {accounts.map((a) => (
+            <button
+              key={a.name}
+              type="button"
+              role="listitem"
+              className="auth__account"
+              onClick={() => {
+                setPicked(a.name);
+                setPassword("");
+              }}
+            >
+              <span className="auth__avatar" aria-hidden="true">
+                {a.name.slice(0, 1).toUpperCase()}
+              </span>
+              <span className="auth__account-name">{a.name}</span>
+            </button>
+          ))}
+        </div>
+        <button type="button" className="auth__link" onClick={() => setTyping(true)}>
+          Someone else
+        </button>
+      </AuthCard>
+    );
   }
 
   return (
     <AuthCard label="Sign in">
       <form className="auth__form" onSubmit={submit}>
-        <label className="auth__field">
-          <span>Username</span>
-          <input
-            autoFocus
-            autoComplete="username"
-            value={username}
-            onChange={(e) => setUsername(e.target.value)}
-          />
-        </label>
+        {picked !== null ? (
+          <div className="auth__picked">
+            <span className="auth__avatar" aria-hidden="true">
+              {picked.slice(0, 1).toUpperCase()}
+            </span>
+            <span className="auth__account-name">{picked}</span>
+            {/* Kept in the form so a password manager knows whose password it is. */}
+            <input type="hidden" autoComplete="username" value={picked} readOnly />
+            <button
+              type="button"
+              className="auth__link"
+              onClick={() => {
+                setPicked(null);
+                setPassword("");
+                login.reset();
+              }}
+            >
+              Not you?
+            </button>
+          </div>
+        ) : (
+          <label className="auth__field">
+            <span>Username</span>
+            <input
+              autoFocus
+              autoComplete="username"
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+            />
+          </label>
+        )}
         <label className="auth__field">
           <span>Password</span>
           <input
             type="password"
+            autoFocus={picked !== null}
             autoComplete="current-password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
@@ -183,7 +245,7 @@ export function Login() {
         <button
           type="submit"
           className="auth__submit"
-          disabled={login.isPending || !username.trim() || !password}
+          disabled={login.isPending || !(picked ?? username).trim() || !password}
         >
           {login.isPending ? "Signing in…" : "Sign in"}
         </button>

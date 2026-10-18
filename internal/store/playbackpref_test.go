@@ -9,7 +9,7 @@ import (
 func TestPlaybackPrefsDefaultAndChoice(t *testing.T) {
 	st := newStore(t)
 	ctx := context.Background()
-	u, err := st.CreateUser(ctx, "", "Chris", "h", RoleMember)
+	u, err := st.CreateUser(ctx, "", "Dana", "h", RoleMember)
 	if err != nil {
 		t.Fatal(err)
 	}

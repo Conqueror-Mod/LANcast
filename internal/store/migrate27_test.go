@@ -62,7 +62,7 @@ func TestUpgradeLeavesExistingAccountsInvisible(t *testing.T) {
 		id, name string
 		shares   int
 	}{
-		{"local", "Chris", 1},
+		{"local", "Dana", 1},
 		{"u2", "Georgia", 0},
 	} {
 		if _, err := db.Exec(`

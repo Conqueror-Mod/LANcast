@@ -63,7 +63,7 @@ beforeEach(() => {
           headers: { "Content-Type": "application/json" },
         });
       if (url.includes("/api/auth/status"))
-        return json({ authenticated: true, configured: true, user: { id: "u1", name: "chris", role: "admin" } });
+        return json({ authenticated: true, configured: true, user: { id: "u1", name: "dana", role: "admin" } });
       if (url.includes("/api/profile/ratings")) return json({ ratings });
       if (url.includes("/api/tags")) return json({ tags });
       if (url.includes("/api/items") && url.includes("favourite=1"))
@@ -73,7 +73,7 @@ beforeEach(() => {
       if (url.includes("/api/profile/year")) return json({});
       if (url.startsWith("/api/profile"))
         return json({
-          user: { name: "chris", admin: true, secured: true },
+          user: { name: "dana", admin: true, secured: true },
           stats: { started: 1, finished: 1, watched_ms: 0, first_at: null },
           history: [],
           total: 0,

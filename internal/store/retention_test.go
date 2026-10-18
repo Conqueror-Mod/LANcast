@@ -19,7 +19,7 @@ import (
 func auditAt(t *testing.T, s *Store, at time.Time, summary string) {
 	t.Helper()
 	if err := s.AppendAudit(context.Background(), AuditEvent{
-		At: at.Unix(), ActorID: "u1", ActorName: "chris",
+		At: at.Unix(), ActorID: "u1", ActorName: "dana",
 		Action: "test.event", Summary: summary,
 	}); err != nil {
 		t.Fatalf("append audit: %v", err)

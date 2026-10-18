@@ -22,15 +22,15 @@ func TestParseAddressCanonicalises(t *testing.T) {
 		want string
 	}{
 		{"a bare host takes the default port", "media-pc", "media-pc:8080"},
-		{"a bare IPv4 takes the default port", "192.168.1.66", "192.168.1.66:8080"},
-		{"host and port are kept", "192.168.1.66:8080", "192.168.1.66:8080"},
-		{"another port is kept", "192.168.1.66:9000", "192.168.1.66:9000"},
-		{"an https URL is an address", "https://192.168.1.66:8080", "192.168.1.66:8080"},
-		{"a trailing slash is not part of it", "https://192.168.1.66:8080/", "192.168.1.66:8080"},
+		{"a bare IPv4 takes the default port", "192.168.1.21", "192.168.1.21:8080"},
+		{"host and port are kept", "192.168.1.21:8080", "192.168.1.21:8080"},
+		{"another port is kept", "192.168.1.21:9000", "192.168.1.21:9000"},
+		{"an https URL is an address", "https://192.168.1.21:8080", "192.168.1.21:8080"},
+		{"a trailing slash is not part of it", "https://192.168.1.21:8080/", "192.168.1.21:8080"},
 		{"a pasted deep link is still an address",
-			"https://192.168.1.66:8080/movies?sort=added", "192.168.1.66:8080"},
+			"https://192.168.1.21:8080/movies?sort=added", "192.168.1.21:8080"},
 		{"http is accepted too", "http://media-pc:8080", "media-pc:8080"},
-		{"surrounding space is not part of it", "  192.168.1.66  ", "192.168.1.66:8080"},
+		{"surrounding space is not part of it", "  192.168.1.21  ", "192.168.1.21:8080"},
 		{"case in a hostname does not matter", "Media-PC", "media-pc:8080"},
 		{"a bracketed IPv6 literal keeps its brackets", "[fe80::1]:8080", "[fe80::1]:8080"},
 		{"a bare IPv6 literal gains brackets and the default port",
@@ -85,7 +85,7 @@ func TestCheck(t *testing.T) {
 	const pin = "3Xk0aBcD1efGh2IjKlMn3OpQrStUvWxYz0123456789="
 	const other = "ZZZZaBcD1efGh2IjKlMn3OpQrStUvWxYz0123456789="
 
-	l := List{}.Accept(Server{Address: "192.168.1.66:8080", Name: "Chris", Pin: pin})
+	l := List{}.Accept(Server{Address: "192.168.1.21:8080", Name: "Dana", Pin: pin})
 
 	t.Run("an address never seen is a question, not a failure", func(t *testing.T) {
 		if got := l.Check("192.168.1.99:8080", pin); got != TrustUnknown {
@@ -94,7 +94,7 @@ func TestCheck(t *testing.T) {
 	})
 
 	t.Run("the key that was accepted connects", func(t *testing.T) {
-		if got := l.Check("192.168.1.66:8080", pin); got != TrustMatch {
+		if got := l.Check("192.168.1.21:8080", pin); got != TrustMatch {
 			t.Errorf("Check = %v, want match", got)
 		}
 	})
@@ -103,7 +103,7 @@ func TestCheck(t *testing.T) {
 	// the same change is a rotation to confirm -- see rotation_test.go, which
 	// is where the interesting half of this rule lives.
 	t.Run("a different key with nothing to appeal to is refused", func(t *testing.T) {
-		if got := l.Check("192.168.1.66:8080", other); got != TrustMismatch {
+		if got := l.Check("192.168.1.21:8080", other); got != TrustMismatch {
 			t.Errorf("Check = %v, want mismatch", got)
 		}
 	})
@@ -112,7 +112,7 @@ func TestCheck(t *testing.T) {
 		// A server that answered without TLS where a pin was accepted is the
 		// same fault as the wrong key: whatever is there is not what was
 		// trusted.
-		if got := l.Check("192.168.1.66:8080", ""); got != TrustMismatch {
+		if got := l.Check("192.168.1.21:8080", ""); got != TrustMismatch {
 			t.Errorf("Check = %v, want mismatch", got)
 		}
 	})
@@ -148,7 +148,7 @@ func TestTheSameKeyInANewCertificateStillMatches(t *testing.T) {
 }
 
 func TestAcceptReplacesAndKeepsTheName(t *testing.T) {
-	l := List{}.Accept(Server{Address: "media-pc:8080", Name: "Chris", Pin: "one"})
+	l := List{}.Accept(Server{Address: "media-pc:8080", Name: "Dana", Pin: "one"})
 	l = l.Accept(Server{Address: "media-pc:8080", Pin: "two"})
 
 	if len(l.Servers) != 1 {
@@ -157,7 +157,7 @@ func TestAcceptReplacesAndKeepsTheName(t *testing.T) {
 	if l.Servers[0].Pin != "two" {
 		t.Errorf("pin = %q, want the new one", l.Servers[0].Pin)
 	}
-	if l.Servers[0].Name != "Chris" {
+	if l.Servers[0].Name != "Dana" {
 		t.Errorf("name = %q, want the name already given to be kept", l.Servers[0].Name)
 	}
 }

@@ -90,7 +90,7 @@ func TestSameDir(t *testing.T) {
 		}
 	}
 
-	other := filepath.Join("C:", "Users", "Chris", "AppData", "Roaming", "LANcast")
+	other := filepath.Join("C:", "Users", "Dana", "AppData", "Roaming", "LANcast")
 	if sameDir(base, other) {
 		t.Error("sameDir treated two different data directories as one")
 	}

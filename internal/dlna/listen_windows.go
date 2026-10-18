@@ -19,7 +19,7 @@ import (
  * the group on that interface. net.ListenMulticastUDP binds the wildcard
  * 0.0.0.0:1900 instead, and on Windows that socket received nothing at all —
  * measured on Aither: not one search in its lifetime, while a socket bound to
- * 192.168.1.160:1900 received Windows' own searches and another device's
+ * 192.168.1.20:1900 received Windows' own searches and another device's
  * within seconds. Windows' SSDP service and qBittorrent bind the same way,
  * which is the convention this follows.
  */
