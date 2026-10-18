@@ -262,6 +262,15 @@ export function awayFromGold(c: RGB, margin = 12): RGB {
  * (a black-and-white photograph) has no colour to give and gets the nebula.
  * Every colour is lifted to a lightness that reads on the dark field, and
  * nudged off gold.
+ *
+ * The visualizer draws in the cover's **opposite** hue, not the cover's own.
+ * The field behind it is the cover, blurred, so a line in the cover's hue
+ * sits in its own colour and goes muddy. It was worse for warm covers: orange
+ * cannot stay orange (it reads as gold), and the nearest way out of the band
+ * is brick red, so an orange record drew a rust-coloured spectrum over a rust
+ * field. Opposite, a warm cover draws cool and a cool cover draws warm, and the
+ * line stands off the wash. The gold nudge still runs afterwards, because the
+ * opposite of a blue cover (about 220°) is 40°, which is gold itself.
  */
 export function paletteFrom(rgba: ArrayLike<number>): RGB[] {
   const BUCKETS = 12;
@@ -282,17 +291,26 @@ export function paletteFrom(rgba: ArrayLike<number>): RGB[] {
   const order = [...weight.keys()].filter((b) => weight[b] > 0).sort((a, b) => weight[b] - weight[a]);
   if (order.length === 0) return NEBULA_PALETTE;
   const mean = (b: number): RGB => [sum[b][0] / weight[b], sum[b][1] / weight[b], sum[b][2] / weight[b]];
-  const first = mean(order[0]);
-  // A cover with one hue gives that hue twice, the second a step round the
-  // wheel, so the gradient up a bar still moves.
-  const second = order[1] !== undefined ? mean(order[1]) : shiftHue(first, 30);
+  const first = shiftHue(mean(order[0]), 180);
+  /*
+   * Bright and saturated enough to glow on the dark field. At 45% saturation
+   * and 55% lightness the line read as a pigment rather than a light: dull
+   * even where the hue was right.
+   */
   const readable = (c: RGB, l: number): RGB => {
     const [h, s] = rgbToHsl(c);
-    return hslToRgb(h, Math.max(0.45, s), l);
+    return hslToRgb(h, Math.max(0.7, s), l);
   };
-  const a = awayFromGold(readable(first, 0.55));
+  const a = awayFromGold(readable(first, 0.66));
+  /*
+   * A cover with one hue gives that hue twice, the second a step round the
+   * wheel, so the gradient up a bar still moves. The step is taken from `a`,
+   * after the gold nudge: taken from `first`, a one-hue blue cover turned both
+   * colours into gold and the nudge sent both to the same 87°, one flat colour.
+   */
+  const second = order[1] !== undefined ? shiftHue(mean(order[1]), 180) : shiftHue(a, 30);
   const b = blendAvoidsGold(a, awayFromGold(readable(second, 0.62)));
-  const cap = awayFromGold(readable(first, 0.82));
+  const cap = awayFromGold(readable(first, 0.84));
   return [a, b, cap];
 }
 
