@@ -51,6 +51,20 @@ const LABELS: Record<string, string> = {
 const DPAD = ["up", "down", "left", "right"];
 const HOLD = ["fast-forward", "rewind"];
 
+const ORDER = [...DPAD, "b", "a", "y", "x", "l", "r", "l2", "r2", "l3", "r3", "start", "select"];
+
+/*
+ * The rows to list. The core's own names win: a core that declares its
+ * buttons (an N64 core calls RetroPad L2 "Z Trigger") is listed by exactly
+ * those, under its names. A core that declares none falls back to what the
+ * console's controller has, under the RetroPad's names.
+ */
+export function rowsFor(platform: string, labels: Record<string, string>): { target: string; label: string }[] {
+  const named = ORDER.filter((t) => labels[t]);
+  const targets = named.length > 0 ? [...named, ...HOLD] : targetsFor(platform);
+  return targets.map((t) => ({ target: t, label: labels[t] || LABELS[t] }));
+}
+
 /** The buttons a console's controller has, in the order they are listed. */
 export function targetsFor(platform: string): string[] {
   switch (platform) {
@@ -69,7 +83,17 @@ export function targetsFor(platform: string): string[] {
   }
 }
 
-export function ControlsPage({ platform, onBack }: { platform: string; onBack: () => void }) {
+export function ControlsPage({
+  platform,
+  labels = {},
+  onBack,
+}: {
+  platform: string;
+  labels?: Record<string, string>;
+  onBack: () => void;
+}) {
+  const rows = rowsFor(platform, labels);
+  const nameOf = (t: string) => rows.find((r) => r.target === t)?.label ?? LABELS[t];
   const [mapping, setMapping] = useState<ControlMapping | null>(null);
   const [waiting, setWaiting] = useState<string | null>(null);
   const [problem, setProblem] = useState<string | null>(null);
@@ -123,7 +147,7 @@ export function ControlsPage({ platform, onBack }: { platform: string; onBack: (
       <>
         <div className="retro-play__heading">Controls</div>
         <p className="retro-play__waiting" role="status">
-          Press a button or key for {LABELS[waiting]}…
+          Press a button or key for {nameOf(waiting)}…
         </p>
         <p className="retro-play__hint">Escape or the Guide button cancels.</p>
       </>
@@ -134,11 +158,11 @@ export function ControlsPage({ platform, onBack }: { platform: string; onBack: (
     <>
       <div className="retro-play__heading">Controls</div>
       {mapping &&
-        targetsFor(platform).map((t, i) => (
+        rows.map(({ target: t, label }, i) => (
           <Row
             key={t}
             autoFocus={i === 0}
-            label={`${LABELS[t]}: ${shown(mapping.pad[t])} · ${shown(mapping.keys[t])}`}
+            label={`${label}: ${shown(mapping.pad[t])} · ${shown(mapping.keys[t])}`}
             onSelect={() => change(t)}
           />
         ))}
