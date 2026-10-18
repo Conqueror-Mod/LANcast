@@ -44,7 +44,7 @@ function room(positionMS: number, paused = false) {
     created_at: 0,
     members: [
       { user_id: "u_chris", name: "Dana", host: true, last_seen: 0 },
-      { user_id: "peer:X/local", name: "Georgia", host: false, last_seen: 0, peer: "X", server: "Utopia" },
+      { user_id: "peer:X/local", name: "Gerda", host: false, last_seen: 0, peer: "X", server: "Utopia" },
     ],
   };
 }

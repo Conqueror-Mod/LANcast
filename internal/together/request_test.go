@@ -7,7 +7,7 @@ import (
 )
 
 const (
-	fp     = "FP-GEORGIA"
+	fp     = "FP-GERDA"
 	person = "u_g1"
 )
 
@@ -17,7 +17,7 @@ func open(t *testing.T) (*Manager, func(time.Duration), Session, Request) {
 	m := New()
 	advance := atClock(m)
 	room := m.Create(42, "alice", "Alice", 0)
-	req := m.Ask("alice", fp, person, "Georgia", "Utopia")
+	req := m.Ask("alice", fp, person, "Gerda", "Utopia")
 	if req.State != RequestPending {
 		t.Fatalf("a first ask is %q, want pending", req.State)
 	}
@@ -38,10 +38,10 @@ func TestAcceptPutsTheAskerInTheRoom(t *testing.T) {
 		}
 	}
 	if guest == nil {
-		t.Fatalf("members = %+v, want Georgia", s.Members)
+		t.Fatalf("members = %+v, want Gerda", s.Members)
 	}
-	if guest.Peer != fp || guest.Server != "Utopia" || guest.Name != "Georgia" || guest.Host {
-		t.Errorf("guest = %+v, want Georgia from Utopia, not host", *guest)
+	if guest.Peer != fp || guest.Server != "Utopia" || guest.Name != "Gerda" || guest.Host {
+		t.Errorf("guest = %+v, want Gerda from Utopia, not host", *guest)
 	}
 	if got := m.Status(req.ID, fp, person); got.State != RequestAccepted || got.RoomID != room.ID {
 		t.Errorf("asker sees %+v, want accepted into %s", got, room.ID)
@@ -113,7 +113,7 @@ func TestADeclineStartsACooldownTheAskerCannotSee(t *testing.T) {
 	}
 
 	advance(requestCooldown - time.Second)
-	again := m.Ask("alice", fp, person, "Georgia", "Utopia")
+	again := m.Ask("alice", fp, person, "Gerda", "Utopia")
 	if got := m.Status(again.ID, fp, person); got.State != "not_now" {
 		t.Errorf("asking inside the cooldown reads %q, want not_now", got.State)
 	}
@@ -122,7 +122,7 @@ func TestADeclineStartsACooldownTheAskerCannotSee(t *testing.T) {
 	}
 
 	advance(time.Second)
-	after := m.Ask("alice", fp, person, "Georgia", "Utopia")
+	after := m.Ask("alice", fp, person, "Gerda", "Utopia")
 	if after.State != RequestPending || len(m.Pending("alice")) != 1 {
 		t.Errorf("after the cooldown the ask is %q with %d prompts, want pending and 1",
 			after.State, len(m.Pending("alice")))
@@ -133,7 +133,7 @@ func TestATimeoutStartsTheCooldownToo(t *testing.T) {
 	m, advance, _, _ := open(t)
 	advance(requestTimeout + time.Second)
 
-	again := m.Ask("alice", fp, person, "Georgia", "Utopia")
+	again := m.Ask("alice", fp, person, "Gerda", "Utopia")
 	if again.State != RequestDeclined || len(m.Pending("alice")) != 0 {
 		t.Errorf("asking straight after a timeout gave %q with %d prompts, want declined and none",
 			again.State, len(m.Pending("alice")))
@@ -144,7 +144,7 @@ func TestATimeoutStartsTheCooldownToo(t *testing.T) {
 func TestAskingAgainReplacesTheOpenRequest(t *testing.T) {
 	m, advance, _, first := open(t)
 	advance(5 * time.Second)
-	second := m.Ask("alice", fp, person, "Georgia", "Utopia")
+	second := m.Ask("alice", fp, person, "Gerda", "Utopia")
 
 	p := m.Pending("alice")
 	if len(p) != 1 || p[0].ID != second.ID {
@@ -163,7 +163,7 @@ func TestPendingListsEachAskerOldestFirst(t *testing.T) {
 
 	p := m.Pending("alice")
 	if len(p) != 2 || p[0].ID != first.ID || p[1].ID != second.ID {
-		t.Errorf("pending = %+v, want Georgia then Sam", p)
+		t.Errorf("pending = %+v, want Gerda then Sam", p)
 	}
 	if len(m.Pending("bob")) != 0 {
 		t.Error("another host was shown Alice's prompts")
@@ -319,7 +319,7 @@ func TestWithdrawIsTheAskersAndStartsNoCooldown(t *testing.T) {
 	if st := m.Status(req.ID, fp, person); st.State != "not_now" {
 		t.Errorf("a withdrawn request reads %q", st.State)
 	}
-	again := m.Ask("alice", fp, person, "Georgia", "Utopia")
+	again := m.Ask("alice", fp, person, "Gerda", "Utopia")
 	if again.State != RequestPending {
 		t.Errorf("asking again after a withdraw is %q, want pending: a withdraw is not a decline", again.State)
 	}

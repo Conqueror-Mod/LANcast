@@ -48,7 +48,7 @@ func (f fixture) pinned(issuer string) bool {
 
 func (f fixture) claims() Claims {
 	return Claims{
-		Subject:  "u_georgia",
+		Subject:  "u_gerda",
 		Audience: f.chris.fp,
 		Nonce:    "nonce-1",
 		IssuedAt: f.now,
@@ -73,7 +73,7 @@ func TestAGoodTicketVerifies(t *testing.T) {
 	if err != nil {
 		t.Fatalf("verify: %v (%s)", err, Reason(err))
 	}
-	if got.Subject != "u_georgia" {
+	if got.Subject != "u_gerda" {
 		t.Errorf("subject = %q, want the person the ticket names", got.Subject)
 	}
 	if got.Nonce != "nonce-1" {
@@ -123,7 +123,7 @@ func TestEveryBadTicketIsRefused(t *testing.T) {
 			// signature over it. The substitution attack the key-in-ticket
 			// design has to survive: carrying the key must not mean trusting
 			// whoever assembled the bytes around it.
-			name: "georgia's key, mallory's signature",
+			name: "gerda's key, mallory's signature",
 			token: func() string {
 				c := f.claims()
 				c.Key = f.georgia.id.Public()

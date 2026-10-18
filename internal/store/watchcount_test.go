@@ -175,12 +175,12 @@ func TestWatchCountsArePerAccount(t *testing.T) {
 	must(st.SaveProgress(ctx, id, "local", 90000, true))
 	must(st.SaveProgress(ctx, id, "local", 300, false))
 	must(st.SaveProgress(ctx, id, "local", 90000, true))
-	must(st.SaveProgress(ctx, id, "georgia", 90000, true))
+	must(st.SaveProgress(ctx, id, "gerda", 90000, true))
 
 	if got := watchCount(t, st, id); got != 2 {
 		t.Errorf("local count = %d, want 2", got)
 	}
-	other, err := st.GetItem(ctx, id, "georgia")
+	other, err := st.GetItem(ctx, id, "gerda")
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -146,7 +146,7 @@ function NamePanel({
     /*
      * Every group under this person, not just the one on screen.
      *
-     * Renaming one of four groups called Georgia Bowles would split her back
+     * Renaming one of four groups called Gerda Blake would split her back
      * into two people — the exact fault collapsing exists to fix, arriving by
      * a different route.
      */
@@ -409,7 +409,7 @@ export function FacePeople() {
    *
    * Naming does not merge groups — a re-cluster seeds named ones as anchors
    * and never dissolves them — so accepting three suggestions leaves four
-   * groups called Georgia Bowles. Reported as her appearing three times, at
+   * groups called Gerda Blake. Reported as her appearing three times, at
    * 80, 1 and 1, which reads as three people who share a name.
    */
   const collapsed = collapsePeople(ordered);

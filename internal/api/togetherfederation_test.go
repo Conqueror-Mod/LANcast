@@ -26,7 +26,7 @@ import (
  * away has to close the door.
  */
 
-const georgiaPerson = "u_georgia"
+const georgiaPerson = "u_gerda"
 
 type roomFixture struct {
 	fedFixture
@@ -41,7 +41,7 @@ func newRoomFixture(t *testing.T) roomFixture {
 	f := newFedFixture(t)
 	ctx := context.Background()
 	if err := f.h.st.ReplaceRemotePeople(ctx, f.peerFP, []store.RemotePerson{
-		{ID: georgiaPerson, Name: "Georgia"},
+		{ID: georgiaPerson, Name: "Gerda"},
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -189,8 +189,8 @@ func TestARemotePersonAsksIsAcceptedAndFollows(t *testing.T) {
 	}
 
 	p := f.pending(t)
-	if len(p) != 1 || p[0].Name != "Georgia" || p[0].Server != "Utopia" {
-		t.Fatalf("host sees %+v, want one request from Georgia on Utopia", p)
+	if len(p) != 1 || p[0].Name != "Gerda" || p[0].Server != "Utopia" {
+		t.Fatalf("host sees %+v, want one request from Gerda on Utopia", p)
 	}
 
 	room := f.openRoom(t)

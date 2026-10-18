@@ -38,10 +38,10 @@ let pending: unknown[] = [];
 
 const request = {
   id: "q1",
-  host_id: "u_chris",
+  host_id: "u_dana",
   peer: "FP",
   person: "u_g",
-  name: "Georgia",
+  name: "Gerda",
   server: "Utopia",
   state: "pending",
   created_at: 1_000,
@@ -52,16 +52,16 @@ function session(members = 1) {
   return {
     id: "r1",
     item_id: 5,
-    host_id: "u_chris",
+    host_id: "u_dana",
     position_ms: 12_000,
     paused: false,
     updated_at: 0,
     age_ms: 0,
     created_at: 0,
     members: [
-      { user_id: "u_chris", name: "Dana", host: true, last_seen: 0 },
+      { user_id: "u_dana", name: "Dana", host: true, last_seen: 0 },
       ...(members > 1
-        ? [{ user_id: "peer:FP/u_g", name: "Georgia", host: false, last_seen: 0, peer: "FP", server: "Utopia" }]
+        ? [{ user_id: "peer:FP/u_g", name: "Gerda", host: false, last_seen: 0, peer: "FP", server: "Utopia" }]
         : []),
     ],
   };
@@ -77,7 +77,7 @@ function mockServer() {
       const json = (v: unknown, status = 200) =>
         new Response(JSON.stringify(v), { status, headers: { "Content-Type": "application/json" } });
       if (url === "/api/auth/status")
-        return json({ authenticated: true, user: { id: "u_chris", name: "Dana", role: "admin" } });
+        return json({ authenticated: true, user: { id: "u_dana", name: "Dana", role: "admin" } });
       if (url === "/api/together/requests") return json({ requests: pending });
       if (url === "/api/together" && method === "POST") return json(session(), 201);
       if (url === "/api/together/requests/q1/accept") {
@@ -141,7 +141,7 @@ describe("a friend asking to join", () => {
   it("asks the host, by name and server, while their film plays", async () => {
     mockServer();
     await render();
-    expect(host.textContent).toContain("Georgia on Utopia would like to watch this with you");
+    expect(host.textContent).toContain("Gerda on Utopia would like to watch this with you");
     // The server's own minute, counted from when this client saw it.
     const left = host.querySelector(".join-prompt__left")?.textContent;
     expect(["60s", "59s"]).toContain(left);

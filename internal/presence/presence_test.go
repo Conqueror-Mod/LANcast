@@ -192,12 +192,12 @@ func TestEmptyUserIsIgnored(t *testing.T) {
 
 func TestOnlineIsSortedAndStable(t *testing.T) {
 	tr, _ := newTest()
-	for _, id := range []string{"georgia", "dana", "alex"} {
+	for _, id := range []string{"gerda", "dana", "alex"} {
 		tr.Seen(id)
 	}
 	first := tr.Online()
 	second := tr.Online()
-	want := []string{"alex", "dana", "georgia"}
+	want := []string{"alex", "dana", "gerda"}
 	for i, id := range want {
 		if first[i] != id {
 			t.Fatalf("Online() = %v, want %v", first, want)
@@ -222,10 +222,10 @@ func TestConcurrentUseIsSafe(t *testing.T) {
 			defer wg.Done()
 			for j := 0; j < 200; j++ {
 				tr.Watching("dana", "Blade Runner")
-				tr.Seen("georgia")
+				tr.Seen("gerda")
 				tr.Snapshot("dana")
 				tr.Online()
-				tr.Stopped("georgia")
+				tr.Stopped("gerda")
 			}
 		}()
 	}

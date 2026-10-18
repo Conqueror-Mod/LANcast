@@ -21,7 +21,7 @@ func grantFixture(t *testing.T) (*Store, context.Context, string) {
 		t.Fatal(err)
 	}
 	if err := st.ReplaceRemotePeople(ctx, fpA, []RemotePerson{
-		{ID: "g-1", Name: "Georgia"},
+		{ID: "g-1", Name: "Gerda"},
 		{ID: "g-2", Name: "Alex"},
 	}); err != nil {
 		t.Fatal(err)

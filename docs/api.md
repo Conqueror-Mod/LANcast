@@ -1616,7 +1616,7 @@ request, because a page needing identity, statistics and a list should not
 discover that from three round trips and three loading states.
 
 ```json
-{ "user": { "id": "u_3f9", "name": "Chris", "admin": true, "secured": true },
+{ "user": { "id": "u_3f9", "name": "Dana", "admin": true, "secured": true },
   "stats": { "started": 214, "finished": 168, "viewings": 197,
              "watched_ms": 913_400_000, "first_at": 1739000000 },
   "history": [ { "item": { "id": 87, "title": "Arrival", ... },
@@ -1673,7 +1673,7 @@ route.
 
 ### `PATCH /api/profile`
 
-Changes your own display name. `{ "name": "Chris" }`, 60 characters or fewer,
+Changes your own display name. `{ "name": "Dana" }`, 60 characters or fewer,
 no control characters. `409 duplicate` if the name is taken.
 
 The account **id does not change**, which is what makes this a rename rather
@@ -1747,10 +1747,10 @@ first.
 
 ```json
 { "sessions": [
-  { "id": "3f9a1c0b77de2e41", "user_id": "u_3f9", "user_name": "Chris",
+  { "id": "3f9a1c0b77de2e41", "user_id": "u_3f9", "user_name": "Dana",
     "device": "LANcast app on Windows", "address": "192.168.1.20",
     "created_at": 1791500000, "last_seen": 1791861000, "current": true },
-  { "id": "a07b5e19c2d4f810", "user_id": "u_3f9", "user_name": "Chris",
+  { "id": "a07b5e19c2d4f810", "user_id": "u_3f9", "user_name": "Dana",
     "device": "Chrome on Android", "address": "2600:1700:…",
     "created_at": 1791400000, "last_seen": 1791800000, "current": false } ] }
 ```
@@ -3094,7 +3094,7 @@ The audit log: who changed what, and when. **Admin only** (ADR 0026).
 {
   "events": [
     { "id": 42, "at": 1786220000,
-      "actor_id": "local", "actor_name": "chris",
+      "actor_id": "local", "actor_name": "dana",
       "action": "library.delete", "target_kind": "library", "target_id": "3",
       "summary": "Removed library \"Films\" (1226 items) — files left on disk",
       "detail": "{\"path\":\"D:\\Media\",\"kind\":\"movie\",\"item_count\":1226}" }
@@ -4142,7 +4142,7 @@ position.
 { "sessions": [ { "id": "k3f9q2xw7m", "item_id": 87, "host_id": "u_3f9",
   "position_ms": 1284000, "paused": false, "updated_at": 1755200000,
   "age_ms": 1400,
-  "members": [ { "user_id": "u_3f9", "name": "Chris", "host": true,
+  "members": [ { "user_id": "u_3f9", "name": "Dana", "host": true,
                  "last_seen": 1755200000 },
                { "user_id": "peer:7Q2M…/u_a81", "name": "Georgia",
                  "host": false, "last_seen": 1755200001,

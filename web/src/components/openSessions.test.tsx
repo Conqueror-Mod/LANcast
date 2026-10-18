@@ -67,7 +67,7 @@ function mockServer(sessions: unknown[], hidden: number[] = []) {
         if (hidden.includes(id)) return json({ error: { code: "not_found", message: "no" } }, 404);
         return json({ id, title: id === 7 ? "Arrival" : "Blade Runner", series: null });
       }
-      if (url === "/api/together/r1/join") return json(room("r1", 7, "u_chris", "Dana", ["u_me"]));
+      if (url === "/api/together/r1/join") return json(room("r1", 7, "u_dana", "Dana", ["u_me"]));
       return json({});
     }),
   );
@@ -114,14 +114,14 @@ afterEach(() => {
 
 describe("the rooms you could join", () => {
   it("names who is watching what", async () => {
-    mockServer([room("r1", 7, "u_chris", "Dana")]);
+    mockServer([room("r1", 7, "u_dana", "Dana")]);
     await render();
     expect(host.textContent).toContain("Dana is watching Arrival");
     expect([...host.querySelectorAll("button")].some((b) => b.textContent === "Join")).toBe(true);
   });
 
   it("leaves out rooms you host or are already in", async () => {
-    mockServer([room("r2", 7, "u_me", "Me"), room("r3", 8, "u_chris", "Dana", ["u_me"])]);
+    mockServer([room("r2", 7, "u_me", "Me"), room("r3", 8, "u_dana", "Dana", ["u_me"])]);
     await render();
     expect(host.textContent).not.toContain("is watching");
   });
@@ -129,7 +129,7 @@ describe("the rooms you could join", () => {
   // A limited profile is never offered a film above its ceiling by way of
   // somebody else's evening: the item route refuses it, so the room is hidden.
   it("hides a room whose film you could not open", async () => {
-    mockServer([room("r1", 7, "u_chris", "Dana")], [7]);
+    mockServer([room("r1", 7, "u_dana", "Dana")], [7]);
     await render();
     expect(host.textContent).not.toContain("is watching");
   });
@@ -137,7 +137,7 @@ describe("the rooms you could join", () => {
   // Joining without opening the film would leave you in a room watching
   // nothing; the film is opened, then the room joined.
   it("opens the room's film and joins it", async () => {
-    mockServer([room("r1", 7, "u_chris", "Dana")]);
+    mockServer([room("r1", 7, "u_dana", "Dana")]);
     await render();
     const join = [...host.querySelectorAll("button")].find((b) => b.textContent === "Join")!;
     await act(async () => {
@@ -153,7 +153,7 @@ describe("the rooms you could join", () => {
   });
 
   it("offers nothing when you are not in a player's reach", async () => {
-    mockServer([room("r1", 7, "u_chris", "Dana")]);
+    mockServer([room("r1", 7, "u_dana", "Dana")]);
     const qc = new QueryClient();
     await act(async () => {
       root.render(
