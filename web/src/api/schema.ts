@@ -833,6 +833,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/profile/ratings/pending": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * What you finished lately and have not rated
+         * @description Home's "Rate what you've watched" shelf: films finished, and shows with an episode finished, in the last 30 days, that you have not rated. A show is offered once, by its latest episode, and is rated as the show. Newest finish first, at most 20. Rating one is how it leaves. Your account's rating limit and hidden libraries apply.
+         */
+        get: operations["listToRate"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/profile/sharing": {
         parameters: {
             query?: never;
@@ -10202,6 +10222,27 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["RatedItemList"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+        };
+    };
+    listToRate: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The items, or an empty list. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ItemList"];
                 };
             };
             401: components["responses"]["Unauthorized"];

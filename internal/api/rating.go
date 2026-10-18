@@ -119,3 +119,15 @@ func (s *Server) listMyRatings(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"ratings": items})
 }
+
+// listToRate is Home's "Rate what you've watched" shelf: films and shows this
+// account finished in the last 30 days and has not rated (store.ToRate).
+// Rating one is how it leaves; there is no other way off.
+func (s *Server) listToRate(w http.ResponseWriter, r *http.Request) {
+	items, err := s.st.ToRate(r.Context(), s.userID(r), 20)
+	if err != nil {
+		s.writeInternal(w, err, "list what to rate")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"items": items})
+}

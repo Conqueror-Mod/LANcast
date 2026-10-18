@@ -1174,6 +1174,15 @@ Everything you have rated, most recent first. `?limit=` defaults to 50 (max
 200). Same privacy rule as above - it is your list, and there is no route to
 anybody else's.
 
+### `GET /api/profile/ratings/pending`
+
+Home's **Rate what you've watched** shelf: `{items}`, the films you finished
+and the shows you finished an episode of in the last 30 days, that you have
+not rated. A show appears once, by its most recent episode, and is rated as
+the show. Newest finish first, at most 20. Rating one (`PUT
+/api/items/{id}/rating`) is how it leaves. Your account's rating limit and
+hidden libraries apply, as everywhere.
+
 ### `GET /api/profile/viewings`
 
 Your watch history: one row per **finished** viewing of a film or an episode,
