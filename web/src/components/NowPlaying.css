@@ -277,14 +277,38 @@
   }
 
   /* Over the stage's lower edge rather than under it: the column starts
-     18px below the stage, and every pixel taken from it is a queue row. */
+     18px below the stage, and every pixel taken from it is a queue row.
+     Anchored by its bottom and growing upward, so the trails' preset row
+     stacks above the choices, inside the stage, and never onto the title. */
   .np__stage {
     left: calc(50% - var(--np-art) / 2);
-    top: calc(var(--np-top) + var(--np-art) - 40px);
+    top: calc(var(--np-top) + var(--np-art) - 8px);
+    transform: translateY(-100%);
+    flex-direction: column-reverse;
+    gap: 4px;
   }
 
+  .np__stage-row {
+    flex-wrap: nowrap;
+    gap: 2px;
+  }
+
+  /* Five choices across a stage 72% of a phone wide: less tracking and
+     padding than the desktop's, or Trails wraps onto a line of its own. */
   .np__stage-btn {
     min-height: 32px;
+    padding: 4px 7px;
+    letter-spacing: 0.05em;
     background: rgba(5, 7, 15, 0.55);
+  }
+
+  .np__step {
+    border-radius: 999px;
+    background: rgba(5, 7, 15, 0.55);
+  }
+
+  .np__step-btn {
+    width: 32px;
+    height: 32px;
   }
 }
