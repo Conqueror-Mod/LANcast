@@ -161,6 +161,6 @@ func TestPatchUnknownUser(t *testing.T) {
 // beats succeeding against a row that does not exist.
 func TestProfilePatchWithoutAnAccount(t *testing.T) {
 	h := newHarness(t)
-	wantError(t, h.do(t, "PATCH", "/api/profile", map[string]any{"name": "Chris"}),
+	wantError(t, h.do(t, "PATCH", "/api/profile", map[string]any{"name": "Dana"}),
 		http.StatusConflict, "no_account")
 }

@@ -309,7 +309,7 @@ func TestPeerStateAndLastSeen(t *testing.T) {
 func TestVisibilityToPeersDefaultsOff(t *testing.T) {
 	st := newStore(t)
 	ctx := context.Background()
-	u, err := st.CreateUser(ctx, "", "Chris", "hash", RoleAdmin)
+	u, err := st.CreateUser(ctx, "", "Dana", "hash", RoleAdmin)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -286,7 +286,7 @@ func TestThePeerGoingQuietIsAChangeInPresence(t *testing.T) {
 	// Point the guest's record of the host at a port nobody listens on, and
 	// forget the address that last answered, which would be tried first.
 	if err := x.guest.st.AddPeer(ctx, store.Peer{
-		Fingerprint: x.hostFP, Name: "Chris's", Addrs: []string{"127.0.0.1:1"},
+		Fingerprint: x.hostFP, Name: "Dana's", Addrs: []string{"127.0.0.1:1"},
 	}); err != nil {
 		t.Fatal(err)
 	}

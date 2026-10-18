@@ -30,11 +30,11 @@ function mount(status: Record<string, unknown>) {
       const json = (v: unknown) =>
         new Response(JSON.stringify(v), { status: 200, headers: { "Content-Type": "application/json" } });
       if (url.includes("/api/auth/status")) {
-        return json({ authenticated: true, configured: true, user: { id: "u1", name: "chris", role: "admin" } });
+        return json({ authenticated: true, configured: true, user: { id: "u1", name: "dana", role: "admin" } });
       }
       if (url.includes("/api/dlna")) return json(status);
       if (url.endsWith("/api/users")) {
-        return json({ users: [{ id: "u1", name: "chris", role: "admin" }, { id: "u_kid", name: "Kids", role: "member" }] });
+        return json({ users: [{ id: "u1", name: "dana", role: "admin" }, { id: "u_kid", name: "Kids", role: "member" }] });
       }
       if (url.includes("/api/settings")) {
         if (init?.method === "PUT" || init?.method === "PATCH") {

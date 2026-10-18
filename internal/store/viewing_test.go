@@ -18,7 +18,7 @@ func viewingFixture(t *testing.T) (*Store, string, int64) {
 	t.Helper()
 	st := openTestStore(t)
 	ctx := context.Background()
-	u, err := st.CreateUser(ctx, "", "chris", "hash", RoleAdmin)
+	u, err := st.CreateUser(ctx, "", "dana", "hash", RoleAdmin)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -29,7 +29,7 @@ function mount(list: Record<string, unknown>) {
       const json = (v: unknown) =>
         new Response(JSON.stringify(v), { status: 200, headers: { "Content-Type": "application/json" } });
       if (url.includes("/api/auth/status")) {
-        return json({ authenticated: true, configured: true, user: { id: "u1", name: "chris", role: "admin" } });
+        return json({ authenticated: true, configured: true, user: { id: "u1", name: "dana", role: "admin" } });
       }
       if (url.includes("/api/optimized")) return json(list);
       if (url.includes("/optimized") && init?.method) {

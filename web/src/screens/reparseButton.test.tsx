@@ -67,7 +67,7 @@ function mount(reparse: { examined: number; changed: number }) {
         return json({
           authenticated: true,
           configured: true,
-          user: { id: "u1", name: "chris", role: "admin" },
+          user: { id: "u1", name: "dana", role: "admin" },
         });
       }
       if (url.includes("/scan")) return json({ state: "idle" });

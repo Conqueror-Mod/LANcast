@@ -24,13 +24,13 @@ let root: Root;
 let asked: string[];
 
 const abandoned = {
-  id: "t-abandoned", item_id: 41, title: "Scream", owner: "chris",
+  id: "t-abandoned", item_id: 41, title: "Scream", owner: "dana",
   live: false, output: "hls", encoding: true, start_at: 0,
   idle_seconds: 480, running_seconds: 500, served_bytes: 0, finished: false,
 };
 
 const watching = {
-  id: "t-watching", item_id: 88, title: "Spider-Verse", owner: "chris",
+  id: "t-watching", item_id: 88, title: "Spider-Verse", owner: "dana",
   live: false, output: "hls", encoding: true, start_at: 0,
   idle_seconds: 2, running_seconds: 300, served_bytes: 41 * 1048576,
   finished: false,

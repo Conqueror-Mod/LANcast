@@ -26,7 +26,7 @@ const (
 )
 
 func known() List {
-	l := List{}.Accept(Server{Address: "media-pc:8080", Name: "Chris", Pin: oldPin})
+	l := List{}.Accept(Server{Address: "media-pc:8080", Name: "Dana", Pin: oldPin})
 	return l.RecordIdentity("media-pc:8080", identity)
 }
 
@@ -86,7 +86,7 @@ func TestAcceptingARotationKeepsTheIdentityAndTheName(t *testing.T) {
 	if s.Identity != identity {
 		t.Errorf("identity = %q, want it kept", s.Identity)
 	}
-	if s.Name != "Chris" {
+	if s.Name != "Dana" {
 		t.Errorf("name = %q, want it kept", s.Name)
 	}
 	if got := l.Check("media-pc:8080", newPin); got != TrustMatch {

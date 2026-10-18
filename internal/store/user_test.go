@@ -12,7 +12,7 @@ func TestCreateUserAndLookup(t *testing.T) {
 	st := newStore(t)
 	ctx := context.Background()
 
-	u, err := st.CreateUser(ctx, "", "Chris", "hash", RoleAdmin)
+	u, err := st.CreateUser(ctx, "", "Dana", "hash", RoleAdmin)
 	if err != nil {
 		t.Fatalf("CreateUser: %v", err)
 	}
@@ -22,7 +22,7 @@ func TestCreateUserAndLookup(t *testing.T) {
 
 	// Name lookup is case-insensitive (COLLATE NOCASE) so login does not depend
 	// on capitalisation.
-	got, err := st.UserByName(ctx, "chris")
+	got, err := st.UserByName(ctx, "dana")
 	if err != nil {
 		t.Fatalf("UserByName: %v", err)
 	}
@@ -34,11 +34,11 @@ func TestCreateUserAndLookup(t *testing.T) {
 func TestCreateUserDuplicateName(t *testing.T) {
 	st := newStore(t)
 	ctx := context.Background()
-	if _, err := st.CreateUser(ctx, "", "Chris", "h", RoleAdmin); err != nil {
+	if _, err := st.CreateUser(ctx, "", "Dana", "h", RoleAdmin); err != nil {
 		t.Fatal(err)
 	}
 	// Different case, same name — must collide.
-	_, err := st.CreateUser(ctx, "", "CHRIS", "h", RoleMember)
+	_, err := st.CreateUser(ctx, "", "DANA", "h", RoleMember)
 	if !errors.Is(err, ErrDuplicate) {
 		t.Errorf("second CreateUser err = %v, want ErrDuplicate", err)
 	}
@@ -63,7 +63,7 @@ func TestSessionRequiresLiveUser(t *testing.T) {
 	st := newStore(t)
 	ctx := context.Background()
 
-	u, err := st.CreateUser(ctx, "", "Chris", "h", RoleMember)
+	u, err := st.CreateUser(ctx, "", "Dana", "h", RoleMember)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -75,8 +75,8 @@ func TestSessionRequiresLiveUser(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LookupSession: %v", err)
 	}
-	if sess.Name != "Chris" || sess.Role != RoleMember {
-		t.Errorf("session = %+v, want Chris/member from the joined user", sess)
+	if sess.Name != "Dana" || sess.Role != RoleMember {
+		t.Errorf("session = %+v, want Dana/member from the joined user", sess)
 	}
 
 	// Deleting the user must make their session stop resolving immediately.
@@ -93,7 +93,7 @@ func TestSessionRequiresLiveUser(t *testing.T) {
 func TestPurgeExpiredSessionsLeavesLiveOnes(t *testing.T) {
 	st := newStore(t)
 	ctx := context.Background()
-	u, err := st.CreateUser(ctx, "", "Chris", "h", RoleMember)
+	u, err := st.CreateUser(ctx, "", "Dana", "h", RoleMember)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -148,7 +148,7 @@ func TestDeleteUserCleansPlaybackAndSessions(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	u, err := st.CreateUser(ctx, "", "Chris", "h", RoleMember)
+	u, err := st.CreateUser(ctx, "", "Dana", "h", RoleMember)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -188,7 +188,7 @@ func TestDeleteAllUsersKeepsWatchHistory(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	owner, err := st.CreateUser(ctx, LocalUserID, "Chris", "h", RoleAdmin)
+	owner, err := st.CreateUser(ctx, LocalUserID, "Dana", "h", RoleAdmin)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -232,7 +232,7 @@ func TestDeleteAllUsersKeepsWatchHistory(t *testing.T) {
 	}
 
 	// And it reconnects: the replacement admin takes the same id.
-	if _, err := st.CreateUser(ctx, LocalUserID, "Chris", "h2", RoleAdmin); err != nil {
+	if _, err := st.CreateUser(ctx, LocalUserID, "Dana", "h2", RoleAdmin); err != nil {
 		t.Fatalf("recreate admin: %v", err)
 	}
 	items, _, err := st.ListItems(ctx, ItemFilter{UserID: LocalUserID, LibraryID: lib.ID})
@@ -256,7 +256,7 @@ func TestDeleteAllUsersLeavesTheLibraryAlone(t *testing.T) {
 	if _, err := st.UpsertItem(ctx, file(lib.ID, filepath.Join(lib.Path, "m.mkv"), "M")); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := st.CreateUser(ctx, LocalUserID, "Chris", "h", RoleAdmin); err != nil {
+	if _, err := st.CreateUser(ctx, LocalUserID, "Dana", "h", RoleAdmin); err != nil {
 		t.Fatal(err)
 	}
 

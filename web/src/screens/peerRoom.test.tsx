@@ -43,7 +43,7 @@ function room(positionMS: number, paused = false) {
     age_ms: 0,
     created_at: 0,
     members: [
-      { user_id: "u_chris", name: "Chris", host: true, last_seen: 0 },
+      { user_id: "u_chris", name: "Dana", host: true, last_seen: 0 },
       { user_id: "peer:X/local", name: "Georgia", host: false, last_seen: 0, peer: "X", server: "Utopia" },
     ],
   };
@@ -196,8 +196,8 @@ describe("following a room on their server", () => {
   it("names who is driving", async () => {
     mockServer({ route: joined(room(0, true)) });
     await render(`/peers/${FP}/item/42?room=${ROOM}`);
-    await waitFor(() => (host.textContent ?? "").includes("Watching with Chris"));
-    expect(host.textContent).toContain("Watching with Chris. They control playback.");
+    await waitFor(() => (host.textContent ?? "").includes("Watching with Dana"));
+    expect(host.textContent).toContain("Watching with Dana. They control playback.");
   });
 
   /*
@@ -281,10 +281,10 @@ describe("asking to join from People", () => {
   const peers = (watching?: string, shares = true) => [
     {
       fingerprint: FP,
-      name: "Chris's",
+      name: "Dana's",
       state: "paired",
       reachable: true,
-      people: [{ id: "u_chris", name: "Chris", granted: true, shares, online: true, watching }],
+      people: [{ id: "u_chris", name: "Dana", granted: true, shares, online: true, watching }],
     },
   ];
   const button = () =>
@@ -330,7 +330,7 @@ describe("asking to join from People", () => {
     await flush();
     const ask = calls.find((c) => c.method === "POST" && c.url.endsWith("/together/requests"));
     expect(ask?.body).toEqual({ person: "u_chris" });
-    expect(host.textContent).toContain("Asking Chris…");
+    expect(host.textContent).toContain("Asking Dana…");
 
     answered = true;
     await waitFor(() => landed.startsWith(`/peers/${FP}/item/42`), 5000);
@@ -360,7 +360,7 @@ describe("asking to join from People", () => {
     });
     await flush();
     expect(calls.some((c) => c.method === "DELETE" && c.url.endsWith(`/together/requests/q1`))).toBe(true);
-    expect(host.textContent).not.toContain("Asking Chris…");
+    expect(host.textContent).not.toContain("Asking Dana…");
     expect(button()).toBeTruthy();
   });
 

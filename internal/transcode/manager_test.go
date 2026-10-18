@@ -135,14 +135,14 @@ func TestProgressiveSupersedesSameOwnersStream(t *testing.T) {
 	bin := fakeFFmpeg(t, `while true; do printf 'x'; sleep 0.05; done`)
 	m := newManager(t, bin)
 
-	first, err := m.Progressive(context.Background(), 7, "chris", Options{Input: "x.mkv", Decision: remux()})
+	first, err := m.Progressive(context.Background(), 7, "dana", Options{Input: "x.mkv", Decision: remux()})
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer first.Close()
 	first.Read(make([]byte, 1))
 
-	second, err := m.Progressive(context.Background(), 7, "chris", Options{Input: "x.mkv", Decision: remux()})
+	second, err := m.Progressive(context.Background(), 7, "dana", Options{Input: "x.mkv", Decision: remux()})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -161,7 +161,7 @@ func TestProgressiveLeavesOtherViewersAlone(t *testing.T) {
 	bin := fakeFFmpeg(t, `while true; do printf 'x'; sleep 0.05; done`)
 	m := newManager(t, bin)
 
-	for _, who := range []string{"chris", "georgia"} {
+	for _, who := range []string{"dana", "georgia"} {
 		rc, err := m.Progressive(context.Background(), 7, who, Options{Input: "x.mkv", Decision: remux()})
 		if err != nil {
 			t.Fatalf("%s: %v", who, err)

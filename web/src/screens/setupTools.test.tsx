@@ -70,7 +70,7 @@ function fill() {
     Object.getOwnPropertyDescriptor(
       HTMLInputElement.prototype,
       "value",
-    )!.set!.call(user, "chris");
+    )!.set!.call(user, "dana");
     user.dispatchEvent(new Event("input", { bubbles: true }));
     Object.getOwnPropertyDescriptor(
       HTMLInputElement.prototype,

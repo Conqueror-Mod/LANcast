@@ -14,7 +14,7 @@ func pk(userID string, cred byte) Passkey {
 func TestPasskeyRoundTrip(t *testing.T) {
 	st := newStore(t)
 	ctx := context.Background()
-	u, err := st.CreateUser(ctx, "", "Chris", "h", RoleAdmin)
+	u, err := st.CreateUser(ctx, "", "Dana", "h", RoleAdmin)
 	if err != nil {
 		t.Fatal(err)
 	}

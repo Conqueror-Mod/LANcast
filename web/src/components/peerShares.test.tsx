@@ -80,7 +80,7 @@ beforeEach(() => {
       if (url.includes("/api/auth/status")) {
         return json({
           authenticated: true,
-          user: { id: "u_1", name: "Chris", role },
+          user: { id: "u_1", name: "Dana", role },
         });
       }
       return json({});
@@ -109,7 +109,7 @@ async function render() {
    */
   qc.setQueryData(["auth-status"], {
     authenticated: true,
-    user: { id: "u_1", name: "Chris", role },
+    user: { id: "u_1", name: "Dana", role },
   });
   await act(async () => {
     root.render(

@@ -174,7 +174,7 @@ func TestRestoreClearsSessionsFromAPreAmendmentBackup(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := src.CreateUser(ctx, "u_1", "Chris", "hash", "admin"); err != nil {
+	if _, err := src.CreateUser(ctx, "u_1", "Dana", "hash", "admin"); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := src.Snapshot(ctx, snap); err != nil {
@@ -232,7 +232,7 @@ func TestRestoreOfACurrentBackupHasNoSessionsToClear(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := src.CreateUser(ctx, "u_1", "Chris", "hash", "admin"); err != nil {
+	if _, err := src.CreateUser(ctx, "u_1", "Dana", "hash", "admin"); err != nil {
 		t.Fatal(err)
 	}
 	if err := src.CreateSession(ctx, "hash-a", "u_1", time.Hour); err != nil {

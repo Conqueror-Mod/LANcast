@@ -110,7 +110,7 @@ function mount(episodes: number[], next: number | null = null) {
         return json({
           authenticated: true,
           configured: true,
-          user: { id: "u1", name: "chris", role: "admin" },
+          user: { id: "u1", name: "dana", role: "admin" },
         });
       }
       return json({});

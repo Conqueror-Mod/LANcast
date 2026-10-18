@@ -92,7 +92,7 @@ func TestATVSeesWhatItsAccountSees(t *testing.T) {
 func TestNothingOffTheLANIsAnswered(t *testing.T) {
 	a := newAccessHarness(t)
 	h := a.dlna(t, a.memberID(t))
-	for _, from := range []string{"8.8.8.8:4000", "[2600:1702::99]:4000"} {
+	for _, from := range []string{"8.8.8.8:4000", "[2001:db8::99]:4000"} {
 		if code := dlnaCall(h, "GET", "/dlna/device.xml", "", from).Code; code != http.StatusForbidden {
 			t.Errorf("device.xml from %s = %d, want 403", from, code)
 		}
