@@ -453,6 +453,9 @@ func (r *retroPlayer) run(ctx context.Context, game *remote.Game, corePath strin
 			if e.Options != nil {
 				out["options"] = e.Options
 			}
+			if e.Labels != nil {
+				out["labels"] = e.Labels
+			}
 			r.emit(out)
 		},
 		Log: slog.Default(),

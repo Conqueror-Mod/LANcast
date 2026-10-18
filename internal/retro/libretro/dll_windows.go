@@ -538,7 +538,21 @@ func (c *dllCore) environment(cmd uint32, data unsafe.Pointer) bool {
 			*(*uint32)(data) = 4
 		}
 		return true
-	case EnvSetPerformanceLevel, EnvSetInputDescriptors, EnvSetControllerInfo,
+	case EnvSetInputDescriptors:
+		// What the core calls each input, for the Controls page's labels.
+		if ds, ok := fe.(DescriptorSink); ok && data != nil {
+			var out []InputDescriptor
+			for p := (*retroInputDescriptor)(data); p.description != nil; p = (*retroInputDescriptor)(unsafe.Add(unsafe.Pointer(p), unsafe.Sizeof(retroInputDescriptor{}))) {
+				out = append(out, InputDescriptor{Port: p.port, Device: p.device, Index: p.index, ID: p.id,
+					Description: goString(p.description)})
+				if len(out) > 1024 {
+					break
+				}
+			}
+			ds.SetInputDescriptors(out)
+		}
+		return true
+	case EnvSetPerformanceLevel, EnvSetControllerInfo,
 		EnvSetSupportNoGame, EnvSetSerializationQuirks:
 		// Acknowledged and ignored: nothing here changes what the host does.
 		return true
@@ -638,4 +652,11 @@ func logCB(level, format uintptr) uintptr {
 		Log(int(uint32(level)), goString((*byte)(cPointer(format))))
 	}
 	return 0
+}
+
+// retroInputDescriptor is struct retro_input_descriptor: four unsigneds and
+// a const char *, the array ended by a null description.
+type retroInputDescriptor struct {
+	port, device, index, id uint32
+	description             *byte
 }

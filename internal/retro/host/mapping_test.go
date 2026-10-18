@@ -64,3 +64,22 @@ func TestAnOldMappingGetsNewTargetsFromTheDefault(t *testing.T) {
 		t.Errorf("merged: %+v", m)
 	}
 }
+
+// The core's own names reach the page by Controls target, the first
+// controller's joypad only.
+func TestTheCoresButtonNamesBecomeLabels(t *testing.T) {
+	var got Event
+	s := New(Config{OnEvent: func(e Event) { got = e }})
+	s.SetInputDescriptors([]libretro.InputDescriptor{
+		{Port: 0, Device: libretro.DeviceJoypad, ID: libretro.JoypadL2, Description: "Z Trigger"},
+		{Port: 0, Device: libretro.DeviceJoypad, ID: libretro.JoypadB, Description: "B Button"},
+		{Port: 1, Device: libretro.DeviceJoypad, ID: libretro.JoypadA, Description: "Player 2 A"},
+		{Port: 0, Device: libretro.DeviceAnalog, ID: 0, Description: "Control Stick X"},
+	})
+	if got.Kind != "labels" || got.Labels["l2"] != "Z Trigger" || got.Labels["b"] != "B Button" {
+		t.Fatalf("event = %+v", got)
+	}
+	if len(got.Labels) != 2 {
+		t.Errorf("labels carried another port or the analog stick: %v", got.Labels)
+	}
+}
