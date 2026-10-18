@@ -119,6 +119,7 @@ import type {
 } from "@/api/types";
 import { LibraryRow, AddLibrary } from "@/components/LibrarySettings";
 import { answersWithin, goTo, urlAtPort } from "@/lib/portMove";
+import { usePlaybackIfAny } from "@/playback/PlaybackProvider";
 import { useQueryClient } from "@tanstack/react-query";
 import "./Settings.css";
 
@@ -4066,6 +4067,7 @@ function NetworkSection() {
  */
 function PortRow({ net }: { net: NetworkStatus }) {
   const setPort = useSetPort();
+  const playback = usePlaybackIfAny();
   const qc = useQueryClient();
   const [draft, setDraft] = useState("");
   const [confirming, setConfirming] = useState(false);
@@ -4155,14 +4157,18 @@ function PortRow({ net }: { net: NetworkStatus }) {
                 className="set-btn"
                 type="button"
                 disabled={setPort.isPending}
-                onClick={() =>
+                onClick={() => {
+                  // The restart ends whatever is playing anyway; stopping it
+                  // first means it ends cleanly rather than in a mini-player
+                  // that nothing can control any more.
+                  playback?.stop();
                   setPort.mutate(port, {
                     onSuccess: (r) => {
                       setConfirming(false);
                       void follow(r.port);
                     },
-                  })
-                }
+                  });
+                }}
               >
                 Restart on port {draft}
               </button>
