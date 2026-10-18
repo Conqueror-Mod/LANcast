@@ -113,3 +113,17 @@ func TestMediaKeysAreNamedAndNothingElseIs(t *testing.T) {
 		}
 	}
 }
+
+// Keyboard software (iCUE, Logi Options+) delivers media keys injected; the
+// hook's own injected key, and any other injected key, stay ignored.
+func TestInjectedMediaKeysAreAnswered(t *testing.T) {
+	if !considers(true, 0xB3) || !considers(true, 0xB0) {
+		t.Error("an injected media key was ignored")
+	}
+	if considers(true, 0xE8) || considers(true, 0x25) {
+		t.Error("an injected non-media key was considered")
+	}
+	if !considers(false, 0x25) {
+		t.Error("a real arrow was ignored")
+	}
+}

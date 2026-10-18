@@ -1,3 +1,4 @@
+import { typingInto } from "@/lib/typing";
 import { WINDOW_HIDDEN } from "@/components/TrayBridge";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
@@ -394,12 +395,7 @@ export function Player() {
     const onKey = (e: KeyboardEvent) => {
       // While typing in the subtitle search box, keys are text — not transport.
       const ae = document.activeElement;
-      if (
-        ae instanceof HTMLElement &&
-        (ae.tagName === "INPUT" ||
-          ae.tagName === "TEXTAREA" ||
-          ae.isContentEditable)
-      ) {
+      if (typingInto(ae)) {
         return;
       }
       /*

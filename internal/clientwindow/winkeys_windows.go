@@ -132,7 +132,14 @@ func lowLevelKey(code int, wp uintptr, k *kbdLLHook) uintptr {
 		hookMu.Lock()
 		h := theHook
 		hookMu.Unlock()
-		if h != nil && h.handle != 0 && k.Flags&llkhfInjected == 0 && h.take(uint32(wp), k.VkCode) {
+		/*
+		 * Injected presses are skipped so this hook never answers its own
+		 * tapDummy -- but a media key is never ours, and keyboard software
+		 * (iCUE, Logi Options+) delivers every media key injected. Skipping
+		 * them all made the media keys do nothing at all; a diagnostic build
+		 * showed every press arriving with LLKHF_INJECTED (2026-10-17).
+		 */
+		if h != nil && h.handle != 0 && considers(k.Flags&llkhfInjected != 0, k.VkCode) && h.take(uint32(wp), k.VkCode) {
 			return 1
 		}
 	}

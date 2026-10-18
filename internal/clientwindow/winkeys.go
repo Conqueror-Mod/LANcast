@@ -264,3 +264,11 @@ func MediaCommand(vk uint32) string {
 	}
 	return ""
 }
+
+// considers is whether the hook looks at a press at all: every real one, and
+// of the injected ones only the media keys. The hook injects a key of its own
+// (tapDummy) and must not answer it, but keyboard software delivers media keys
+// injected, and refusing those made them do nothing.
+func considers(injected bool, vk uint32) bool {
+	return !injected || MediaCommand(vk) != ""
+}
