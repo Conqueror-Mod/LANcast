@@ -277,7 +277,7 @@ func TestRemovingAPeerTakesTheRosterWithIt(t *testing.T) {
 	}).Body.Close()
 
 	if err := h.st.ReplaceRemotePeople(ctx, other.Fingerprint(), []store.RemotePerson{
-		{ID: "u1", Name: "Georgia"},
+		{ID: "u1", Name: "Gerda"},
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -336,7 +336,7 @@ func TestRemovingAnUnknownPeerIs404(t *testing.T) {
 func TestPairingIsAdminOnly(t *testing.T) {
 	h := newHarness(t)
 	h.secure(t, "a good long password")
-	member := h.member(t, "Georgia", "another good password")
+	member := h.member(t, "Gerda", "another good password")
 
 	for _, tc := range []struct{ method, path string }{
 		{"GET", "/api/peers"},
@@ -400,7 +400,7 @@ func TestPeerVisibilityIsPersonalAndReadsBack(t *testing.T) {
 func TestAMemberMaySetTheirOwnVisibility(t *testing.T) {
 	h := newHarness(t)
 	h.secure(t, "a good long password")
-	member := h.member(t, "Georgia", "another good password")
+	member := h.member(t, "Gerda", "another good password")
 
 	resp := h.asUser(t, member, "PUT", "/api/profile/peer-visibility", map[string]any{"visible": true})
 	defer resp.Body.Close()

@@ -86,7 +86,7 @@ func TestTheWatchlistIsNewestFirstAndTakesFilmsAndShows(t *testing.T) {
 		t.Errorf("adding nothing err = %v", err)
 	}
 	// Private: another account's list is empty.
-	other, _ := f.st.CreateUser(ctx, "", "georgia", "h", RoleMember)
+	other, _ := f.st.CreateUser(ctx, "", "gerda", "h", RoleMember)
 	if items, _ := f.st.Watchlist(ctx, other.ID, 0); len(items) != 0 {
 		t.Errorf("another account sees %d", len(items))
 	}

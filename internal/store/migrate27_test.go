@@ -63,7 +63,7 @@ func TestUpgradeLeavesExistingAccountsInvisible(t *testing.T) {
 		shares   int
 	}{
 		{"local", "Dana", 1},
-		{"u2", "Georgia", 0},
+		{"u2", "Gerda", 0},
 	} {
 		if _, err := db.Exec(`
 			INSERT INTO user (id, name, password_hash, role, created_at, share_activity)

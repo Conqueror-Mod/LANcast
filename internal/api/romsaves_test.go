@@ -197,7 +197,7 @@ func TestSavesArePerPerson(t *testing.T) {
 	if resp := f.raw(t, "PUT", path, []byte("owner's"), ""); resp.StatusCode != http.StatusOK {
 		t.Fatalf("owner save: %d %s", resp.StatusCode, body(t, resp))
 	}
-	m := f.h.member(t, "georgia", "another long password")
+	m := f.h.member(t, "gerda", "another long password")
 	req, _ := http.NewRequest("GET", f.h.srv.URL+path, nil)
 	req.AddCookie(m.cookie)
 	resp, err := f.h.srv.Client().Do(req)
@@ -294,7 +294,7 @@ func TestTicketRoutes(t *testing.T) {
 func TestDeletingAUserRemovesTheirSaves(t *testing.T) {
 	f := newROMFixture(t)
 	f.h.secure(t, "a good long password")
-	m := f.h.member(t, "georgia", "another long password")
+	m := f.h.member(t, "gerda", "another long password")
 	req, _ := http.NewRequest("PUT", f.h.srv.URL+"/api/items/"+itoa(f.cart)+"/saves/sram", bytes.NewReader([]byte("hers")))
 	req.Header.Set("Origin", f.h.srv.URL)
 	req.AddCookie(m.cookie)

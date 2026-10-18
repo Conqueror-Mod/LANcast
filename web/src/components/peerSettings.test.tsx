@@ -27,7 +27,7 @@ globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 const PAIRED = {
   fingerprint: "BBBB4G6XEG33AUPJU7LGSTT4N74U6D4B",
   fingerprint_display: "BBBB-4G6X-EG33-AUPJ-U7LG-STT4-N74U-6D4B",
-  name: "Georgia",
+  name: "Gerda",
   state: "paired",
   addrs: ["10.0.0.14:8080"],
   added_at: 1_757_000_000,

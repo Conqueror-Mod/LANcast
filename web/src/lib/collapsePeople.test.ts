@@ -5,7 +5,7 @@ import type { FacePerson } from "@/api/hooks";
 /*
  * One person, one tile.
  *
- * Reported from a real library: "Georgia Bowles" appeared three times, with
+ * Reported from a real library: "Gerda Blake" appeared three times, with
  * counts of 80, 1 and 1 — the result of accepting near-miss suggestions, which
  * names a group rather than merging it. The page read as three different
  * people who happened to share a name.
@@ -18,12 +18,12 @@ function person(id: number, name: string | null, count: number, cover?: number):
 describe("collapsing people by name", () => {
   it("shows one row for a person spread across several groups", () => {
     const got = collapsePeople([
-      person(1, "Georgia Bowles", 80, 11),
-      person(2, "Georgia Bowles", 1, 22),
-      person(3, "Georgia Bowles", 1, 33),
+      person(1, "Gerda Blake", 80, 11),
+      person(2, "Gerda Blake", 1, 22),
+      person(3, "Gerda Blake", 1, 33),
     ]);
     expect(got).toHaveLength(1);
-    expect(got[0].name).toBe("Georgia Bowles");
+    expect(got[0].name).toBe("Gerda Blake");
     expect(got[0].count).toBe(82);
   });
 
@@ -31,9 +31,9 @@ describe("collapsing people by name", () => {
     // Renaming one of three would split her back into two people, which is
     // this function's own bug arriving by a different route.
     const got = collapsePeople([
-      person(1, "Georgia Bowles", 80),
-      person(2, "Georgia Bowles", 1),
-      person(3, "Georgia Bowles", 1),
+      person(1, "Gerda Blake", 80),
+      person(2, "Gerda Blake", 1),
+      person(3, "Gerda Blake", 1),
     ]);
     expect(got[0].clusterIDs).toEqual([1, 2, 3]);
   });
@@ -41,8 +41,8 @@ describe("collapsing people by name", () => {
   it("takes the cover face from the largest group", () => {
     // The one with the most evidence behind it, not whichever arrived first.
     const got = collapsePeople([
-      person(2, "Georgia Bowles", 1, 22),
-      person(1, "Georgia Bowles", 80, 11),
+      person(2, "Gerda Blake", 1, 22),
+      person(1, "Gerda Blake", 80, 11),
     ]);
     expect(got[0].coverFaceID).toBe(11);
     expect(got[0].clusterIDs[0]).toBe(1);
@@ -50,8 +50,8 @@ describe("collapsing people by name", () => {
 
   it("falls back to a smaller group's face when the largest has none", () => {
     const got = collapsePeople([
-      person(1, "Georgia Bowles", 80),
-      person(2, "Georgia Bowles", 1, 22),
+      person(1, "Gerda Blake", 80),
+      person(2, "Gerda Blake", 1, 22),
     ]);
     expect(got[0].coverFaceID).toBe(22);
   });
@@ -73,8 +73,8 @@ describe("collapsing people by name", () => {
 
   it("treats a name that differs only by spacing as the same person", () => {
     const got = collapsePeople([
-      person(1, "Georgia Bowles", 5),
-      person(2, "  Georgia Bowles  ", 3),
+      person(1, "Gerda Blake", 5),
+      person(2, "  Gerda Blake  ", 3),
     ]);
     expect(got).toHaveLength(1);
     expect(got[0].count).toBe(8);
@@ -82,8 +82,8 @@ describe("collapsing people by name", () => {
 
   it("keeps different people apart", () => {
     const got = collapsePeople([
-      person(1, "Georgia Bowles", 5),
-      person(2, "Carl Bowles", 3),
+      person(1, "Gerda Blake", 5),
+      person(2, "Carl Hodge", 3),
       person(3, null, 1),
     ]);
     expect(got).toHaveLength(3);

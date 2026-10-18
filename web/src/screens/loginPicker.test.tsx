@@ -79,7 +79,7 @@ function type(input: HTMLInputElement, value: string) {
 
 describe("the sign-in page's account picker", () => {
   it("offers the accounts it is sent, and signs in as the one picked", async () => {
-    mount(["chris", "kids"]);
+    mount(["dana", "kids"]);
     await render();
     expect(host.textContent).toContain("Who's signing in?");
     expect(host.querySelector('input[type="password"]')).toBeNull();
@@ -94,9 +94,9 @@ describe("the sign-in page's account picker", () => {
   });
 
   it("goes back to the names from Not you, and to the form from Someone else", async () => {
-    mount(["chris", "kids"]);
+    mount(["dana", "kids"]);
     await render();
-    await act(async () => button("chris")!.click());
+    await act(async () => button("dana")!.click());
     await act(async () => button("Not you?")!.click());
     expect(host.textContent).toContain("Who's signing in?");
     await act(async () => button("Someone else")!.click());

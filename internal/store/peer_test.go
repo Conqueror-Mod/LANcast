@@ -157,7 +157,7 @@ func TestRemovingAPeerTakesItsPeopleAndAddresses(t *testing.T) {
 		t.Fatal(err)
 	}
 	if err := st.ReplaceRemotePeople(ctx, fpA, []RemotePerson{
-		{ID: "u1", Name: "Georgia"},
+		{ID: "u1", Name: "Gerda"},
 		{ID: "u2", Name: "Somebody"},
 	}); err != nil {
 		t.Fatal(err)
@@ -203,12 +203,12 @@ func TestReplacingARosterRemovesWhoIsNoLongerOnIt(t *testing.T) {
 	}
 
 	if err := st.ReplaceRemotePeople(ctx, fpA, []RemotePerson{
-		{ID: "u1", Name: "Georgia"}, {ID: "u2", Name: "Leaving"},
+		{ID: "u1", Name: "Gerda"}, {ID: "u2", Name: "Leaving"},
 	}); err != nil {
 		t.Fatal(err)
 	}
 	if err := st.ReplaceRemotePeople(ctx, fpA, []RemotePerson{
-		{ID: "u1", Name: "Georgia renamed"},
+		{ID: "u1", Name: "Gerda renamed"},
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -221,7 +221,7 @@ func TestReplacingARosterRemovesWhoIsNoLongerOnIt(t *testing.T) {
 		t.Fatalf("roster = %v, want only u1", people)
 	}
 	// The id is what survives a rename, which is why a grant names the id.
-	if people[0].Name != "Georgia renamed" {
+	if people[0].Name != "Gerda renamed" {
 		t.Errorf("name = %q, want the refreshed one", people[0].Name)
 	}
 }

@@ -22,7 +22,7 @@ func testIdentity(t *testing.T) identity.Identity {
 func TestRoundTrip(t *testing.T) {
 	id := testIdentity(t)
 
-	s, err := Encode(id, "Georgia's LANcast", []string{"192.0.2.10:8080", "198.51.100.9:8080"})
+	s, err := Encode(id, "Gerda's LANcast", []string{"192.0.2.10:8080", "198.51.100.9:8080"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -37,7 +37,7 @@ func TestRoundTrip(t *testing.T) {
 	if got.Fingerprint != id.Fingerprint() {
 		t.Errorf("fingerprint = %q, want %q", got.Fingerprint, id.Fingerprint())
 	}
-	if got.Name != "Georgia's LANcast" {
+	if got.Name != "Gerda's LANcast" {
 		t.Errorf("name = %q", got.Name)
 	}
 	if len(got.Addrs) != 2 || got.Addrs[0] != "192.0.2.10:8080" {
@@ -198,7 +198,7 @@ func TestNameIsCleanedButNotMangled(t *testing.T) {
 		return got
 	}
 
-	if got := enc("Georgia\nadmin").Name; strings.ContainsAny(got, "\r\n") {
+	if got := enc("Gerda\nadmin").Name; strings.ContainsAny(got, "\r\n") {
 		t.Errorf("newline survived: %q", got)
 	}
 	if got := enc("Bad\x1b[31mred").Name; strings.Contains(got, "\x1b") {
@@ -209,7 +209,7 @@ func TestNameIsCleanedButNotMangled(t *testing.T) {
 	}
 	// Not an ASCII filter: names are people's, and most of the world's are not
 	// ASCII.
-	for _, name := range []string{"Georgia's Utopia", "Björn", "北京の家", "Дом"} {
+	for _, name := range []string{"Gerda's Utopia", "Björn", "北京の家", "Дом"} {
 		if got := enc(name).Name; got != name {
 			t.Errorf("name %q was mangled to %q", name, got)
 		}

@@ -286,7 +286,7 @@ func TestAPersonSpanningTwoGroupsGetsAllTheirPhotographs(t *testing.T) {
 	// Both groups are the same person, the way naming two of them makes them.
 	both := []int64{clusterOf(t, s, everyday), clusterOf(t, s, shoot)}
 	for _, id := range both {
-		if err := s.NameCluster(ctx, id, "Georgia"); err != nil {
+		if err := s.NameCluster(ctx, id, "Gerda"); err != nil {
 			t.Fatal(err)
 		}
 	}

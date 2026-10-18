@@ -144,7 +144,7 @@ func TestAReclusterNeverOverwritesAName(t *testing.T) {
 		t.Fatal(err)
 	}
 	id := clusterOf(t, s, a1)
-	if err := s.NameCluster(ctx, id, "Georgia"); err != nil {
+	if err := s.NameCluster(ctx, id, "Gerda"); err != nil {
 		t.Fatal(err)
 	}
 
@@ -170,7 +170,7 @@ func TestAReclusterNeverOverwritesAName(t *testing.T) {
 	}
 	var named *FaceCluster
 	for i := range clusters {
-		if clusters[i].Name != nil && *clusters[i].Name == "Georgia" {
+		if clusters[i].Name != nil && *clusters[i].Name == "Gerda" {
 			named = &clusters[i]
 		}
 	}
@@ -369,7 +369,7 @@ func TestARejectedFaceIsNotRegroupedByTheNextPass(t *testing.T) {
 	if clusterOf(t, s, wrong) != group {
 		t.Fatal("fixture: the three faces did not group together")
 	}
-	if err := s.NameCluster(ctx, group, "Georgia Bowles"); err != nil {
+	if err := s.NameCluster(ctx, group, "Gerda Blake"); err != nil {
 		t.Fatal(err)
 	}
 

@@ -142,7 +142,7 @@ function onePeer(people: PeerPersonFixture[], reachable = true) {
   return [
     {
       fingerprint: "AAAA-BBBB",
-      name: "Georgia's LANcast",
+      name: "Gerda's LANcast",
       state: "paired",
       reachable,
       people,
@@ -168,7 +168,7 @@ describe("people on paired servers", () => {
       onePeer([
         {
           id: "g-1",
-          name: "Georgia",
+          name: "Gerda",
           granted: false,
           shares: true,
           online: true,
@@ -178,7 +178,7 @@ describe("people on paired servers", () => {
     );
     await render();
 
-    expect(host.textContent).toContain("Georgia");
+    expect(host.textContent).toContain("Gerda");
     expect(host.textContent).toContain("Watching Blade Runner");
   });
 
@@ -189,7 +189,7 @@ describe("people on paired servers", () => {
    */
   it("says a choice is a choice, not an absence", async () => {
     mockServer(
-      onePeer([{ id: "g-1", name: "Georgia", granted: false, shares: false }]),
+      onePeer([{ id: "g-1", name: "Gerda", granted: false, shares: false }]),
     );
     await render();
 
@@ -204,7 +204,7 @@ describe("people on paired servers", () => {
    */
   it("does not call a non-sharer offline", async () => {
     mockServer(
-      onePeer([{ id: "g-1", name: "Georgia", granted: true, shares: false }]),
+      onePeer([{ id: "g-1", name: "Gerda", granted: true, shares: false }]),
     );
     await render();
 
@@ -222,7 +222,7 @@ describe("people on paired servers", () => {
    */
   it("says on the card what a peer has shared with us", async () => {
     mockServer(
-      onePeer([{ id: "g-1", name: "Georgia", granted: true, shares: false }]),
+      onePeer([{ id: "g-1", name: "Gerda", granted: true, shares: false }]),
       [
         { id: 1, name: "Movies", kind: "movie" },
         { id: 2, name: "Music", kind: "music" },
@@ -237,12 +237,12 @@ describe("people on paired servers", () => {
   // that reads the same as a screen that has not loaded.
   it("says when a peer has shared nothing", async () => {
     mockServer(
-      onePeer([{ id: "g-1", name: "Georgia", granted: true, shares: false }]),
+      onePeer([{ id: "g-1", name: "Gerda", granted: true, shares: false }]),
     );
     await render(() => host.textContent!.includes("has not shared"));
 
     expect(host.textContent).toContain(
-      "Georgia's LANcast has not shared a library with this server",
+      "Gerda's LANcast has not shared a library with this server",
     );
   });
 
@@ -272,7 +272,7 @@ describe("people on paired servers", () => {
       onePeer([
         {
           id: "g-1",
-          name: "Georgia",
+          name: "Gerda",
           granted: false,
           shares: true,
           online: true,
@@ -291,7 +291,7 @@ describe("people on paired servers", () => {
         [
           {
             id: "g-1",
-            name: "Georgia",
+            name: "Gerda",
             granted: false,
             shares: true,
             online: true,
@@ -318,7 +318,7 @@ describe("people on paired servers", () => {
   it("shows your grant, not theirs", async () => {
     mockServer(
       onePeer([
-        { id: "g-1", name: "Georgia", granted: true, shares: false },
+        { id: "g-1", name: "Gerda", granted: true, shares: false },
         { id: "g-2", name: "Alex", granted: false, shares: true, online: true },
       ]),
     );
@@ -334,7 +334,7 @@ describe("people on paired servers", () => {
 
   it("grants presence to a named person, by id", async () => {
     mockServer(
-      onePeer([{ id: "g-1", name: "Georgia", granted: false, shares: false }]),
+      onePeer([{ id: "g-1", name: "Gerda", granted: false, shares: false }]),
     );
     await render(() => peerBoxes().length > 0);
 
@@ -381,7 +381,7 @@ describe("people on paired servers", () => {
               peers: onePeer([
                 {
                   id: "g-1",
-                  name: "Georgia",
+                  name: "Gerda",
                   granted: false,
                   shares: false,
                 },
