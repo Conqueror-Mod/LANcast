@@ -20,11 +20,15 @@ export function LyricsPanel({
   itemID,
   atMS,
   onClose,
+  inline = false,
 }: {
   itemID: number;
   /** Where the song is, in milliseconds. */
   atMS: number;
-  onClose: () => void;
+  /** Absent inline: a tab is left by choosing the other one. */
+  onClose?: () => void;
+  /** Laid out in Now Playing's column rather than over the player. */
+  inline?: boolean;
 }) {
   const { data, isLoading } = useLyrics(itemID);
   const listRef = useRef<HTMLDivElement>(null);
@@ -56,20 +60,26 @@ export function LyricsPanel({
     activeRef.current?.scrollIntoView({ block: "center", behavior: "smooth" });
   }, [active]);
 
+  // Said plainly. A panel that simply never highlights anything reads as
+  // broken, and "these do not follow the song" is a different and true
+  // statement.
+  const untimed = !!data && !synced && lines.length > 0;
+
   return (
-    <aside className="lyrics" aria-label="Lyrics">
-      <div className="lyrics__head">
-        <span className="section-label">Lyrics</span>
-        {/* Said plainly. A panel that simply never highlights anything reads as
-            broken, and "these do not follow the song" is a different and true
-            statement. */}
-        {data && !synced && lines.length > 0 && (
-          <span className="lyrics__note">not timed to the song</span>
-        )}
-        <button className="lyrics__close" onClick={onClose} aria-label="Close lyrics">
-          ×
-        </button>
-      </div>
+    <aside className={"lyrics" + (inline ? " lyrics--inline" : "")} aria-label="Lyrics">
+      {/* Inline, the tab above already says Lyrics; the head is kept only for
+          the note. */}
+      {(!inline || untimed) && (
+        <div className="lyrics__head">
+          {!inline && <span className="section-label">Lyrics</span>}
+          {untimed && <span className="lyrics__note">not timed to the song</span>}
+          {onClose && (
+            <button className="lyrics__close" onClick={onClose} aria-label="Close lyrics">
+              ×
+            </button>
+          )}
+        </div>
+      )}
 
       <div className="lyrics__lines" ref={listRef}>
         {isLoading && <p className="lyrics__empty">Looking…</p>}

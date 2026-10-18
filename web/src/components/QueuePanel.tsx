@@ -16,7 +16,13 @@ export function QueuePanel({
   onPick,
   upNext = [],
   onDrop,
+  inline = false,
 }: {
+  /**
+   * Laid out on the page (Now Playing's column) rather than as a popover over
+   * the player. It scrolls itself and follows the track that is playing.
+   */
+  inline?: boolean;
   ids: number[];
   currentID: number;
   onPick: (id: number, at: number) => void;
@@ -47,14 +53,44 @@ export function QueuePanel({
    * beneath it.
    */
   const currentRow = useRef<HTMLButtonElement>(null);
+  const panel = useRef<HTMLDivElement>(null);
   useEffect(() => {
+    if (inline) return;
     currentRow.current?.scrollIntoView({ block: "center" });
     // On open only. Re-running as the queue advances would drag the list out
     // from under someone who had scrolled off to look at something else.
-  }, []);
+  }, [inline]);
+
+  /*
+   * On the page, the list follows the record: the playing row goes to the top
+   * whenever the track changes, so what is visible is what comes next.
+   *
+   * A popover is opened to look at something and closed again, so dragging it
+   * would be rude. A column that stays on screen for an album and goes on
+   * showing track 1 while track 9 plays is just wrong. Once per track, not on
+   * every tick, so somebody scrolling to read is moved at most when a song
+   * ends.
+   *
+   * The scroll is set on the panel itself rather than with scrollIntoView,
+   * which also scrolls every scrollable ancestor to get there. `.player` is
+   * overflow: hidden, and hidden still scrolls programmatically, so the whole
+   * screen could slide up under the cover.
+   */
+  useEffect(() => {
+    if (!inline) return;
+    const box = panel.current;
+    const row = currentRow.current;
+    if (!box || !row) return;
+    box.scrollTop += row.getBoundingClientRect().top - box.getBoundingClientRect().top;
+  }, [inline, currentID]);
 
   return (
-    <div className="queue" role="menu" aria-label="Queue">
+    <div
+      ref={panel}
+      className={"queue" + (inline ? " queue--inline" : "")}
+      role="menu"
+      aria-label="Queue"
+    >
       {upNext.length > 0 && (
         <>
           <div className="queue__head">

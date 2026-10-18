@@ -1,0 +1,176 @@
+/*
+ * Now Playing's column, beside the cover the media surface draws underneath.
+ *
+ * Its edges are computed from the same --np-art and --np-gap the cover uses
+ * (playback.css): left edge --np-gap/2 right of the middle, top and height
+ * matching the cover's, so the two read as one composition even though they
+ * live in different layers.
+ *
+ * Nothing here is gold except focus. The playing row in the queue keeps its
+ * gold edge (QueuePanel.css), so the chosen tab is marked the neutral way an
+ * engaged control is: two golds in one column would leave the eye asking which
+ * one is "here".
+ */
+.np {
+  --np-h: max(var(--np-art), 320px);
+  position: absolute;
+  left: calc(50% + var(--np-gap) / 2);
+  width: min(calc(var(--np-art) * 1.15), calc(50% - var(--np-gap) / 2 - 32px));
+  top: calc(50% - var(--np-h) / 2);
+  height: var(--np-h);
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+/* The column's own children must not shrink to fit (CLAUDE.md): the head and
+   the tabs keep their height, and only the panel gives. */
+.np__head,
+.np__tabs {
+  flex-shrink: 0;
+}
+
+.np__head {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+/* Content type, sentence case, normal tracking: a title, not a label. */
+.np__title {
+  margin: 0;
+  font-size: clamp(22px, 2.4vw, 34px);
+  font-weight: 500;
+  line-height: 1.15;
+  color: var(--text-primary);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+}
+
+/* Two lines, not one with an ellipsis: album names run long ("D" Is for
+   Dubby: The Lustmord Dub Mixes), and one line cut the album off entirely,
+   leaving "Puscifer — ...". */
+.np__meta {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.4;
+  color: var(--text-secondary);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* The album link is a button, which does not wrap on its own. */
+.np__album {
+  text-align: left;
+  white-space: normal;
+}
+
+.np__sep,
+.np__year {
+  color: var(--text-muted);
+}
+
+/* A link in the meta line: underlined on hover, ringed on focus. */
+.np__album {
+  appearance: none;
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  border-radius: 3px;
+}
+
+.np__album:hover {
+  color: var(--text-primary);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.np__album:focus-visible {
+  outline: none;
+  color: var(--text-primary);
+  box-shadow: 0 0 0 3px var(--gold-ring);
+}
+
+.np__tabs {
+  display: flex;
+  gap: 18px;
+  margin-top: 22px;
+  border-bottom: 1px solid rgba(242, 245, 251, 0.08);
+}
+
+/* Wide-tracked small caps: structure, as section labels are. */
+.np__tab {
+  appearance: none;
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  padding: 6px 0 8px;
+  font: inherit;
+  font-size: 11px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: color var(--dur-fast) ease, border-color var(--dur-fast) ease;
+}
+
+.np__tab:hover {
+  color: var(--text-secondary);
+}
+
+.np__tab.is-on {
+  color: var(--text-primary);
+  border-bottom-color: var(--text-secondary);
+}
+
+.np__tab:focus-visible {
+  outline: none;
+  color: var(--text-primary);
+  box-shadow: 0 0 0 3px var(--gold-ring);
+  border-radius: 3px;
+}
+
+.np__panel {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  margin-top: 6px;
+}
+
+/* A phone: stacked, the column under the cover and above the control bar. */
+@media (max-width: 600px) {
+  .np {
+    left: 16px;
+    right: 16px;
+    width: auto;
+    top: calc(var(--np-top) + var(--np-art) + 18px);
+    /* Clears the phone's control bar (Player.css): scrubber, time, transport
+       and the ⋯ row measured 153px at 375px, and 108px left the queue running
+       45px under it. A measurement of today's bar, not a rule it enforces. */
+    bottom: calc(164px + env(safe-area-inset-bottom, 0px));
+    height: auto;
+  }
+
+  .np__title {
+    font-size: 20px;
+  }
+
+  .np__tabs {
+    margin-top: 12px;
+  }
+
+  /* Touch targets (design.md, Phone). */
+  .np__tab {
+    min-height: 40px;
+  }
+}

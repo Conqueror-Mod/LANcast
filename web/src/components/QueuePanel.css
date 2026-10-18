@@ -100,6 +100,45 @@
   white-space: nowrap;
 }
 
+/* On the page, in Now Playing's column: no surface of its own, because the
+   column is the surface. The whole panel scrolls rather than each list, so the
+   hand-queued lane and the queue read as one list with two headings. */
+.queue--inline {
+  position: static;
+  /*
+   * auto, not the popover's 5. Static does not make z-index inert here: this
+   * is a flex item (of .np__panel), and a flex item honours z-index without
+   * being positioned. So the column's queue was painted over the playback
+   * settings popover opened from the bar, its rows showing through the panel.
+   */
+  z-index: auto;
+  flex: 1 1 auto;
+  min-height: 0;
+  width: auto;
+  max-height: none;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  background: none;
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+/* A scrolling flex column: its children must not shrink to fit, or they
+   collapse to nothing with every style still applying (CLAUDE.md). */
+.queue--inline > * {
+  flex-shrink: 0;
+}
+
+.queue--inline .queue__list {
+  overflow: visible;
+}
+
+.queue--inline .queue__head {
+  padding-left: 0;
+  padding-right: 0;
+}
+
 /* A lane row and its drop control, side by side.
 
    The × is a sibling of the jump target rather than inside it: a button cannot
