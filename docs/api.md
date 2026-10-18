@@ -1179,6 +1179,14 @@ they are never merged into a single field.
 Scores are out of **ten**, not five: a half-star interface then needs no
 migration, and the provider ratings this sits beside are already out of ten.
 
+### `GET /api/items/{id}/collections`
+
+The collections a title is in, for **View collection** on its page: `{items,
+total}`, decorated like any listing and sorted by name. Only real collections
+are listed, two or more present films, so a provider's collection of one (a
+duplicate tile of the film itself) is not. The rating limit and hidden
+libraries apply, and an item the caller cannot open is `404`.
+
 ### `GET /api/profile/ratings`
 
 Everything you have rated, most recent first. `?limit=` defaults to 50 (max

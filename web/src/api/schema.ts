@@ -478,6 +478,29 @@ export interface paths {
         patch: operations["editItem"];
         trace?: never;
     };
+    "/items/{id}/collections": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The item's id. */
+                id: components["parameters"]["ItemId"];
+            };
+            cookie?: never;
+        };
+        /**
+         * The collections a title is in
+         * @description For the title page's "View collection": the collections this item belongs to that are real (two or more present films; a provider's collection of one is not listed), sorted by name, decorated like any listing. The account's rating limit and hidden libraries apply, and an item the account cannot open is 404.
+         */
+        get: operations["listItemCollections"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/items/{id}/progress": {
         parameters: {
             query?: never;
@@ -9507,6 +9530,31 @@ export interface operations {
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    listItemCollections: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The item's id. */
+                id: components["parameters"]["ItemId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The collections, or an empty list. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ItemsPage"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
             404: components["responses"]["NotFound"];
         };
     };
