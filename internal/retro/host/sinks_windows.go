@@ -343,12 +343,14 @@ type Controllers struct {
 	// window it belongs to — is in front, so typing in another program does
 	// not move the game.
 	HWND uintptr
+	// Map is the Controls page's mapping; nil is the default layout.
+	Map *Mappings
 }
 
 func (c Controllers) Poll() (pads [2]Pad, guide, escape bool) {
 	pads, guide = c.PollPads()
 	if c.focused() {
-		kb := FromKeyboard(keyDown)
+		kb := fromKeyboardWith(keyDown, c.Map.current())
 		pads[0] = Merge(pads[0], kb)
 		escape = keyDown(VKEscape)
 	}
@@ -371,7 +373,7 @@ func (c Controllers) PollPads() (pads [2]Pad, guide bool) {
 		if r != 0 {
 			continue
 		}
-		pads[i] = FromXInput(st.gamepad)
+		pads[i] = fromXInputWith(st.gamepad, c.Map.current())
 		if i == 0 && st.gamepad.Buttons&XInputGuide != 0 {
 			guide = true
 		}
@@ -409,4 +411,60 @@ func (c Controllers) focused() bool {
 func syscallN(fn uintptr, args ...uintptr) (uintptr, uintptr, error) {
 	r1, r2, errno := syscall.SyscallN(fn, args...)
 	return r1, r2, errno
+}
+
+/*
+ * Capture waits for the next control pressed, for the Controls page's
+ * "press the button you want": a pad control on the first pad, or a key,
+ * by the names mapping.go uses. Whatever is held when it starts is waited
+ * out first, so the press that chose "change" is not taken as the answer.
+ * Escape or the Guide button cancels (ok false), as does the timeout.
+ */
+func Capture(timeout time.Duration) (kind, name string, ok bool) {
+	held := func() (uint32, map[string]bool, bool) {
+		var st xinputState
+		var bits uint32
+		guide := false
+		if ex := xinputGetStateEx(); ex != 0 {
+			if r, _, _ := syscallN(ex, 0, uintptr(unsafe.Pointer(&st))); r == 0 {
+				bits = padBits(st.gamepad)
+				guide = st.gamepad.Buttons&XInputGuide != 0
+			}
+		} else if procXInputGetState.Find() == nil {
+			if r, _, _ := procXInputGetState.Call(0, uintptr(unsafe.Pointer(&st))); r == 0 {
+				bits = padBits(st.gamepad)
+			}
+		}
+		keys := map[string]bool{}
+		for n, vk := range KeyCodes {
+			if keyDown(vk) {
+				keys[n] = true
+			}
+		}
+		return bits, keys, guide || keyDown(VKEscape)
+	}
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		bits, keys, _ := held()
+		if bits == 0 && len(keys) == 0 {
+			break
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	for time.Now().Before(deadline) {
+		bits, keys, cancel := held()
+		if cancel {
+			return "", "", false
+		}
+		for n, b := range PadControls {
+			if bits&b != 0 {
+				return "pad", n, true
+			}
+		}
+		for n := range keys {
+			return "key", n, true
+		}
+		time.Sleep(15 * time.Millisecond)
+	}
+	return "", "", false
 }
