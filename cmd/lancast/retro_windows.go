@@ -430,6 +430,16 @@ func (r *retroPlayer) command(name, slot string) error {
 		} else {
 			s.LoadState(slot)
 		}
+	case "fast-forward", "rewind":
+		// The value rides in slot: "on" or "off", and nothing else.
+		if slot != "on" && slot != "off" {
+			return fmt.Errorf("%s wants on or off, not %q", name, slot)
+		}
+		if name == "fast-forward" {
+			s.SetFastForward(slot == "on")
+		} else {
+			s.SetRewind(slot == "on")
+		}
 	case "stop":
 		r.stop()
 	default:

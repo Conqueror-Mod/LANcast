@@ -110,3 +110,17 @@ html.lancast-native-video .retro-play {
   color: var(--text-primary);
   font-size: 14px;
 }
+
+/* Running fast or backwards: a small badge in the corner, not over the game. */
+.retro-play__speed {
+  position: fixed;
+  top: 20px;
+  left: 20px;
+  padding: 6px 12px;
+  border-radius: var(--radius-tile);
+  background: rgba(5, 7, 15, 0.75);
+  color: var(--text-primary);
+  font-size: 13px;
+  letter-spacing: 0.04em;
+  pointer-events: none;
+}
