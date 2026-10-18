@@ -1,0 +1,204 @@
+/* Your RetroAchievements on the profile page (ADR 0090). */
+.ra {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin: 8px 0 28px;
+}
+
+.ra__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.ra__actions {
+  display: flex;
+  gap: 14px;
+}
+
+.ra__intro {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text-secondary);
+  max-width: 60ch;
+}
+
+.ra__form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 12px;
+}
+
+.ra__field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.ra__field input {
+  min-width: 200px;
+  padding: 8px 10px;
+  border-radius: var(--radius-tile);
+  border: 1px solid var(--gold-dormant);
+  background: rgba(5, 7, 15, 0.6);
+  color: var(--text-primary);
+  font-size: 14px;
+}
+
+.ra__field input:focus {
+  outline: none;
+  border-color: var(--gold);
+  box-shadow: 0 0 0 3px var(--gold-ring);
+}
+
+.ra__button {
+  padding: 8px 16px;
+  border-radius: var(--radius-tile);
+  border: 1px solid var(--gold-dormant);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text-primary);
+  cursor: pointer;
+}
+
+.ra__button:hover,
+.ra__button:focus-visible {
+  border-color: var(--gold);
+  outline: none;
+}
+
+.ra__button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.ra__link {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text-muted);
+  font-size: 12px;
+  cursor: pointer;
+  text-decoration: underline;
+  align-self: flex-start;
+}
+
+.ra__link:hover,
+.ra__link:focus-visible {
+  color: var(--text-primary);
+  outline: none;
+}
+
+.ra__problem {
+  margin: 0;
+  font-size: 12px;
+  color: #e08a7a;
+}
+
+.ra__who {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.ra__avatar {
+  width: 56px;
+  height: 56px;
+  flex-shrink: 0;
+  border-radius: 8px;
+}
+
+.ra__name {
+  font-size: 16px;
+  color: var(--text-primary);
+}
+
+.ra__points,
+.ra__presence {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.ra__sub {
+  margin-top: 6px;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--text-muted);
+}
+
+.ra__unlocks,
+.ra__games {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.ra__unlock,
+.ra__game {
+  display: grid;
+  grid-template-columns: 40px 1fr auto;
+  align-items: center;
+  gap: 12px;
+  padding: 6px 4px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+.ra__badge {
+  width: 40px;
+  height: 40px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.ra__what {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.ra__title {
+  font-size: 13px;
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ra__tag {
+  margin-left: 8px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  font-size: 10px;
+  color: var(--text-secondary);
+}
+
+.ra__detail,
+.ra__when {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.ra__bar {
+  display: block;
+  height: 3px;
+  margin-top: 4px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.08);
+  overflow: hidden;
+}
+
+.ra__bar > span {
+  display: block;
+  height: 100%;
+  background: rgba(255, 255, 255, 0.5);
+}

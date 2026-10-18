@@ -2413,6 +2413,180 @@
         }
       }
     },
+    "/profile/retroachievements": {
+      "get": {
+        "operationId": "getRetroAchievements",
+        "tags": [
+          "profile"
+        ],
+        "summary": "Your RetroAchievements progress",
+        "description": "ADR 0090. The caller's own and nobody else's. Fetched from RetroAchievements on the caller's behalf and cached for ten minutes; ?refresh=1 asks again, at most once a minute. Nothing is fetched until the caller connects an account.",
+        "parameters": [
+          {
+            "name": "refresh",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "1"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The caller's RetroAchievements, or that it is not connected.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RetroAchievementsView"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      },
+      "put": {
+        "operationId": "connectRetroAchievements",
+        "tags": [
+          "profile"
+        ],
+        "summary": "Connect your RetroAchievements account",
+        "description": "Takes your RetroAchievements username and Web API key and checks them with RetroAchievements before anything is kept; a refusal is a 400 and nothing is stored. The key is sealed under a key kept outside the database and is never returned.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "username",
+                  "api_key"
+                ],
+                "properties": {
+                  "username": {
+                    "type": "string"
+                  },
+                  "api_key": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The caller's RetroAchievements, or that it is not connected.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RetroAchievementsView"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "409": {
+            "description": "Not available on this server.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "RetroAchievements could not be reached or answered oddly.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "operationId": "disconnectRetroAchievements",
+        "tags": [
+          "profile"
+        ],
+        "summary": "Disconnect your RetroAchievements account",
+        "description": "Deletes the stored name and sealed key; nothing more is fetched.",
+        "responses": {
+          "204": {
+            "description": "Disconnected."
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      }
+    },
+    "/retroachievements/media/{dir}/{file}": {
+      "get": {
+        "operationId": "retroAchievementsMedia",
+        "tags": [
+          "profile"
+        ],
+        "summary": "A RetroAchievements picture, through LANcast",
+        "description": "Avatars, badges and game icons, fetched once from RetroAchievements and cached, so a browser never contacts RetroAchievements itself. Only {dir} UserPic, Badge or Images, and only .png files; anything else is 404.",
+        "parameters": [
+          {
+            "name": "dir",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "UserPic",
+                "Badge",
+                "Images"
+              ]
+            }
+          },
+          {
+            "name": "file",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The picture.",
+            "content": {
+              "image/png": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
     "/profile/sharing": {
       "put": {
         "operationId": "putSharing",
@@ -19996,6 +20170,148 @@
                 }
               }
             }
+          }
+        }
+      },
+      "RetroAchievementsView": {
+        "type": "object",
+        "required": [
+          "available",
+          "connected",
+          "points",
+          "softcore_points",
+          "true_points",
+          "recent",
+          "games"
+        ],
+        "properties": {
+          "available": {
+            "type": "boolean",
+            "description": "False when this server could not prepare the feature."
+          },
+          "connected": {
+            "type": "boolean"
+          },
+          "user": {
+            "type": "string",
+            "description": "The RetroAchievements display name."
+          },
+          "problem": {
+            "type": "string",
+            "description": "Why what is shown is not current, or why the connection needs redoing."
+          },
+          "avatar": {
+            "type": "string",
+            "description": "LANcast's URL for the picture (GET /api/retroachievements/media/…)."
+          },
+          "points": {
+            "type": "integer"
+          },
+          "softcore_points": {
+            "type": "integer"
+          },
+          "true_points": {
+            "type": "integer"
+          },
+          "rich_presence": {
+            "type": "string"
+          },
+          "recent": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "achievement_id",
+                "title",
+                "description",
+                "points",
+                "hardcore",
+                "date",
+                "game_id",
+                "game_title",
+                "console"
+              ],
+              "properties": {
+                "achievement_id": {
+                  "type": "integer"
+                },
+                "title": {
+                  "type": "string"
+                },
+                "description": {
+                  "type": "string"
+                },
+                "points": {
+                  "type": "integer"
+                },
+                "hardcore": {
+                  "type": "boolean"
+                },
+                "date": {
+                  "type": "string"
+                },
+                "badge": {
+                  "type": "string"
+                },
+                "game_id": {
+                  "type": "integer"
+                },
+                "game_title": {
+                  "type": "string"
+                },
+                "console": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "games": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "game_id",
+                "title",
+                "console",
+                "awarded",
+                "awarded_hardcore",
+                "max"
+              ],
+              "properties": {
+                "game_id": {
+                  "type": "integer"
+                },
+                "title": {
+                  "type": "string"
+                },
+                "console": {
+                  "type": "string"
+                },
+                "icon": {
+                  "type": "string"
+                },
+                "awarded": {
+                  "type": "integer"
+                },
+                "awarded_hardcore": {
+                  "type": "integer"
+                },
+                "max": {
+                  "type": "integer"
+                },
+                "award": {
+                  "type": "string",
+                  "description": "RetroAchievements' highest award kind, e.g. beaten-hardcore."
+                },
+                "last_unlock": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "fetched_at": {
+            "type": "integer",
+            "format": "int64"
           }
         }
       }

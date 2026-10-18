@@ -896,6 +896,54 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/profile/retroachievements": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Your RetroAchievements progress
+         * @description ADR 0090. The caller's own and nobody else's. Fetched from RetroAchievements on the caller's behalf and cached for ten minutes; ?refresh=1 asks again, at most once a minute. Nothing is fetched until the caller connects an account.
+         */
+        get: operations["getRetroAchievements"];
+        /**
+         * Connect your RetroAchievements account
+         * @description Takes your RetroAchievements username and Web API key and checks them with RetroAchievements before anything is kept; a refusal is a 400 and nothing is stored. The key is sealed under a key kept outside the database and is never returned.
+         */
+        put: operations["connectRetroAchievements"];
+        post?: never;
+        /**
+         * Disconnect your RetroAchievements account
+         * @description Deletes the stored name and sealed key; nothing more is fetched.
+         */
+        delete: operations["disconnectRetroAchievements"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/retroachievements/media/{dir}/{file}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * A RetroAchievements picture, through LANcast
+         * @description Avatars, badges and game icons, fetched once from RetroAchievements and cached, so a browser never contacts RetroAchievements itself. Only {dir} UserPic, Badge or Images, and only .png files; anything else is 404.
+         */
+        get: operations["retroAchievementsMedia"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/profile/sharing": {
         parameters: {
             query?: never;
@@ -8484,6 +8532,47 @@ export interface components {
                 name: string;
             }[];
         };
+        RetroAchievementsView: {
+            /** @description False when this server could not prepare the feature. */
+            available: boolean;
+            connected: boolean;
+            /** @description The RetroAchievements display name. */
+            user?: string;
+            /** @description Why what is shown is not current, or why the connection needs redoing. */
+            problem?: string;
+            /** @description LANcast's URL for the picture (GET /api/retroachievements/media/…). */
+            avatar?: string;
+            points: number;
+            softcore_points: number;
+            true_points: number;
+            rich_presence?: string;
+            recent: {
+                achievement_id: number;
+                title: string;
+                description: string;
+                points: number;
+                hardcore: boolean;
+                date: string;
+                badge?: string;
+                game_id: number;
+                game_title: string;
+                console: string;
+            }[];
+            games: {
+                game_id: number;
+                title: string;
+                console: string;
+                icon?: string;
+                awarded: number;
+                awarded_hardcore: number;
+                max: number;
+                /** @description RetroAchievements' highest award kind, e.g. beaten-hardcore. */
+                award?: string;
+                last_unlock?: string;
+            }[];
+            /** Format: int64 */
+            fetched_at?: number;
+        };
     };
     responses: {
         /** @description Malformed body or invalid parameter. */
@@ -10344,6 +10433,120 @@ export interface operations {
                 };
             };
             401: components["responses"]["Unauthorized"];
+        };
+    };
+    getRetroAchievements: {
+        parameters: {
+            query?: {
+                refresh?: "1";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The caller's RetroAchievements, or that it is not connected. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RetroAchievementsView"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+        };
+    };
+    connectRetroAchievements: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    username: string;
+                    api_key: string;
+                };
+            };
+        };
+        responses: {
+            /** @description The caller's RetroAchievements, or that it is not connected. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RetroAchievementsView"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            /** @description Not available on this server. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description RetroAchievements could not be reached or answered oddly. */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    disconnectRetroAchievements: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Disconnected. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+        };
+    };
+    retroAchievementsMedia: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                dir: "UserPic" | "Badge" | "Images";
+                file: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The picture. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "image/png": string;
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
         };
     };
     putSharing: {

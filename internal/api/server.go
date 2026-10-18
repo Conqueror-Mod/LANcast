@@ -229,6 +229,10 @@ type Server struct {
 	// localNets replaces this machine's interface networks in tests of the
 	// sign-in picker's home-network rule (loginpicker.go).
 	localNets func() []*net.IPNet
+	// ra and raCache are RetroAchievements on the profile page (ADR 0090);
+	// nil when the server could not prepare it.
+	ra      *RetroAchievements
+	raCache *raCache
 	// passkeyChallenges holds issued WebAuthn challenges (ADR 0082), and
 	// passkeyRPFor replaces the RP check in tests, whose server has no TLS.
 	passkeyChallenges *passkey.Challenges
@@ -536,6 +540,11 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/profile/playback", s.playbackPreferences)
 	mux.HandleFunc("PUT /api/profile/playback", s.setPlaybackPreferences)
 	mux.HandleFunc("GET /api/profile/ratings", s.listMyRatings)
+	// RetroAchievements (ADR 0090): the caller's own, and nobody else's.
+	mux.HandleFunc("GET /api/profile/retroachievements", s.getRetroAchievements)
+	mux.HandleFunc("PUT /api/profile/retroachievements", s.putRetroAchievements)
+	mux.HandleFunc("DELETE /api/profile/retroachievements", s.deleteRetroAchievements)
+	mux.HandleFunc("GET /api/retroachievements/media/{dir}/{file}", s.raMediaRoute)
 	mux.HandleFunc("GET /api/profile/ratings/pending", s.listToRate)
 	mux.HandleFunc("PUT /api/profile/sharing", s.putSharing)
 	mux.HandleFunc("PUT /api/profile/avatar", s.putAvatar)

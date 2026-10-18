@@ -1202,6 +1202,35 @@ the show. Newest finish first, at most 20. Rating one (`PUT
 /api/items/{id}/rating`) is how it leaves. Your account's rating limit and
 hidden libraries apply, as everywhere.
 
+### `GET` · `PUT` · `DELETE /api/profile/retroachievements`
+
+Your RetroAchievements progress on your profile page
+([ADR 0090](adr/0090-retroachievements-are-yours-to-connect.md)). **Yours
+only**: every route answers for the caller, and no route reads anybody
+else's.
+
+- **Opt-in.** Nothing contacts RetroAchievements until you connect. `PUT`
+  takes `{username, api_key}` (the Web API key from your RetroAchievements
+  control panel) and checks them with RetroAchievements first: a refusal is
+  `400` and nothing is stored. The key is **sealed** under a key kept in the
+  data folder, outside the database, and is never returned or logged, so a
+  database backup alone carries no usable key. A backup restored on another
+  machine shows `problem` and asks you to connect again.
+- `GET` answers `{available, connected, user, points, softcore_points,
+  true_points, avatar, recent: [...], games: [...], problem?}`: the last two
+  weeks of unlocks and your first 100 games' completion. Fetched for you and
+  cached for ten minutes; `?refresh=1` asks again, at most once a minute.
+  When RetroAchievements cannot be reached, the last answer is shown with
+  `problem` saying why it is not newer.
+- `DELETE` disconnects: the name and sealed key are deleted (`204`).
+
+### `GET /api/retroachievements/media/{dir}/{file}`
+
+A RetroAchievements avatar, badge or game icon, fetched once and cached, so
+your browser never contacts RetroAchievements itself. `{dir}` is `UserPic`,
+`Badge` or `Images` and `{file}` a plain `.png` name; anything else is
+`404`. The URLs in the view above already point here.
+
 ### `GET /api/profile/viewings`
 
 Your watch history: one row per **finished** viewing of a film or an episode,
