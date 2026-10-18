@@ -71,6 +71,7 @@ export interface RetroEvent {
     | "sram-saved"
     | "message"
     | "speed"
+    | "captured"
     | "error"
     | "stopped"
     /** A pad move while the menu is open: up, down, left, right, select, back. */

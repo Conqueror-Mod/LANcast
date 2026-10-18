@@ -1,3 +1,4 @@
+import { ControlsPage } from "@/components/RetroControls";
 import { useCallback, useEffect, useState } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
@@ -62,6 +63,9 @@ export function RetroPlay() {
   const [loading, setLoading] = useState<{ done: number; total: number } | null>({ done: 0, total: 0 });
   const [running, setRunning] = useState(false);
   const [menu, setMenu] = useState(false);
+  // Which page of the menu is showing (2026-10-18): a short main list, with
+  // Picture, Speed & rewind and Controls a step in, so it fits a TV.
+  const [page, setPage] = useState<"main" | "picture" | "speed" | "controls">("main");
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [options, setOptions] = useState<RetroOption[]>([]);
@@ -136,6 +140,7 @@ export function RetroPlay() {
             setMode(e.text === "fast" || e.text === "rewind" ? e.text : "normal");
             break;
           case "menu":
+            setPage("main");
             setMenu(true);
             break;
           case "options":
@@ -199,6 +204,7 @@ export function RetroPlay() {
 
   const openMenu = useCallback(() => {
     void retroCommand("pause");
+    setPage("main");
     setMenu(true);
   }, []);
   const closeMenu = useCallback(() => {
@@ -213,9 +219,10 @@ export function RetroPlay() {
   // Back toggles the menu while a game runs; with nothing running it leaves.
   const back = useCallback(() => {
     if (error || !running) quit();
+    else if (menu && page !== "main") setPage("main");
     else if (menu) closeMenu();
     else openMenu();
-  }, [error, running, menu, quit, openMenu, closeMenu]);
+  }, [error, running, menu, page, quit, openMenu, closeMenu]);
   useBackHandler(back);
 
   const filled = new Set((saves ?? []).map((s) => s.slot));
@@ -249,117 +256,139 @@ export function RetroPlay() {
         <div className="retro-play__panel retro-play__menu" role="dialog" aria-label="Game menu" ref={menuScope}>
           <div className="retro-play__title">{item?.title}</div>
           <div className="retro-play__sub">{platformLabel(item?.platform)}</div>
-          <MenuButton label="Resume" onSelect={closeMenu} autoFocus />
-          <div className="retro-play__group" aria-label="Save">
-            {STATE_SLOTS.map((slot) => (
+          {page === "main" && (
+            <>
+              <MenuButton label="Resume" onSelect={closeMenu} autoFocus />
+              <div className="retro-play__group" aria-label="Save">
+                {STATE_SLOTS.map((slot) => (
+                  <MenuButton
+                    key={slot}
+                    label={`Save to ${slotLabel(slot)}`}
+                    onSelect={() => void retroCommand("save-state", slot)}
+                  />
+                ))}
+              </div>
+              <div className="retro-play__group" aria-label="Load">
+                {STATE_SLOTS.filter((slot) => filled.has(slot)).map((slot) => (
+                  <MenuButton
+                    key={slot}
+                    label={`Load ${slotLabel(slot)}`}
+                    onSelect={() => void retroCommand("load-state", slot)}
+                  />
+                ))}
+              </div>
+              <MenuButton label={`Game volume: ${volumeLabel(volume)}`} onSelect={cycleVolume} />
+              <MenuButton label="Picture…" onSelect={() => setPage("picture")} />
+              <MenuButton label="Speed & rewind…" onSelect={() => setPage("speed")} />
+              <MenuButton label="Controls…" onSelect={() => setPage("controls")} />
+              {pb.itemID !== 0 && (
+                /*
+                 * Whatever is playing in the corner (ADR 0076), from the menu the
+                 * pad can reach — the card's own buttons answer to the mouse,
+                 * and somebody holding a controller should not need one.
+                 */
+                <div className="retro-play__group" aria-label="In the corner">
+                  <MenuButton
+                    label={`${pb.playing ? "Pause" : "Play"} ${pb.item?.title ?? (pb.isAudio ? "the music" : "the film")}`}
+                    onSelect={pb.togglePlay}
+                  />
+                  <MenuButton label={pb.isAudio ? "Stop the music" : "Stop the film"} onSelect={pb.stop} />
+                  {/* Where the card sits and how big, for a pad: the strip's grip
+                      and size button are the same choices for a mouse. */}
+                  <MenuButton
+                    label={`Corner: ${CORNER_LABEL[dock.corner]}`}
+                    onSelect={() => setDock({ corner: nextCorner(dock.corner) })}
+                  />
+                  <MenuButton
+                    label={`Size: ${SIZE_LABEL[dock.size]}`}
+                    onSelect={() => setDock({ size: nextSize(dock.size) })}
+                  />
+                </div>
+              )}
               <MenuButton
-                key={slot}
-                label={`Save to ${slotLabel(slot)}`}
-                onSelect={() => void retroCommand("save-state", slot)}
+                label="Restart"
+                onSelect={() => {
+                  void retroCommand("reset");
+                  closeMenu();
+                }}
               />
-            ))}
-          </div>
-          <div className="retro-play__group" aria-label="Load">
-            {STATE_SLOTS.filter((slot) => filled.has(slot)).map((slot) => (
-              <MenuButton
-                key={slot}
-                label={`Load ${slotLabel(slot)}`}
-                onSelect={() => void retroCommand("load-state", slot)}
-              />
-            ))}
-          </div>
-          {options.length > 0 && (
-            <div className="retro-play__group" aria-label="Picture">
-              {options.map((o) => (
+              <MenuButton label="Quit" onSelect={quit} />
+              <p className="retro-play__hint">
+                In-game saves are kept on the server as you play. Quitting saves where you stopped.
+              </p>
+            </>
+          )}
+          {page === "picture" && (
+            <>
+              <div className="retro-play__heading">Picture</div>
+              <div className="retro-play__group" aria-label="Display">
                 <MenuButton
-                  key={o.key}
-                  label={`${o.description}: ${o.value}`}
-                  onSelect={() => void setRetroOption(item?.platform ?? "", o.key, nextValue(o))}
+                  label={`Pixels: ${display.smooth ? "Smooth" : "Sharp"}`}
+                  onSelect={() => changeDisplay({ smooth: !display.smooth })}
                 />
-              ))}
-              <p className="retro-play__hint">Some picture changes take effect when the game next starts.</p>
-            </div>
+                <MenuButton
+                  label={`Size: ${display.fill ? "Fill the screen" : "Whole steps"}`}
+                  onSelect={() => changeDisplay({ fill: !display.fill })}
+                />
+                <MenuButton
+                  label={`Shape: ${aspectLabel(display.aspect)}`}
+                  onSelect={() => changeDisplay({ aspect: nextAspect(display.aspect) })}
+                />
+                <MenuButton
+                  label={`Scanlines: ${display.scanlines ? "On" : "Off"}`}
+                  onSelect={() => changeDisplay({ scanlines: !display.scanlines })}
+                />
+                <p className="retro-play__hint">
+                  Remembered for {platformLabel(item?.platform)}. Scanlines don't show on games drawn in 3D, such as N64.
+                </p>
+              </div>
+              {options.length > 0 && (
+                <div className="retro-play__group" aria-label="Picture">
+                  {options.map((o) => (
+                    <MenuButton
+                      key={o.key}
+                      label={`${o.description}: ${o.value}`}
+                      onSelect={() => void setRetroOption(item?.platform ?? "", o.key, nextValue(o))}
+                    />
+                  ))}
+                  <p className="retro-play__hint">Some picture changes take effect when the game next starts.</p>
+                </div>
+              )}
+              <MenuButton label="Back" onSelect={() => setPage("main")} />
+            </>
           )}
-          <MenuButton label={`Game volume: ${volumeLabel(volume)}`} onSelect={cycleVolume} />
-          <div className="retro-play__group" aria-label="Display">
-            <MenuButton
-              label={`Pixels: ${display.smooth ? "Smooth" : "Sharp"}`}
-              onSelect={() => changeDisplay({ smooth: !display.smooth })}
-            />
-            <MenuButton
-              label={`Size: ${display.fill ? "Fill the screen" : "Whole steps"}`}
-              onSelect={() => changeDisplay({ fill: !display.fill })}
-            />
-            <MenuButton
-              label={`Shape: ${aspectLabel(display.aspect)}`}
-              onSelect={() => changeDisplay({ aspect: nextAspect(display.aspect) })}
-            />
-            <MenuButton
-              label={`Scanlines: ${display.scanlines ? "On" : "Off"}`}
-              onSelect={() => changeDisplay({ scanlines: !display.scanlines })}
-            />
-            <p className="retro-play__hint">
-              Remembered for {platformLabel(item?.platform)}. Scanlines don't show on games drawn in 3D, such as N64.
-            </p>
-          </div>
-          <div className="retro-play__group" aria-label="Speed">
-            <MenuButton
-              label={`Fast-forward: ${fastForward ? "On" : "Off"}`}
-              onSelect={() => {
-                const next = !fastForward;
-                setFastForward(next);
-                void retroCommand("fast-forward", next ? "on" : "off");
-              }}
-            />
-            <MenuButton
-              label={`Rewind: ${rewind ? "On" : "Off"}`}
-              onSelect={() => {
-                const next = !rewind;
-                setRewind(next);
-                setRewindPreferred(next);
-                void retroCommand("rewind", next ? "on" : "off");
-              }}
-            />
-            <p className="retro-play__hint">
-              Hold Tab or click the right stick to fast-forward. With rewind on, hold R or click the
-              left stick to go back.
-            </p>
-          </div>
-          {pb.itemID !== 0 && (
-            /*
-             * Whatever is playing in the corner (ADR 0076), from the menu the
-             * pad can reach — the card's own buttons answer to the mouse,
-             * and somebody holding a controller should not need one.
-             */
-            <div className="retro-play__group" aria-label="In the corner">
-              <MenuButton
-                label={`${pb.playing ? "Pause" : "Play"} ${pb.item?.title ?? (pb.isAudio ? "the music" : "the film")}`}
-                onSelect={pb.togglePlay}
-              />
-              <MenuButton label={pb.isAudio ? "Stop the music" : "Stop the film"} onSelect={pb.stop} />
-              {/* Where the card sits and how big, for a pad: the strip's grip
-                  and size button are the same choices for a mouse. */}
-              <MenuButton
-                label={`Corner: ${CORNER_LABEL[dock.corner]}`}
-                onSelect={() => setDock({ corner: nextCorner(dock.corner) })}
-              />
-              <MenuButton
-                label={`Size: ${SIZE_LABEL[dock.size]}`}
-                onSelect={() => setDock({ size: nextSize(dock.size) })}
-              />
-            </div>
+          {page === "speed" && (
+            <>
+              <div className="retro-play__heading">Speed &amp; rewind</div>
+              <div className="retro-play__group" aria-label="Speed">
+                <MenuButton
+                  label={`Fast-forward: ${fastForward ? "On" : "Off"}`}
+                  onSelect={() => {
+                    const next = !fastForward;
+                    setFastForward(next);
+                    void retroCommand("fast-forward", next ? "on" : "off");
+                  }}
+                />
+                <MenuButton
+                  label={`Rewind: ${rewind ? "On" : "Off"}`}
+                  onSelect={() => {
+                    const next = !rewind;
+                    setRewind(next);
+                    setRewindPreferred(next);
+                    void retroCommand("rewind", next ? "on" : "off");
+                  }}
+                />
+                <p className="retro-play__hint">
+                  Hold Tab or click the right stick to fast-forward. With rewind on, hold R or click the
+                  left stick to go back.
+                </p>
+              </div>
+              <MenuButton label="Back" onSelect={() => setPage("main")} />
+            </>
           )}
-          <MenuButton
-            label="Restart"
-            onSelect={() => {
-              void retroCommand("reset");
-              closeMenu();
-            }}
-          />
-          <MenuButton label="Quit" onSelect={quit} />
-          <p className="retro-play__hint">
-            In-game saves are kept on the server as you play. Quitting saves where you stopped.
-          </p>
+          {page === "controls" && (
+            <ControlsPage platform={item?.platform ?? ""} onBack={() => setPage("main")} />
+          )}
         </div>
       )}
 

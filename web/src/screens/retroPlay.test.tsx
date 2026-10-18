@@ -520,6 +520,8 @@ describe("picture options", () => {
       options: [{ key: "mupen64plus-43screensize", description: "4:3 Resolution", values: ["640x480", "960x720"], value: "640x480" }],
     });
     emit({ kind: "menu" });
+    // The game's own picture options are on the Picture page.
+    await act(async () => button("Picture…").click());
     await act(async () => button("4:3 Resolution: 640x480").click());
     expect(window.lancastRetroSetOption).toHaveBeenCalledWith("n64", "mupen64plus-43screensize", "960x720");
     delete window.lancastRetroSetOption;
@@ -532,6 +534,7 @@ describe("speed and rewind (2026-10-18)", () => {
     await render("/play/41");
     emit({ kind: "started" });
     emit({ kind: "menu" });
+    await act(async () => button("Speed & rewind…").click());
     await act(async () => button("Fast-forward: Off").click());
     expect(window.lancastRetroCommand).toHaveBeenCalledWith("fast-forward", "on");
     await act(async () => button("Rewind: Off").click());
@@ -568,6 +571,7 @@ describe("display (2026-10-18)", () => {
     await render("/play/41");
     emit({ kind: "started" });
     emit({ kind: "menu" });
+    await act(async () => button("Picture…").click());
     await act(async () => button("Pixels: Sharp").click());
     expect(set).toHaveBeenLastCalledWith("n64", { smooth: true, fill: false, aspect: "", scanlines: false });
     await act(async () => button("Shape: Original").click());
@@ -577,5 +581,77 @@ describe("display (2026-10-18)", () => {
     expect(button("Size: Whole steps")).toBeTruthy();
     delete window.lancastRetroDisplay;
     delete window.lancastRetroSetDisplay;
+  });
+});
+
+describe("the menu's pages (2026-10-18)", () => {
+  it("keeps the main list short, and Back or the back key returns from a page", async () => {
+    await render("/play/41");
+    emit({ kind: "started" });
+    emit({ kind: "menu" });
+    for (const label of ["Resume", "Picture…", "Speed & rewind…", "Controls…", "Restart", "Quit"]) {
+      expect(button(label)).toBeTruthy();
+    }
+    expect(buttons().some((b) => b.textContent?.startsWith("Pixels"))).toBe(false);
+
+    await act(async () => button("Picture…").click());
+    expect(button("Pixels: Sharp")).toBeTruthy();
+    await act(async () => button("Back").click());
+    expect(button("Picture…")).toBeTruthy();
+
+    await act(async () => button("Speed & rewind…").click());
+    await act(async () => {
+      document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+    });
+    // Back from a page goes to the main list, not out of the menu.
+    expect(button("Speed & rewind…")).toBeTruthy();
+    expect(host.querySelector('[role="dialog"]')).not.toBeNull();
+  });
+});
+
+describe("controls (2026-10-18)", () => {
+  it("lists this console's buttons and assigns the next press", async () => {
+    const mapping = {
+      pad: { up: "Up", down: "Down", left: "Left", right: "Right", b: "A", a: "B", start: "Start", select: "Back", "fast-forward": "RS", rewind: "LS" },
+      keys: { up: "Up", down: "Down", left: "Left", right: "Right", b: "Z", a: "X", start: "Enter", select: "Backspace", "fast-forward": "Tab", rewind: "R" },
+    };
+    window.lancastRetroControls = vi.fn(async () => mapping);
+    window.lancastRetroCapture = vi.fn(async () => true);
+    const set = vi.fn(async () => ({ ...mapping, pad: { ...mapping.pad, b: "X" } }));
+    window.lancastRetroSetControl = set;
+    await render("/play/41");
+    emit({ kind: "started" });
+    emit({ kind: "menu" });
+    await act(async () => button("Controls…").click());
+    await settle();
+    await act(async () => button("B (bottom button): A · Z").click());
+    expect(window.lancastRetroCapture).toHaveBeenCalled();
+    expect(host.textContent).toContain("Press a button or key for B (bottom button)");
+    emit({ kind: "captured", control: "pad", name: "X" });
+    await settle();
+    expect(set).toHaveBeenCalledWith("n64", "b", "pad", "X");
+    expect(button("B (bottom button): X · Z")).toBeTruthy();
+    delete window.lancastRetroControls;
+    delete window.lancastRetroCapture;
+    delete window.lancastRetroSetControl;
+  });
+
+  it("assigns nothing when the press is cancelled", async () => {
+    window.lancastRetroControls = vi.fn(async () => ({ pad: { b: "A" }, keys: { b: "Z" } }));
+    window.lancastRetroCapture = vi.fn(async () => true);
+    const set = vi.fn(async () => ({ pad: {}, keys: {} }));
+    window.lancastRetroSetControl = set;
+    await render("/play/41");
+    emit({ kind: "started" });
+    emit({ kind: "menu" });
+    await act(async () => button("Controls…").click());
+    await settle();
+    await act(async () => button("B (bottom button): A · Z").click());
+    emit({ kind: "captured", control: "", name: "" });
+    await settle();
+    expect(set).not.toHaveBeenCalled();
+    delete window.lancastRetroControls;
+    delete window.lancastRetroCapture;
+    delete window.lancastRetroSetControl;
   });
 });
