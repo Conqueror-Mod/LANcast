@@ -1,4 +1,4 @@
-import { usePrefs, QUALITIES, DEFAULTS, DIALOGUE_LEVELS, CROSSFADES, type SubFont } from "@/playback/prefs";
+import { usePrefs, QUALITIES, DEFAULTS, DIALOGUE_LEVELS, CROSSFADES, STAGES, type Stage, type SubFont } from "@/playback/prefs";
 import { EQ_PRESETS } from "@/playback/elementAudio";
 import { FONTS } from "@/playback/cueVars";
 import { COLORS, SIZES } from "./PlaybackSettings";
@@ -136,6 +136,30 @@ export function PlayerSettings() {
             onChange={(e) => setPrefs({ taper: e.target.checked })}
           />
           Fade in at the start and out at the end of a listening session
+        </label>
+        <label className="set-row">
+          <span>Now Playing shows</span>
+          <select
+            className="set-input"
+            value={prefs.stage}
+            onChange={(e) => setPrefs({ stage: e.target.value as Stage })}
+          >
+            {STAGES.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.label}
+              </option>
+            ))}
+          </select>
+        </label>
+        {/* Half the motion (docs/now-playing-plan.md, Photosensitivity). On
+            regardless while the system asks for reduced motion. */}
+        <label className="set-toggle">
+          <input
+            type="checkbox"
+            checked={prefs.vizCalm}
+            onChange={(e) => setPrefs({ vizCalm: e.target.checked })}
+          />
+          Calm visualizers: half the motion
         </label>
       </section>
     </>

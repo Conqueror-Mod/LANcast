@@ -203,6 +203,47 @@
   max-width: 90%;
 }
 
+/*
+ * The stage's visualizer (docs/now-playing-plan.md, step 2), in the cover's
+ * square: the same flex box and padding as .playback__cover above, so the
+ * canvas lands exactly where the sharp cover was, at --np-art. The wash stays
+ * as the field; only the art gives way. Full screen only: docked, the provider
+ * does not mount it and the cover shows.
+ */
+.playback__viz {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  padding-right: calc(50% + var(--np-gap) / 2);
+  pointer-events: none;
+}
+
+@media (max-width: 600px) {
+  .playback__viz {
+    justify-content: center;
+    align-items: flex-start;
+    padding-right: 0;
+    padding-top: var(--np-top);
+  }
+}
+
+.playback__viz-canvas {
+  display: block;
+  width: var(--np-art);
+  height: var(--np-art);
+  border-radius: var(--radius-panel);
+  /* A darker square on the wash, so the stage still reads as the stage. */
+  background: rgba(5, 7, 15, 0.42);
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.45);
+}
+
+.playback--full.playback--viz .playback__cover-art,
+.playback--full.playback--viz .playback__cover-none {
+  visibility: hidden;
+}
+
 /* ---- subtitle appearance ---------------------------------------------------
  *
  * The cue box lives in a shadow tree the page cannot reach with a style

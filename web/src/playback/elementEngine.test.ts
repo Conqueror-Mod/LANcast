@@ -54,6 +54,12 @@ class FakeContext {
   createChannelMerger = () => new FakeNode();
   createDynamicsCompressor = () => new FakeNode();
   createWaveShaper = () => new FakeNode();
+  analysers: FakeNode[] = [];
+  createAnalyser = () => {
+    const a = Object.assign(new FakeNode(), { fftSize: 0, smoothingTimeConstant: 0.8 });
+    this.analysers.push(a);
+    return a;
+  };
   setSinkId = vi.fn(async (id: string) => {
     this.sinks.push(id);
   });
@@ -223,5 +229,75 @@ describe("applyDeckFX, for the music deck's two elements", () => {
     const b = document.createElement("audio");
     applyDeckFX([a, b], NIGHT_ON, "speakers-2", 2);
     expect(made[0].sinks).toContain("speakers-2");
+  });
+});
+
+/*
+ * The visualizer's tap (docs/now-playing-plan.md, step 2): an engine built
+ * with every effect off, so showing a visualizer does not depend on fxActive,
+ * and an analyser after the graph and before the slider.
+ */
+describe("the tap, for a visualizer", () => {
+  it("builds the element's engine with every effect off when tapped", () => {
+    const el = document.createElement("audio");
+    el.volume = 0.3;
+    const e = applyElementFX(el, FX_OFF, "", 2, true)!;
+    expect(e).toBeDefined();
+    expect(made).toHaveLength(1);
+    expect(engineFor(el)).toBe(e);
+    // The same volume trap as night mode: the slider moves to `level`.
+    expect(e.level.gain.value).toBe(0.3);
+    expect(el.volume).toBe(1);
+  });
+
+  it("builds the deck's engine with every effect off when tapped: one context, both sources", () => {
+    const a = document.createElement("audio");
+    const b = document.createElement("audio");
+    const e = applyDeckFX([a, b], FX_OFF, "", 2, true)!;
+    expect(e).toBeDefined();
+    expect(made).toHaveLength(1);
+    expect(made[0].sources).toBe(2);
+    expect(engineFor(b)).toBe(e);
+  });
+
+  it("hangs the analyser off graph.output, beside level, and connects it to nothing", () => {
+    const el = document.createElement("audio");
+    const e = applyElementFX(el, FX_OFF, "", 2, true)!;
+    const output = e.graph.output as unknown as FakeNode;
+    expect(output.connect).toHaveBeenCalledWith(e.analyser);
+    expect(output.connect).toHaveBeenCalledWith(e.level);
+    expect((e.analyser as unknown as FakeNode).connect).not.toHaveBeenCalled();
+    // Smoothing is the visualizer's (vizMath.ts), not the node's.
+    expect(e.analyser.smoothingTimeConstant).toBe(0);
+  });
+
+  it("gives the deck one analyser, so a crossfade between its elements needs no handover", () => {
+    const a = document.createElement("audio");
+    const b = document.createElement("audio");
+    const e1 = applyDeckFX([a, b], FX_OFF, "", 2, true)!;
+    const e2 = applyDeckFX([b, a], FX_OFF, "", 2, true)!;
+    expect(e2.analyser).toBe(e1.analyser);
+    expect(made[0].analysers).toHaveLength(1);
+  });
+
+  it("taps an engine night mode already built, rather than building another", () => {
+    const el = document.createElement("audio");
+    const e1 = applyElementFX(el, NIGHT_ON, "", 2)!;
+    const e2 = applyElementFX(el, FX_OFF, "", 2, true)!;
+    expect(e2).toBe(e1);
+    expect(made).toHaveLength(1);
+    expect(made[0].analysers).toHaveLength(1);
+  });
+
+  it("follows the source's channels when tapped, as night mode does", () => {
+    const el = document.createElement("audio");
+    applyElementFX(el, FX_OFF, "", 2, true);
+    expect(made[0].destination.channelCount).toBe(2);
+  });
+
+  it("resumes a suspended context, or the routed element would be silent", () => {
+    const el = document.createElement("audio");
+    applyElementFX(el, FX_OFF, "", 2, true);
+    expect(made[0].resume).toHaveBeenCalled();
   });
 });

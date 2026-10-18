@@ -106,7 +106,24 @@ export interface Prefs {
   eq: number[];
   /** Which preset the bands came from, or "custom" once a slider moved. */
   eqPreset: string;
+
+  /*
+   * Now Playing's stage (docs/now-playing-plan.md, step 2): the cover or a
+   * visualizer. The cover by default, so music that has never asked for a
+   * visualizer is never routed through Web Audio for one, and so a
+   * prefers-reduced-motion screen starts still.
+   */
+  stage: Stage;
+  /** Half the motion in a visualizer; always on under reduced motion. */
+  vizCalm: boolean;
 }
+
+export type Stage = "cover" | "spectrum" | "scope";
+export const STAGES: { id: Stage; label: string }[] = [
+  { id: "cover", label: "Cover" },
+  { id: "spectrum", label: "Spectrum" },
+  { id: "scope", label: "Scope" },
+];
 
 /** The crossfade lengths offered, in seconds; 0 is Off. */
 export const CROSSFADES = [0, 2, 5, 8, 12] as const;
@@ -130,6 +147,8 @@ export const DEFAULTS: Prefs = {
   crossfade: 0,
   eq: [0, 0, 0, 0, 0],
   eqPreset: "flat",
+  stage: "cover",
+  vizCalm: false,
 };
 
 const KEY = "lancast:playback-prefs";

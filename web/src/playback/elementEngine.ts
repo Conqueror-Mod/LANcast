@@ -38,6 +38,13 @@
  * level, and the owner heard night mode as louder than off on two releases
  * running while every measurement taken before the destination said it was
  * 9 dB quieter.
+ *
+ * And the visualizers (docs/now-playing-plan.md, step 2). An analyser hangs off
+ * the graph's output, before `level`: after the deck's two sources have joined
+ * (one analyser across a gapless join or a crossfade, with no handover of its
+ * own) and before the slider, so the bars follow the track and not the volume.
+ * Its output is left unconnected, which the Web Audio spec allows; it only
+ * reads. A visualizer is a reason to route with every effect off (`tap`).
  */
 import { buildGraph, fxActive, type ElementFX, type FXGraph } from "./elementAudio";
 
@@ -48,6 +55,28 @@ export interface ElementEngine {
   graph: FXGraph;
   /** The player's volume, applied after the graph. */
   level: GainNode;
+  /** Reads the graph's output, before `level`, for the visualizers. */
+  analyser: AnalyserNode;
+}
+
+/** The analyser's FFT size: 1024 bins, about 23 Hz apart at 48 kHz. */
+export const ANALYSER_FFT = 2048;
+
+/*
+ * The tap: an analyser on the graph's output, a branch beside `level` rather
+ * than a stage in front of it, so nothing that plays passes through it.
+ * Smoothing is the visualizer's own (vizMath.ts), so the node's is off.
+ */
+function tapOutput(ctx: AudioContext, graph: FXGraph): AnalyserNode {
+  const analyser = ctx.createAnalyser();
+  analyser.fftSize = ANALYSER_FFT;
+  analyser.smoothingTimeConstant = 0;
+  // The byte data's 0..255 spans these. The default ceiling, -30 dB, pinned
+  // every bass bar of a modern master at full height for the whole track.
+  analyser.minDecibels = -90;
+  analyser.maxDecibels = -12;
+  graph.output.connect(analyser);
+  return analyser;
 }
 
 // Per element, because createMediaElementSource can be called once per element.
@@ -68,16 +97,23 @@ export function elementFXSupported(): boolean {
  * returns the engine, or undefined when nothing is engaged and nothing ever
  * was: an element that has never been asked for an effect is left exactly as
  * the browser plays it.
+ *
+ * `tap` asks for the engine anyway, with fx as it is (FX_OFF, often), because
+ * a visualizer is showing and needs the analyser. With every effect off the
+ * graph is a straight wire, so the track sounds as it did; but the engine is
+ * never torn down, so from here until the page reloads this element plays
+ * through Web Audio. That is the price of the bars, accepted in the plan.
  */
 export function applyElementFX(
   el: HTMLMediaElement,
   fx: ElementFX,
   sinkId: string,
   sourceChannels: number,
+  tap = false,
 ): ElementEngine | undefined {
   let engine = engines.get(el);
   if (!engine) {
-    if (!fxActive(fx) || !elementFXSupported()) return undefined;
+    if (!(fxActive(fx) || tap) || !elementFXSupported()) return undefined;
     const ctx: SinkContext = new AudioContext();
     const source = ctx.createMediaElementSource(el);
     const graph = buildGraph(ctx);
@@ -89,14 +125,16 @@ export function applyElementFX(
     source.connect(graph.input);
     graph.output.connect(level);
     level.connect(ctx.destination);
-    engine = { ctx, graph, level };
+    engine = { ctx, graph, level, analyser: tapOutput(ctx, graph) };
     engines.set(el, engine);
     setContextSink(engine, sinkId);
   }
   const dest = engine.ctx.destination;
   dest.channelCount = outputChannels(sourceChannels, dest.maxChannelCount);
   engine.graph.set(fx);
-  if (fxActive(fx)) void resume(engine);
+  // A routed element is silent while its context is suspended, so a tap
+  // resumes it as an effect does.
+  if (fxActive(fx) || tap) void resume(engine);
   return engine;
 }
 
@@ -114,16 +152,20 @@ export function applyElementFX(
  * The slider is the shared `level`, after the graph, exactly as on the single
  * element; the deck holds its elements at full volume and fades them against
  * each other before the graph, where a crossfade belongs.
+ *
+ * `tap` is applyElementFX's: route with every effect off, for a visualizer,
+ * and stay routed until the page reloads.
  */
 export function applyDeckFX(
   els: [HTMLMediaElement, HTMLMediaElement],
   fx: ElementFX,
   sinkId: string,
   sourceChannels: number,
+  tap = false,
 ): ElementEngine | undefined {
   let engine = engines.get(els[0]) ?? engines.get(els[1]);
   if (!engine) {
-    if (!fxActive(fx) || !elementFXSupported()) return undefined;
+    if (!(fxActive(fx) || tap) || !elementFXSupported()) return undefined;
     const ctx: SinkContext = new AudioContext();
     const graph = buildGraph(ctx);
     const level = ctx.createGain();
@@ -131,7 +173,7 @@ export function applyDeckFX(
     level.gain.value = els[0].volume;
     graph.output.connect(level);
     level.connect(ctx.destination);
-    engine = { ctx, graph, level };
+    engine = { ctx, graph, level, analyser: tapOutput(ctx, graph) };
     for (const el of els) {
       ctx.createMediaElementSource(el).connect(graph.input);
       el.volume = 1;
@@ -142,7 +184,7 @@ export function applyDeckFX(
   const dest = engine.ctx.destination;
   dest.channelCount = outputChannels(sourceChannels, dest.maxChannelCount);
   engine.graph.set(fx);
-  if (fxActive(fx)) void resume(engine);
+  if (fxActive(fx) || tap) void resume(engine);
   return engine;
 }
 

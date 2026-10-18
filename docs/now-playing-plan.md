@@ -1,7 +1,7 @@
 # Now Playing and visualizers for music — plan
 
-**Status: step 1 built (#896, 2026-10-18).** Steps 2 and 3 (the visualizers)
-are not started. Where step 1 departed from the proposal below, the text has
+**Status: steps 1 and 2 built (#896; step 2 2026-10-18).** Step 3 (feedback
+presets and full screen) is not started. Where step 1 departed from the proposal below, the text has
 been brought into line and says so; the rest is the original proposal.
 
 A proper Now Playing view for music, and a few visualizers in the spirit of
@@ -214,12 +214,20 @@ Each step is its own PR, and each ships something usable on its own.
    installed server at 1440×900 and 375×812. Still owed: a look in the desktop
    window once a release carries it, and synced lyrics on a real track (the
    album checked had no `.lrc`).
-2. **The tap and the classic visualizers.** The analyser on the engine (a way to
+2. **The tap and the classic visualizers. Built.** The analyser on the engine (a way to
    build the engine with every effect off, so the visualizer does not depend on
    `fxActive`), the stage switcher, spectrum and scope, calm, and the
    reduced-motion default. Prove it on both paths, "music on deck" and "music on
    element": bars move, the level is unchanged with every effect off, and a
    crossfade does not reset the analyser.
+   As built: proven in a browser tab against the installed server on both
+   paths (the element path by pointing a "converted" track back at its direct
+   stream, since nothing in the library converts), through a real crossfade,
+   with the output silent at `level`. Looking at it changed two things: the
+   gold band is 20–75° (a sepia cover's 68° olive read as gold), and a blend
+   between the two colours must not cross it either; the analyser spans
+   −90 to −12 dB, since the default ceiling pinned every bass bar. Still owed:
+   the desktop window, 375px, and the analyser read in WebView2 itself.
 3. **Feedback presets and full screen.** The WebGL2 pipeline, presets, beat
    detection, full-screen mode with idle chrome, and preset keys. Check it on
    the TV with a pad, since that is where it will mostly be used.

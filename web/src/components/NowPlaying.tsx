@@ -2,6 +2,8 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useItem } from "@/api/hooks";
 import { usePlayback } from "@/playback/PlaybackProvider";
+import { usePrefs, STAGES } from "@/playback/prefs";
+import { elementFXSupported } from "@/playback/elementEngine";
 import { LyricsPanel } from "@/components/LyricsPanel";
 import { QueuePanel } from "@/components/QueuePanel";
 import "./NowPlaying.css";
@@ -42,63 +44,99 @@ export function NowPlaying() {
   const albumTitle = item?.series ?? album?.title ?? null;
 
   return (
-    <section className="np" aria-label="Now playing">
-      <div className="np__head">
-        <span className="section-label">Now playing</span>
-        <h1 className="np__title">{item?.title ?? "Playing"}</h1>
-        <p className="np__meta">
-          {item?.artist && <span>{item.artist}</span>}
-          {item?.artist && albumTitle && <span className="np__sep"> — </span>}
-          {albumTitle &&
-            (album ? (
-              // To the album, leaving this playing in the corner: the same
-              // thing the back arrow does, with somewhere to go.
-              <button
-                className="np__album"
-                onClick={() => navigate(`/item/${album.id}`)}
-                title={`Go to ${albumTitle}`}
-              >
-                {albumTitle}
-              </button>
-            ) : (
-              <span>{albumTitle}</span>
-            ))}
-          {year != null && <span className="np__year"> · {year}</span>}
-        </p>
-      </div>
+    <>
+      <StageSwitch />
+      <section className="np" aria-label="Now playing">
+        <div className="np__head">
+          <span className="section-label">Now playing</span>
+          <h1 className="np__title">{item?.title ?? "Playing"}</h1>
+          <p className="np__meta">
+            {item?.artist && <span>{item.artist}</span>}
+            {item?.artist && albumTitle && <span className="np__sep"> — </span>}
+            {albumTitle &&
+              (album ? (
+                // To the album, leaving this playing in the corner: the same
+                // thing the back arrow does, with somewhere to go.
+                <button
+                  className="np__album"
+                  onClick={() => navigate(`/item/${album.id}`)}
+                  title={`Go to ${albumTitle}`}
+                >
+                  {albumTitle}
+                </button>
+              ) : (
+                <span>{albumTitle}</span>
+              ))}
+            {year != null && <span className="np__year"> · {year}</span>}
+          </p>
+        </div>
 
-      <div className="np__tabs" role="tablist" aria-label="Beside the track">
-        {hasQueue && (
-          <TabButton id="queue" current={tab} onPick={setChosen}>
-            Queue
+        <div className="np__tabs" role="tablist" aria-label="Beside the track">
+          {hasQueue && (
+            <TabButton id="queue" current={tab} onPick={setChosen}>
+              Queue
+            </TabButton>
+          )}
+          <TabButton id="lyrics" current={tab} onPick={setChosen}>
+            Lyrics
           </TabButton>
-        )}
-        <TabButton id="lyrics" current={tab} onPick={setChosen}>
-          Lyrics
-        </TabButton>
-      </div>
+        </div>
 
-      <div className="np__panel" role="tabpanel" id={`np-panel-${tab}`}>
-        {tab === "queue" ? (
-          <QueuePanel
-            inline
-            // The order that will play, as the popover always showed it.
-            ids={pb.playOrder}
-            currentID={pb.itemID}
-            upNext={pb.upNext}
-            onDrop={pb.removeFromUpNext}
-            onPick={(id, at) => pb.playFromQueue(id, at)}
-          />
-        ) : (
-          <LyricsPanel
-            inline
-            itemID={pb.itemID}
-            // The clock the chrome trusts; see the panel.
-            atMS={Math.max(0, Math.floor(pb.displayTime * 1000))}
-          />
-        )}
-      </div>
-    </section>
+        <div className="np__panel" role="tabpanel" id={`np-panel-${tab}`}>
+          {tab === "queue" ? (
+            <QueuePanel
+              inline
+              // The order that will play, as the popover always showed it.
+              ids={pb.playOrder}
+              currentID={pb.itemID}
+              upNext={pb.upNext}
+              onDrop={pb.removeFromUpNext}
+              onPick={(id, at) => pb.playFromQueue(id, at)}
+            />
+          ) : (
+            <LyricsPanel
+              inline
+              itemID={pb.itemID}
+              // The clock the chrome trusts; see the panel.
+              atMS={Math.max(0, Math.floor(pb.displayTime * 1000))}
+            />
+          )}
+        </div>
+      </section>
+    </>
+  );
+}
+
+/*
+ * The stage switcher, under the stage (docs/now-playing-plan.md, step 2): the
+ * cover, or one of the classic visualizers. Remembered per device with the
+ * other "This device" playback preferences. Positioned from --np-art like the
+ * column, because the stage it sits under is drawn in another layer.
+ *
+ * Offered only where music can be routed through Web Audio, since a
+ * visualizer is an analyser on that graph. The chosen one is marked the
+ * neutral way the column's tabs are: gold is focus only.
+ */
+function StageSwitch() {
+  const [prefs, setPrefs] = usePrefs();
+  if (!elementFXSupported()) return null;
+  return (
+    <div className="np__stage" role="radiogroup" aria-label="Stage">
+      {STAGES.map((s) => {
+        const on = prefs.stage === s.id;
+        return (
+          <button
+            key={s.id}
+            role="radio"
+            aria-checked={on}
+            className={"np__stage-btn" + (on ? " is-on" : "")}
+            onClick={() => setPrefs({ stage: s.id })}
+          >
+            {s.label}
+          </button>
+        );
+      })}
+    </div>
   );
 }
 

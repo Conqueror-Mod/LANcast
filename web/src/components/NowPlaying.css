@@ -147,6 +147,52 @@
   margin-top: 6px;
 }
 
+/*
+ * The stage switcher, centred under the stage. The stage's box is the cover's
+ * (playback.css): its right edge --np-gap/2 left of the middle, --np-art wide
+ * and tall, centred vertically. Nothing here is gold except focus.
+ */
+.np__stage {
+  position: absolute;
+  left: calc(50% - var(--np-gap) / 2 - var(--np-art));
+  width: var(--np-art);
+  top: calc(50% + var(--np-art) / 2 + 14px);
+  display: flex;
+  justify-content: center;
+  gap: 4px;
+}
+
+.np__stage-btn {
+  appearance: none;
+  background: none;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  padding: 4px 12px;
+  font: inherit;
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: color var(--dur-fast) ease, border-color var(--dur-fast) ease;
+}
+
+.np__stage-btn:hover {
+  color: var(--text-secondary);
+}
+
+.np__stage-btn.is-on {
+  color: var(--text-primary);
+  border-color: rgba(242, 245, 251, 0.22);
+}
+
+.np__stage-btn:focus-visible {
+  outline: none;
+  color: var(--text-primary);
+  box-shadow: 0 0 0 3px var(--gold-ring);
+  border-color: var(--gold);
+}
+
 /* A phone: stacked, the column under the cover and above the control bar. */
 @media (max-width: 600px) {
   .np {
@@ -172,5 +218,17 @@
   /* Touch targets (design.md, Phone). */
   .np__tab {
     min-height: 40px;
+  }
+
+  /* Over the stage's lower edge rather than under it: the column starts
+     18px below the stage, and every pixel taken from it is a queue row. */
+  .np__stage {
+    left: calc(50% - var(--np-art) / 2);
+    top: calc(var(--np-top) + var(--np-art) - 40px);
+  }
+
+  .np__stage-btn {
+    min-height: 32px;
+    background: rgba(5, 7, 15, 0.55);
   }
 }
