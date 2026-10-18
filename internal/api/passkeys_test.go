@@ -410,3 +410,35 @@ func TestPasskeysExistOnlyAtTheNameWithAValidCertificate(t *testing.T) {
 		t.Error("available with the public certificate turned off")
 	}
 }
+
+// The desktop window opens the public name instead of localhost when there is
+// one, so the status tells a request that is not at the name where passkeys
+// would work -- and says nothing once the certificate is not valid.
+func TestTheStatusNamesWherePasskeysWouldWork(t *testing.T) {
+	h := newHarness(t)
+	pc := h.settings.Get()
+	pc.PublicCert = config.PublicCert{Enabled: true, Hostname: pkRP, CA: "letsencrypt"}
+	if err := h.settings.Set(pc); err != nil {
+		t.Fatal(err)
+	}
+	ask := func() map[string]any {
+		r := httptest.NewRequest("GET", "/api/auth/status", nil)
+		r.Host = "localhost:8080"
+		r.TLS = &tls.ConnectionState{}
+		rec := httptest.NewRecorder()
+		h.srvAPI.Handler().ServeHTTP(rec, r)
+		var st map[string]any
+		if err := json.Unmarshal(rec.Body.Bytes(), &st); err != nil {
+			t.Fatal(err)
+		}
+		return st["passkeys"].(map[string]any)
+	}
+	h.srvAPI.publicCert = certStatus{publiccert.Status{State: publiccert.StateActive, NotAfter: time.Now().Add(24 * time.Hour)}}
+	if pk := ask(); pk["available"] != false || pk["public_name"] != pkRP {
+		t.Errorf("valid certificate, at localhost: %v", pk)
+	}
+	h.srvAPI.publicCert = certStatus{publiccert.Status{State: publiccert.StateFailing, NotAfter: time.Now().Add(-time.Hour)}}
+	if pk := ask(); pk["public_name"] != nil {
+		t.Errorf("expired certificate: %v", pk)
+	}
+}

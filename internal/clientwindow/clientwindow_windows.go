@@ -38,6 +38,15 @@ func open(o Options) error {
 	if err := applyBrowserArgs(o.CertPin, o.DevTools); err != nil {
 		return err
 	}
+	if o.LoopbackName != "" {
+		arg, err := loopbackArg(o.LoopbackName)
+		if err != nil {
+			return err
+		}
+		if err := os.Setenv(browserArgsEnv, joinArgs(os.Getenv(browserArgsEnv), arg)); err != nil {
+			return err
+		}
+	}
 
 	/*
 	 * The window, and the close handler, declared before either is built.

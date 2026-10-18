@@ -55,6 +55,27 @@ func (s *Server) passkeyRP(r *http.Request) (string, bool) {
 	return pc.Hostname, true
 }
 
+/*
+ * publicName is the public certificate's name while it has a valid one, on
+ * any request: what the desktop window opens instead of localhost so that
+ * passkeys work in it. Not a secret: it is in public DNS and in the
+ * certificate every visitor to the name is handed.
+ */
+func (s *Server) publicName() string {
+	if s.publicCert == nil {
+		return ""
+	}
+	pc := s.settings.Get().PublicCert
+	if !pc.Enabled || pc.Hostname == "" {
+		return ""
+	}
+	st := s.publicCert.Status()
+	if st.NotAfter.IsZero() || !time.Now().Before(st.NotAfter) {
+		return ""
+	}
+	return pc.Hostname
+}
+
 func (s *Server) passkeyUnavailable(w http.ResponseWriter) {
 	writeError(w, http.StatusConflict, "conflict",
 		"passkeys work only at the server's public name over HTTPS")

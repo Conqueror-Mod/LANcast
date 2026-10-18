@@ -98,7 +98,7 @@ func (l *launcher) watchForRecovery(c clientwindow.Controller, url, pinAtLaunch 
 				// Asked now rather than when the move was noticed: then the
 				// server was still restarting, and nothing answered to say
 				// whether it speaks https.
-				url, moved = desktop.ResolvedURL(l.addr), false
+				url, moved = l.windowURL(l.addr), false
 			}
 			slog.Info("the server is reachable again; reloading the window", "url", url)
 			c.Navigate(url)

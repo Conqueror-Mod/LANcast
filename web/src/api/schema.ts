@@ -8148,6 +8148,8 @@ export interface components {
             available: boolean;
             /** @description The public name passkeys are bound to. Present only when available. */
             rp_id?: string;
+            /** @description Where passkeys would work, when this request is not there: the public certificate's name while it is valid. The desktop app opens its own server at this name, resolved to this machine, so passkeys work in its window. */
+            public_name?: string;
         };
         PasskeyOptions: {
             /** @description Sent back with the answer. Single use, five minutes. */

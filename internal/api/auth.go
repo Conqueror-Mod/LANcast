@@ -451,6 +451,10 @@ func (s *Server) authStatus(w http.ResponseWriter, r *http.Request) {
 	 */
 	if rp, ok := s.passkeyRP(r); ok {
 		resp["passkeys"] = map[string]any{"available": true, "rp_id": rp}
+	} else if name := s.publicName(); name != "" {
+		// Where they would work: the desktop window opens this name instead
+		// of localhost when there is one.
+		resp["passkeys"] = map[string]any{"available": false, "public_name": name}
 	} else {
 		resp["passkeys"] = map[string]any{"available": false}
 	}
