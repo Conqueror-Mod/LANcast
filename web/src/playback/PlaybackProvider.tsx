@@ -69,7 +69,7 @@ import { attachMediaHandlers, type MediaBackend, type MediaEventName } from "./b
 import { MusicDeck, GAPLESS_OVERLAP_S, PRELOAD_LEAD_S } from "./musicDeck";
 import { mpvBackend, nativeFeatures, nativePlaybackAvailable } from "./mpvBackend";
 import { HIDDEN, nativeLayout, sameLayout } from "./nativeLayout";
-import { isGameOnScreen, subscribeGameOnScreen } from "./retro";
+import { isGameOnScreen, stopGame, subscribeGameOnScreen } from "./retro";
 import { DOCK_WIDTHS, getDock, subscribeDock, type DockState } from "@/lib/dock";
 import "./dock.css";
 
@@ -427,6 +427,14 @@ export function usePlayback(): PlaybackState {
 }
 
 /**
+ * usePlaybackIfAny is usePlayback for a screen that may be drawn without the
+ * provider (Settings, in its tests): null there rather than a throw.
+ */
+export function usePlaybackIfAny(): PlaybackState | null {
+  return useContext(Ctx);
+}
+
+/**
  * useFullSurface claims the full-screen surface for as long as the calling
  * screen is mounted, and hands it back on unmount — which is what turns the
  * player into the docked mini-player when you navigate away.
@@ -465,6 +473,23 @@ function NavigateBridge({
 }
 
 export function PlaybackProvider({ children }: { children: ReactNode }) {
+  /*
+   * A new page owns no film, so it clears any its predecessor left playing.
+   *
+   * The desktop app's native player belongs to the window, not to the page.
+   * A page that goes away without stopping it -- a reload, the window coming
+   * back after an update restart, moving to another port (ADR 0089) -- left
+   * the film playing in its mini-player with nothing able to stop or control
+   * it, because the page that knew about it had gone. Reported after a port
+   * change. Anything native that is playing when a page starts is that
+   * orphan by definition.
+   */
+  useEffect(() => {
+    void window.lancastMpvStop?.().catch(() => {});
+    void window.lancastMpvLayout?.("hidden", 0, 0, 0, 0).catch(() => {});
+    void stopGame().catch(() => {});
+  }, []);
+
   const [itemID, setItemID] = useState(0);
   const [queue, setQueue] = useState<number[]>([]);
   const [fullClaimed, setFullClaimed] = useState(false);

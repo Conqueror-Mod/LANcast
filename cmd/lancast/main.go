@@ -348,6 +348,9 @@ func runWindow(l *launcher, d *desk) {
 	// Native playback (ADR 0067). Built before the window so its bindings are
 	// injected with the rest; it learns the window itself in OnReady.
 	native := &nativePlayer{origin: url, pin: pin}
+	if l.target.local {
+		native.addr, native.follow = l.addr, service.ConfiguredAddr
+	}
 	/*
 	 * Open on the picker rather than on a server, when there is no server this
 	 * launch can honestly open (ADR 0070).

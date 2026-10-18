@@ -6,7 +6,11 @@ import "lancast/internal/clientwindow"
 
 // nativePlayer has no implementation off Windows; the page keeps the browser's
 // player (ADR 0067).
-type nativePlayer struct{ origin, pin string }
+type nativePlayer struct {
+	origin, pin string
+	follow      func() (string, bool)
+	addr        string
+}
 
 func (n *nativePlayer) attach(clientwindow.Controller) {}
 

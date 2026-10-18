@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"lancast/internal/clientwindow"
+	"lancast/internal/desktop"
 	"lancast/internal/mpv"
 )
 
@@ -34,6 +35,12 @@ import (
 
 type nativePlayer struct {
 	origin, pin string
+	// follow is set when the server is this machine's own: its port can be
+	// moved from Settings (ADR 0089), and the relay must fetch from where the
+	// service is now, not where it was when the app opened. addr is the
+	// address origin was made from.
+	follow func() (string, bool)
+	addr   string
 
 	mu     sync.Mutex
 	window clientwindow.Controller
@@ -145,6 +152,28 @@ func (n *nativePlayer) ensure() error {
 	return nil
 }
 
+/*
+ * followService points the relay at the service's current port. Without it a
+ * film opened after a port change fetched from the old port, which nothing
+ * answers, until the app was reopened. Asked per film, not per request: a
+ * port only moves with a restart. n.mu must be held.
+ */
+func (n *nativePlayer) followService() {
+	if n.follow == nil {
+		return
+	}
+	a, ok := n.follow()
+	if !ok || a == n.addr {
+		return
+	}
+	slog.Info("native playback follows the server to its new address", "from", n.addr, "to", a)
+	n.addr, n.origin = a, desktop.ResolvedURL(a)
+	if n.relay != nil {
+		_ = n.relay.Close()
+		n.relay = nil
+	}
+}
+
 // emit forwards mpv's translated events to the page's backend (mpvBackend.ts).
 func (n *nativePlayer) emit(s mpv.State, events []string) {
 	n.mu.Lock()
@@ -203,6 +232,7 @@ func (n *nativePlayer) open(itemID int64, ticket string) error {
 	if itemID <= 0 || ticket == "" {
 		return errors.New("an item and a ticket are required")
 	}
+	n.followService()
 	if err := n.ensure(); err != nil {
 		return err
 	}
