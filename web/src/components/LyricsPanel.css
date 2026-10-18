@@ -80,6 +80,9 @@
 /* In Now Playing's column: the column is the surface, so no panel of its own. */
 .lyrics--inline {
   position: static;
+  /* auto, not the overlay's 3: a flex item honours z-index unpositioned, and
+     the lyrics would paint over the bar's popovers (QueuePanel.css). */
+  z-index: auto;
   flex: 1 1 auto;
   min-height: 0;
   width: auto;

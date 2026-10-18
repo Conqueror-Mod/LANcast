@@ -105,6 +105,13 @@
    hand-queued lane and the queue read as one list with two headings. */
 .queue--inline {
   position: static;
+  /*
+   * auto, not the popover's 5. Static does not make z-index inert here: this
+   * is a flex item (of .np__panel), and a flex item honours z-index without
+   * being positioned. So the column's queue was painted over the playback
+   * settings popover opened from the bar, its rows showing through the panel.
+   */
+  z-index: auto;
   flex: 1 1 auto;
   min-height: 0;
   width: auto;
