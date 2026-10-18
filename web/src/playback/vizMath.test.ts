@@ -198,12 +198,14 @@ function pixels(colours: RGB[]): Uint8ClampedArray {
 }
 
 describe("paletteFrom (the cover's colours)", () => {
-  it("takes the most present hue first", () => {
+  it("draws in the opposite of the most present hue", () => {
     const red: RGB = [200, 30, 40];
     const blue: RGB = [30, 60, 200];
     const pal = paletteFrom(pixels([red, red, red, blue]));
     const [h] = rgbToHsl(pal[0]);
-    expect(h < 20 || h > 340).toBe(true);
+    // Red, mostly: its opposite is cyan.
+    expect(h).toBeGreaterThan(160);
+    expect(h).toBeLessThan(200);
   });
 
   it("prefers a saturated stripe to a grey wall", () => {
@@ -211,8 +213,28 @@ describe("paletteFrom (the cover's colours)", () => {
     const green: RGB = [40, 180, 70];
     const pal = paletteFrom(pixels([grey, grey, grey, grey, grey, grey, green]));
     const [h] = rgbToHsl(pal[0]);
-    expect(h).toBeGreaterThan(100);
-    expect(h).toBeLessThan(160);
+    // The green stripe decides it: its opposite is magenta.
+    expect(h).toBeGreaterThan(290);
+    expect(h).toBeLessThan(340);
+  });
+
+  it("draws an orange cover cool, not rust", () => {
+    // The cover that found this: orange, which the gold nudge used to turn into
+    // a dull 8° brick red drawn over a field of the same colour.
+    const orange: RGB = [220, 120, 40];
+    const [h, s, l] = rgbToHsl(paletteFrom(pixels([orange, orange, [180, 90, 30]]))[0]);
+    expect(h).toBeGreaterThan(190);
+    expect(h).toBeLessThan(230);
+    expect(s).toBeGreaterThanOrEqual(0.69);
+    expect(l).toBeGreaterThan(0.6);
+  });
+
+  it("moves a blue cover's opposite off gold, since 220° turned round is 40°", () => {
+    const blue: RGB = [40, 90, 200];
+    for (const c of paletteFrom(pixels([blue, blue, blue]))) {
+      const [h, s] = rgbToHsl(c);
+      if (s >= 0.12) expect(isGoldHue(h), `hue ${h.toFixed(0)}`).toBe(false);
+    }
   });
 
   it("gives the nebula for a black-and-white cover, which has no colour to give", () => {
