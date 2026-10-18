@@ -100,7 +100,7 @@ the server still held its session.
 
 | Route | Purpose |
 |---|---|
-| `GET /api/auth/status` | `{configured, authenticated, lan_enabled, restart_required, can_convert, passkeys, user?}`; `user` carries `sharing`. `passkeys` is `{available, rp_id?}` for **this request** — see Passkeys |
+| `GET /api/auth/status` | `{configured, authenticated, lan_enabled, restart_required, can_convert, passkeys, user?}`; `user` carries `sharing`. `passkeys` is `{available, rp_id?, public_name?}` for **this request** — see Passkeys |
 | `GET /api/auth/accounts` | `{accounts: [{name}]}` for the sign-in page's account picker, **home network only** — see below |
 | `POST /api/auth/setup` | `{username, password, install_media_tools?}` → creates the first admin; only while unconfigured. Answers `media_tools_installing` |
 | `POST /api/auth/login` | `{username, password}` → session cookie. Throttled per IP, and per account from outside the local network — see below |
@@ -1926,6 +1926,12 @@ use passkeys when it arrived over TLS for the public certificate's hostname
 `GET /api/auth/status` reports `passkeys: {available: true, rp_id}` exactly
 then, and `{available: false}` everywhere else: by IP, on `localhost`, or with
 no public certificate. Off the name, the ceremony routes below answer `409`.
+
+Off the name but with a valid public certificate, the answer also carries
+`public_name`: where passkeys would work. The desktop app reads it from its own
+server and opens the window at `https://<public_name>:<port>`, with the name
+resolved to `127.0.0.1` inside that window only, so the page is on the same
+machine as before and passkeys (Windows Hello) work in it.
 
 All binary values are **base64url without padding**. A client turns them into
 `ArrayBuffer`s for `navigator.credentials`, and turns the browser's buffers
