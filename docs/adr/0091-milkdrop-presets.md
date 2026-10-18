@@ -1,6 +1,6 @@
 # ADR 0091 — A MilkDrop preset is data, never code
 
-Date: 2026-10-18 · Status: **proposed**
+Date: 2026-10-18 · Status: **accepted** 2026-10-18
 
 Chris asked whether LANcast could accept uploaded Winamp visualizations, so
 fewer would need building by hand. Now Playing shipped in v0.9.89. Its own
@@ -510,7 +510,7 @@ The remaining risks, plainly:
 - **Textures** are the murkiest part. Many come from MilkDrop's own
   distribution. They are an upload, like presets.
 
-## Decision (proposed)
+## Decision
 
 1. **MilkDrop only.** AVS is declined on the evidence in §7.
 2. **Engine:** butterchurn 3, vendored per ADR 0013's rule, with
