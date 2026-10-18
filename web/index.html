@@ -21,6 +21,42 @@
       one frame of the desk layout on every load — which reads as the app
       breaking and correcting itself. Four lines here is the whole fix.
     -->
+    <!--
+      A page from an older build reloads itself, once.
+
+      Every build renames its files, so a page loaded before a server update
+      (a tab left open, a phone's home-screen app restored from memory) asks
+      for code that no longer exists, and sat blank. The server answers 404
+      for those (internal/web/embed.go); this catches the failed script and
+      Vite's failed lazy chunks, and reloads to fetch the current page. Once
+      per minute at most, so a server that really is missing a file cannot
+      put the page in a loop.
+    -->
+    <script>
+      (function () {
+        function reloadOnce() {
+          try {
+            var last = Number(sessionStorage.getItem("lancast:stale-reload") || 0);
+            if (Date.now() - last < 60000) return;
+            sessionStorage.setItem("lancast:stale-reload", String(Date.now()));
+          } catch (e) {}
+          location.reload();
+        }
+        window.addEventListener(
+          "error",
+          function (e) {
+            var t = e.target;
+            if (t && t.tagName === "SCRIPT" && /\/assets\//.test(t.src || "")) reloadOnce();
+            if (t && t.tagName === "LINK" && /\/assets\//.test(t.href || "")) reloadOnce();
+          },
+          true,
+        );
+        window.addEventListener("vite:preloadError", function (e) {
+          e.preventDefault();
+          reloadOnce();
+        });
+      })();
+    </script>
     <script>
       try {
         if (JSON.parse(localStorage.getItem("lancast:bigscreen") || "false")) {

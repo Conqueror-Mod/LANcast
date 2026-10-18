@@ -56,6 +56,24 @@ func Handler() http.Handler {
 			}
 		}
 
+		/*
+		 * A missing build file is missing, not a route.
+		 *
+		 * assets/ holds only fingerprinted build output, and a name that is
+		 * not there is one from an older build: a page loaded before an
+		 * update, or a phone's home-screen app restored from memory after
+		 * one, asking for the code it was built with. Handing it the shell
+		 * instead answered a script request with HTML, which a browser
+		 * refuses to run, and the page sat blank with nothing in any log
+		 * (reported from a phone after a server update). A 404 lets the
+		 * page notice and reload itself (index.html).
+		 */
+		if strings.HasPrefix(upath, "assets/") {
+			w.Header().Set("Cache-Control", "no-store")
+			http.NotFound(w, r)
+			return
+		}
+
 		// Unknown path: hand the client its shell and let the router decide.
 		w.Header().Set("Cache-Control", "no-cache, must-revalidate")
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
