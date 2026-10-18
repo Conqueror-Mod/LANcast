@@ -69,6 +69,8 @@ export function RetroPlay() {
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [options, setOptions] = useState<RetroOption[]>([]);
+  // The core's own button names, for the Controls page.
+  const [labels, setLabels] = useState<Record<string, string>>({});
   // Speed and rewind (2026-10-18). fastForward is the menu's toggle; mode is
   // what the game is doing now, for the badge, which also covers the hold
   // keys the page never sees.
@@ -145,6 +147,9 @@ export function RetroPlay() {
             break;
           case "options":
             setOptions(curatedOptions(e.options));
+            break;
+          case "labels":
+            setLabels(e.labels ?? {});
             break;
           case "state-saved":
             if (e.slot !== "auto") setNotice(`Saved to ${slotLabel(e.slot ?? "")}.`);
@@ -387,7 +392,7 @@ export function RetroPlay() {
             </>
           )}
           {page === "controls" && (
-            <ControlsPage platform={item?.platform ?? ""} onBack={() => setPage("main")} />
+            <ControlsPage platform={item?.platform ?? ""} labels={labels} onBack={() => setPage("main")} />
           )}
         </div>
       )}

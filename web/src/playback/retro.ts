@@ -72,6 +72,7 @@ export interface RetroEvent {
     | "message"
     | "speed"
     | "captured"
+    | "labels"
     | "error"
     | "stopped"
     /** A pad move while the menu is open: up, down, left, right, select, back. */
@@ -81,6 +82,8 @@ export interface RetroEvent {
   done?: number;
   total?: number;
   options?: RetroOption[];
+  /** On "labels": the core's own names for the first pad's buttons, by Controls target. */
+  labels?: Record<string, string>;
 }
 
 declare global {

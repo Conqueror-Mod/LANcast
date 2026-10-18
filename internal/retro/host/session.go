@@ -89,6 +89,9 @@ type Event struct {
 	// Options, on an "options" event, are the core options the core
 	// declared, each with its current value.
 	Options []Option
+	// Labels, on a "labels" event, are the core's own names for the first
+	// controller's buttons, by Controls target ("b": "B Button").
+	Labels map[string]string
 }
 
 // Option is one core option as a menu shows it.
@@ -1093,4 +1096,26 @@ func (s *Session) announceSpeed(mode string) {
 	}
 	s.shown = mode
 	s.cfg.OnEvent(Event{Kind: "speed", Text: mode})
+}
+
+/*
+ * SetInputDescriptors takes the core's names for its inputs (DescriptorSink)
+ * and tells the page the first controller's, for the Controls page: an N64
+ * core calls RetroPad L2 "Z Trigger", which a generic "L2" does not say.
+ */
+func (s *Session) SetInputDescriptors(ds []libretro.InputDescriptor) {
+	labels := map[string]string{}
+	for _, d := range ds {
+		if d.Port != 0 || d.Device != libretro.DeviceJoypad || d.Description == "" {
+			continue
+		}
+		for name, id := range targetButton {
+			if uint32(id) == d.ID {
+				labels[name] = d.Description
+			}
+		}
+	}
+	if len(labels) > 0 {
+		s.cfg.OnEvent(Event{Kind: "labels", Labels: labels})
+	}
 }
