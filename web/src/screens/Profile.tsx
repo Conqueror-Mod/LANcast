@@ -1,3 +1,4 @@
+import { RetroAchievementsCard } from "@/components/RetroAchievementsCard";
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import {
@@ -118,6 +119,7 @@ export function Profile() {
           <FavouritesShelf />
           <YourRatings />
           <YourTags />
+          <RetroAchievementsCard />
         </>
       )}
 
