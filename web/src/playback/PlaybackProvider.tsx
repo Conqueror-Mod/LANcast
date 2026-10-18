@@ -42,7 +42,7 @@ import {
   nextPos,
   prevPos,
 } from "./queueOrder";
-import { usePrefs, qualityQuery, STAGES, type Prefs, type Stage } from "./prefs";
+import { usePrefs, qualityQuery, getPrefs, setPrefs, STAGES, stageTier, type Prefs, type Stage } from "./prefs";
 import { resumePointAfterFailure } from "./resumePoint";
 import { applyCueVars } from "./cueVars";
 import { refusedNote } from "./transcodeRefused";
@@ -98,9 +98,15 @@ import {
   setElementVolume,
 } from "./elementEngine";
 import { Visualizer, useDocumentHidden, usePrefersReducedMotion, vizShouldRun } from "./Visualizer";
+import { webgl2Supported } from "./trails";
 
-// A stored stage this build does not know (an older or newer one wrote it) is the cover.
+// A stored stage this build does not know (an older or newer one wrote it) is
+// the cover, and so is a trail stored by a browser with WebGL2 and read back
+// by one without it.
 const STAGE_IDS = new Set<Stage>(STAGES.map((s) => s.id));
+function stageShowable(s: Stage): boolean {
+  return s !== "cover" && STAGE_IDS.has(s) && (stageTier(s) !== 2 || webgl2Supported());
+}
 /*
  * What to say during the wait, in words written for the person waiting.
  *
@@ -364,6 +370,15 @@ interface PlaybackState {
   toggleFullscreen: () => void;
   /** Whether the picture is filling the screen, however it got there. */
   fullscreen: boolean;
+  /*
+   * The full-screen visualizer (docs/now-playing-plan.md, step 3): the
+   * stage's visualizer filling the screen instead of sitting in its square.
+   * Not the window's fullscreen, which is `fullscreen` and works on its own.
+   * Only ever true on the full surface with a visualizer showing.
+   */
+  vizFull: boolean;
+  /** Into or out of it. Asked for over the cover, the stage becomes a visualizer. */
+  setVizFull: (on: boolean) => void;
   /** Leave fullscreen if we are in it, by whichever mechanism put us there. */
   exitFullscreen: () => void;
   cycleSub: (dir: 1 | -1) => void;
@@ -794,8 +809,26 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
    */
   const reducedMotion = usePrefersReducedMotion();
   const tabHidden = useDocumentHidden();
-  const vizWanted =
-    isAudio && surface === "full" && prefs.stage !== "cover" && STAGE_IDS.has(prefs.stage) && elementFXSupported();
+  const vizWanted = isAudio && surface === "full" && stageShowable(prefs.stage) && elementFXSupported();
+  const [vizFullAsked, setVizFullAsked] = useState(false);
+  const vizFull = vizFullAsked && vizWanted;
+  /*
+   * Left behind with the screen: docking the player or a film coming on ends
+   * it, so coming back to a track's screen is Now Playing, not a field with no
+   * column. A track change does not, though the next item is briefly unloaded
+   * between them: full screen on a record is for the whole record.
+   */
+  useEffect(() => {
+    if (surface !== "full" || (item && !isAudio)) setVizFullAsked(false);
+  }, [surface, item, isAudio]);
+  const setVizFull = useCallback((on: boolean) => {
+    if (on && !stageShowable(getPrefs().stage)) {
+      // The first trail where they can be drawn, which is what full screen is
+      // for; the spectrum where they cannot.
+      setPrefs({ stage: webgl2Supported() ? "tunnel" : "spectrum" });
+    }
+    setVizFullAsked(on);
+  }, []);
   const currentAnalyser = useCallback(
     () => engineFor(deckRef.current ? deckPair()[0] : (videoRef.current ?? deckPair()[0]))?.analyser,
     [],
@@ -2935,6 +2968,8 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
     toggleFullscreen,
     fullscreen,
     exitFullscreen,
+    vizFull,
+    setVizFull,
     cycleSub,
     selectSub: setSubKey,
     selectAudio,
@@ -3380,7 +3415,7 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
           playing, which is the exact thing this provider exists to prevent. */}
       <div
         ref={containerRef}
-        className={`playback playback--${surface}${isAudio ? " playback--audio" : ""}${vizWanted ? " playback--viz" : ""}`}
+        className={`playback playback--${surface}${isAudio ? " playback--audio" : ""}${vizWanted ? " playback--viz" : ""}${vizFull ? " playback--vizfull" : ""}`}
         onClick={surface === "mini" ? openFromDock : undefined}
         title={surface === "mini" ? "Open the player" : undefined}
       >

@@ -13,7 +13,9 @@ import { clock } from "@/lib/format";
 import { showsSubtitleButton } from "@/lib/subtitleButton";
 import { matchesBinding, bindingKeys } from "@/lib/keys";
 import { Scrubber } from "@/components/Scrubber";
-import { NowPlaying } from "@/components/NowPlaying";
+import { NowPlaying, VizStep, stepVisualizer } from "@/components/NowPlaying";
+import { stageTier } from "@/playback/prefs";
+import { elementFXSupported } from "@/playback/elementEngine";
 import { PlaybackStats } from "@/components/PlaybackStats";
 import { PlaybackSettings } from "@/components/PlaybackSettings";
 import { QueuePanel } from "@/components/QueuePanel";
@@ -277,7 +279,17 @@ export function Player() {
    * window borderless over a page that has no idea it is, which is a stranger
    * place to end up than where you started.
    */
+  /*
+   * The full-screen visualizer comes off before either: it is a layer of this
+   * screen, and Escape from it returns to Now Playing, not out of the player
+   * (docs/now-playing-plan.md). On a TV the window is fullscreen for good, and
+   * Escape leaving that instead would strand the field over a desktop.
+   */
   const back = useCallback(() => {
+    if (pb.vizFull) {
+      pb.setVizFull(false);
+      return;
+    }
     if (pb.fullscreen) {
       pb.exitFullscreen();
       return;
@@ -326,8 +338,9 @@ export function Player() {
     // Audio keeps its controls. Chrome hides to get out of the way of the
     // picture; over a still cover there is nothing to get out of the way of,
     // and hiding the transport would leave a motionless screen that looks
-    // frozen rather than playing.
-    if (pb.isAudio) return;
+    // frozen rather than playing. The full-screen visualizer is the one
+    // exception: it is a picture, and fades its chrome exactly as a film does.
+    if (pb.isAudio && !pb.vizFull) return;
     idleTimer.current = window.setTimeout(function tick() {
       /*
        * The controls do not vanish from under the pointer.
@@ -347,7 +360,16 @@ export function Player() {
       }
       if (pb.playing) setChromeVisible(false);
     }, 2500);
-  }, [pb.isAudio, pb.playing]);
+  }, [pb.isAudio, pb.playing, pb.vizFull]);
+
+  // Into the full-screen visualizer, the idle clock starts; out of it, the
+  // chrome is back for good, as it always is over a track.
+  const wasVizFull = useRef(pb.vizFull);
+  useEffect(() => {
+    if (wasVizFull.current === pb.vizFull) return;
+    wasVizFull.current = pb.vizFull;
+    wakeChrome();
+  }, [pb.vizFull, wakeChrome]);
 
   /*
    * The prompt has to be visible when it appears, which it was not.
@@ -381,7 +403,11 @@ export function Player() {
     seekBy,
     cycleSub,
     changeVolume,
+    setVizFull,
   } = pb;
+  // A visualizer can be on screen: a track, with Web Audio to tap.
+  const vizOffered = pb.isAudio && elementFXSupported();
+  const vizShowing = vizOffered && (pb.vizFull || stageTier(pb.prefs.stage) > 0);
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       // While typing in the subtitle search box, keys are text — not transport.
@@ -408,6 +434,8 @@ export function Player() {
         toggleFullscreen();
       } else if (matchesBinding("mute", e.key)) {
         toggleMute();
+      } else if (matchesBinding("vizfull", e.key)) {
+        if (vizOffered) setVizFull(!pb.vizFull);
       } else if (e.key === "ArrowLeft") {
         e.preventDefault();
         seekBy(-10);
@@ -424,8 +452,16 @@ export function Player() {
         // The subtitle pair is one binding with two keys: the first cycles
         // back, the second forward, whatever they have been rebound to.
         const subs = bindingKeys("subtitles");
+        const viz = bindingKeys("vizpreset");
         if (e.key === subs[0]) cycleSub(-1);
         else if (e.key === subs[1]) cycleSub(1);
+        // Only while a visualizer is showing: over the cover they would turn
+        // one on, and routing the music is not a side effect a stray key gets.
+        else if (e.key === viz[0]) {
+          if (vizShowing) stepVisualizer(-1);
+        } else if (e.key === viz[1]) {
+          if (vizShowing) stepVisualizer(1);
+        }
         else if (e.key === "i" || e.key === "I") {
           /*
            * `i`, for information: the statistics overlay.
@@ -452,8 +488,12 @@ export function Player() {
     seekBy,
     cycleSub,
     changeVolume,
+    setVizFull,
     pb.muted,
     pb.volume,
+    pb.vizFull,
+    vizOffered,
+    vizShowing,
     wakeChrome,
   ]);
 
@@ -531,7 +571,8 @@ export function Player() {
       className={
         "player" +
         (chromeVisible ? "" : " player--idle") +
-        (pb.isAudio ? " player--audio" : "")
+        (pb.isAudio ? " player--audio" : "") +
+        (pb.vizFull ? " player--vizfull" : "")
       }
       onMouseMove={wakeChrome}
       onClick={(e) => {
@@ -594,9 +635,18 @@ export function Player() {
         }}
       >
         <div className="player__top">
-          <button className="player__icon" onClick={close} aria-label="Close">
-            ←
-          </button>
+          {/* Over the full-screen visualizer, back is to Now Playing, as
+              Escape is; close is a step further. */}
+          {pb.vizFull ? (
+            <button className="player__icon" onClick={() => setVizFull(false)} aria-label="Back to Now Playing">
+              ←
+            </button>
+          ) : (
+            <button className="player__icon" onClick={close} aria-label="Close">
+              ←
+            </button>
+          )}
+          {pb.vizFull && <VizStep />}
           {/* A track is named on the page, in Now Playing's column, and
               naming it here as well would say it twice in 400px. */}
           {!pb.isAudio && <span className="player__title">{item?.title}</span>}
@@ -625,7 +675,7 @@ export function Player() {
 
         {/* A track's screen is Now Playing: what is on, and what comes next,
             beside the cover (docs/now-playing-plan.md). */}
-        {pb.isAudio && <NowPlaying />}
+        {pb.isAudio && !pb.vizFull && <NowPlaying />}
 
         {/*
           Skip intro and skip credits. Credits are a button that appears and

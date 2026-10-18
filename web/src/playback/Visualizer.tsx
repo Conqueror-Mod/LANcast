@@ -234,7 +234,7 @@ function ClassicCanvas({
     };
     id = requestAnimationFrame(frame);
     return () => cancelAnimationFrame(id);
-  }, [running, kind, calm]);
+  }, [running, kind, calm, analyserRef, paletteRef]);
 
   return <canvas ref={canvasRef} className="playback__viz-canvas" data-viz={kind} aria-hidden="true" />;
 }
@@ -307,7 +307,7 @@ function TrailCanvas({
     };
     id = requestAnimationFrame(frame);
     return () => cancelAnimationFrame(id);
-  }, [running]);
+  }, [running, analyserRef, paletteRef]);
 
   return <canvas ref={canvasRef} className="playback__viz-canvas" data-viz={preset} aria-hidden="true" />;
 }

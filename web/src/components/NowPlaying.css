@@ -158,8 +158,64 @@
   width: var(--np-art);
   top: calc(50% + var(--np-art) / 2 + 14px);
   display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+
+.np__stage-row {
+  display: flex;
   justify-content: center;
+  flex-wrap: wrap;
   gap: 4px;
+}
+
+/* The full-screen button: a glyph, so no tracking to space it out. */
+.np__stage-full {
+  letter-spacing: 0;
+  padding: 4px 10px;
+}
+
+/* A preset's name between back and forward: under the stage for the trails,
+   and in the top bar over the full-screen visualizer. */
+.np__step {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.np__step-name {
+  min-width: 7em;
+  text-align: center;
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+
+.np__step-btn {
+  appearance: none;
+  background: none;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  width: 28px;
+  height: 28px;
+  font: inherit;
+  font-size: 16px;
+  line-height: 1;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.np__step-btn:hover {
+  color: var(--text-primary);
+}
+
+.np__step-btn:focus-visible {
+  outline: none;
+  color: var(--text-primary);
+  box-shadow: 0 0 0 3px var(--gold-ring);
+  border-color: var(--gold);
 }
 
 .np__stage-btn {
