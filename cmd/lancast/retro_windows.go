@@ -14,6 +14,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"lancast/internal/clientwindow"
@@ -47,6 +48,11 @@ type retroPlayer struct {
 	done    chan struct{}
 
 	install coreInstall
+
+	// maps is the running game's control mapping (Controls page), swapped
+	// in place when the page changes it; capturing is one capture at a time.
+	maps      host.Mappings
+	capturing atomic.Bool
 }
 
 /*
@@ -228,6 +234,39 @@ func saveDisplay(platform string, d host.Display) error {
 	return os.WriteFile(retroDir("display.json"), b, 0o644)
 }
 
+/*
+ * Which control does what, per console (the Controls page), kept on this
+ * machine beside the picture and core options. A console never changed uses
+ * the default layout.
+ */
+func savedControls(platform string) host.Mapping {
+	all := map[string]host.Mapping{}
+	if b, err := os.ReadFile(retroDir("controls.json")); err == nil {
+		_ = json.Unmarshal(b, &all)
+	}
+	return all[platform].WithDefaults()
+}
+
+func writeControls(platform string, m *host.Mapping) error {
+	if _, ok := cores.For(platform); !ok {
+		return fmt.Errorf("no console called %q", platform)
+	}
+	all := map[string]host.Mapping{}
+	if b, err := os.ReadFile(retroDir("controls.json")); err == nil {
+		_ = json.Unmarshal(b, &all)
+	}
+	if m == nil {
+		delete(all, platform)
+	} else {
+		all[platform] = *m
+	}
+	if err := os.MkdirAll(retroDir(), 0o755); err != nil {
+		return err
+	}
+	b, _ := json.MarshalIndent(all, "", "  ")
+	return os.WriteFile(retroDir("controls.json"), b, 0o644)
+}
+
 // availability is what the page needs to decide between a Play button and a
 // sentence saying why not.
 func (r *retroPlayer) availability(platform string) map[string]any {
@@ -394,7 +433,7 @@ func (r *retroPlayer) run(ctx context.Context, game *remote.Game, corePath strin
 		// it costs nothing there; an N64 core cannot run without it.
 		GL:              &host.WGL{HWND: hwnd},
 		Audio:           &host.WaveOut{},
-		Input:           host.Controllers{HWND: hwnd},
+		Input:           host.Controllers{HWND: hwnd, Map: &r.maps},
 		Saves:           game,
 		Options:         savedOptions(platform),
 		Display:         savedDisplay(platform),
@@ -418,6 +457,7 @@ func (r *retroPlayer) run(ctx context.Context, game *remote.Game, corePath strin
 		},
 		Log: slog.Default(),
 	})
+	r.maps.Set(savedControls(platform))
 	s.SetVolume(r.volume())
 	r.mu.Lock()
 	r.session = s
@@ -555,6 +595,46 @@ func (r *retroPlayer) bindings() map[string]any {
 				s.SetOption(key, value)
 			}
 			return nil
+		},
+		// Which control does what, per console (the Controls page).
+		"lancastRetroControls": func(platform string) host.Mapping { return savedControls(platform) },
+		"lancastRetroSetControl": func(platform, target, kind, name string) (host.Mapping, error) {
+			m, err := savedControls(platform).Assign(target, kind, name)
+			if err != nil {
+				return host.Mapping{}, err
+			}
+			if err := writeControls(platform, &m); err != nil {
+				return host.Mapping{}, err
+			}
+			r.maps.Set(m)
+			return m, nil
+		},
+		"lancastRetroResetControls": func(platform string) (host.Mapping, error) {
+			if err := writeControls(platform, nil); err != nil {
+				return host.Mapping{}, err
+			}
+			m := host.DefaultMapping()
+			r.maps.Set(m)
+			return m, nil
+		},
+		/*
+		 * "Press the button you want." Bindings run on the UI thread, so the
+		 * wait is on a goroutine and the answer comes back as a "captured"
+		 * event: kind "pad" or "key" and its name, or kind "" for cancelled.
+		 */
+		"lancastRetroCapture": func() bool {
+			if !r.capturing.CompareAndSwap(false, true) {
+				return false
+			}
+			go func() {
+				defer r.capturing.Store(false)
+				kind, name, ok := host.Capture(8 * time.Second)
+				if !ok {
+					kind, name = "", ""
+				}
+				r.emit(map[string]any{"kind": "captured", "control": kind, "name": name})
+			}()
+			return true
 		},
 		// How a console's picture is drawn, remembered per console and
 		// applied to the running game at once.

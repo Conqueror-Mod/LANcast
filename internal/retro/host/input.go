@@ -107,33 +107,8 @@ const (
  * negative, as on screen.
  */
 func FromXInput(g XInputGamepad) Pad {
-	var p Pad
-	b := g.Buttons
-	p.set(libretro.JoypadUp, b&XInputDPadUp != 0)
-	p.set(libretro.JoypadDown, b&XInputDPadDown != 0)
-	p.set(libretro.JoypadLeft, b&XInputDPadLeft != 0)
-	p.set(libretro.JoypadRight, b&XInputDPadRight != 0)
-	p.set(libretro.JoypadStart, b&XInputStart != 0)
-	p.set(libretro.JoypadSelect, b&XInputBack != 0)
-	if b&XInputRightThmb != 0 {
-		p.Hot |= HotFastForward
-	}
-	if b&XInputLeftThumb != 0 {
-		p.Hot |= HotRewind
-	}
-	p.set(libretro.JoypadL, b&XInputLeftShldr != 0)
-	p.set(libretro.JoypadR, b&XInputRightShdr != 0)
-	p.set(libretro.JoypadB, b&XInputA != 0)
-	p.set(libretro.JoypadA, b&XInputB != 0)
-	p.set(libretro.JoypadY, b&XInputX != 0)
-	p.set(libretro.JoypadX, b&XInputY != 0)
-	p.set(libretro.JoypadL2, g.LeftTrigger > triggerThreshold)
-	p.set(libretro.JoypadR2, g.RightTrigger > triggerThreshold)
-	p.Analog[0][0] = deadZone(g.ThumbLX, leftDeadZone)
-	p.Analog[0][1] = invert(deadZone(g.ThumbLY, leftDeadZone))
-	p.Analog[1][0] = deadZone(g.ThumbRX, rightDeadZone)
-	p.Analog[1][1] = invert(deadZone(g.ThumbRY, rightDeadZone))
-	return p
+	// The default layout (mapping.go), which is the one this always was.
+	return fromXInputWith(g, defaultCompiled)
 }
 
 /*
@@ -187,28 +162,11 @@ const (
  * Enter and Backspace for Start and Select. Escape is the menu, not a button,
  * so it never reaches the game.
  */
-var keyboardMap = map[int]int{
-	VKUp: libretro.JoypadUp, VKDown: libretro.JoypadDown,
-	VKLeft: libretro.JoypadLeft, VKRight: libretro.JoypadRight,
-	VKZ: libretro.JoypadB, VKX: libretro.JoypadA,
-	VKA: libretro.JoypadY, VKS: libretro.JoypadX,
-	VKQ: libretro.JoypadL, VKW: libretro.JoypadR,
-	VKReturn: libretro.JoypadStart, VKBack: libretro.JoypadSelect,
-}
+// The table itself is DefaultMapping's Keys (mapping.go).
 
 // FromKeyboard maps the keys held down onto the RetroPad.
 func FromKeyboard(down func(vk int) bool) Pad {
-	var p Pad
-	for vk, button := range keyboardMap {
-		p.set(button, down(vk))
-	}
-	if down(VKTab) {
-		p.Hot |= HotFastForward
-	}
-	if down(VKR) {
-		p.Hot |= HotRewind
-	}
-	return p
+	return fromKeyboardWith(down, defaultCompiled)
 }
 
 // Merge combines a pad and the keyboard into one player: either can press a
