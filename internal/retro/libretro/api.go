@@ -302,3 +302,16 @@ type Core interface {
 	// the same core.
 	Close()
 }
+
+// InputDescriptor is a core's own name for one of its inputs, from
+// SET_INPUT_DESCRIPTORS: "C-Down", "Z Trigger", "Cross".
+type InputDescriptor struct {
+	Port, Device, Index, ID uint32
+	Description             string
+}
+
+// DescriptorSink is a Frontend that wants a core's input names. Optional:
+// a frontend without it has them acknowledged and dropped, as before.
+type DescriptorSink interface {
+	SetInputDescriptors([]InputDescriptor)
+}
