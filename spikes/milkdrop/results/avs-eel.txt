@@ -1,0 +1,22 @@
+code blocks: 382, parsed: 317
+9x unknown function getspec()
+   e.g. SuperScope.perFrame: "reg00=getspec(.1,.1,0);\r\nreg02="
+9x unknown function gettime()
+   e.g. GlobalVariables.init: " reg20 = debug;\r\nptime = gettime(0);reg70=0;"
+11x unknown $ constant
+   e.g. GlobalVariables.perFrame: "ng;\r\n\r\nreg70 = max(reg70,$dt);\r\n\r\n\r\n\r\nreg40 = min("
+2x unknown function randN()
+   e.g. SuperScope.init: "me = 1/60;  bc=5;\r\nvec(L,rand2(),rand2(),rand2());"
+5x unexpected character "#"
+   e.g. SuperScope.perFrame: "// trails\r\n#define rotsines_vec(name"
+16x unknown function getosc()
+   e.g. TexerII.onBeat: "redc=getosc(0.6,0.02,0)*0.14;\r"
+5x unknown function mb()
+   e.g. SuperScope.perPoint: "\ny=cos(r)*d;\r\nsnd = abs((mb(pc+avgoffset)));\r\nred="
+4x unknown function gmb()
+   e.g. SuperScope.perPoint: "+fc)%ww ) *hh+cy;\r\nsnd = gmb(ind);\r\nyi=cy*ihh+snd*"
+2x unexpected character "\uN"
+   e.g. EffectList.init: "\u0006"
+2x unexpected =
+   e.g. EffectList.perFrame: "=.5;"
+types carrying code: DynamicMovement, SuperScope, TexerII, GlobalVariables, Bump, ColorModifier, Triangle, EffectList

@@ -1,0 +1,28 @@
+{
+  "dir": "presets-cream-of-the-crop",
+  "presets": 5236,
+  "seconds": 1911.444,
+  "parsedAndRan": 5225,
+  "parseFailures": 11,
+  "runtimeFailures": 0,
+  "nanInMotionVars": 1,
+  "loopCapHit": 0,
+  "md2": 4012,
+  "withWarpShader": 3809,
+  "withCompShader": 3896,
+  "eqMsPerFrame": {
+    "p50": "3.206",
+    "p90": "12.792",
+    "p99": "42.453",
+    "max": "71.74"
+  },
+  "failureCategories": {
+    "expected ), found l": 2,
+    "assign() needs a variable": 2,
+    "assignment to a non-variable": 1,
+    "unexpected character \"\\\\\"": 1,
+    "unexpected eof": 1,
+    "unexpected character .": 1,
+    "unknown function _aboeq()": 3
+  }
+}

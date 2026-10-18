@@ -1,0 +1,16 @@
+01 skupers - same old intro.avs                                        32 components
+02 zamuz - keep tryin'.avs                                             55 components
+03 hboy - ghost (framey's summer remix).avs                            25 components
+04 synth-c - vorticity (brain activity remix by zamuz).avs             33 components
+05 skupers - dance of the seraphim (yathosho's city lights mix).avs    20 components
+06 framey - strike.avs                                                 25 components
+07 grandchild - elite-einheit (future).avs                             23 components
+08 synth-c - quantization.avs                                          25 components
+09 yathosho - figure c edit.avs                                        15 components
+10 zamuz - wonder 'bout.avs                                            65 components
+11 onionring - rabbit in your headlights.avs                           34 components
+12 synth-c - gap the mind (circuit remix by grandchild).avs            15 components
+13 synth-c - gap the mind.avs                                          22 components
+14 amphirion - in the burning (dynamic duo remix for 17).avs           26 components
+15 yathosho - fish-ly.avs                                              20 components
+[["Comment",15],["EffectList",15],["Movement",15],["ColorMap",14],["BufferSave",13],["ConvolutionFilter",12],["DynamicMovement",10],["SuperScope",9],["SetRenderMode",9],["CustomBPM",8],["TexerII",7],["Invert",5],["AVSTransAutomation",5],["FadeOut",4],["ClearScreen",4],["GlobalVariables",4],["Water",3],["Blur",3],["UniqueTone",3],["ChannelShift",2],["Colorfade",2],["Mosaic",2],["OnBeatClear",2],["ColorModifier",2],["FramerateLimiter",2],["FastBrightness",2],["Picture",1],["VideoDelay",1],["Grain",1],["Bump",1],["Multiplier",1],["Mirror",1],["Triangle",1],["Interleave",1],["ColorReduction",1]]

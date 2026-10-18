@@ -1,0 +1,20 @@
+{
+  "dir": "presets-milkdrop-original",
+  "presets": 434,
+  "seconds": 132.444,
+  "parsedAndRan": 434,
+  "parseFailures": 0,
+  "runtimeFailures": 0,
+  "nanInMotionVars": 0,
+  "loopCapHit": 0,
+  "md2": 186,
+  "withWarpShader": 179,
+  "withCompShader": 185,
+  "eqMsPerFrame": {
+    "p50": "3.683",
+    "p90": "9.901",
+    "p99": "25.871",
+    "max": "61.69"
+  },
+  "failureCategories": {}
+}

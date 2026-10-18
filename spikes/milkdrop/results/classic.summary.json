@@ -1,0 +1,23 @@
+{
+  "dir": "presets-projectm-classic",
+  "presets": 3817,
+  "seconds": 626.207,
+  "parsedAndRan": 3813,
+  "parseFailures": 4,
+  "runtimeFailures": 0,
+  "nanInMotionVars": 6,
+  "loopCapHit": 0,
+  "md2": 556,
+  "withWarpShader": 527,
+  "withCompShader": 545,
+  "eqMsPerFrame": {
+    "p50": "1.843",
+    "p90": "5.610",
+    "p99": "14.180",
+    "max": "52.54"
+  },
+  "failureCategories": {
+    "unexpected character .": 3,
+    "assign() needs a variable": 1
+  }
+}

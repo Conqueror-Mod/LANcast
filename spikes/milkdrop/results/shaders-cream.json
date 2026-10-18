@@ -1,0 +1,58 @@
+{
+ "presets": 5236,
+ "withShader": 4012,
+ "randTexture": 94,
+ "namedTexture": 793,
+ "loops": 440,
+ "tex3D": 851,
+ "topNamedTextures": [
+  [
+   "worms",
+   306
+  ],
+  [
+   "fw_clouds",
+   97
+  ],
+  [
+   "cells",
+   41
+  ],
+  [
+   "seaweed",
+   39
+  ],
+  [
+   "shub1",
+   38
+  ],
+  [
+   "grad3",
+   36
+  ],
+  [
+   "grad",
+   30
+  ],
+  [
+   "grad2",
+   30
+  ],
+  [
+   "rose",
+   29
+  ],
+  [
+   "fw_sky",
+   27
+  ],
+  [
+   "ruin",
+   20
+  ],
+  [
+   "lichen",
+   20
+  ]
+ ]
+}

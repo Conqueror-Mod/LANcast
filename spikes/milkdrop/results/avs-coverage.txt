@@ -1,0 +1,16 @@
+01 skupers - same old intro.json                   26/31 rendered missing: CustomBPM, ConvolutionFilter, Movement
+02 zamuz - keep tryin'.json                        23/54 rendered missing: Movement, SetRenderMode, TexerII, ConvolutionFilter, CustomBPM
+03 hboy - ghost (framey's summer remix).json       15/23 rendered missing: Colorfade, Water, ConvolutionFilter, VideoDelay, Movement
+04 synth-c - vorticity (brain activity remix by za 13/31 rendered missing: AVSTransAutomation, GlobalVariables, SetRenderMode, ConvolutionFilter, TexerII, Movement, CustomBPM, OnBeatClear
+05 skupers - dance of the seraphim (yathosho's cit 9/19 rendered missing: SetRenderMode, TexerII, CustomBPM, ConvolutionFilter, Movement
+06 framey - strike.json                            15/24 rendered missing: Movement, Grain, ConvolutionFilter, Bump, Multiplier, ColorModifier, FramerateLimiter
+07 grandchild - elite-einheit (future).json        15/22 rendered missing: AVSTransAutomation, Movement, Triangle, Blur, ColorModifier
+08 synth-c - quantization.json                     13/24 rendered missing: GlobalVariables, AVSTransAutomation, Movement, SetRenderMode, TexerII, FastBrightness, Interleave
+09 yathosho - figure c edit.json                   9/14 rendered missing: Movement, ConvolutionFilter
+10 zamuz - wonder 'bout.json                       15/64 rendered missing: SetRenderMode, TexerII, Movement, CustomBPM, ConvolutionFilter
+11 onionring - rabbit in your headlights.json      15/33 rendered missing: FramerateLimiter, OnBeatClear, SetRenderMode, TexerII, CustomBPM, ConvolutionFilter, Colorfade, Movement, FastBrightness, Blur
+12 synth-c - gap the mind (circuit remix by grandc 5/14 rendered missing: AVSTransAutomation, GlobalVariables, Movement, SetRenderMode, Blur
+13 synth-c - gap the mind.json                     12/21 rendered missing: AVSTransAutomation, GlobalVariables, SetRenderMode, Movement, Water, ConvolutionFilter
+14 amphirion - in the burning (dynamic duo remix f 16/25 rendered missing: Movement, ConvolutionFilter, CustomBPM, Water, ColorReduction
+15 yathosho - fish-ly.json                         5/19 rendered missing: SetRenderMode, TexerII, CustomBPM, Movement, ConvolutionFilter
+presets fully covered: 0
