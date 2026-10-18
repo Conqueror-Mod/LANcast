@@ -1473,6 +1473,39 @@
         }
       }
     },
+    "/items/{id}/collections": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/ItemId"
+        }
+      ],
+      "get": {
+        "operationId": "listItemCollections",
+        "tags": [
+          "items"
+        ],
+        "summary": "The collections a title is in",
+        "description": "For the title page's \"View collection\": the collections this item belongs to that are real (two or more present films; a provider's collection of one is not listed), sorted by name, decorated like any listing. The account's rating limit and hidden libraries apply, and an item the account cannot open is 404.",
+        "responses": {
+          "200": {
+            "description": "The collections, or an empty list.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ItemsPage"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
     "/items/{id}/progress": {
       "parameters": [
         {

@@ -831,6 +831,26 @@ func (s *Server) getItem(w http.ResponseWriter, r *http.Request) {
 	s.respondItem(w, r, id)
 }
 
+// itemCollections lists the collections a title page offers under "View
+// collection": real ones only, and only those this account may open
+// (decorateAndWriteItems applies the rating limit and hidden libraries).
+func (s *Server) itemCollections(w http.ResponseWriter, r *http.Request) {
+	id, ok := pathID(r)
+	if !ok {
+		writeError(w, http.StatusBadRequest, "bad_request", "invalid item id")
+		return
+	}
+	if _, err := s.st.GetItem(r.Context(), id, s.userID(r)); s.notFoundOr(w, err, "get item", "no such item") {
+		return
+	}
+	cols, err := s.st.CollectionsShownFor(r.Context(), id)
+	if err != nil {
+		s.writeInternal(w, err, "list collections")
+		return
+	}
+	s.decorateAndWriteItems(w, r, cols)
+}
+
 func (s *Server) putProgress(w http.ResponseWriter, r *http.Request) {
 	id, ok := pathID(r)
 	if !ok {

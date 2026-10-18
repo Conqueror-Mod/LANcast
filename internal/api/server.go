@@ -737,6 +737,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("PATCH /api/channel-sources/{id}", s.adminOnly(s.patchChannelSource))
 	mux.HandleFunc("DELETE /api/channel-sources/{id}", s.adminOnly(s.deleteChannelSource))
 	mux.HandleFunc("GET /api/items/{id}", s.getItem)
+	mux.HandleFunc("GET /api/items/{id}/collections", s.itemCollections)
 	// Editing shared metadata or identity re-litigates the library for everyone,
 	// so it is an admin action. Watching and progress are not.
 	mux.HandleFunc("PATCH /api/items/{id}", s.adminOnly(s.patchItem))

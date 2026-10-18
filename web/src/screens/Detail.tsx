@@ -47,7 +47,7 @@ import {
 import { platformLabel } from "@/lib/platforms";
 import { retroAvailability } from "@/playback/retro";
 import { WEB_STATE_PREFIX, webStateCore } from "@/playback/retroWeb";
-import { useGameSaves, useOnWatchlist, useSetWatchlist, useOptimized, useSetOptimized, optimizedOf } from "@/api/hooks";
+import { useGameSaves, useItemCollections, useOnWatchlist, useSetWatchlist, useOptimized, useSetOptimized, optimizedOf } from "@/api/hooks";
 import type { OptimizedList } from "@/api/types";
 import { useQuery } from "@tanstack/react-query";
 import type { Item } from "@/api/types";
@@ -73,6 +73,7 @@ import { useDownloads, downloadURL } from "@/lib/downloads";
 import { RateItem } from "@/components/RateItem";
 import { TagItem } from "@/components/TagItem";
 import { PointMenu, type MenuAction, type MenuPoint } from "@/components/Menu";
+import { collectionsMenu } from "@/lib/collectionsMenu";
 import type { Credit } from "@/api/types";
 import "./Detail.css";
 
@@ -364,6 +365,7 @@ function detailActions(o: {
   watched: MenuAction | null;
   watchlist: { on: boolean; toggle: () => void } | null;
   optimized: MenuAction | null;
+  collections: MenuAction[];
   pin: { pinned: boolean; toggle: () => void } | null;
   rename: (() => void) | null;
   remove: (() => void) | null;
@@ -386,6 +388,9 @@ function detailActions(o: {
     });
   }
   if (o.optimized) out.push(o.optimized);
+  // The collections this title is in. Until now the only way to one was the
+  // Collections button at the top of a whole library.
+  out.push(...o.collections);
   // Anything that plays on its own can go in a playlist; a container cannot,
   // since a playlist holds entries, not albums. Pictures do not play at all.
   if (!o.container && !isPicture(item) && !isROM(item)) {
@@ -529,6 +534,8 @@ export function Detail() {
   // Optimized copies (ADR 0087), for administrators' More Options.
   const { data: optimizedList } = useOptimized(useIsAdmin());
   const setOptimized = useSetOptimized();
+  // The collections it is in, for More Options' "View collection".
+  const { data: inCollections } = useItemCollections(item && item.kind !== "collection" ? item.id : 0);
   // On or off the watchlist, for More Options (the button reads it itself).
   const onWatchlist = useOnWatchlist(item?.id ?? 0);
   const setWatchlist = useSetWatchlist();
@@ -1196,6 +1203,7 @@ export function Detail() {
                       ? watchedAction(item, children, forgetPlace.mutate, markAll, marking)
                       : null,
                   optimized: optimizedMenu(item, isAdmin, optimizedList, setOptimized.mutate),
+                  collections: collectionsMenu(item, inCollections?.items, (id) => navigate(`/item/${id}`)),
                   watchlist: watchlistable(item)
                     ? { on: onWatchlist, toggle: () => setWatchlist.mutate({ id: item.id, on: !onWatchlist }) }
                     : null,
