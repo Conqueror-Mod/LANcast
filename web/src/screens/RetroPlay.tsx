@@ -18,6 +18,8 @@ import {
   setRetroOption,
   openGame,
   retroCommand,
+  rewindPreferred,
+  setRewindPreferred,
   slotLabel,
   stopGame,
   volumeLabel,
@@ -57,6 +59,12 @@ export function RetroPlay() {
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [options, setOptions] = useState<RetroOption[]>([]);
+  // Speed and rewind (2026-10-18). fastForward is the menu's toggle; mode is
+  // what the game is doing now, for the badge, which also covers the hold
+  // keys the page never sees.
+  const [fastForward, setFastForward] = useState(false);
+  const [rewind, setRewind] = useState(rewindPreferred);
+  const [mode, setMode] = useState<"normal" | "fast" | "rewind">("normal");
 
   // The page is see-through over the picture while this screen is up, and a
   // docked film floats above it rather than above the main window (ADR 0076).
@@ -97,6 +105,10 @@ export function RetroPlay() {
           case "started":
             setLoading(null);
             setRunning(true);
+            if (rewindPreferred()) void retroCommand("rewind", "on");
+            break;
+          case "speed":
+            setMode(e.text === "fast" || e.text === "rewind" ? e.text : "normal");
             break;
           case "menu":
             setMenu(true);
@@ -244,6 +256,29 @@ export function RetroPlay() {
             </div>
           )}
           <MenuButton label={`Game volume: ${volumeLabel(volume)}`} onSelect={cycleVolume} />
+          <div className="retro-play__group" aria-label="Speed">
+            <MenuButton
+              label={`Fast-forward: ${fastForward ? "On" : "Off"}`}
+              onSelect={() => {
+                const next = !fastForward;
+                setFastForward(next);
+                void retroCommand("fast-forward", next ? "on" : "off");
+              }}
+            />
+            <MenuButton
+              label={`Rewind: ${rewind ? "On" : "Off"}`}
+              onSelect={() => {
+                const next = !rewind;
+                setRewind(next);
+                setRewindPreferred(next);
+                void retroCommand("rewind", next ? "on" : "off");
+              }}
+            />
+            <p className="retro-play__hint">
+              Hold Tab or click the right stick to fast-forward. With rewind on, hold R or click the
+              left stick to go back.
+            </p>
+          </div>
           {pb.itemID !== 0 && (
             /*
              * Whatever is playing in the corner (ADR 0076), from the menu the
@@ -279,6 +314,12 @@ export function RetroPlay() {
           <p className="retro-play__hint">
             In-game saves are kept on the server as you play. Quitting saves where you stopped.
           </p>
+        </div>
+      )}
+
+      {running && !menu && mode !== "normal" && (
+        <div className="retro-play__speed" aria-live="polite">
+          {mode === "fast" ? "▶▶ Fast-forward" : "◀◀ Rewind"}
         </div>
       )}
 

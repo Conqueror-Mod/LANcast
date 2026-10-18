@@ -525,3 +525,37 @@ describe("picture options", () => {
     delete window.lancastRetroSetOption;
   });
 });
+
+describe("speed and rewind (2026-10-18)", () => {
+  it("toggles fast-forward and rewind from the menu, and remembers rewind", async () => {
+    localStorage.removeItem("lancast:retro-rewind");
+    await render("/play/41");
+    emit({ kind: "started" });
+    emit({ kind: "menu" });
+    await act(async () => button("Fast-forward: Off").click());
+    expect(window.lancastRetroCommand).toHaveBeenCalledWith("fast-forward", "on");
+    await act(async () => button("Rewind: Off").click());
+    expect(window.lancastRetroCommand).toHaveBeenCalledWith("rewind", "on");
+    expect(localStorage.getItem("lancast:retro-rewind")).toBe("on");
+    expect(button("Rewind: On")).toBeTruthy();
+  });
+
+  it("turns rewind on when a game starts, when it was left on", async () => {
+    localStorage.setItem("lancast:retro-rewind", "on");
+    await render("/play/41");
+    emit({ kind: "started" });
+    expect(window.lancastRetroCommand).toHaveBeenCalledWith("rewind", "on");
+    localStorage.removeItem("lancast:retro-rewind");
+  });
+
+  it("shows what the game is doing while it runs fast or backwards", async () => {
+    await render("/play/41");
+    emit({ kind: "started" });
+    emit({ kind: "speed", text: "fast" });
+    expect(host.textContent).toContain("Fast-forward");
+    emit({ kind: "speed", text: "rewind" });
+    expect(host.textContent).toContain("Rewind");
+    emit({ kind: "speed", text: "normal" });
+    expect(host.querySelector(".retro-play__speed")).toBeNull();
+  });
+});

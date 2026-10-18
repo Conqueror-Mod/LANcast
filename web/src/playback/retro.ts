@@ -70,6 +70,7 @@ export interface RetroEvent {
     | "state-loaded"
     | "sram-saved"
     | "message"
+    | "speed"
     | "error"
     | "stopped"
     /** A pad move while the menu is open: up, down, left, right, select, back. */
@@ -159,7 +160,39 @@ export async function openGame(itemID: number, platform: string, resume: boolean
   await window.lancastRetroOpen(itemID, ticket, platform, resume);
 }
 
-export type RetroCommand = "pause" | "resume" | "reset" | "save-state" | "load-state" | "stop";
+export type RetroCommand =
+  | "pause"
+  | "resume"
+  | "reset"
+  | "save-state"
+  | "load-state"
+  | "stop"
+  // The value rides in the second argument, "on" or "off".
+  | "fast-forward"
+  | "rewind";
+
+/*
+ * Whether rewind is on, remembered on this device. Off unless turned on: it
+ * keeps a copy of the game every other frame, which costs memory and time a
+ * person who never rewinds should not pay.
+ */
+const REWIND_KEY = "lancast:retro-rewind";
+
+export function rewindPreferred(): boolean {
+  try {
+    return localStorage.getItem(REWIND_KEY) === "on";
+  } catch {
+    return false;
+  }
+}
+
+export function setRewindPreferred(on: boolean): void {
+  try {
+    localStorage.setItem(REWIND_KEY, on ? "on" : "off");
+  } catch {
+    // Not remembered: it still applies to this game.
+  }
+}
 
 export async function retroCommand(name: RetroCommand, slot = ""): Promise<void> {
   if (!window.lancastRetroCommand) return;
