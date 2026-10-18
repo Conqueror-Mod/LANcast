@@ -40,6 +40,7 @@ var (
 	procGetAncestor      = user32.NewProc("GetAncestor")
 	procStretchDIBits    = gdi32.NewProc("StretchDIBits")
 	procSetStretchMode   = gdi32.NewProc("SetStretchBltMode")
+	procSetBrushOrgEx    = gdi32.NewProc("SetBrushOrgEx")
 	procPatBlt           = gdi32.NewProc("PatBlt")
 
 	procWaveOutOpen    = winmm.NewProc("waveOutOpen")
@@ -68,6 +69,7 @@ const (
 	srcCopy      = 0x00CC0020
 	blackness    = 0x00000042
 	colorOnColor = 3 // nearest neighbour: crisp pixels, no blur
+	halftone     = 4 // averaged: smooth
 )
 
 type winRect struct{ left, top, right, bottom int32 }
@@ -81,7 +83,7 @@ type GDIVideo struct {
 	lastSize [2]int32
 }
 
-func (v *GDIVideo) Present(bgra []byte, width, height int, aspect float64) {
+func (v *GDIVideo) Present(bgra []byte, width, height int, aspect float64, d Display) {
 	if v.HWND == 0 || width == 0 || height == 0 || len(bgra) < width*height*4 {
 		return
 	}
@@ -90,7 +92,7 @@ func (v *GDIVideo) Present(bgra []byte, width, height int, aspect float64) {
 		return
 	}
 	ww, wh := int(rc.right-rc.left), int(rc.bottom-rc.top)
-	dst := Layout(ww, wh, width, height, aspect)
+	dst := LayoutFor(ww, wh, width, height, aspect, d)
 	if dst.W == 0 {
 		return
 	}
@@ -99,7 +101,14 @@ func (v *GDIVideo) Present(bgra []byte, width, height int, aspect float64) {
 		return
 	}
 	defer procReleaseDC.Call(v.HWND, dc)
-	_, _, _ = procSetStretchMode.Call(dc, colorOnColor)
+	if d.Smooth {
+		// HALFTONE averages the source pixels each destination pixel
+		// covers; it needs the brush origin set after it, per its docs.
+		_, _, _ = procSetStretchMode.Call(dc, halftone)
+		_, _, _ = procSetBrushOrgEx.Call(dc, 0, 0, 0)
+	} else {
+		_, _, _ = procSetStretchMode.Call(dc, colorOnColor)
+	}
 
 	// The bars are painted only when the window changes size: they do not
 	// change otherwise, and painting them every frame is a visible flicker

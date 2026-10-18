@@ -20,7 +20,7 @@ import (
 // VideoSink shows a frame. Called on the core's thread with BGRA rows the
 // session reuses for the next frame, so it must draw or copy before returning.
 type VideoSink interface {
-	Present(bgra []byte, width, height int, aspect float64)
+	Present(bgra []byte, width, height int, aspect float64, d Display)
 }
 
 // AudioSink plays interleaved stereo samples. Write blocks while its buffer
@@ -46,7 +46,7 @@ type GLSink interface {
 	Framebuffer() uintptr
 	ProcAddress(name string) uintptr
 	// Present shows the part of the framebuffer the core drew this frame.
-	Present(width, height int, aspect float64, bottomLeftOrigin bool)
+	Present(width, height int, aspect float64, bottomLeftOrigin bool, d Display)
 	Close()
 }
 
@@ -117,8 +117,10 @@ type Config struct {
 	// makes and an N64 core cannot run without.
 	GL    GLSink
 	Audio AudioSink // nil runs on a timer instead
-	Input InputSource
-	Saves SaveStore
+	// Display is how the picture starts out drawn; SetDisplay changes it.
+	Display Display
+	Input   InputSource
+	Saves   SaveStore
 	// ResumeState loads this slot after the game starts, typically "auto",
 	// which Stop writes. Empty starts the game fresh.
 	ResumeState string
@@ -186,6 +188,11 @@ type Session struct {
 	skipVideo   bool
 	muted       bool
 	shown       string
+
+	// display is how the picture is drawn, set from any goroutine
+	// (SetDisplay); scan is the core thread's scanline buffer.
+	display atomic.Pointer[Display]
+	scan    []byte
 }
 
 // Speed and rewind's numbers. Three times speed is what fast-forward means
@@ -216,6 +223,8 @@ func New(cfg Config) *Session {
 	s := &Session{cfg: cfg, cmds: make(chan command, 16), vars: map[string]libretro.Variable{},
 		rewind: newRewindRing(rewindStates, rewindBytes)}
 	s.volume.Store(math.Float64bits(1))
+	d := cfg.Display
+	s.display.Store(&d)
 	return s
 }
 
@@ -232,6 +241,10 @@ func (s *Session) send(c command) {
 func (s *Session) Pause()  { s.send(command{kind: "pause"}) }
 func (s *Session) Resume() { s.send(command{kind: "resume"}) }
 func (s *Session) Reset()  { s.send(command{kind: "reset"}) }
+
+// SetDisplay changes how the picture is drawn, from the next frame. Safe
+// from any goroutine.
+func (s *Session) SetDisplay(d Display) { s.display.Store(&d) }
 
 // SetFastForward turns the menu's fast-forward on or off. The hold keys work
 // either way.
@@ -800,9 +813,12 @@ func (s *Session) VideoRefresh(f libretro.Frame) {
 	}
 	start := time.Now()
 	defer func() { s.stats.present += time.Since(start) }()
+	d := *s.display.Load()
+	w, h := int(f.Width), int(f.Height)
+	aspect := d.aspectFor(s.aspect(f), w, h)
 	if f.HW {
 		if s.glReady {
-			s.cfg.GL.Present(int(f.Width), int(f.Height), s.aspect(f), s.hw.BottomLeftOrigin)
+			s.cfg.GL.Present(w, h, aspect, s.hw.BottomLeftOrigin, d)
 		}
 		return
 	}
@@ -811,7 +827,12 @@ func (s *Session) VideoRefresh(f libretro.Frame) {
 	}
 	f.Format = s.format
 	s.bgra = ToBGRA(f, s.bgra)
-	s.cfg.Video.Present(s.bgra, int(f.Width), int(f.Height), s.aspect(f))
+	if d.Scanlines {
+		s.scan = Scanlines(s.bgra, w, h, s.scan)
+		s.cfg.Video.Present(s.scan, w, h*2, aspect, d)
+		return
+	}
+	s.cfg.Video.Present(s.bgra, w, h, aspect, d)
 }
 
 /*

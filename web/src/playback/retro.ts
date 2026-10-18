@@ -92,6 +92,8 @@ declare global {
       resume: boolean,
     ) => Promise<void>;
     lancastRetroCommand?: (name: string, slot: string) => Promise<void>;
+    lancastRetroDisplay?: (platform: string) => Promise<RetroDisplay>;
+    lancastRetroSetDisplay?: (platform: string, d: RetroDisplay) => Promise<void>;
     lancastRetroStop?: () => Promise<void>;
     lancastRetroSetCore?: (platform: string, path: string) => Promise<void>;
     lancastRetroCores?: () => Promise<Record<string, string>>;
@@ -305,4 +307,47 @@ export function subscribeGameOnScreen(fn: () => void): () => void {
   return () => {
     screenListeners.delete(fn);
   };
+}
+
+/*
+ * How a console's picture is drawn (the game menu's Display), remembered per
+ * console by the desktop app. All off and aspect "" is how it always looked.
+ */
+export interface RetroDisplay {
+  smooth: boolean;
+  fill: boolean;
+  aspect: "" | "4:3" | "square" | "stretch";
+  scanlines: boolean;
+}
+
+export const DEFAULT_DISPLAY: RetroDisplay = { smooth: false, fill: false, aspect: "", scanlines: false };
+
+export async function gameDisplay(platform: string): Promise<RetroDisplay> {
+  if (!window.lancastRetroDisplay) return DEFAULT_DISPLAY;
+  try {
+    return { ...DEFAULT_DISPLAY, ...(await window.lancastRetroDisplay(platform)) };
+  } catch {
+    return DEFAULT_DISPLAY;
+  }
+}
+
+export async function setGameDisplay(platform: string, d: RetroDisplay): Promise<void> {
+  if (!window.lancastRetroSetDisplay) return;
+  await window.lancastRetroSetDisplay(platform, d);
+}
+
+const ASPECTS: RetroDisplay["aspect"][] = ["", "4:3", "square", "stretch"];
+const ASPECT_LABEL: Record<RetroDisplay["aspect"], string> = {
+  "": "Original",
+  "4:3": "4:3",
+  square: "Square pixels",
+  stretch: "Stretch",
+};
+
+export function nextAspect(a: RetroDisplay["aspect"]): RetroDisplay["aspect"] {
+  return ASPECTS[(ASPECTS.indexOf(a) + 1) % ASPECTS.length];
+}
+
+export function aspectLabel(a: RetroDisplay["aspect"]): string {
+  return ASPECT_LABEL[a] ?? "Original";
 }

@@ -559,3 +559,23 @@ describe("speed and rewind (2026-10-18)", () => {
     expect(host.querySelector(".retro-play__speed")).toBeNull();
   });
 });
+
+describe("display (2026-10-18)", () => {
+  it("changes how the picture is drawn, for this console, from the menu", async () => {
+    const set = vi.fn(async () => {});
+    window.lancastRetroDisplay = vi.fn(async () => ({ smooth: false, fill: false, aspect: "" as const, scanlines: false }));
+    window.lancastRetroSetDisplay = set;
+    await render("/play/41");
+    emit({ kind: "started" });
+    emit({ kind: "menu" });
+    await act(async () => button("Pixels: Sharp").click());
+    expect(set).toHaveBeenLastCalledWith("n64", { smooth: true, fill: false, aspect: "", scanlines: false });
+    await act(async () => button("Shape: Original").click());
+    expect(set).toHaveBeenLastCalledWith("n64", { smooth: true, fill: false, aspect: "4:3", scanlines: false });
+    await act(async () => button("Scanlines: Off").click());
+    expect(button("Scanlines: On")).toBeTruthy();
+    expect(button("Size: Whole steps")).toBeTruthy();
+    delete window.lancastRetroDisplay;
+    delete window.lancastRetroSetDisplay;
+  });
+});

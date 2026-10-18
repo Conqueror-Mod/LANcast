@@ -196,6 +196,38 @@ func saveOption(platform, key, value string) error {
 	return os.WriteFile(retroDir("options.json"), b, 0o644)
 }
 
+/*
+ * How each console's picture is drawn (the game menu's Display), kept on this
+ * machine beside the core options. A console never set is the zero Display,
+ * which is how it always looked.
+ */
+func savedDisplay(platform string) host.Display {
+	all := map[string]host.Display{}
+	if b, err := os.ReadFile(retroDir("display.json")); err == nil {
+		_ = json.Unmarshal(b, &all)
+	}
+	return all[platform]
+}
+
+func saveDisplay(platform string, d host.Display) error {
+	if _, ok := cores.For(platform); !ok {
+		return fmt.Errorf("no console called %q", platform)
+	}
+	if err := d.Valid(); err != nil {
+		return err
+	}
+	all := map[string]host.Display{}
+	if b, err := os.ReadFile(retroDir("display.json")); err == nil {
+		_ = json.Unmarshal(b, &all)
+	}
+	all[platform] = d
+	if err := os.MkdirAll(retroDir(), 0o755); err != nil {
+		return err
+	}
+	b, _ := json.MarshalIndent(all, "", "  ")
+	return os.WriteFile(retroDir("display.json"), b, 0o644)
+}
+
 // availability is what the page needs to decide between a Play button and a
 // sentence saying why not.
 func (r *retroPlayer) availability(platform string) map[string]any {
@@ -365,6 +397,7 @@ func (r *retroPlayer) run(ctx context.Context, game *remote.Game, corePath strin
 		Input:           host.Controllers{HWND: hwnd},
 		Saves:           game,
 		Options:         savedOptions(platform),
+		Display:         savedDisplay(platform),
 		ResumeState:     resumeSlot,
 		SaveStateOnStop: true,
 		OnEvent: func(e host.Event) {
@@ -520,6 +553,21 @@ func (r *retroPlayer) bindings() map[string]any {
 			r.mu.Unlock()
 			if s != nil {
 				s.SetOption(key, value)
+			}
+			return nil
+		},
+		// How a console's picture is drawn, remembered per console and
+		// applied to the running game at once.
+		"lancastRetroDisplay": func(platform string) host.Display { return savedDisplay(platform) },
+		"lancastRetroSetDisplay": func(platform string, d host.Display) error {
+			if err := saveDisplay(platform, d); err != nil {
+				return err
+			}
+			r.mu.Lock()
+			s := r.session
+			r.mu.Unlock()
+			if s != nil {
+				s.SetDisplay(d)
 			}
 			return nil
 		},
