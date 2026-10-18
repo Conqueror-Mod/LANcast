@@ -375,13 +375,28 @@ func runWindow(l *launcher, d *desk) {
 		page = pickerPage(pickerReason)
 	}
 
+	/*
+	 * This machine's server opens at its public name when it has one, so
+	 * passkeys work in the window (publicname.go). Only once the page is
+	 * the server's, not the picker's, and only for a pinned https server.
+	 */
+	winURL := url
+	if pickerReason == "" && l.target.local && strings.HasPrefix(url, "https://") {
+		if name := publicNameOf(url, pin); name != "" {
+			l.publicName = name
+			winURL = l.windowURL(l.addr)
+			slog.Info("opening the server at its public name", "name", name)
+		}
+	}
+
 	err = clientwindow.Open(clientwindow.Options{
-		URL:        url,
-		HTML:       page,
-		Title:      "LANcast",
-		AppVersion: Version,
-		Width:      1280,
-		Height:     800,
+		URL:          winURL,
+		LoopbackName: l.publicName,
+		HTML:         page,
+		Title:        "LANcast",
+		AppVersion:   Version,
+		Width:        1280,
+		Height:       800,
 		// Where it was last time, if anywhere. Width and Height above stay the
 		// first-run answer: a remembered placement that cannot be honoured is
 		// refused rather than forced, and a centred default window is always
@@ -425,7 +440,7 @@ func runWindow(l *launcher, d *desk) {
 			 * opens it again. recover.go explains why this is a poll rather
 			 * than an event.
 			 */
-			go l.watchForRecovery(c, url, pin)
+			go l.watchForRecovery(c, winURL, pin)
 
 			/*
 			 * Listen for a second launch, whatever the tray preference says.
@@ -450,7 +465,7 @@ func runWindow(l *launcher, d *desk) {
 				 * anybody off the page they were on.
 				 */
 				if pane != "" {
-					c.Navigate(desktop.ResolvedURL(l.addr) + "/settings?pane=" + pane)
+					c.Navigate(l.windowURL(l.addr) + "/settings?pane=" + pane)
 				}
 				c.Show()
 			}, func() {
@@ -673,6 +688,9 @@ func clientDataDir() string {
 // alone.
 type launcher struct {
 	addr string
+	// publicName is the server's public name when the window opens it there
+	// rather than at localhost (publicname.go); empty otherwise.
+	publicName string
 	// dataDir is the operator's explicit choice, empty when they made none.
 	dataDir string
 	started *exec.Cmd

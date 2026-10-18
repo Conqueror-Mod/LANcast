@@ -19202,6 +19202,10 @@
           "rp_id": {
             "type": "string",
             "description": "The public name passkeys are bound to. Present only when available."
+          },
+          "public_name": {
+            "type": "string",
+            "description": "Where passkeys would work, when this request is not there: the public certificate's name while it is valid. The desktop app opens its own server at this name, resolved to this machine, so passkeys work in its window."
           }
         }
       },

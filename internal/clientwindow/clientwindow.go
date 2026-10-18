@@ -67,6 +67,11 @@ type Options struct {
 	// HTTP and has no certificate to trust.
 	CertPin string
 
+	// LoopbackName is the server's public name, which this window's browser
+	// resolves to 127.0.0.1 (loopbackname.go) so the page can be opened at
+	// that name, where passkeys work. Empty for none.
+	LoopbackName string
+
 	/*
 	 * DevTools opens the web view's inspector alongside the window.
 	 *
