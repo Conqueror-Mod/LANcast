@@ -3074,6 +3074,8 @@ export function invalidateWatchState(qc: QueryClient) {
     "history-count",
     // Finishing something takes it off the watchlist (ADR 0085).
     "watchlist",
+    // ...and puts it on Rate what you've watched.
+    "to-rate",
   ]) {
     qc.invalidateQueries({ queryKey: [key] });
   }
@@ -3467,6 +3469,20 @@ export function useStopTranscode() {
 
 // -------------------------------------------------------------- ratings
 
+/*
+ * Home's "Rate what you've watched" shelf: films and shows finished in the
+ * last 30 days and not rated. Rating changes it (useSetRating, useClearRating)
+ * and so does finishing something (invalidateWatchState), which are the two
+ * ways somebody could be looking at a stale one.
+ */
+export function useToRate() {
+  return useQuery({
+    queryKey: ["to-rate"],
+    queryFn: ({ signal }) =>
+      apiGet<{ items: Item[] }>("/api/profile/ratings/pending", signal),
+  });
+}
+
 export function useRating(itemID: number | undefined) {
   return useQuery({
     queryKey: ["rating", itemID],
@@ -3485,6 +3501,7 @@ export function useSetRating(itemID: number) {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["rating", itemID] });
       qc.invalidateQueries({ queryKey: ["my-ratings"] });
+      qc.invalidateQueries({ queryKey: ["to-rate"] });
     },
   });
 }
@@ -3498,6 +3515,7 @@ export function useClearRating(itemID: number) {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["rating", itemID] });
       qc.invalidateQueries({ queryKey: ["my-ratings"] });
+      qc.invalidateQueries({ queryKey: ["to-rate"] });
     },
   });
 }
