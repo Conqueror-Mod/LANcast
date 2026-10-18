@@ -223,12 +223,14 @@ export function hslToRgb(h: number, s: number, l: number): RGB {
 
 /*
  * The gold band. --gold is #c6a35a, hue 40°; --gold-bright #e3c179, 40° too.
- * Oranges, ambers and yellows from 25° to 60° read as gold on a dark field at
+ * Ambers, yellows and olives from 20° to 75° read as gold on a dark field at
  * the saturation a visualizer draws at, so nothing a visualizer draws may sit
- * in it (design.md: gold means where you are, and nothing else).
+ * in it (design.md: gold means where you are, and nothing else). The first
+ * band stopped at 60°, and a sepia cover came out as 68° olive bars that
+ * looked, on the screen, like a gold spectrum.
  */
-export const GOLD_HUE_MIN = 25;
-export const GOLD_HUE_MAX = 60;
+export const GOLD_HUE_MIN = 20;
+export const GOLD_HUE_MAX = 75;
 
 export function isGoldHue(h: number): boolean {
   const x = ((h % 360) + 360) % 360;
@@ -241,7 +243,7 @@ export function isGoldHue(h: number): boolean {
  * colour is kept as nearly as it can be; only the one thing gold must not be
  * is taken from it.
  */
-export function awayFromGold(c: RGB, margin = 8): RGB {
+export function awayFromGold(c: RGB, margin = 12): RGB {
   const [h, s, l] = rgbToHsl(c);
   if (s < 0.12 || !isGoldHue(h)) return c;
   const mid = (GOLD_HUE_MIN + GOLD_HUE_MAX) / 2;
@@ -289,9 +291,35 @@ export function paletteFrom(rgba: ArrayLike<number>): RGB[] {
     return hslToRgb(h, Math.max(0.45, s), l);
   };
   const a = awayFromGold(readable(first, 0.55));
-  const b = awayFromGold(readable(second, 0.62));
+  const b = blendAvoidsGold(a, awayFromGold(readable(second, 0.62)));
   const cap = awayFromGold(readable(first, 0.82));
   return [a, b, cap];
+}
+
+/** Whether a straight RGB blend from a to b passes through a gold hue. */
+export function blendCrossesGold(a: RGB, b: RGB, steps = 16): boolean {
+  for (let i = 1; i < steps; i++) {
+    const t = i / steps;
+    const [h, s] = rgbToHsl([a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t]);
+    if (s >= 0.12 && isGoldHue(h)) return true;
+  }
+  return false;
+}
+
+/*
+ * blendAvoidsGold: the bars are a gradient from one colour to the other, and
+ * a blend is not its ends. A sepia cover gave red (8°) and yellow-green (87°),
+ * both off gold, and the canvas drew orange and tan between them: a gold
+ * spectrum by another route. So when the blend crosses the band, the second
+ * colour is moved to the first one's far side, a step further from gold.
+ */
+export function blendAvoidsGold(a: RGB, b: RGB): RGB {
+  if (!blendCrossesGold(a, b)) return b;
+  const [h] = rgbToHsl(a);
+  const x = ((h % 360) + 360) % 360;
+  const away = x < GOLD_HUE_MIN || x > 270 ? -35 : 35;
+  const [, s, l] = rgbToHsl(b);
+  return hslToRgb(h + away, s, l);
 }
 
 function shiftHue(c: RGB, by: number): RGB {

@@ -71,6 +71,10 @@ function tapOutput(ctx: AudioContext, graph: FXGraph): AnalyserNode {
   const analyser = ctx.createAnalyser();
   analyser.fftSize = ANALYSER_FFT;
   analyser.smoothingTimeConstant = 0;
+  // The byte data's 0..255 spans these. The default ceiling, -30 dB, pinned
+  // every bass bar of a modern master at full height for the whole track.
+  analyser.minDecibels = -90;
+  analyser.maxDecibels = -12;
   graph.output.connect(analyser);
   return analyser;
 }

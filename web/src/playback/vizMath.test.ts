@@ -5,6 +5,8 @@
 import { describe, it, expect } from "vitest";
 import {
   awayFromGold,
+  blendAvoidsGold,
+  blendCrossesGold,
   calmMotion,
   canvasSize,
   fallPeaks,
@@ -235,6 +237,19 @@ describe("paletteFrom (the cover's colours)", () => {
     }
   });
 
+  it("never draws gold between its colours: the gradient up a bar stays off gold too", () => {
+    // A sepia cover (the one that found this): mostly warm browns.
+    const sepia: RGB[] = [
+      [150, 120, 80],
+      [120, 95, 60],
+      [200, 180, 140],
+      [90, 70, 50],
+      [170, 150, 110],
+    ];
+    const [a, b] = paletteFrom(pixels(sepia));
+    expect(blendCrossesGold(a, b)).toBe(false);
+  });
+
   it("gives three colours from a one-hue cover, the second a step round the wheel", () => {
     const pal = paletteFrom(pixels([[30, 60, 200]]));
     expect(pal).toHaveLength(3);
@@ -250,12 +265,16 @@ describe("awayFromGold", () => {
 
   it("pushes a warm orange redder, to the nearer edge", () => {
     const [h] = rgbToHsl(awayFromGold([230, 140, 40])); // ~32°
-    expect(h).toBeLessThan(25);
+    expect(h).toBeLessThan(20);
   });
 
   it("pushes a yellow greener, to the nearer edge", () => {
     const [h] = rgbToHsl(awayFromGold([220, 210, 40])); // ~57°
-    expect(h).toBeGreaterThan(60);
+    expect(h).toBeGreaterThan(75);
+  });
+
+  it("counts an olive as gold: a sepia cover's 68° bars read as a gold spectrum", () => {
+    expect(isGoldHue(rgbToHsl([178, 192, 89])[0])).toBe(true);
   });
 
   it("leaves a colour outside the band exactly as it was", () => {
@@ -271,6 +290,25 @@ describe("awayFromGold", () => {
     const after = rgbToHsl(awayFromGold([230, 140, 40]));
     expect(after[1]).toBeCloseTo(before[1], 1);
     expect(after[2]).toBeCloseTo(before[2], 1);
+  });
+});
+
+describe("blendAvoidsGold", () => {
+  it("sees that red to yellow-green blends through orange and tan", () => {
+    expect(blendCrossesGold([210, 90, 70], [170, 200, 100])).toBe(true);
+  });
+
+  it("moves the second colour to the first one's far side when the blend crosses gold", () => {
+    const red: RGB = [210, 90, 70];
+    const b = blendAvoidsGold(red, [170, 200, 100]);
+    expect(blendCrossesGold(red, b)).toBe(false);
+    expect(isGoldHue(rgbToHsl(b)[0])).toBe(false);
+  });
+
+  it("leaves a blend that never nears gold alone", () => {
+    const blue: RGB = [40, 80, 200];
+    const violet: RGB = [110, 70, 190];
+    expect(blendAvoidsGold(blue, violet)).toEqual(violet);
   });
 });
 
