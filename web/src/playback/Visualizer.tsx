@@ -18,10 +18,26 @@ import {
   type Peaks,
   type RGB,
 } from "./vizMath";
+import {
+  bandEnergy,
+  calmPreset,
+  frameParams,
+  isTrail,
+  lowBins,
+  newTrailState,
+  trailSize,
+  TRAIL_PRESETS,
+  type TrailId,
+} from "./trailMath";
+import { createTrailRenderer, type TrailRenderer } from "./trails";
 
 /*
- * The classic visualizers in Now Playing's stage (docs/now-playing-plan.md,
- * step 2): spectrum bars with falling caps, and the scope's one line.
+ * The visualizers in Now Playing's stage (docs/now-playing-plan.md): the
+ * classic pair from step 2, spectrum bars with falling caps and the scope's
+ * one line, in Canvas 2D; and step 3's feedback trails, in WebGL2 (trails.ts).
+ * Each tier gets its own canvas, because a canvas that has given out a 2D
+ * context will never give out a WebGL one. Between two trail presets the
+ * canvas and its buffers stay, so the trails of one become the next.
  *
  * Mounted by the provider as a sibling of `.playback__cover`, never inside or
  * beside `.playback__slot` (see the slot comment there, and
@@ -108,13 +124,7 @@ function useCoverPalette(cover: string | undefined): RGB[] {
   return palette;
 }
 
-export function Visualizer({
-  kind,
-  analyser,
-  running,
-  calm,
-  cover,
-}: {
+interface VizProps {
   kind: VizKind;
   /** The analyser on whichever path music is on, looked up each frame: the
    *  engine may be built after this mounts, and the path can change. */
@@ -122,14 +132,51 @@ export function Visualizer({
   running: boolean;
   calm: boolean;
   cover: string | undefined;
-}) {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const palette = useCoverPalette(cover);
+}
+
+export function Visualizer(props: VizProps) {
+  const palette = useCoverPalette(props.cover);
   // Read by the loop through a ref, so a palette arriving does not restart it.
   const paletteRef = useRef(palette);
   paletteRef.current = palette;
-  const analyserRef = useRef(analyser);
-  analyserRef.current = analyser;
+  const analyserRef = useRef(props.analyser);
+  analyserRef.current = props.analyser;
+  return isTrail(props.kind) ? (
+    <TrailCanvas
+      key="trails"
+      preset={props.kind}
+      running={props.running}
+      calm={props.calm}
+      analyser={analyserRef}
+      palette={paletteRef}
+    />
+  ) : (
+    <ClassicCanvas
+      key="classic"
+      kind={props.kind}
+      running={props.running}
+      calm={props.calm}
+      analyser={analyserRef}
+      palette={paletteRef}
+    />
+  );
+}
+
+interface CanvasProps {
+  running: boolean;
+  calm: boolean;
+  analyser: { current: () => AnalyserNode | undefined };
+  palette: { current: RGB[] };
+}
+
+function ClassicCanvas({
+  kind,
+  running,
+  calm,
+  analyser: analyserRef,
+  palette: paletteRef,
+}: CanvasProps & { kind: "spectrum" | "scope" }) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
 
   useEffect(() => {
     if (!running) return; // the last frame holds
@@ -187,9 +234,82 @@ export function Visualizer({
     };
     id = requestAnimationFrame(frame);
     return () => cancelAnimationFrame(id);
-  }, [running, kind, calm]);
+  }, [running, kind, calm, analyserRef, paletteRef]);
 
   return <canvas ref={canvasRef} className="playback__viz-canvas" data-viz={kind} aria-hidden="true" />;
+}
+
+/*
+ * The feedback trails. One loop, like the classic pair's, and the same rules:
+ * it runs only while somebody can see it, and paused, the last frame holds,
+ * because a WebGL canvas keeps showing what it last presented until it is
+ * drawn again. The preset is read through a ref, so `,` and `.` change how
+ * the field moves without throwing away what is already in it.
+ */
+function TrailCanvas({
+  preset,
+  running,
+  calm,
+  analyser: analyserRef,
+  palette: paletteRef,
+}: CanvasProps & { preset: TrailId }) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const presetRef = useRef(preset);
+  presetRef.current = preset;
+  const calmRef = useRef(calm);
+  calmRef.current = calm;
+  // The renderer lives as long as the canvas, so a pause and a resume carry
+  // on from the trails already in the buffers rather than starting blank.
+  const gfxRef = useRef<TrailRenderer | null>(null);
+  useEffect(
+    () => () => {
+      gfxRef.current?.dispose();
+      gfxRef.current = null;
+    },
+    [],
+  );
+
+  useEffect(() => {
+    if (!running) return;
+    const canvas = canvasRef.current;
+    if (canvas && !gfxRef.current) gfxRef.current = createTrailRenderer(canvas);
+    const gfx = gfxRef.current;
+    if (!canvas || !gfx) return;
+    const state = newTrailState();
+    let freq: Uint8Array<ArrayBuffer> = new Uint8Array(0);
+    let time: Uint8Array<ArrayBuffer> = new Uint8Array(0);
+    let low = { start: 1, end: 2 };
+    let lowFor = "";
+    let last = -1;
+    let id = 0;
+
+    const frame = (now: number) => {
+      id = requestAnimationFrame(frame);
+      const dt = last < 0 ? 1 / 60 : Math.min(0.1, (now - last) / 1000);
+      last = now;
+      const box = canvas.getBoundingClientRect();
+      const { w, h } = trailSize(box.width, box.height, window.devicePixelRatio);
+      gfx.resize(w, h);
+      const node = analyserRef.current();
+      if (!node) return;
+      const key = `${node.frequencyBinCount}@${node.context.sampleRate}`;
+      if (key !== lowFor) {
+        low = lowBins(node.frequencyBinCount, node.context.sampleRate);
+        freq = new Uint8Array(node.frequencyBinCount);
+        lowFor = key;
+      }
+      if (time.length !== node.fftSize) time = new Uint8Array(node.fftSize);
+      node.getByteFrequencyData(freq);
+      node.getByteTimeDomainData(time);
+      const base = TRAIL_PRESETS[presetRef.current];
+      const p = frameParams(calmRef.current ? calmPreset(base) : base, state, bandEnergy(freq, low.start, low.end), dt);
+      gfx.frame(time, p, paletteRef.current);
+    };
+    id = requestAnimationFrame(frame);
+    return () => cancelAnimationFrame(id);
+  }, [running, analyserRef, paletteRef]);
+
+  return <canvas ref={canvasRef} className="playback__viz-canvas" data-viz={preset} aria-hidden="true" />;
 }
 
 function drawSpectrum(

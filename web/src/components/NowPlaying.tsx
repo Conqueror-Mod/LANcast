@@ -2,8 +2,18 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useItem } from "@/api/hooks";
 import { usePlayback } from "@/playback/PlaybackProvider";
-import { usePrefs, STAGES } from "@/playback/prefs";
+import {
+  usePrefs,
+  getPrefs,
+  setPrefs,
+  STAGES,
+  cycleStage,
+  stageTier,
+  vizStages,
+  type Stage,
+} from "@/playback/prefs";
 import { elementFXSupported } from "@/playback/elementEngine";
+import { webgl2Supported } from "@/playback/trails";
 import { LyricsPanel } from "@/components/LyricsPanel";
 import { QueuePanel } from "@/components/QueuePanel";
 import "./NowPlaying.css";
@@ -108,34 +118,91 @@ export function NowPlaying() {
 }
 
 /*
- * The stage switcher, under the stage (docs/now-playing-plan.md, step 2): the
- * cover, or one of the classic visualizers. Remembered per device with the
- * other "This device" playback preferences. Positioned from --np-art like the
- * column, because the stage it sits under is drawn in another layer.
+ * stepVisualizer: `,` and `.`, and the arrows beside a preset's name. Round
+ * the visualizers this screen can draw, never onto the cover. Within `only`
+ * (a tier), when the stepper is the trails row and should stay in it.
+ */
+export function stepVisualizer(dir: 1 | -1, only?: 1 | 2) {
+  const offered = vizStages(webgl2Supported()).filter((s) => !only || stageTier(s) === only);
+  setPrefs({ stage: cycleStage(getPrefs().stage, dir, offered) });
+}
+
+function stageLabel(id: Stage): string {
+  return STAGES.find((s) => s.id === id)?.label ?? id;
+}
+
+/*
+ * The stage switcher, under the stage (docs/now-playing-plan.md, steps 2 and
+ * 3): the cover, one of the classic visualizers, or the trails, and a way into
+ * the full-screen visualizer. Remembered per device with the other "This
+ * device" playback preferences. Positioned from --np-art like the column,
+ * because the stage it sits under is drawn in another layer.
+ *
+ * The five trail presets are one choice here, Trails, with the preset named
+ * on a row of its own under it: eight buttons do not fit under a square that
+ * is 46% of a phone's width, and which trail is a smaller question than
+ * whether there are trails at all. Trails is offered only with WebGL2.
  *
  * Offered only where music can be routed through Web Audio, since a
  * visualizer is an analyser on that graph. The chosen one is marked the
  * neutral way the column's tabs are: gold is focus only.
  */
 function StageSwitch() {
-  const [prefs, setPrefs] = usePrefs();
+  const pb = usePlayback();
+  const [prefs, update] = usePrefs();
   if (!elementFXSupported()) return null;
+  const trails = webgl2Supported();
+  const tier = stageTier(prefs.stage);
+  const choices: { id: Stage; label: string; on: boolean }[] = [
+    ...STAGES.filter((s) => s.tier < 2).map((s) => ({ id: s.id, label: s.label, on: prefs.stage === s.id })),
+    ...(trails ? [{ id: "tunnel" as Stage, label: "Trails", on: tier === 2 }] : []),
+  ];
   return (
-    <div className="np__stage" role="radiogroup" aria-label="Stage">
-      {STAGES.map((s) => {
-        const on = prefs.stage === s.id;
-        return (
+    <div className="np__stage">
+      <div className="np__stage-row" role="radiogroup" aria-label="Stage">
+        {choices.map((c) => (
           <button
-            key={s.id}
+            key={c.label}
             role="radio"
-            aria-checked={on}
-            className={"np__stage-btn" + (on ? " is-on" : "")}
-            onClick={() => setPrefs({ stage: s.id })}
+            aria-checked={c.on}
+            className={"np__stage-btn" + (c.on ? " is-on" : "")}
+            onClick={() => !c.on && update({ stage: c.id })}
           >
-            {s.label}
+            {c.label}
           </button>
-        );
-      })}
+        ))}
+        <button
+          className="np__stage-btn np__stage-full"
+          onClick={() => pb.setVizFull(true)}
+          aria-label="Full-screen visualizer"
+          title="Full-screen visualizer (V)"
+        >
+          ⛶
+        </button>
+      </div>
+      {trails && tier === 2 && <VizStep only={2} />}
+    </div>
+  );
+}
+
+/*
+ * The preset's name between back and forward. Under the stage it steps
+ * between trails; over the full-screen visualizer, through all of them, as
+ * `,` and `.` do.
+ */
+export function VizStep({ only }: { only?: 1 | 2 }) {
+  const [prefs] = usePrefs();
+  return (
+    <div className="np__step" role="group" aria-label="Visualizer">
+      <button className="np__step-btn" onClick={() => stepVisualizer(-1, only)} aria-label="Previous visualizer">
+        ‹
+      </button>
+      <span className="np__step-name" aria-live="polite">
+        {stageLabel(prefs.stage)}
+      </span>
+      <button className="np__step-btn" onClick={() => stepVisualizer(1, only)} aria-label="Next visualizer">
+        ›
+      </button>
     </div>
   );
 }

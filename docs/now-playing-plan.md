@@ -1,7 +1,7 @@
 # Now Playing and visualizers for music — plan
 
-**Status: steps 1 and 2 built (#896; step 2 2026-10-18).** Step 3 (feedback
-presets and full screen) is not started. Where step 1 departed from the proposal below, the text has
+**Status: all three steps built (#896, #900; step 3 2026-10-18).** Step 3
+(feedback presets and full screen) still owes the TV with a pad. Where step 1 departed from the proposal below, the text has
 been brought into line and says so; the rest is the original proposal.
 
 A proper Now Playing view for music, and a few visualizers in the spirit of
@@ -228,9 +228,28 @@ Each step is its own PR, and each ships something usable on its own.
    between the two colours must not cross it either; the analyser spans
    −90 to −12 dB, since the default ceiling pinned every bass bar. Still owed:
    the desktop window, 375px, and the analyser read in WebView2 itself.
-3. **Feedback presets and full screen.** The WebGL2 pipeline, presets, beat
+3. **Feedback presets and full screen. Built.** The WebGL2 pipeline, presets, beat
    detection, full-screen mode with idle chrome, and preset keys. Check it on
    the TV with a pad, since that is where it will mostly be used.
+   As built: five presets (Tunnel, Spiral, Smoke, Bloom, Drift) in
+   `trailMath.ts`, each a plain object of numbers, drawn by `trails.ts` into
+   buffers capped at 1280 px on the long side. In the stage switcher the five
+   are one choice, **Trails**, with the preset named on a row under it: eight
+   buttons do not fit under a stage 72% of a phone wide. `,` and `.` step
+   through every visualizer, classic and trails, and do nothing over the cover,
+   since routing the music is not a side effect a stray key gets. `v` over the
+   cover picks Tunnel (Spectrum without WebGL2). Escape leaves the full-screen
+   visualizer before the window's fullscreen, so on a TV it returns to Now
+   Playing rather than out to a desktop. Looking at it changed two things: beat
+   detection disarms after a beat until the energy falls back (a held bass note
+   otherwise beat every third of a second while the average caught up), and
+   on a phone the switcher grows upward inside the stage, because the preset
+   row landed on the title. The ring of a preset is a number too (0 a line, 1 a
+   ring), which is how Drift's half-ring curl came about.
+   Checked in a browser tab against the installed server at 1024×768 and
+   375×812, all five presets, silent at the destination. Still owed: the TV
+   with a pad, the desktop window (WebView2's WebGL2), and a listening test of
+   how the beats land on real music.
 
 ## Testing
 

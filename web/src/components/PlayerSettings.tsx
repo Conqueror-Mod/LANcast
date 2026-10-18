@@ -1,4 +1,5 @@
 import { usePrefs, QUALITIES, DEFAULTS, DIALOGUE_LEVELS, CROSSFADES, STAGES, type Stage, type SubFont } from "@/playback/prefs";
+import { webgl2Supported } from "@/playback/trails";
 import { EQ_PRESETS } from "@/playback/elementAudio";
 import { FONTS } from "@/playback/cueVars";
 import { COLORS, SIZES } from "./PlaybackSettings";
@@ -144,7 +145,8 @@ export function PlayerSettings() {
             value={prefs.stage}
             onChange={(e) => setPrefs({ stage: e.target.value as Stage })}
           >
-            {STAGES.map((s) => (
+            {/* The trails need WebGL2; the stage switcher does not offer them without it either. */}
+            {STAGES.filter((s) => s.tier < 2 || webgl2Supported()).map((s) => (
               <option key={s.id} value={s.id}>
                 {s.label}
               </option>

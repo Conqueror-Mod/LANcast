@@ -69,6 +69,14 @@ export const DEFAULT_BINDINGS: Binding[] = [
   { id: "fullscreen", meaning: "Fullscreen", scope: "player", keys: ["f"] },
   { id: "mute", meaning: "Mute", scope: "player", keys: ["m"] },
   { id: "subtitles", meaning: "Cycle subtitle track", scope: "player", keys: ["[", "]"] },
+  /*
+   * Music's visualizers (docs/now-playing-plan.md). Not `[`/`]`, which are the
+   * subtitles above: a key that means two things depending on what is playing
+   * is the gold rule's problem in another form. The preset pair is one binding
+   * with two keys, the first back and the second forward, like the subtitles.
+   */
+  { id: "vizfull", meaning: "Full-screen visualizer (music)", scope: "player", keys: ["v"] },
+  { id: "vizpreset", meaning: "Previous · next visualizer (music)", scope: "player", keys: [",", "."] },
 ];
 
 /** Overrides are stored as id → keys, not as whole bindings. */

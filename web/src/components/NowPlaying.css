@@ -158,8 +158,64 @@
   width: var(--np-art);
   top: calc(50% + var(--np-art) / 2 + 14px);
   display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+
+.np__stage-row {
+  display: flex;
   justify-content: center;
+  flex-wrap: wrap;
   gap: 4px;
+}
+
+/* The full-screen button: a glyph, so no tracking to space it out. */
+.np__stage-full {
+  letter-spacing: 0;
+  padding: 4px 10px;
+}
+
+/* A preset's name between back and forward: under the stage for the trails,
+   and in the top bar over the full-screen visualizer. */
+.np__step {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.np__step-name {
+  min-width: 7em;
+  text-align: center;
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+
+.np__step-btn {
+  appearance: none;
+  background: none;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  width: 28px;
+  height: 28px;
+  font: inherit;
+  font-size: 16px;
+  line-height: 1;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.np__step-btn:hover {
+  color: var(--text-primary);
+}
+
+.np__step-btn:focus-visible {
+  outline: none;
+  color: var(--text-primary);
+  box-shadow: 0 0 0 3px var(--gold-ring);
+  border-color: var(--gold);
 }
 
 .np__stage-btn {
@@ -221,14 +277,38 @@
   }
 
   /* Over the stage's lower edge rather than under it: the column starts
-     18px below the stage, and every pixel taken from it is a queue row. */
+     18px below the stage, and every pixel taken from it is a queue row.
+     Anchored by its bottom and growing upward, so the trails' preset row
+     stacks above the choices, inside the stage, and never onto the title. */
   .np__stage {
     left: calc(50% - var(--np-art) / 2);
-    top: calc(var(--np-top) + var(--np-art) - 40px);
+    top: calc(var(--np-top) + var(--np-art) - 8px);
+    transform: translateY(-100%);
+    flex-direction: column-reverse;
+    gap: 4px;
   }
 
+  .np__stage-row {
+    flex-wrap: nowrap;
+    gap: 2px;
+  }
+
+  /* Five choices across a stage 72% of a phone wide: less tracking and
+     padding than the desktop's, or Trails wraps onto a line of its own. */
   .np__stage-btn {
     min-height: 32px;
+    padding: 4px 7px;
+    letter-spacing: 0.05em;
     background: rgba(5, 7, 15, 0.55);
+  }
+
+  .np__step {
+    border-radius: 999px;
+    background: rgba(5, 7, 15, 0.55);
+  }
+
+  .np__step-btn {
+    width: 32px;
+    height: 32px;
   }
 }

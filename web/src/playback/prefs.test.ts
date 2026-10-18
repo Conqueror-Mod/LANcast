@@ -12,6 +12,9 @@
  */
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import {
+  cycleStage,
+  stageTier,
+  vizStages,
   QUALITIES,
   DEFAULTS,
   qualityByID,
@@ -105,5 +108,37 @@ describe("stored preferences", () => {
     setPrefs({ quality: "original" });
     seen.push(getPrefs().quality);
     expect(seen).toEqual(["720p2", "original"]);
+  });
+});
+
+describe("the stage's visualizers", () => {
+  it("offers the classic pair everywhere and the trails only with WebGL2", () => {
+    expect(vizStages(false)).toEqual(["spectrum", "scope"]);
+    expect(vizStages(true).slice(0, 2)).toEqual(["spectrum", "scope"]);
+    expect(vizStages(true).length).toBeGreaterThanOrEqual(6);
+    expect(vizStages(true)).not.toContain("cover");
+  });
+
+  it("steps forward and back round the offered list, never onto the cover", () => {
+    const offered = vizStages(true);
+    expect(cycleStage("spectrum", 1, offered)).toBe("scope");
+    expect(cycleStage("spectrum", -1, offered)).toBe(offered[offered.length - 1]);
+    expect(cycleStage(offered[offered.length - 1], 1, offered)).toBe("spectrum");
+  });
+
+  it("steps from the cover to the first or last visualizer", () => {
+    const offered = vizStages(false);
+    expect(cycleStage("cover", 1, offered)).toBe("spectrum");
+    expect(cycleStage("cover", -1, offered)).toBe("scope");
+  });
+
+  it("steps out of a trail this screen cannot offer onto one it can", () => {
+    expect(cycleStage("tunnel", 1, vizStages(false))).toBe("spectrum");
+  });
+
+  it("gives each stage its tier, and the cover none", () => {
+    expect(stageTier("cover")).toBe(0);
+    expect(stageTier("scope")).toBe(1);
+    expect(stageTier("smoke")).toBe(2);
   });
 });
