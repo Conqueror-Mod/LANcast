@@ -87,6 +87,19 @@ outside. Recorded here because every local change to a vendored copy has to stay
 visible; the alternative was forking the window procedure into the caller, which
 is more code in a worse place.
 
+## Local addition — `WindowOptions.At`, `X`, `Y` (2026-10-17)
+
+Creates the window at a given position. Upstream shows the window inside
+`CreateWithOptions`, centred on the primary display, before returning;
+LANcast then moved it to the monitor it was on last time, and the window was
+visible on the wrong screen for as long as embedding the browser took.
+Reported as a small white window flashing at startup. Unset, the behaviour is
+upstream's.
+
+Creating the window *hidden* and showing it once placed was tried first and
+left the page blank: the browser embedded into a hidden window never drew.
+Creating it in the right place keeps upstream's order of show-then-embed.
+
 ## Local addition — the video overlay (2026-09-16)
 
 `overlay.go`, the `overlay`, `shield` and `handingOff` fields, a branch in
