@@ -76,7 +76,7 @@ function mount(s: Scenario) {
         return json({
           authenticated: true,
           configured: true,
-          user: { id: "u1", name: "chris", role: "admin" },
+          user: { id: "u1", name: "dana", role: "admin" },
         });
       }
       if (url.includes("/api/faces/capabilities")) {
@@ -485,7 +485,7 @@ describe("removing a face from a person", () => {
     ready: true,
     pending: 0,
     people: [
-      { id: 7, name: "Chris Bowles", name_locked: true, count: 40, cover_face_id: 11 },
+      { id: 7, name: "Dana Example", name_locked: true, count: 40, cover_face_id: 11 },
     ] as unknown as FacePerson[],
     faces: [
       { id: 501, item_id: 1, score: 0.9 },

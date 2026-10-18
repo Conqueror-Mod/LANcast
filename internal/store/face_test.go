@@ -429,7 +429,7 @@ func TestRejectionIsAboutOnePersonOnly(t *testing.T) {
 		t.Fatal(err)
 	}
 	mine := clusterOf(t, s, b1)
-	if err := s.NameCluster(ctx, mine, "Chris Bowles"); err != nil {
+	if err := s.NameCluster(ctx, mine, "Dana Example"); err != nil {
 		t.Fatal(err)
 	}
 
@@ -504,7 +504,7 @@ func TestADismissedSuggestionIsNotOfferedAgain(t *testing.T) {
 	if group == suggested {
 		t.Fatal("fixture: the near-miss grouped after all")
 	}
-	if err := s.NameCluster(ctx, group, "Chris Bowles"); err != nil {
+	if err := s.NameCluster(ctx, group, "Dana Example"); err != nil {
 		t.Fatal(err)
 	}
 

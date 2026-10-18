@@ -315,7 +315,7 @@ describe("which near copy is largest", () => {
     copies: [
       { item: sized(30, 720, 1280), album: "Me & Us" },
       { item: sized(31, 720, 1280), album: "Profile" },
-      { item: sized(32, 337, 600), album: "Chris" },
+      { item: sized(32, 337, 600), album: "Dana" },
     ],
   };
 

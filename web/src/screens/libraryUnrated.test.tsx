@@ -41,7 +41,7 @@ beforeEach(() => {
       const json = (v: unknown) =>
         new Response(JSON.stringify(v), { status: 200, headers: { "Content-Type": "application/json" } });
       if (url.includes("/api/auth/status")) {
-        return json({ authenticated: true, configured: true, user: { id: "u1", name: "chris", role } });
+        return json({ authenticated: true, configured: true, user: { id: "u1", name: "dana", role } });
       }
       if (url.includes("unrated=1")) {
         unratedAsked++;

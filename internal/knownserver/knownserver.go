@@ -144,7 +144,7 @@ var ErrNoAddress = errors.New("no server address")
  * ParseAddress turns what somebody typed into canonical host:port.
  *
  * Generous about the input and strict about the output, because this string
- * becomes a lookup key: "192.168.1.66" and "https://192.168.1.66:8080/" have
+ * becomes a lookup key: "192.168.1.21" and "https://192.168.1.21:8080/" have
  * to reach the same entry, or the second one is a new server with no pin and
  * the person is asked to trust a machine they are already trusting.
  *

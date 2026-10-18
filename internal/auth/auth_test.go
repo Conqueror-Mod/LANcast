@@ -115,7 +115,7 @@ func TestSameOriginRequest(t *testing.T) {
 		{"cross-site referer", "", "https://evil.example/x", "localhost:8080", false},
 		{"no headers at all is allowed", "", "", "localhost:8080", true},
 		{"junk origin", "not-a-url", "", "localhost:8080", false},
-		{"LAN address matches", "http://192.168.1.66:8080", "", "192.168.1.66:8080", true},
+		{"LAN address matches", "http://192.168.1.21:8080", "", "192.168.1.21:8080", true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

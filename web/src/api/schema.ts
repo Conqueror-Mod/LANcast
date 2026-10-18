@@ -96,6 +96,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/auth/accounts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Accounts to pick from on the sign-in page
+         * @description No session needed. Lists every account's name, and nothing else, but only to a request from the home network: this computer, private and link-local addresses, and addresses on a network one of this machine's interfaces is on (a phone on the house Wi-Fi speaking global IPv6 counts; the rest of the internet does not). Any other request, or any request while `login_picker` is off, gets an empty list, which says nothing about whether accounts exist.
+         */
+        get: operations["loginAccounts"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/auth/setup": {
         parameters: {
             query?: never;
@@ -6227,6 +6247,8 @@ export interface components {
             retro_artwork: boolean;
             /** @description Read where photographs were taken and group picture libraries by town (ADR 0078). **Off by default.** Turning it on starts the location pass at once; **turning it off deletes every location and place read**, rather than hiding them. */
             photo_places: boolean;
+            /** @description Show the accounts on the sign-in page to devices on the home network (`GET /api/auth/accounts`). On by default. */
+            login_picker: boolean;
             auto_enrich: boolean;
             update_check: boolean;
             /** @description Raises the server's log level to debug. Takes effect on the next line logged — **no restart** — and is persisted, because the faults worth turning it on for are the intermittent ones and losing the toggle on restart is how somebody reproduces a bug three times. */
@@ -6344,6 +6366,7 @@ export interface components {
             retro_artwork?: boolean;
             /** @description Read where photographs were taken and group picture libraries by town (ADR 0078). **Off by default.** Turning it on starts the location pass at once; **turning it off deletes every location and place read**, rather than hiding them. */
             photo_places?: boolean;
+            login_picker?: boolean;
             hardware_encoder?: string;
             debug_logging?: boolean;
             watched_threshold?: number;
@@ -8411,6 +8434,11 @@ export interface components {
              */
             at: number;
         };
+        LoginAccounts: {
+            accounts: {
+                name: string;
+            }[];
+        };
     };
     responses: {
         /** @description Malformed body or invalid parameter. */
@@ -8630,6 +8658,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AuthStatus"];
+                };
+            };
+        };
+    };
+    loginAccounts: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The names, or an empty list. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LoginAccounts"];
                 };
             };
         };

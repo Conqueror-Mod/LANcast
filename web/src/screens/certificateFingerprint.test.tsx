@@ -49,7 +49,7 @@ beforeEach(() => {
         return json({
           authenticated: true,
           configured: true,
-          user: { id: "u1", name: "chris", role: "admin" },
+          user: { id: "u1", name: "dana", role: "admin" },
         });
       }
       if (url.includes("/api/health")) {

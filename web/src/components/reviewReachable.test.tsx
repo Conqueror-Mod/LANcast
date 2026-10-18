@@ -56,7 +56,7 @@ function mount(opts: Opts) {
         return json({
           authenticated: true,
           configured: true,
-          user: { id: "u1", name: "chris", role: opts.role ?? "admin" },
+          user: { id: "u1", name: "dana", role: opts.role ?? "admin" },
         });
       }
       if (url.includes("/api/libraries")) return json([]);

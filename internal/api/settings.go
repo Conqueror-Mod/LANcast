@@ -87,6 +87,7 @@ func (s *Server) getSettings(w http.ResponseWriter, r *http.Request) {
 		"detect_markers": cur.DetectMarkers,
 		"retro_artwork":  cur.RetroArtwork,
 		"photo_places":   cur.PhotoPlaces,
+		"login_picker":   cur.LoginPicker,
 		// Whether the server can actually inspect and convert media. Reported so
 		// the UI can say so plainly: without these, every file is direct-played
 		// and anything the browser cannot decode fails with no explanation — the
@@ -120,6 +121,7 @@ func (s *Server) putSettings(w http.ResponseWriter, r *http.Request) {
 		DetectMarkers    *bool    `json:"detect_markers"`
 		RetroArtwork     *bool    `json:"retro_artwork"`
 		PhotoPlaces      *bool    `json:"photo_places"`
+		LoginPicker      *bool    `json:"login_picker"`
 		HardwareEncoder  *string  `json:"hardware_encoder"`
 
 		CertificationCountry *string `json:"certification_country"`
@@ -192,6 +194,9 @@ func (s *Server) putSettings(w http.ResponseWriter, r *http.Request) {
 	}
 	if req.DetectMarkers != nil {
 		next.DetectMarkers = *req.DetectMarkers
+	}
+	if req.LoginPicker != nil {
+		next.LoginPicker = *req.LoginPicker
 	}
 	if req.PhotoPlaces != nil {
 		next.PhotoPlaces = *req.PhotoPlaces
@@ -486,6 +491,7 @@ func changedSettings(prev, next config.Settings) []string {
 	add("detect_markers", prev.DetectMarkers != next.DetectMarkers)
 	add("retro_artwork", prev.RetroArtwork != next.RetroArtwork)
 	add("photo_places", prev.PhotoPlaces != next.PhotoPlaces)
+	add("login_picker", prev.LoginPicker != next.LoginPicker)
 	add("auto_enrich", prev.AutoEnrich != next.AutoEnrich)
 	add("update_check", prev.UpdateCheck != next.UpdateCheck)
 	add("hardware_encoder", prev.HardwareEncoder != next.HardwareEncoder)
