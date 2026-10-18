@@ -536,6 +536,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/profile/playback", s.playbackPreferences)
 	mux.HandleFunc("PUT /api/profile/playback", s.setPlaybackPreferences)
 	mux.HandleFunc("GET /api/profile/ratings", s.listMyRatings)
+	mux.HandleFunc("GET /api/profile/ratings/pending", s.listToRate)
 	mux.HandleFunc("PUT /api/profile/sharing", s.putSharing)
 	mux.HandleFunc("PUT /api/profile/avatar", s.putAvatar)
 	// Forgetting what you watched. GET prices it, DELETE does it.

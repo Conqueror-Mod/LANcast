@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { PosterTile } from "./PosterTile";
 import type { MenuAction } from "./Menu";
@@ -28,6 +28,8 @@ interface Props {
   itemOpen?: (item: Item) => (() => void) | undefined;
   /** 16:9 episode tiles rather than posters — the Next up shelf. */
   wide?: boolean;
+  /** Something under each tile: the stars on Rate what you've watched. */
+  itemFooter?: (item: Item) => ReactNode;
 }
 
 // A horizontally scrolling hub row. The header pairs a wide-tracked label with a
@@ -41,6 +43,7 @@ export function Shelf({
   itemActions,
   itemOpen,
   wide = false,
+  itemFooter,
 }: Props) {
   const track = useRef<HTMLDivElement>(null);
   const [reach, setReach] = useState<Edges>({ left: false, right: false });
@@ -132,6 +135,7 @@ export function Shelf({
                 onOpen={itemOpen?.(item)}
                 wide={wide}
               />
+              {itemFooter?.(item)}
             </div>
           ))}
         </div>

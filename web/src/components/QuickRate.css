@@ -1,0 +1,36 @@
+/* Stars under a tile on Rate what you've watched (QuickRate.tsx). */
+.quickrate {
+  display: flex;
+  justify-content: center;
+  gap: 0;
+  margin-top: 6px;
+}
+
+.quickrate__star {
+  flex-shrink: 0;
+  background: none;
+  border: none;
+  padding: 2px 3px;
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+  color: rgba(255, 255, 255, 0.16);
+  border-radius: 4px;
+  transition: color var(--dur-fast) ease;
+}
+
+/* Lit up to the star under the pointer or focus, in the colour a filled star
+   has on the detail page: here it only ever marks where you are pointing. */
+.quickrate__star.is-lit {
+  color: var(--gold);
+}
+
+/* Where you are: full gold, as everywhere. */
+.quickrate__star:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--gold);
+}
+
+.quickrate__star:disabled {
+  cursor: default;
+}

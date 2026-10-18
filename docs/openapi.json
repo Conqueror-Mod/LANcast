@@ -2355,6 +2355,31 @@
         }
       }
     },
+    "/profile/ratings/pending": {
+      "get": {
+        "operationId": "listToRate",
+        "tags": [
+          "profile"
+        ],
+        "summary": "What you finished lately and have not rated",
+        "description": "Home's \"Rate what you've watched\" shelf: films finished, and shows with an episode finished, in the last 30 days, that you have not rated. A show is offered once, by its latest episode, and is rated as the show. Newest finish first, at most 20. Rating one is how it leaves. Your account's rating limit and hidden libraries apply.",
+        "responses": {
+          "200": {
+            "description": "The items, or an empty list.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ItemList"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      }
+    },
     "/profile/sharing": {
       "put": {
         "operationId": "putSharing",

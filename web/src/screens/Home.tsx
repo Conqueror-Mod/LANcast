@@ -1,3 +1,4 @@
+import { QuickRate } from "@/components/QuickRate";
 import {
   useLibraries,
   useContinueWatching,
@@ -8,6 +9,7 @@ import {
   useItems,
   useSetWatchedByID,
   useWatchlist,
+  useToRate,
   watchlistItems,
 } from "@/api/hooks";
 import { useState } from "react";
@@ -304,6 +306,7 @@ export function Home() {
   };
 
   const { data: watchlist } = useWatchlist();
+  const { data: toRate } = useToRate();
 
   const hasAnything =
     (continueWatching?.length ?? 0) > 0 ||
@@ -352,6 +355,13 @@ export function Home() {
         {/* What you meant to watch, after what you are in the middle of
             (ADR 0085). Newest first, and empty means no shelf. */}
         <Shelf title="Watchlist" items={watchlistItems(watchlist)} />
+        {/* What you finished lately and have not rated. Rating one takes it
+            off; an empty list is no shelf. */}
+        <Shelf
+          title="Rate what you've watched"
+          items={toRate?.items ?? []}
+          itemFooter={(item) => <QuickRate item={item} />}
+        />
         <Shelf
           title="Continue Listening"
           items={continueAudio}
