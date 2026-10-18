@@ -40,7 +40,7 @@ type capVideo struct {
 	aspect   float64
 }
 
-func (v *capVideo) Present(b []byte, w, h int, aspect float64) {
+func (v *capVideo) Present(b []byte, w, h int, aspect float64, _ Display) {
 	v.mu.Lock()
 	defer v.mu.Unlock()
 	v.frames++

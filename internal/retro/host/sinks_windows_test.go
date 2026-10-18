@@ -79,8 +79,8 @@ func TestGDIVideoDrawsIntoAWindow(t *testing.T) {
 	defer destroy.Call(hwnd)
 	v := &GDIVideo{HWND: hwnd}
 	frame := make([]byte, 320*240*4)
-	v.Present(frame, 320, 240, 4.0/3)
-	v.Present(frame, 0, 0, 1)          // nothing to draw
-	v.Present(frame[:10], 320, 240, 1) // too short for its size: refused
-	(&GDIVideo{}).Present(frame, 320, 240, 1)
+	v.Present(frame, 320, 240, 4.0/3, Display{Smooth: true})
+	v.Present(frame, 0, 0, 1, Display{})          // nothing to draw
+	v.Present(frame[:10], 320, 240, 1, Display{}) // too short for its size: refused
+	(&GDIVideo{}).Present(frame, 320, 240, 1, Display{})
 }
