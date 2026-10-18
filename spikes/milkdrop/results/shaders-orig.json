@@ -1,0 +1,58 @@
+{
+ "presets": 434,
+ "withShader": 186,
+ "randTexture": 2,
+ "namedTexture": 53,
+ "loops": 31,
+ "tex3D": 10,
+ "topNamedTextures": [
+  [
+   "worms",
+   23
+  ],
+  [
+   "cells",
+   6
+  ],
+  [
+   "manyfish",
+   5
+  ],
+  [
+   "shub1",
+   4
+  ],
+  [
+   "grad3",
+   4
+  ],
+  [
+   "lichen",
+   2
+  ],
+  [
+   "paper",
+   1
+  ],
+  [
+   "fc_heart",
+   1
+  ],
+  [
+   "fc_clouds",
+   1
+  ],
+  [
+   "fc_clouds2",
+   1
+  ],
+  [
+   "fc_sunrise",
+   1
+  ],
+  [
+   "sunrise",
+   1
+  ]
+ ]
+}

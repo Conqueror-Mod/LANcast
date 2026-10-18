@@ -1,0 +1,52 @@
+filename.hlsl(129) : Undeclared identifier 'rot_d2'
+{
+  "presets": 162,
+  "refFailed": 6,
+  "interp": {
+    "rejected": 0,
+    "comparedWithRef": 156,
+    "identical": 156
+  },
+  "wasm": {
+    "rejected": 0,
+    "comparedWithRef": 156,
+    "identical": 153
+  },
+  "msPerFrame_allThreeRan": {
+    "n": 156,
+    "ref": {
+      "p50": "0.670",
+      "p90": "1.138",
+      "p99": "1.865"
+    },
+    "interp": {
+      "p50": "1.458",
+      "p90": "5.722",
+      "p99": "10.994"
+    },
+    "wasm": {
+      "p50": "3.597",
+      "p90": "4.139",
+      "p99": "4.793"
+    },
+    "totalRatio": {
+      "interpOverRef": "3.92",
+      "wasmOverRef": "4.22"
+    }
+  },
+  "wasmModule": {
+    "bytesP50": 6120,
+    "compileMsP50": 24.2,
+    "compileMsP99": 141.35
+  },
+  "shaders": {
+    "warp": {
+      "glsl": 81,
+      "lost": 0
+    },
+    "comp": {
+      "glsl": 87,
+      "lost": 0
+    }
+  }
+}

@@ -1,0 +1,10 @@
+<!doctype html>
+<meta charset="utf-8">
+<!-- Stricter still: no 'unsafe-eval' and no 'wasm-unsafe-eval'. Only these files run. -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'">
+<title>Spike: butterchurn 2 fed interpreter closures, strict CSP</title>
+<style>body{background:#111;color:#ddd;font:13px monospace}canvas{width:480px;height:270px;display:block}</style>
+<canvas id="c" width="960" height="540"></canvas>
+<pre id="log">loading…</pre>
+<script src="butterchurn2.js"></script>
+<script type="module" src="bc2.js"></script>
