@@ -129,5 +129,7 @@ func (s *Server) listToRate(w http.ResponseWriter, r *http.Request) {
 		s.writeInternal(w, err, "list what to rate")
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"items": items})
+	// Decorated like every listing: the tiles need their posters, which an
+	// item does not carry until AttachArtwork (it shipped without them once).
+	s.decorateAndWriteItems(w, r, items)
 }
