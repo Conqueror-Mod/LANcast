@@ -180,3 +180,79 @@
 .auth__submit--secondary {
   width: 100%;
 }
+
+/* The account picker: names to pick from, home network only. */
+.auth__accounts {
+  margin-top: 20px;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(92px, 1fr));
+  gap: 12px;
+}
+
+.auth__account {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 6px;
+  border-radius: var(--radius-tile);
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.auth__account:hover,
+.auth__account:focus-visible {
+  border-color: var(--gold);
+  box-shadow: 0 0 0 3px var(--gold-ring);
+  color: var(--text-primary);
+  outline: none;
+}
+
+.auth__avatar {
+  flex-shrink: 0;
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text-primary);
+  font-size: 20px;
+}
+
+.auth__account-name {
+  font-size: 13px;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.auth__picked {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.auth__link {
+  margin-top: 14px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text-muted);
+  font-size: 12px;
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+.auth__picked .auth__link {
+  margin: 0 0 0 auto;
+}
+
+.auth__link:hover,
+.auth__link:focus-visible {
+  color: var(--text-primary);
+  outline: none;
+}

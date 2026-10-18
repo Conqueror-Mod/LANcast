@@ -332,6 +332,21 @@ export function useSettings(enabled = true) {
  * Its own key, not a child of ["settings"], so nothing that invalidates the
  * general settings refetches this, and the reverse.
  */
+/*
+ * The sign-in page's account picker. The server answers only the home
+ * network and otherwise sends an empty list, so an empty list is "type it",
+ * never an error.
+ */
+export function useLoginAccounts() {
+  return useQuery({
+    queryKey: ["login-accounts"],
+    queryFn: ({ signal }) =>
+      apiGet<{ accounts: { name: string }[] }>("/api/auth/accounts", signal),
+    retry: false,
+    staleTime: 60_000,
+  });
+}
+
 export function usePublicCertificate(enabled = true) {
   return useQuery({
     queryKey: ["public-certificate"],

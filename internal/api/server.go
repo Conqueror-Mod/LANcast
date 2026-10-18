@@ -10,6 +10,7 @@ import (
 	"errors"
 	"lancast/internal/applog"
 	"log/slog"
+	"net"
 	"net/http"
 	"os"
 	"strconv"
@@ -225,6 +226,9 @@ type Server struct {
 	// portChanger moves the installed service to another port (ADR 0089);
 	// nil when this server is not the installed Windows service.
 	portChanger PortChanger
+	// localNets replaces this machine's interface networks in tests of the
+	// sign-in picker's home-network rule (loginpicker.go).
+	localNets func() []*net.IPNet
 	// passkeyChallenges holds issued WebAuthn challenges (ADR 0082), and
 	// passkeyRPFor replaces the RP check in tests, whose server has no TLS.
 	passkeyChallenges *passkey.Challenges
@@ -374,6 +378,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/events", s.eventStream)
 
 	mux.HandleFunc("GET /api/auth/status", s.authStatus)
+	mux.HandleFunc("GET /api/auth/accounts", s.loginAccounts)
 	mux.HandleFunc("POST /api/auth/setup", s.authSetup)
 	mux.HandleFunc("POST /api/auth/login", s.authLogin)
 	mux.HandleFunc("POST /api/auth/logout", s.authLogout)

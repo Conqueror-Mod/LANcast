@@ -119,6 +119,16 @@ type Settings struct {
 	 */
 	PhotoPlaces bool `json:"photo_places"`
 
+	/*
+	 * LoginPicker shows the accounts on the sign-in page, as tiles to pick
+	 * from, to devices on the home network and nobody else (GET
+	 * /api/auth/accounts). On by default (Chris, 2026-10-17); the names are
+	 * half of every login, so a request from the internet never sees them.
+	 * Not omitempty: off has to survive a restart (the zero-value lesson of
+	 * continue_weeks).
+	 */
+	LoginPicker bool `json:"login_picker"`
+
 	// ---- library and playback rules -------------------------------------
 	//
 	// These four are the server's opinion about what a client shows, and they
@@ -352,7 +362,8 @@ func Defaults() Settings {
 		WatchedThreshold: 90, ContinueWeeks: 16, ContinueLimit: 40,
 		AllowMediaDeletion: true, ScanIntervalHours: 0,
 		AuditRetentionDays: 90, MaxTranscodes: DefaultMaxTranscodes,
-		BackupEveryDays: 7, BackupKeep: 4, OptimizedLimitGB: 200}
+		BackupEveryDays: 7, BackupKeep: 4, OptimizedLimitGB: 200,
+		LoginPicker: true}
 }
 
 // SettingsStore reads and writes the settings file.

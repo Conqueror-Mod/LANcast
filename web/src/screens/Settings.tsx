@@ -876,6 +876,8 @@ function LiveTVSection() {
 function UsersSection() {
   const { data: users } = useUsers();
   const me = useCurrentUser();
+  const { data: settings } = useSettings(true);
+  const update = useUpdateSettings();
 
   return (
     <section className="settings__section">
@@ -884,6 +886,22 @@ function UsersSection() {
         <UserRow key={u.id} user={u} isSelf={u.id === me?.id} />
       ))}
       <AddUser />
+      {settings && (
+        <>
+          <label className="set-toggle">
+            <input
+              type="checkbox"
+              checked={settings.login_picker}
+              onChange={(e) => update.mutate({ login_picker: e.target.checked })}
+            />
+            Show accounts on the sign-in page
+          </label>
+          <p className="set-row__sub">
+            Devices on your home network see everyone&rsquo;s name to pick from instead of typing
+            it. From the internet the sign-in page never lists them.
+          </p>
+        </>
+      )}
     </section>
   );
 }
