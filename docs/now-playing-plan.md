@@ -1,6 +1,8 @@
 # Now Playing and visualizers for music — plan
 
-**Status: proposed (2026-10-17). Nothing here is built.**
+**Status: step 1 built (#896, 2026-10-18).** Steps 2 and 3 (the visualizers)
+are not started. Where step 1 departed from the proposal below, the text has
+been brought into line and says so; the rest is the original proposal.
 
 A proper Now Playing view for music, and a few visualizers in the spirit of
 Winamp's: the classic spectrum and scope first, then the feedback-trail look
@@ -89,11 +91,16 @@ proves it reads data that way in WebView2 rather than assuming it.
   sentence case. `artist — album · year` sits under it. The wide-tracked
   `NOW PLAYING` label is the only structural text (design.md, Typography). The
   top bar loses the title, because it is now on the page.
-- **Up next is on the page, not in a popover.** It is the queue panel's content
-  laid out in a column, with the same click-to-play, and the playing row marked
-  the way every "where you are" is marked. **Lyrics is the column's other tab.**
-  Synced lyrics already follow `displayTime`, so they move into the column
-  unchanged. The popovers stay for films and for narrow screens.
+- **The queue is on the page, not in a popover.** It is the queue panel's
+  content laid out in a column, with the same click-to-play, and the playing row
+  marked the way every "where you are" is marked. It follows the record: when
+  the track changes, the playing row goes to the top. **Lyrics is the column's
+  other tab.** Synced lyrics already follow `displayTime`, so they move into the
+  column unchanged. On a track both popover buttons leave the bar; a film keeps
+  its queue popover.
+- **The tab is called Queue, not Up next.** This proposal said Up next, but
+  inside the queue "Up next" already names the lane of tracks queued by hand,
+  and one name for two lists is confusing. Changed when built.
 - **The field is the cover, tinted into the field.** The blurred wash stays, but
   screened with `--nebula-violet` and `--nebula-blue` and vignetted, as
   design.md requires of any full-bleed artwork. Today's wash is untinted, so the
@@ -115,10 +122,12 @@ the player.
 
 ### Phone (≤ 600px)
 
-Stacked: the stage at full width, then the title block, then the transport,
-with the phone player's "⋯" menu kept for everything past the essentials. Up next and Lyrics become a sheet opened
-from a tab row under the title, not a column. Look at it at 375px before calling
-it done: jsdom will pass a column that sits off the screen.
+Stacked: the stage at the top, the column under it, and the control bar below,
+with the phone player's "⋯" menu kept for everything past the essentials. As
+built, the column stays a column rather than becoming a sheet: the same tabs,
+with about two and a half queue rows visible at 375×812. Look at it at 375px
+before calling it done: jsdom will pass a column that sits off the screen. The
+first pass ran 45px under the control bar, which measures 153px there.
 
 ### Keyboard, pad, remote
 
@@ -199,9 +208,12 @@ they spiral; blur and fade and they smoke away.
 
 Each step is its own PR, and each ships something usable on its own.
 
-1. **Now Playing layout.** The stage, the title block, Up next and Lyrics in the
-   column, the tinted wash, and the phone layout. No audio change, and the stage
-   shows only the cover. Check it in the desktop window and at 375px.
+1. **Now Playing layout. Built (#896).** The stage, the title block, Queue and
+   Lyrics in the column, the tinted wash, and the phone layout. No audio change,
+   and the stage shows only the cover. Checked in a browser tab against the
+   installed server at 1440×900 and 375×812. Still owed: a look in the desktop
+   window once a release carries it, and synced lyrics on a real track (the
+   album checked had no `.lrc`).
 2. **The tap and the classic visualizers.** The analyser on the engine (a way to
    build the engine with every effect off, so the visualizer does not depend on
    `fxActive`), the stage switcher, spectrum and scope, calm, and the
@@ -246,6 +258,6 @@ wiring and behaviour, not the picture:
 - Does the visualizer **replace** the cover in the stage, or play **behind** it
   as the field? This plan says replace, with full screen as the "field"
   version, because a visualizer behind a sharp cover fights it.
-- Is Up next always on the page on a wide screen, or still opened on demand? This
-  plan says always: on a record, what comes next is half of what the screen is
+- ~~Is the queue always on the page on a wide screen?~~ Settled by step 1:
+  always, because on a record what comes next is half of what the screen is
   for.
