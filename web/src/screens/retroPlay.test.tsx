@@ -655,3 +655,24 @@ describe("controls (2026-10-18)", () => {
     delete window.lancastRetroSetControl;
   });
 });
+
+describe("the core's own button names (2026-10-18)", () => {
+  it("lists the buttons the core declares, under its names", async () => {
+    window.lancastRetroControls = vi.fn(async () => ({
+      pad: { b: "A", l2: "LT", "fast-forward": "RS", rewind: "LS" },
+      keys: { b: "Z", l2: "", "fast-forward": "Tab", rewind: "R" },
+    }));
+    await render("/play/41");
+    emit({ kind: "labels", labels: { b: "B Button", a: "A Button", l2: "Z Trigger" } });
+    emit({ kind: "started" });
+    emit({ kind: "menu" });
+    await act(async () => button("Controls…").click());
+    await settle();
+    expect(button("Z Trigger: LT · none")).toBeTruthy();
+    expect(button("B Button: A · Z")).toBeTruthy();
+    // Only what the core declared, and the hold keys: no generic Y or L3.
+    expect(buttons().some((b) => b.textContent?.startsWith("Y (left button)"))).toBe(false);
+    expect(buttons().some((b) => b.textContent?.startsWith("Fast-forward (hold)"))).toBe(true);
+    delete window.lancastRetroControls;
+  });
+});
