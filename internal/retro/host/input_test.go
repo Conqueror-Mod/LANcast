@@ -17,7 +17,6 @@ func TestXInputMapsByPosition(t *testing.T) {
 		XInputStart: libretro.JoypadStart, XInputBack: libretro.JoypadSelect,
 		XInputLeftShldr: libretro.JoypadL, XInputRightShdr: libretro.JoypadR,
 		XInputDPadUp: libretro.JoypadUp, XInputDPadRight: libretro.JoypadRight,
-		XInputLeftThumb: libretro.JoypadL3,
 	}
 	for xb, want := range cases {
 		p := FromXInput(XInputGamepad{Buttons: xb})
@@ -183,5 +182,21 @@ func TestMenuNav(t *testing.T) {
 	stick.Analog[0][1] = -30000
 	if got := m.Update(stick, false, t0); !reflect.DeepEqual(got, []string{"up"}) {
 		t.Errorf("stick up: %v", got)
+	}
+}
+
+// The stick clicks and Tab/R are the player's hold keys, never the game's
+// buttons (2026-10-18).
+func TestHoldKeysAreThePlayers(t *testing.T) {
+	p := FromXInput(XInputGamepad{Buttons: XInputRightThmb | XInputLeftThumb})
+	if p.Buttons != 0 || p.Hot != HotFastForward|HotRewind {
+		t.Errorf("stick clicks: buttons %016b hot %b", p.Buttons, p.Hot)
+	}
+	k := FromKeyboard(func(vk int) bool { return vk == VKTab || vk == VKR })
+	if k.Buttons != 0 || k.Hot != HotFastForward|HotRewind {
+		t.Errorf("Tab and R: buttons %016b hot %b", k.Buttons, k.Hot)
+	}
+	if m := Merge(Pad{Hot: HotRewind}, Pad{Hot: HotFastForward}); m.Hot != HotFastForward|HotRewind {
+		t.Errorf("merge lost a hold key: %b", m.Hot)
 	}
 }
