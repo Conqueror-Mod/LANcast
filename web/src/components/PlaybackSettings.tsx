@@ -432,6 +432,20 @@ export function PlaybackSettings({ onClose }: { onClose: () => void }) {
           <p className="pbset__note">Tracks from the same album always play straight through.</p>
         )}
 
+        {/* The stage's visualizer at half the motion (now-playing-plan.md). */}
+        {pb.isAudio && prefs.stage !== "cover" && (
+          <Row label="Visualizer motion">
+            <select
+              className="pbset__select"
+              value={prefs.vizCalm ? "calm" : "full"}
+              onChange={(e) => setPrefs({ vizCalm: e.target.value === "calm" })}
+            >
+              <option value="full">Full</option>
+              <option value="calm">Calm</option>
+            </select>
+          </Row>
+        )}
+
         {/* The queue's start and end (lib/taper.ts). Any music, any channel
             count: it is a volume, not a filter. */}
         {pb.isAudio && (

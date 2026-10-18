@@ -286,6 +286,7 @@ describe("with night mode on", () => {
     createChannelMerger = () => new FakeNode();
     createDynamicsCompressor = () => new FakeNode();
     createWaveShaper = () => new FakeNode();
+    createAnalyser = () => new FakeNode();
     biquads = 0;
     createBiquadFilter = () => {
       this.biquads++;

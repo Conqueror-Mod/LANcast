@@ -42,7 +42,7 @@ import {
   nextPos,
   prevPos,
 } from "./queueOrder";
-import { usePrefs, qualityQuery, type Prefs } from "./prefs";
+import { usePrefs, qualityQuery, STAGES, type Prefs, type Stage } from "./prefs";
 import { resumePointAfterFailure } from "./resumePoint";
 import { applyCueVars } from "./cueVars";
 import { refusedNote } from "./transcodeRefused";
@@ -97,6 +97,10 @@ import {
   setContextSink,
   setElementVolume,
 } from "./elementEngine";
+import { Visualizer, useDocumentHidden, usePrefersReducedMotion, vizShouldRun } from "./Visualizer";
+
+// A stored stage this build does not know (an older or newer one wrote it) is the cover.
+const STAGE_IDS = new Set<Stage>(STAGES.map((s) => s.id));
 /*
  * What to say during the wait, in words written for the person waiting.
  *
@@ -735,12 +739,17 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
   // zero point moves. Stays 0 for direct play.
   const [subOffset, setSubOffset] = useState(0);
   const [muted, setMuted] = useState(false);
+  // Which of the two music paths the current track took: the deck, or the
+  // shared element (a converted track). The visualizer taps that one.
+  const [musicPath, setMusicPath] = useState<"deck" | "element" | null>(null);
   // Volume persists across titles and sessions: having to re-set it on every
   // playback is the kind of small friction that makes a player feel unfinished.
   const [volume, setVolume] = useState(() => {
     const saved = Number(localStorage.getItem("lancast:volume"));
     return Number.isFinite(saved) && saved > 0 && saved <= 1 ? saved : 1;
   });
+  const volumeRef = useRef(volume);
+  volumeRef.current = volume;
   const [note, setNote] = useState("");
   /*
    * The latest auth status, held in a ref.
@@ -776,6 +785,21 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
     : itemID === 0
       ? "idle"
       : "mini";
+
+  /*
+   * Now Playing's stage (docs/now-playing-plan.md, step 2). A visualizer is
+   * shown on the full surface only; docked, the cover stands in. Under
+   * prefers-reduced-motion the stage still defaults to the cover (prefs.ts),
+   * and a visualizer somebody picks on purpose runs calm.
+   */
+  const reducedMotion = usePrefersReducedMotion();
+  const tabHidden = useDocumentHidden();
+  const vizWanted =
+    isAudio && surface === "full" && prefs.stage !== "cover" && STAGE_IDS.has(prefs.stage) && elementFXSupported();
+  const currentAnalyser = useCallback(
+    () => engineFor(deckRef.current ? deckPair()[0] : (videoRef.current ?? deckPair()[0]))?.analyser,
+    [],
+  );
 
   /*
    * Tell the desktop client where the native picture goes (nativeLayout.ts).
@@ -1501,9 +1525,20 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
       : filmChannels > 0
         ? fxApplies({ night: prefs.nightVideo }, filmChannels)
         : FX_OFF;
+    /*
+     * A visualizer on screen taps the path the music is on, and only that one
+     * (docs/now-playing-plan.md, step 2): with every effect off this builds
+     * the engine as a straight wire with an analyser beside `level`. It is
+     * never torn down, so from the first visualizer until the page reloads
+     * that path plays through Web Audio (elementEngine.ts, `tap`).
+     */
+    const tapElement = vizWanted && musicPath === "element";
+    const tapDeck = vizWanted && musicPath === "deck";
+    const music = musicPath === "deck" ? deckPair()[0] : v;
+    const wasRouted = engineFor(music) !== undefined;
     // The output carries what the source has, so a routed element sends the
     // mixer the same stream it would have sent unrouted (elementEngine.ts).
-    applyElementFX(v, fx, prefs.audioDevice, sourceChannels);
+    applyElementFX(v, fx, prefs.audioDevice, sourceChannels, tapElement);
     // The deck carries music only, through one graph for both its elements
     // (applyDeckFX); anything else leaves it on a straight wire.
     applyDeckFX(
@@ -1511,8 +1546,18 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
       isAudio ? fxApplies({ night: prefs.nightMusic, eq: prefs.eq }, musicChannels) : FX_OFF,
       prefs.audioDevice,
       musicChannels,
+      tapDeck,
     );
+    // Routed just now, mid-track: the slider has moved to `level`, so the
+    // player's level is written once more through the routed path. Otherwise
+    // the deck keeps the old slider value for its crossfade sums and the next
+    // fade is scaled twice (elementEngine.ts, the volume trap).
+    const m = media();
+    if (isAudio && !wasRouted && engineFor(music) && m) applyLevel(m, volumeRef.current * taperNow(m));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
+    vizWanted,
+    musicPath,
     isAudio,
     musicChannels,
     filmChannels,
@@ -1965,6 +2010,7 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
         // when a join is not gapless.
         const why = transcoding.current ? "converted" : "deck unavailable";
         clientNote("info", "playback", useDeck ? "music on deck" : `music on element (${why})`);
+        setMusicPath(useDeck ? "deck" : "element");
       }
       v.src = sourceURL(
         item.id,
@@ -3334,7 +3380,7 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
           playing, which is the exact thing this provider exists to prevent. */}
       <div
         ref={containerRef}
-        className={`playback playback--${surface}${isAudio ? " playback--audio" : ""}`}
+        className={`playback playback--${surface}${isAudio ? " playback--audio" : ""}${vizWanted ? " playback--viz" : ""}`}
         onClick={surface === "mini" ? openFromDock : undefined}
         title={surface === "mini" ? "Open the player" : undefined}
       >
@@ -3352,6 +3398,21 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
             ) : (
               <div className="playback__cover-none">{item?.title}</div>
             )}
+          </div>
+        )}
+
+        {/* The stage's visualizer, in place of the sharp cover and over its
+            wash. A sibling of the cover, outside the slot, for the reason the
+            slot comment below gives. */}
+        {vizWanted && prefs.stage !== "cover" && (
+          <div className="playback__viz" aria-hidden="true">
+            <Visualizer
+              kind={prefs.stage}
+              analyser={currentAnalyser}
+              running={vizShouldRun({ surface, stage: prefs.stage, playing, hidden: tabHidden })}
+              calm={prefs.vizCalm || reducedMotion}
+              cover={cover}
+            />
           </div>
         )}
 
