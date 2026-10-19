@@ -29,9 +29,10 @@ import (
  * reads it, and a `//` comment still ends at its own line. Joining with "\n"
  * rather than "" is what lets a refusal name the line it is on.
  *
- * The shaders are dropped. Step 1 of ADR 0091 has no converter that produces
- * GLSL that compiles, so the preset is stored without them, marked
- * not_converted, and plays with butterchurn's default shaders.
+ * The shaders are not read here as the equations are. Their text is taken
+ * out of the file as butterchurn's own converter takes it (splitShaders, in
+ * shader.go) and kept on the upload, unconverted and marked not_converted:
+ * converting is ConvertShaders' job, after Parse, so that Parse stays pure.
  */
 
 // eqLine matches the keys that carry equations or shaders.
@@ -219,11 +220,12 @@ func readMilk(body []byte) (Upload, func(*Preset) []block, error) {
 		}
 		return bs
 	}
-	sh := ShadersNone
+	u := Upload{Source: SourceMilk, Shaders: ShadersNone, Preset: p}
 	if shaders {
-		sh = ShadersNotConverted
+		src := splitShaders(text)
+		u.Shaders, u.HLSL = ShadersNotConverted, &src
 	}
-	return Upload{Source: SourceMilk, Shaders: sh, Preset: p}, blocksOf, nil
+	return u, blocksOf, nil
 }
 
 func parseMilk(body []byte) (Upload, error) {

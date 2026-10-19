@@ -1,0 +1,5 @@
+# The vendored module is verified by its sha256, so git must not touch a byte
+# of it -- the rule web/vendor/butterchurn and web/vendor/hls.js follow. The
+# licence texts are kept as upstream wrote them (hlsl2glslfork's is CRLF).
+msc.wasm.gz binary
+LICENSE* -text

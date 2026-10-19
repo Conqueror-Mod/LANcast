@@ -1,0 +1,26 @@
+[preset00]
+MILKDROP_PRESET_VERSION=201
+PSVERSION=2
+fDecay=1.000000
+per_frame_1=q3 = time*0.1;
+warp_1=`float2 swirl(float2 p, float a)
+warp_2=`{
+warp_3=`    float s = sin(a), c = cos(a);
+warp_4=`    return float2(p.x*c - p.y*s, p.x*s + p.y*c);
+warp_5=`}
+warp_6=`
+warp_7=`shader_body
+warp_8=`{
+warp_9=`    float2 p = swirl(uv - 0.5, 0.01*rad) + 0.5;
+warp_10=`    float3 n = tex2D(sampler_noise_lq, uv*4 + q3).xyz - 0.5;
+warp_11=`    ret = tex2D(sampler_fw_main, p + n.xy*0.002).xyz - 0.004;
+warp_12=`}
+comp_1=`shader_body
+comp_2=`{
+comp_3=`    float3 acc = 0;
+comp_4=`    for (int i = 0; i < 4; i++) {
+comp_5=`        float3 p = float3(uv*2, q3 + i*0.25);
+comp_6=`        acc += tex3D(sampler_noisevol_lq, p).xyz / 4;
+comp_7=`    }
+comp_8=`    ret = GetMain(uv) + acc*0.1;
+comp_9=`}

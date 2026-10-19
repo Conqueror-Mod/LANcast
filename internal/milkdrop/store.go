@@ -34,6 +34,13 @@ import (
  *
  * The list is read from disk once and kept in memory, then kept current by
  * Put and Delete. Nothing else writes the folder: one server runs per machine.
+ *
+ * A .milk's HLSL is in the same file, under "hlsl", beside the preset rather
+ * than in it: Get never returns it, so it is never served. It is kept so that
+ * a better converter can convert a stored preset again without anybody
+ * finding the file to upload it a second time. Presets stored before step g3
+ * have none — that version dropped the HLSL — so for those a re-upload is the
+ * only way to their shaders, and Put makes a re-upload replace them.
  */
 
 // ErrNotFound means there is no preset with that id, or it is not an id.
@@ -43,18 +50,35 @@ var idPattern = regexp.MustCompile(`^[0-9a-f]{64}$`)
 
 // Summary is what a list shows about one preset.
 type Summary struct {
-	ID         string `json:"id"`
-	Name       string `json:"name"`
-	Source     string `json:"source"`
-	Shaders    string `json:"shaders"`
-	SizeBytes  int64  `json:"size_bytes"`
-	UploadedAt int64  `json:"uploaded_at"`
+	ID      string `json:"id"`
+	Name    string `json:"name"`
+	Source  string `json:"source"`
+	Shaders string `json:"shaders"`
+	// ShadersReason is why a .milk's shaders were not converted, when that is
+	// known: the converter's first error line, named by shader. A preset
+	// stored before the server could convert shaders has none.
+	ShadersReason string `json:"shaders_reason,omitempty"`
+	SizeBytes     int64  `json:"size_bytes"`
+	UploadedAt    int64  `json:"uploaded_at"`
 }
 
-// Entry is a stored preset: its summary and the preset itself.
+// Entry is a stored preset: its summary and the preset itself. It is what is
+// served.
 type Entry struct {
 	Summary
 	Preset Preset `json:"preset"`
+}
+
+// stored is the file: an Entry and, for a .milk with shaders, their HLSL.
+type stored struct {
+	Entry
+	HLSL *ShaderSource `json:"hlsl,omitempty"`
+}
+
+// indexed is what the in-memory list keeps about one file.
+type indexed struct {
+	Summary
+	hasHLSL bool
 }
 
 // Store is the folder of presets.
@@ -62,7 +86,7 @@ type Store struct {
 	root string
 
 	mu    sync.Mutex
-	index map[string]Summary // nil until first read
+	index map[string]indexed // nil until first read
 }
 
 // NewStore keeps presets under root, creating it when the first one comes.
@@ -97,7 +121,7 @@ func (s *Store) load() error {
 	if s.index != nil {
 		return nil
 	}
-	idx := map[string]Summary{}
+	idx := map[string]indexed{}
 	des, err := os.ReadDir(s.root)
 	if err != nil && !errors.Is(err, os.ErrNotExist) {
 		return fmt.Errorf("read presets: %w", err)
@@ -111,30 +135,30 @@ func (s *Store) load() error {
 		if err != nil {
 			continue
 		}
-		idx[id] = e.Summary
+		idx[id] = indexed{Summary: e.Summary, hasHLSL: e.HLSL != nil}
 	}
 	s.index = idx
 	return nil
 }
 
-func (s *Store) read(id string) (Entry, error) {
+func (s *Store) read(id string) (stored, error) {
 	p, err := s.path(id)
 	if err != nil {
-		return Entry{}, err
+		return stored{}, err
 	}
 	b, err := os.ReadFile(p)
 	if errors.Is(err, os.ErrNotExist) {
-		return Entry{}, ErrNotFound
+		return stored{}, ErrNotFound
 	}
 	if err != nil {
-		return Entry{}, fmt.Errorf("read preset: %w", err)
+		return stored{}, fmt.Errorf("read preset: %w", err)
 	}
-	var e Entry
+	var e stored
 	if err := json.Unmarshal(b, &e); err != nil {
-		return Entry{}, fmt.Errorf("read preset %s: %w", id, err)
+		return stored{}, fmt.Errorf("read preset %s: %w", id, err)
 	}
 	if e.ID != id {
-		return Entry{}, fmt.Errorf("preset file %s names itself %s", id, e.ID)
+		return stored{}, fmt.Errorf("preset file %s names itself %s", id, e.ID)
 	}
 	return e, nil
 }
@@ -147,8 +171,8 @@ func (s *Store) List() ([]Summary, error) {
 		return nil, err
 	}
 	out := make([]Summary, 0, len(s.index))
-	for _, sm := range s.index {
-		out = append(out, sm)
+	for _, ix := range s.index {
+		out = append(out, ix.Summary)
 	}
 	sort.Slice(out, func(i, j int) bool {
 		a, b := strings.ToLower(out[i].Name), strings.ToLower(out[j].Name)
@@ -160,55 +184,114 @@ func (s *Store) List() ([]Summary, error) {
 	return out, nil
 }
 
-// Get is one preset.
+// Get is one preset, as it is served: without its HLSL.
 func (s *Store) Get(id string) (Entry, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return s.read(id)
+	e, err := s.read(id)
+	return e.Entry, err
+}
+
+// HLSL is the shader text a stored .milk came with, or nil. It is for the
+// server alone; no handler serves it.
+func (s *Store) HLSL(id string) (*ShaderSource, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	e, err := s.read(id)
+	return e.HLSL, err
 }
 
 /*
  * Put stores an upload. created is false when the same preset was already
- * there, in which case the stored one is returned unchanged: its name is the
- * one it was first given, because uploading a pack twice should not rename
- * anything.
+ * there, in which case the stored one is returned: its name is the one it was
+ * first given, because uploading a pack twice should not rename anything.
+ *
+ * Two cases are about the same .milk stored earlier without its shaders —
+ * before step g3, which dropped them and kept no HLSL, or by a converter that
+ * could not convert them then:
+ *
+ *   - When this upload's shaders converted and u.Replaces names such a
+ *     preset, the new preset takes its place, under its name, and the old
+ *     file is removed. replaced is its id. Otherwise re-uploading a folder to
+ *     get its shaders would put a second copy of every preset beside the
+ *     first.
+ *   - When the shaders still do not convert, the preset is the same one, so
+ *     its id is too. A file from before g3 gains the HLSL and the reason,
+ *     keeping its name and time, and created is false.
  *
  * The file is written beside its final name and renamed into place, so a
  * reader never sees half a preset.
  */
-func (s *Store) Put(u Upload) (sm Summary, created bool, err error) {
+func (s *Store) Put(u Upload) (sm Summary, created bool, replaced string, err error) {
 	id, err := ID(u.Preset)
 	if err != nil {
-		return Summary{}, false, err
+		return Summary{}, false, "", err
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if err := s.load(); err != nil {
-		return Summary{}, false, err
+		return Summary{}, false, "", err
 	}
 	if have, ok := s.index[id]; ok {
-		return have, false, nil
+		if have.hasHLSL || u.HLSL == nil {
+			return have.Summary, false, "", nil
+		}
+		e, err := s.read(id)
+		if err != nil {
+			return Summary{}, false, "", err
+		}
+		e.Shaders, e.ShadersReason, e.HLSL = u.Shaders, u.ShadersReason, u.HLSL
+		if err := s.write(id, e); err != nil {
+			return Summary{}, false, "", err
+		}
+		return e.Summary, false, "", nil
 	}
-	p, err := s.path(id)
-	if err != nil {
-		return Summary{}, false, err
+	name := u.Name
+	old, superseding := s.index[u.Replaces]
+	superseding = superseding && u.Replaces != id &&
+		old.Source == SourceMilk && old.Shaders == ShadersNotConverted
+	if superseding {
+		name = old.Name
 	}
 	preset, err := json.Marshal(u.Preset)
 	if err != nil {
-		return Summary{}, false, err
+		return Summary{}, false, "", err
 	}
-	e := Entry{Summary: Summary{ID: id, Name: u.Name, Source: u.Source, Shaders: u.Shaders,
-		SizeBytes: int64(len(preset)), UploadedAt: time.Now().Unix()}, Preset: u.Preset}
+	e := stored{Entry: Entry{Summary: Summary{ID: id, Name: name, Source: u.Source, Shaders: u.Shaders,
+		ShadersReason: u.ShadersReason, SizeBytes: int64(len(preset)), UploadedAt: time.Now().Unix()},
+		Preset: u.Preset}, HLSL: u.HLSL}
+	if err := s.write(id, e); err != nil {
+		return Summary{}, false, "", err
+	}
+	if superseding {
+		// The new file is in place first, so a failure here leaves two
+		// presets rather than none.
+		if p, err := s.path(u.Replaces); err == nil {
+			if err := os.Remove(p); err == nil || errors.Is(err, os.ErrNotExist) {
+				delete(s.index, u.Replaces)
+				replaced = u.Replaces
+			}
+		}
+	}
+	return e.Summary, true, replaced, nil
+}
+
+// write puts e in its file and in the index. The caller holds s.mu.
+func (s *Store) write(id string, e stored) error {
+	p, err := s.path(id)
+	if err != nil {
+		return err
+	}
 	body, err := json.Marshal(e)
 	if err != nil {
-		return Summary{}, false, err
+		return err
 	}
 	if err := os.MkdirAll(s.root, 0o755); err != nil {
-		return Summary{}, false, fmt.Errorf("create preset folder: %w", err)
+		return fmt.Errorf("create preset folder: %w", err)
 	}
 	tmp, err := os.CreateTemp(s.root, ".upload-*")
 	if err != nil {
-		return Summary{}, false, fmt.Errorf("store preset: %w", err)
+		return fmt.Errorf("store preset: %w", err)
 	}
 	_, werr := tmp.Write(body)
 	cerr := tmp.Close()
@@ -220,10 +303,10 @@ func (s *Store) Put(u Upload) (sm Summary, created bool, err error) {
 	}
 	if werr != nil {
 		_ = os.Remove(tmp.Name())
-		return Summary{}, false, fmt.Errorf("store preset: %w", werr)
+		return fmt.Errorf("store preset: %w", werr)
 	}
-	s.index[id] = e.Summary
-	return e.Summary, true, nil
+	s.index[id] = indexed{Summary: e.Summary, hasHLSL: e.HLSL != nil}
+	return nil
 }
 
 // Delete removes a preset. It returns the summary it removed, for the audit
@@ -238,7 +321,7 @@ func (s *Store) Delete(id string) (Summary, error) {
 	if err != nil {
 		return Summary{}, err
 	}
-	sm, ok := s.index[id]
+	ix, ok := s.index[id]
 	if err := os.Remove(p); err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			delete(s.index, id)
@@ -247,6 +330,7 @@ func (s *Store) Delete(id string) (Summary, error) {
 		return Summary{}, fmt.Errorf("delete preset: %w", err)
 	}
 	delete(s.index, id)
+	sm := ix.Summary
 	if !ok {
 		sm = Summary{ID: id}
 	}

@@ -5,14 +5,17 @@
 // The rule it exists to keep is the ADR's title: **a preset is data, never
 // code.** What it stores is numbers, EEL text that internal/milkdrop/eel has
 // parsed and that only ever runs as eel-wasm's WebAssembly in a browser, and,
-// for butterchurn's own JSON, GLSL that runs only on a GPU. Nothing in a
+// GLSL that runs only on a GPU. Nothing in a
 // preset is executed here, and nothing it stores is JavaScript: butterchurn
 // 2's `*_eqs_str` is refused by name.
 //
 // Two formats come in and one goes out:
-//   - a `.milk` file, read as MilkDrop writes it. Its HLSL shaders are dropped
-//     (step 1 has no converter that works, ADR 0091 §4) and the preset is
-//     marked so the client can say "shaders not converted";
+//   - a `.milk` file, read as MilkDrop writes it. Its HLSL shaders are
+//     converted to GLSL by ConvertShaders, after Parse, in a WebAssembly
+//     sandbox (shader.go, msc/). When they do not all convert they are
+//     dropped, and the preset is marked so the client can say "shaders not
+//     converted". The HLSL is kept beside the preset either way, and never
+//     served;
 //   - butterchurn 3's JSON, whose shaders are already GLSL. It is validated
 //     key by key, never trusted.
 //
@@ -98,10 +101,12 @@ const (
 const (
 	// ShadersNone: the preset has none, and butterchurn's defaults are right.
 	ShadersNone = "none"
-	// ShadersNotConverted: a .milk had HLSL shaders, which step 1 drops. It
-	// plays with butterchurn's defaults and the client says so.
+	// ShadersNotConverted: a .milk had HLSL shaders that did not all convert,
+	// or that were uploaded before the server could convert any. It plays
+	// with butterchurn's defaults and the client says so.
 	ShadersNotConverted = "not_converted"
-	// ShadersConverted: butterchurn JSON carrying GLSL, stored as it came.
+	// ShadersConverted: GLSL, either a .milk's HLSL converted at upload or
+	// butterchurn JSON carrying it, stored as it came.
 	ShadersConverted = "converted"
 )
 
@@ -124,7 +129,16 @@ type Upload struct {
 	Name    string
 	Source  string
 	Shaders string
-	Preset  Preset
+	// ShadersReason is why a .milk's shaders were not converted: the
+	// converter's first error line, named by shader.
+	ShadersReason string
+	Preset        Preset
+	// HLSL is a .milk's shader text, when it has any. Parse leaves it
+	// unconverted; ConvertShaders converts it.
+	HLSL *ShaderSource
+	// Replaces is the id this preset had before its shaders were converted:
+	// what an upload before step g3 stored for the same file.
+	Replaces string
 }
 
 // Parse reads an uploaded file. filename is only a display name: it never
