@@ -8,12 +8,18 @@ import {
   setPrefs,
   STAGES,
   cycleStage,
+  prefsForVizKey,
+  resolveMilkdrop,
   stageTier,
-  vizStages,
+  vizChoices,
+  vizKeyOf,
+  type Prefs,
   type Stage,
+  type StageTier,
 } from "@/playback/prefs";
 import { elementFXSupported } from "@/playback/elementEngine";
 import { webgl2Supported } from "@/playback/trails";
+import { markMilkdropPicked, useMilkdropOffer, type MilkdropOffer } from "@/playback/milkdropStage";
 import { LyricsPanel } from "@/components/LyricsPanel";
 import { QueuePanel } from "@/components/QueuePanel";
 import "./NowPlaying.css";
@@ -120,28 +126,42 @@ export function NowPlaying() {
 /*
  * stepVisualizer: `,` and `.`, and the arrows beside a preset's name. Round
  * the visualizers this screen can draw, never onto the cover. Within `only`
- * (a tier), when the stepper is the trails row and should stay in it.
+ * (a tier), when the stepper is the trails' or MilkDrop's row and should stay
+ * in it. `milkdrop` is the stored presets' ids (useMilkdropOffer), each its
+ * own stop, after the built-in ones.
  */
-export function stepVisualizer(dir: 1 | -1, only?: 1 | 2) {
-  const offered = vizStages(webgl2Supported()).filter((s) => !only || stageTier(s) === only);
-  setPrefs({ stage: cycleStage(getPrefs().stage, dir, offered) });
+export function stepVisualizer(dir: 1 | -1, only?: StageTier, milkdrop: string[] = []) {
+  const offered = vizChoices(webgl2Supported(), milkdrop).filter(
+    (k) => !only || stageTier(prefsForVizKey(k).stage ?? "cover") === only,
+  );
+  const next = prefsForVizKey(cycleStage(vizKeyOf(getPrefs(), milkdrop), dir, offered));
+  // A step onto MilkDrop is somebody choosing it, which is what lets it start
+  // under reduced motion (milkdropStage.ts).
+  if (next.stage === "milkdrop") markMilkdropPicked();
+  setPrefs(next);
 }
 
-function stageLabel(id: Stage): string {
-  return STAGES.find((s) => s.id === id)?.label ?? id;
+function stageLabel(p: Pick<Prefs, "stage" | "milkdrop">, milkdrop: MilkdropOffer): string {
+  if (p.stage === "milkdrop") {
+    const id = resolveMilkdrop(p.milkdrop, milkdrop.ids);
+    return milkdrop.presets.find((m) => m.id === id)?.name ?? "MilkDrop";
+  }
+  return STAGES.find((s) => s.id === p.stage)?.label ?? p.stage;
 }
 
 /*
  * The stage switcher, under the stage (docs/now-playing-plan.md, steps 2 and
- * 3): the cover, one of the classic visualizers, or the trails, and a way into
- * the full-screen visualizer. Remembered per device with the other "This
- * device" playback preferences. Positioned from --np-art like the column,
- * because the stage it sits under is drawn in another layer.
+ * 3): the cover, one of the classic visualizers, the trails or MilkDrop, and a
+ * way into the full-screen visualizer. Remembered per device with the other
+ * "This device" playback preferences. Positioned from --np-art like the
+ * column, because the stage it sits under is drawn in another layer.
  *
  * The five trail presets are one choice here, Trails, with the preset named
  * on a row of its own under it: eight buttons do not fit under a square that
  * is 46% of a phone's width, and which trail is a smaller question than
  * whether there are trails at all. Trails is offered only with WebGL2.
+ * MilkDrop is the same shape, its presets being the server's uploads
+ * (ADR 0091), and is offered only with WebGL2 and at least one stored.
  *
  * Offered only where music can be routed through Web Audio, since a
  * visualizer is an analyser on that graph. The chosen one is marked the
@@ -150,13 +170,20 @@ function stageLabel(id: Stage): string {
 function StageSwitch() {
   const pb = usePlayback();
   const [prefs, update] = usePrefs();
-  if (!elementFXSupported()) return null;
+  const fx = elementFXSupported();
+  const milkdrop = useMilkdropOffer(fx);
+  if (!fx) return null;
   const trails = webgl2Supported();
   const tier = stageTier(prefs.stage);
   const choices: { id: Stage; label: string; on: boolean }[] = [
     ...STAGES.filter((s) => s.tier < 2).map((s) => ({ id: s.id, label: s.label, on: prefs.stage === s.id })),
     ...(trails ? [{ id: "tunnel" as Stage, label: "Trails", on: tier === 2 }] : []),
+    ...(milkdrop.offered ? [{ id: "milkdrop" as Stage, label: "MilkDrop", on: tier === 3 }] : []),
   ];
+  const pick = (id: Stage) => {
+    if (id === "milkdrop") markMilkdropPicked();
+    update({ stage: id });
+  };
   return (
     <div className="np__stage">
       <div className="np__stage-row" role="radiogroup" aria-label="Stage">
@@ -166,7 +193,10 @@ function StageSwitch() {
             role="radio"
             aria-checked={c.on}
             className={"np__stage-btn" + (c.on ? " is-on" : "")}
-            onClick={() => !c.on && update({ stage: c.id })}
+            // MilkDrop remembered from another session reads as chosen but is
+            // held on the cover under reduced motion; pressing it is the pick
+            // that starts it.
+            onClick={() => (!c.on || c.id === "milkdrop") && pick(c.id)}
           >
             {c.label}
           </button>
@@ -181,26 +211,44 @@ function StageSwitch() {
         </button>
       </div>
       {trails && tier === 2 && <VizStep only={2} />}
+      {milkdrop.offered && tier === 3 && <VizStep only={3} />}
     </div>
   );
 }
 
 /*
  * The preset's name between back and forward. Under the stage it steps
- * between trails; over the full-screen visualizer, through all of them, as
- * `,` and `.` do.
+ * between trails, or between MilkDrop presets; over the full-screen
+ * visualizer, through all of them, as `,` and `.` do. A MilkDrop preset whose
+ * shaders the server could not convert says so, as the API asks clients to:
+ * it plays with butterchurn's default shaders, and may not look as its author
+ * meant.
  */
-export function VizStep({ only }: { only?: 1 | 2 }) {
+export function VizStep({ only }: { only?: StageTier }) {
   const [prefs] = usePrefs();
+  const milkdrop = useMilkdropOffer(elementFXSupported());
+  const shown =
+    prefs.stage === "milkdrop"
+      ? milkdrop.presets.find((m) => m.id === resolveMilkdrop(prefs.milkdrop, milkdrop.ids))
+      : undefined;
   return (
     <div className="np__step" role="group" aria-label="Visualizer">
-      <button className="np__step-btn" onClick={() => stepVisualizer(-1, only)} aria-label="Previous visualizer">
+      <button
+        className="np__step-btn"
+        onClick={() => stepVisualizer(-1, only, milkdrop.ids)}
+        aria-label="Previous visualizer"
+      >
         ‹
       </button>
       <span className="np__step-name" aria-live="polite">
-        {stageLabel(prefs.stage)}
+        {stageLabel(prefs, milkdrop)}
+        {shown?.shaders === "not_converted" && <span className="np__step-note"> · shaders not converted</span>}
       </span>
-      <button className="np__step-btn" onClick={() => stepVisualizer(1, only)} aria-label="Next visualizer">
+      <button
+        className="np__step-btn"
+        onClick={() => stepVisualizer(1, only, milkdrop.ids)}
+        aria-label="Next visualizer"
+      >
         ›
       </button>
     </div>
