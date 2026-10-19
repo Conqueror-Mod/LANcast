@@ -228,7 +228,8 @@ function compile(gl: WebGL2RenderingContext, fs: string): WebGLProgram | null {
  */
 export function createOutputPass(canvas: HTMLCanvasElement): OutputPass | null {
   const gl = canvas.getContext("webgl2", { alpha: false, antialias: false, depth: false, stencil: false });
-  if (!gl) return null;
+  // A lost context compiles nothing, and says so only as a null info log.
+  if (!gl || gl.isContextLost()) return null;
   const guardProg = compile(gl, GUARD_FS);
   const limitProg = compile(gl, LIMIT_FS);
   const outProg = compile(gl, OUTPUT_FS);
@@ -375,7 +376,14 @@ export function createOutputPass(canvas: HTMLCanvasElement): OutputPass | null {
       gl.deleteTexture(srcTex);
       gl.deleteBuffer(quad);
       gl.deleteVertexArray(vao);
-      gl.getExtension("WEBGL_lose_context")?.loseContext();
+      /*
+       * No loseContext() here. A canvas hands out one context for its whole
+       * life, so losing it bricks the element: the next pass made on the same
+       * canvas compiles nothing. React's StrictMode does exactly that in
+       * development (unmount and remount, same DOM), and it turned the stage
+       * black on the first return to Now Playing. The context goes when the
+       * canvas is collected.
+       */
     },
   };
 }
