@@ -186,11 +186,23 @@
 
 .np__step-name {
   min-width: 7em;
+  /* An uploaded MilkDrop preset's name can be a sentence; it ends in an
+     ellipsis rather than pushing the arrows apart. */
+  max-width: min(22em, 60vw);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   text-align: center;
   font-size: 11px;
   letter-spacing: 0.14em;
   text-transform: uppercase;
   color: var(--text-secondary);
+}
+
+.np__step-note {
+  text-transform: none;
+  letter-spacing: 0;
+  color: var(--text-muted);
 }
 
 .np__step-btn {

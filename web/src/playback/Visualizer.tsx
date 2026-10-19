@@ -30,14 +30,17 @@ import {
   type TrailId,
 } from "./trailMath";
 import { createTrailRenderer, type TrailRenderer } from "./trails";
+import { MilkdropCanvas } from "./MilkdropCanvas";
 
 /*
  * The visualizers in Now Playing's stage (docs/now-playing-plan.md): the
  * classic pair from step 2, spectrum bars with falling caps and the scope's
- * one line, in Canvas 2D; and step 3's feedback trails, in WebGL2 (trails.ts).
- * Each tier gets its own canvas, because a canvas that has given out a 2D
- * context will never give out a WebGL one. Between two trail presets the
- * canvas and its buffers stay, so the trails of one become the next.
+ * one line, in Canvas 2D; step 3's feedback trails, in WebGL2 (trails.ts);
+ * and uploaded MilkDrop presets, through LANcast's own output pass (ADR 0091,
+ * MilkdropCanvas.tsx). Each tier gets its own canvas, because a canvas that
+ * has given out a 2D context will never give out a WebGL one. Between two
+ * trail presets the canvas and its buffers stay, so the trails of one become
+ * the next.
  *
  * Mounted by the provider as a sibling of `.playback__cover`, never inside or
  * beside `.playback__slot` (see the slot comment there, and
@@ -132,6 +135,8 @@ interface VizProps {
   running: boolean;
   calm: boolean;
   cover: string | undefined;
+  /** For the MilkDrop stage: the preset to play, and every stored one. */
+  milkdrop?: { preset: string; ids: string[] };
 }
 
 export function Visualizer(props: VizProps) {
@@ -141,6 +146,18 @@ export function Visualizer(props: VizProps) {
   paletteRef.current = palette;
   const analyserRef = useRef(props.analyser);
   analyserRef.current = props.analyser;
+  if (props.kind === "milkdrop") {
+    return (
+      <MilkdropCanvas
+        key="milkdrop"
+        preset={props.milkdrop?.preset ?? ""}
+        ids={props.milkdrop?.ids ?? []}
+        running={props.running}
+        calm={props.calm}
+        analyser={analyserRef}
+      />
+    );
+  }
   return isTrail(props.kind) ? (
     <TrailCanvas
       key="trails"
@@ -175,7 +192,7 @@ function ClassicCanvas({
   calm,
   analyser: analyserRef,
   palette: paletteRef,
-}: CanvasProps & { kind: "spectrum" | "scope" }) {
+}: CanvasProps & { kind: Exclude<VizKind, TrailId | "milkdrop"> }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
   useEffect(() => {
