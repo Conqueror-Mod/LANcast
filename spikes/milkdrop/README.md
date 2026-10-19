@@ -22,6 +22,7 @@
 | `browser/bc2.html` | butterchurn 2 handed the interpreter's closures, under `script-src 'self'`. |
 | `browser/common.js` | Synthetic music, readback, the flash detector, the limiter simulation and the gold sampler. |
 | `precedence/` | Written after the spike, for step f′: MilkDrop 2's own EEL front end built as a reference, and the corpus differential that found eel-wasm grouping `&`, `!` and `&&` unlike MilkDrop. Its README has the results. |
+| `shaders/` | Written after the spike, for step g: MilkDrop 2's HLSL shaders converted on the server, by the native converter built for WASI and run under wazero. Its README has the method; ADR 0091's amendment of 2026-10-19 has the results. |
 | `avs/*.mjs` | The AVS corpus: decode with webvsc, check webvs coverage, parse AVS expressions with `eel.mjs`. |
 | `results/` | Summaries of the runs quoted in the ADR. |
 

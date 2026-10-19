@@ -13,7 +13,6 @@
 import { W, H, violations, shaderFailures, setCurrent, audioAt, sample, stats } from "./common.js";
 import Butterchurn from "./butterchurn.min.js";
 
-const FRAMES = 90;
 const log = (s) => (document.getElementById("log").textContent = s + "\n" + document.getElementById("log").textContent.slice(0, 4000));
 document.getElementById("log").textContent = "";
 
@@ -29,9 +28,11 @@ let evalBlocked = false;
 try { new Function("return 1")(); } catch { evalBlocked = true; }
 
 const q = new URLSearchParams(location.search);
+const FRAMES = +(q.get("frames") || 90);
+const ONLY = q.get("only") ? new Set(q.get("only").split("|")) : null;
 const all = await (await fetch(q.get("set") || "presets.json")).json();
 const from = +(q.get("from") || 0), to = +(q.get("to") || all.length);
-const set = all.slice(from, to);
+const set = all.slice(from, to).filter((e) => !ONLY || ONLY.has(e.id.split("/").pop()));
 
 const results = [];
 window.__spike = { results, violations, shaderFailures, linkFailures, evalBlocked, lost: 0, done: false, total: set.length };
@@ -92,6 +93,8 @@ for (let i = 0; i < set.length; i++) {
     r.bareMs = stats(bare.ms);
     r.lum = +mean(sh.lum).toFixed(3);
     r.bareLum = +mean(bare.lum).toFixed(3);
+    r.lumTail = +mean(sh.lum.slice(-30)).toFixed(4);
+    r.bareLumTail = +mean(bare.lum.slice(-30)).toFixed(4);
     // A frame is "black" if its mean luminance is under 0.002.
     r.blackFrames = sh.lum.filter((l) => l < 0.002).length;
     r.bareBlackFrames = bare.lum.filter((l) => l < 0.002).length;

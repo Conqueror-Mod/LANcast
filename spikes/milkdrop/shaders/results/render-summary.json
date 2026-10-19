@@ -1,0 +1,32 @@
+{
+ "about": "browser/render.html over every 4th preset whose shaders all converted (1,107 of 4,433), 90 frames each run, vendored LANcast butterchurn 3 build, CSP script-src 'self' 'wasm-unsafe-eval', desktop app's built-in Chromium pane, 2026-10-19. 'ok' = no compile failure, no link failure and gl.getError() clean on every frame. diff = mean |luminance| difference per 32x18 cell between the run with shaders and the run without (noise floor 0.012, from the plain-copy control). 'black' = 60+ of 90 frames below 0.002 mean luminance with shaders while the run without was not.",
+ "controls": {
+  "undeclared identifier in comp": "1 compile failure, 1 link failure, gl error on 90/90 frames, mean luminance 0",
+  "comp paints white": "0 failures, luminance 1.0, diff 0.992",
+  "comp copies sampler_main": "0 failures, diff 0.0117"
+ },
+ "n": 1107,
+ "errors": [
+  ["presets-cream-of-the-crop/Particles/Points Trails/Flexi - space voyage [shifter's esc shader].milk", "float unrepresentable in integer range"],
+  ["presets-milkdrop-original/Milkdrop-Original/Flexi + Martin - astral projection.milk", "float unrepresentable in integer range"]
+ ],
+ "lost": 0,
+ "csp": ["script-src blocked eval"],
+ "evalBlocked": true,
+ "compiledAndLinked": 1099,
+ "failed": 6,
+ "shaderLogs": [
+  "EoS - glowsticks v2 04 music minimal - ghosts nz+18.milk: ERROR: 0:151: 'n' : undeclared identifier",
+  "Tripgnosis - Wormhole.milk: ERROR: 0:136: 'texsize_smalltiled_electric_nebula' : undeclared identifier",
+  "amandio c - fume (ATI)(1).milk: ERROR: 0:139: 'xlat_mutablen' : undeclared identifier",
+  "EVET - 3D Gravity Waves.milk: ERROR: 0:245: 'tele' : undeclared identifier",
+  "Zylot - Age of Science (seeking truth mix).milk: ERROR: 0:152: 'texsize_smalltiled_electric_nebula' : undeclared identifier",
+  "martin - organic light.milk: ERROR: 0:156: 'uv3' : undeclared identifier"
+ ],
+ "blackWithShaderNotWithout": 37,
+ "visible_diff_ge_0_02": 852,
+ "diff": {"p10": 0.005, "p50": 0.087, "p90": 0.476},
+ "lum": {"bare_p50": 0.012, "shader_p50": 0.053},
+ "frameMs": {"shader_p50": 3.2, "shader_p95_of_p95": 12.5, "bare_p50": 2.9, "bare_p95_of_p95": 12, "shader_worst_p95": 37.9},
+ "loadMs": {"shader_p50": 26.9, "shader_p99": 175.8, "bare_p50": 17.7}
+}

@@ -33,3 +33,17 @@ Optimisation level, on one trivial shader under a 10 s deadline:
   -Os                          never returns
   -Os -fno-delete-null-pointer-checks   never returns
   -Os -fno-strict-aliasing     ok   <- build.sh default
+
+Reproducibility: three builds (same tree twice, and a copy of the tree at another path) all gave
+  sha256 91babcc9…5aad1cf9. Not tried: another machine, or a second flex/bison run.
+
+Mutation probe (mutate.mjs, seed 7): 3,000 real prepared shaders with random byte edits,
+truncation, inserted tokens, repeated spans, deleted spans, or 200-20,200 nested parentheses;
+8 workers, 10 s deadline, 256 MiB ceiling.
+  exit codes: 0 converted 357, 1 HLSL parse error 2,430, 2 translation error 204,
+              4 glsl-optimizer refused 5, 5 empty 1,
+              -1 TRAP 2 ("wasm error: invalid table access": an indirect call through a corrupted
+                 function pointer -- in a native build, a crash or worse),
+              -2 DEADLINE 1 (never returned; closed by WithCloseOnContextDone at 10.0 s)
+  linear memory max 5,824 KiB. The host process survived all three and kept converting.
+  Not a coverage-guided fuzzer: it says these bugs exist, not how many.

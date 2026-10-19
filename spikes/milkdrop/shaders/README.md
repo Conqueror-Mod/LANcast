@@ -45,8 +45,9 @@ transcription of it, checked byte for byte against the shipped packs below.
 | `fidelity.mjs` | does the WASI build reproduce the native addon? Compares with butterchurn's packs. |
 | `post.mjs` | results → converted shaders per preset, failure reasons, texture needs. |
 | `bundle/main.go` | the browser set: reads each `.milk` with `internal/milkdrop`, adds the GLSL, and passes it back through `milkdrop.Parse` as butterchurn JSON. |
-| `browser/render.{html,js}` | butterchurn 3 (LANcast's vendored build) renders each preset twice, without and with its shaders, and records compile and link failures, GL errors, frame time and the difference. |
-| `results/` | the summaries quoted in the ADR. |
+| `browser/render.{html,js}` | butterchurn 3 (LANcast's vendored build) renders each preset twice, without and with its shaders, and records compile and link failures, GL errors, frame time and the difference. `?set=`, `?from=&to=`, `?frames=`, `?only=` (file names joined by a pipe). |
+| `mutate.mjs` | mutated real shaders, to see how the converter fails under the host: a refusal, a trap or a timeout. |
+| `results/` | the summaries quoted in the ADR: `convert-summary.json`, the two `fidelity-*.json`, `host-runs.txt` (timing, memory, size, optimisation levels, reproducibility, mutation probe), `render-summary.json`, `black-rerun.txt`, `output-pass.txt`. |
 
 ## Building it
 

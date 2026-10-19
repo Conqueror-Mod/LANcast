@@ -1,6 +1,6 @@
 # ADR 0091 — A MilkDrop preset is data, never code
 
-Date: 2026-10-18 · Status: **accepted** 2026-10-18 · Amended 2026-10-18 (step f′: operator precedence settled, eel-wasm patched)
+Date: 2026-10-18 · Status: **accepted** 2026-10-18 · Amended 2026-10-18 (step f′: operator precedence settled, eel-wasm patched) · Amended 2026-10-19 (step g: shaders convert on the server under wazero; build it, textures later)
 
 Chris asked whether LANcast could accept uploaded Winamp visualizations, so
 fewer would need building by hand. Now Playing shipped in v0.9.89. Its own
@@ -544,6 +544,9 @@ The remaining risks, plainly:
    - accept textures beside presets.
    - If that build is impractical, MilkDrop stays at step 1, and this ADR
      says so.
+   - *Spiked by the amendment of 2026-10-19:* the build is practical and
+     the results are good. Build it, with textures as a later step of their
+     own.
 7. **The output pass is mandatory.** One fragment shader after butterchurn:
    the luminance limiter (0.6/s, lower in Calm) and the gold guard.
    `prefers-reduced-motion` keeps MilkDrop from auto-starting. A per-preset
@@ -560,7 +563,7 @@ The remaining risks, plainly:
 | e | Client: output pass (limiter + gold guard), Calm and reduced-motion wiring, vitest for the maths the way `trailMath` is tested | M |
 | f | Verify on a TV and a phone: memory (128 MiB modules), frame time | S, but must happen before release |
 | f′ | Settle `&` precedence against Winamp's MilkDrop (eel-wasm's test-preset method); if eel-wasm is wrong, patch upstream or carry a patch | S — **done**: wrong, patch carried (amendment below); upstream issue drafted, not filed |
-| g | **Step 2 spike:** hlsl2glslfork + glsl-optimizer → WASI → wazero; texture uploads | unknown until spiked |
+| g | **Step 2 spike:** hlsl2glslfork + glsl-optimizer → WASI → wazero; texture uploads | **done** (amendment of 2026-10-19): proved; build steps g1–g5 below, textures deferred to h |
 
 The plan's other open item, a visualizer as a wazero plugin, is unaffected.
 A MilkDrop preset is data for a built-in engine, not a plugin.
@@ -671,3 +674,307 @@ patched compiler on all 73,013 blocks (`godiff.mjs`).
   (`buildTestPreset.js` generates it; a green screen confirms);
 - `?:`, which MilkDrop 2 parses and eel-wasm does not;
 - integer literals above 2³¹.
+
+## Amendment, 2026-10-19 — step g: the native converter runs under wazero, and should be built
+
+§4 left one question open: can the converter that made butterchurn's own
+preset packs run inside the LANcast server? It can. It was built from
+source for WASI, run under wazero over the whole corpus, and checked in a
+browser and in the real client. The record, scripts and raw summaries are
+in [spikes/milkdrop/shaders/](../../spikes/milkdrop/shaders/README.md).
+
+### Recommendation
+
+**Build it, in a narrower form than "every MilkDrop 2 preset as MilkDrop
+drew it".**
+- Convert a `.milk`'s warp and comp shaders **on the server, at upload**,
+  with the native converter compiled to WebAssembly and run under wazero.
+- A preset whose shaders do not all convert is stored exactly as step 1
+  stores it today: default shaders, labelled, with the converter's reason.
+  Nothing is refused that step 1 accepts.
+- **Textures are a separate later step (h).** Presets that name their own
+  image are 5.7% of those that convert, and butterchurn already draws them
+  with a stand-in image.
+- Keep the source HLSL server-side, so a better converter can re-convert
+  later without a re-upload.
+
+### 1. The chain, exactly
+
+butterchurn's packs come from `milkdrop-preset-converter-node`. Only one of
+its steps is native:
+
+| step | what | licence |
+|---|---|---|
+| `splitPreset`, `prepareShader` (`milkdrop-preset-utils` @ `ba5a4e4`) | pull the shader lines out; wrap the body in MilkDrop's header of samplers, `q1`–`q32` and `GetBlur` macros | MIT |
+| `convertHLSLString` (`milkdrop-shader-converter` @ `291c885`, 0.0.8) | **native**: HLSL → GLSL ES 3.00, then optimised | MIT |
+| ↳ `jberg/hlsl2glslfork` @ `fb01237` | Unity's HLSL parser and GLSL generator, with a cut-down mojoshader preprocessor | BSD-3 (Unity, BitSquid, ATI, 3Dlabs); the preprocessor was zlib |
+| ↳ `jberg/glsl-optimizer` @ `b8eba1e` | Unity's fork of Mesa's GLSL compiler | MIT (Brian Paul, Unity) |
+| `processOptimizedShader` (`milkdrop-preset-utils`) | trim the GLSL back to the `shader_body { }` butterchurn wraps at runtime | MIT |
+
+The module also links wasi-libc (MIT/Apache-2.0) and libc++ (Apache-2.0
+with LLVM exception). All of these are compatible with LANcast shipping
+them, with notices. The browser converter (`milkdrop-preset-converter`,
+hlslparser) is not in this chain. It is the broken one §4 measured.
+
+### 2. It builds from source, with one flag
+
+- **Toolchain:** wasi-sdk 34.0, checked against GitHub's published digest.
+  hlslang's parser was generated with Ubuntu's flex 2.6.4 and bison 3.8.2.
+  The repository's bundled `bison.exe`, `flex.exe` and Cygwin DLLs were not
+  run, and nothing else downloaded was run.
+- **Changes to the sources: none.** The spike adds a 40-line OS layer (an
+  8-slot table where Linux uses pthread keys) and a driver that is
+  `main.cpp` with its Node binding taken off.
+- **One flag is required, not optional: `-fno-strict-aliasing`.** Without
+  it, every optimised build (`-O1`, `-Os`) loops for ever inside
+  glsl-optimizer, while `-O0` works. Mesa's `exec_list` of this era reads
+  its sentinels through overlapping struct pointers. Found by bisecting:
+  trace points, then a native gcc build, then optimisation levels.
+- **Result:** `msc.wasm`, **1,225,443 bytes** (gzip 340 KB, xz 261 KB),
+  sha256 `91babcc9…5aad1cf9`. Three builds, one of them from a copy at
+  another path, gave the same hash.
+- **Its whole reach is 13 WASI imports:** args, environ, clock, `fd_*` on
+  the three standard streams, and `proc_exit`. There is no `path_open`, so
+  it could not name a file even if a directory were mounted. The host
+  mounts none, grants no environment, and adds no host functions.
+
+### 3. On the corpus: 96% of shaders, 93% of presets
+
+All 9,487 presets were run through it. 4,754 have a warp or comp shader,
+9,141 shaders in all.
+
+| | converted |
+|---|---|
+| shaders | **8,814 / 9,141 (96.4%)** |
+| presets with every shader converted | **4,433 / 4,754 (93.2%)** |
+| …original pack | 176 / 186 |
+| …cream of the crop | 3,714 / 4,012 |
+| …projectM classic | 543 / 556 |
+
+Failures:
+- **184** HLSL errors from hlsl2glslfork. Most often an undeclared
+  identifier (94) or an operator with no overload for its types (80).
+- **143** refusals from glsl-optimizer. Most often a parse error (76), an
+  array constructor with the wrong count (39), or a vector assigned to a
+  float (25).
+- These are the native converter's own limits, not the port's (§4 below).
+
+### 4. It is the native converter, byte for byte
+
+butterchurn's packs ship converted GLSL and no HLSL, so a pack preset was
+matched to the corpus `.milk` of the same name and the two outputs compared:
+
+| | shaders compared | byte-identical |
+|---|---|---|
+| `butterchurn-presets` 3.0.0-beta.4 (the v3 pack) | 390 | **388** |
+| `butterchurn-presets` 2.4.7 | 1,043 | **1,033** |
+
+- Every difference examined is a **different revision of the preset**, not
+  a different conversion. One has an extra `+ q5`. One has a comp that is
+  a different shader altogether. *ORB – Sandblade* has a `samples[4]` array
+  that the pack's version does not have.
+- A native build of the same sources (mingw-w64 gcc, x86-64) agrees with
+  the WASI build on **298 of 298** converted shaders, and on all 304 exit
+  codes, in a sample of every 30th.
+
+### 5. In WebGL 2, 99.5% compile and 77% visibly change the picture
+
+**The sample.** A quarter of the converted presets, 1,109, were read by
+`internal/milkdrop` as an upload is today. The GLSL was added, and the
+result handed back to `milkdrop.Parse` as butterchurn JSON:
+- **the server's own validator accepted all 1,107** whose EEL it accepts;
+- the other 2 have EEL typos and are refused today anyway.
+
+**How they were rendered.**
+- Each preset ran twice from a black frame in LANcast's vendored butterchurn
+  build, under the CSP `script-src 'self' 'wasm-unsafe-eval'`: once without
+  shaders (what step 1 shows), once with them.
+- That was 90 frames of synthetic music handed to `render()`. No audio
+  reached a speaker.
+- Positive controls ran first:
+  - a shader with an undeclared name registered 1 compile failure, 1 link
+    failure, a GL error every frame, and a black picture;
+  - a white comp read luminance 1.0;
+  - a plain copy read a difference of 0.012, which is the noise floor.
+
+| 1,105 that loaded (2 hit §3's WebAssembly trap in their EEL) | |
+|---|---|
+| compile, link and run with no GL error | **1,099 (99.5%)** |
+| compile failure | 6: four names the converter left undeclared (`n`, `xlat_mutablen`, `tele`, `uv3`), two `texsize_<texture>` (§7) |
+| picture differs from the shader-less run by ≥ 0.02 | **852 (77%)**; median difference 0.087 |
+| lost WebGL context | 0 |
+| CSP violations | only the page's own `new Function` probe |
+| frame time, p50 (with / without shaders) | 3.2 ms / 2.9 ms |
+| worst preset's p95 | 37.9 ms |
+| `loadPreset`, p50 / p99 | 26.9 / 175.8 ms (17.7 ms p50 without shaders) |
+
+**Black pictures.** 37 rendered black at 1.5 s where the shader-less run did
+not. They were rerun for 10 s:
+- 12 lit up: a slow warm-up. Three of those are byte-identical to
+  butterchurn's own packs.
+- 5 are dark with or without shaders.
+- **20 stay black with shaders and lit without**: 1.8% of the sample.
+  - No single feature separates them (3D noise, blur3, a texture, a loop
+    are all near their base rates).
+  - One, *Geiss – Digitunnel*, is byte-identical to butterchurn's own pack,
+    so butterchurn renders it black too.
+  - Whether MilkDrop does is **not known**.
+- butterchurn never checks `COMPILE_STATUS`, so a failed or black shader is
+  silent. That is the client's job (g4).
+
+### 6. Cost
+
+| | measured |
+|---|---|
+| per shader, one worker, wazero's compiler | p50 **~100 ms**, p99 125–210 ms, max 434 ms |
+| …of which fixed start-up | ~52 ms (a trivial shader): both compilers build their built-in tables in each fresh instance |
+| per preset (two shaders) | ~0.2 s, once, at upload |
+| whole corpus, 24 workers | 9,141 shaders in 58.6 s |
+| compiling the module | 0.55–0.64 s, once per process |
+| linear memory per instance | p50 3.7 MiB, max 5.9 MiB |
+| server memory | Go `Sys` 10 → 75 MiB once compiled and one shader converted |
+| wazero's interpreter instead | 11× slower (1.1 s a shader); not needed, as every release target is amd64 or arm64 |
+| release binary | +1.2 MB raw, or +0.34 MB gzipped and inflated on first use; LANcast.exe is 32.6 MB |
+
+**Does it fit "process execution stays split from parsing"?** Yes. That rule
+exists because ffmpeg is an external process: its result depends on the
+machine, the session (v0.8.0's DXVA2 failure), and what is installed, so a
+decision that needs it is untestable in milliseconds. A wazero call is
+none of those things:
+- it is a pure function of its input bytes;
+- it runs from a module compiled into the binary;
+- it gives the same answer in a unit test, a shell and session 0;
+- it touches no GPU, no PATH and no file.
+
+The rule's real point still applies, and the build should keep it:
+- `milkdrop.Parse` stays pure and fast;
+- conversion is a separate step the upload handler calls through an
+  interface, so handler tests use a fake;
+- the converter's own tests run the real module on fixtures.
+
+At ~100 ms a shader, a dozen fixtures cost about a second. The corpus test
+stays outside the repository, like step c's.
+
+### 7. Textures: what the server would need, and the limits
+
+After glsl-optimizer drops samplers a shader declares and never reads:
+- **254 of the 4,433** converted presets (5.7%) sample an image of their own;
+- 35 distinct names. The commonest are `rand00` (43), `seaweed` (38),
+  `cells` (31), `lichen` (23), `fw_clouds` (18) and `prayerwheel` (17).
+
+§4's "about a fifth" counted sampler names in the HLSL, used or not. This
+is the smaller number that matters.
+
+What butterchurn does today:
+- It binds each named texture it has been given (`loadExtraImages`), and
+  **otherwise a built-in stand-in (`clouds2`)**. So these presets already
+  render, with the wrong image.
+- It binds them at texture units 15, 16 and on. WebGL 2 guarantees only
+  16 units, so **one preset texture is all that is portable**. 4 presets
+  use two or more.
+- It declares no `texsize_<name>` uniform. The 13 presets that read their
+  texture's size cannot compile; the two in the browser sample did not.
+  - The server could replace that uniform with a constant, since it knows
+    the image's size, or butterchurn could be patched.
+  - Neither was tried.
+
+What a texture step would store and serve:
+- An admin uploads images into `<data>/visualizers/milkdrop/textures/`.
+  They are decoded and re-encoded as PNG on the server, so what is served
+  is pixels and nothing else.
+  - MilkDrop loaded textures through Direct3D's image loader, which also
+    reads formats browsers cannot (`.tga`, `.dds`), and Go's standard
+    library cannot read them either. Which formats real texture packs
+    use was not surveyed. Each would be a decoder to vet, or a format
+    refused.
+- Limits: a cap on dimensions, on count and on total size.
+- Names resolve as MilkDrop resolves them:
+  - the `fw_`/`fc_`/`pw_`/`pc_` prefixes choose filtering and wrap, and are
+    stripped for lookup;
+  - `randNN[_filter]` picks a random image whose name contains the
+    filter.
+- Served same-origin to signed-in clients, immutable by content hash, like
+  a preset.
+- Provenance is the murkiest of anything here (Licences, above). Like
+  presets, LANcast ships none.
+
+### 8. Safety
+
+**The converter has memory-safety bugs, and the sandbox contains them.**
+3,000 real shaders were mutated at random (byte edits, truncation, inserted
+tokens, repeated or deleted spans, deep nesting):
+- **2 trapped** with *invalid table access*, an indirect call through a
+  corrupted function pointer. In a native build that is a crash, or worse.
+- **1 never returned** and was closed at the 10 s deadline.
+- The host process converted on through all three.
+- So the converter must never run natively in the server. The deadline
+  belongs in the build: 3 s is about seven times the slowest real shader
+  with one worker (434 ms). So does a memory ceiling: 32 MiB is five
+  times the largest instance.
+- This was not a coverage-guided fuzzer. It shows that such bugs exist, not
+  how many there are.
+
+**What a converted shader can do** is what §4 said a JSON upload's GLSL
+can already do. It runs on the GPU behind ANGLE, sees only butterchurn's
+textures, and has no network, DOM or JavaScript. It is bounded by
+`MaxShaderBytes`: the largest converted preset is 23.7 KB for both
+shaders, against a limit of 64 KB each. The Security table stands as it
+is.
+
+**The output pass runs after preset shaders.** This was checked live, in
+the client embedded in a devseed build, on a scratch server and data dir.
+Playback was routed through Web Audio, with every connection to the
+speakers dropped.
+
+| uploaded preset, its comp shader | straight out of butterchurn | on screen, after the pass |
+|---|---|---|
+| full-field strobe, `step(0.5, fract(time*8.0))` | 59 of 120 frames black, mean 0.51 | luminance 0.06–0.17, ≤ 0.011 a frame, **0 flashes/s** |
+| solid amber, `vec3(1.0, 0.72, 0.1)` | an amber field | `(255, 56, 25)`, **0% gold** |
+| two real converted presets | — | 0.25 and 0.5 flashes/s, 0.2% and 0.8% gold |
+
+This is structural, not luck:
+- butterchurn renders warp and comp in its own WebGL context, into a canvas
+  never on the page;
+- `milkdropPass` uploads that canvas into a second context, which owns the
+  visible one;
+- a preset's shaders run only in the first.
+
+### Proved and not proved
+
+Proved, by measurement:
+- The native chain builds from source to a 1.2 MB WASI module, with
+  `-fno-strict-aliasing`, and runs under wazero with no capabilities
+  beyond standard streams.
+- It reproduces the native converter byte for byte.
+- It converts 96.4% of the corpus's shaders, and every shader of 93.2% of
+  its MilkDrop 2 presets, at ~0.1 s a shader.
+- The server's validator accepts its output.
+- 99.5% of a 1,105-preset sample compile and run in WebGL 2, and 77%
+  visibly change the picture.
+- The output pass limits and de-golds a preset's shaders.
+- Its crashes and hangs stay inside the sandbox.
+
+Not proved:
+- **Fidelity to Winamp's MilkDrop.** Agreement is with butterchurn's packs,
+  which come from the same converter. 20 presets (1.8%) render black for an
+  unknown reason.
+- **A TV or a phone.** Shader cost there is unmeasured. This is step f's
+  open question, with heavier presets.
+- **Textures**, beyond counting them; the `texsize_` fix.
+- **The installed service.** No GPU or ffmpeg is involved, so session 0
+  should not matter. The swap-the-build check is still owed when g ships.
+- A reproducible build on another machine, or from a fresh flex/bison run.
+
+### Decision
+
+Step g is **build**, as g1–g5. Textures become step h, with its own
+decision once g has shipped.
+
+| Step | What | Size |
+|---|---|---|
+| g1 | Vendor the converter: pinned sources and submodules, the OS layer and driver, a build script pinned to wasi-sdk 34 with `-fno-strict-aliasing`, a reproducible-hash proof, `msc.wasm` (gzipped) checked in with its licences and notices, and a test pinning its hash | M |
+| g2 | Server: `internal/milkdrop` gains a converter behind an interface. wazero compiler, one compiled module, a fresh instance per shader, 3 s deadline, 32 MiB ceiling, one conversion at a time, compiled on first use. The string steps either side are ported to Go, with in-repo fixtures of LANcast's own shaders and a corpus diff against `pipeline.mjs` kept outside the repo | M |
+| g3 | Upload: a `.milk` with shaders is converted. `shaders` is `converted`, or `not_converted` with the converter's first error line. The source HLSL is kept server-side and not served. `docs/api.md` and `openapi.json` gain the reason field | S–M |
+| g4 | Client: check `COMPILE_STATUS` and `LINK_STATUS` of a preset's shaders. On failure, reload it with the default shaders and say so, rather than show black | S |
+| g5 | Verify: swap the build into the installed service and upload a few presets. Rerun the browser sample against the shipped client | S |
+| h | Textures (§7): upload, re-encode, name resolution, `texsize_`; its own spike for TGA/DDS and the one-unit limit | later |
