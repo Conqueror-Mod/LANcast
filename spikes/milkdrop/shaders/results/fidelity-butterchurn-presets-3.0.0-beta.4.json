@@ -1,0 +1,20 @@
+{
+ "tally": {
+  "warp: identical": 190,
+  "comp: identical": 198,
+  "comp: neither": 117,
+  "warp: pack has shader, no corpus match": 203,
+  "comp: pack has shader, no corpus match": 189,
+  "warp: neither": 109,
+  "warp: differs": 1,
+  "warp: pack converted, WASI failed": 1
+ },
+ "examples": {
+  "differs": [
+   "martin - baby one more time#warp"
+  ],
+  "wasiFailed": [
+   "orb - sandblade#warp rc=4"
+  ]
+ }
+}
