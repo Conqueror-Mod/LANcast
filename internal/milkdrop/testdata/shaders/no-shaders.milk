@@ -1,0 +1,4 @@
+[preset00]
+MILKDROP_PRESET_VERSION=100
+fDecay=0.980000
+per_frame_1=zoom = 1.0 + 0.01*sin(time);

@@ -1,0 +1,9 @@
+[preset00]
+MILKDROP_PRESET_VERSION=201
+PSVERSION=2
+fDecay=0.990000
+per_frame_1=wave_r = 0.5;
+comp_1=`shader_body
+comp_2=`{
+comp_3=`    ret = 1 - GetPixel(uv);
+comp_4=`}

@@ -1,0 +1,4 @@
+# Fixtures are read byte for byte, and comp-only-crlf.milk is CRLF on purpose:
+# a .milk from Windows is, and the split must handle it as pipeline.mjs does.
+*.milk -text
+golden.json -text

@@ -32,6 +32,7 @@ import (
 	"lancast/internal/marker"
 	"lancast/internal/meta"
 	"lancast/internal/milkdrop"
+	"lancast/internal/milkdrop/msc"
 	"lancast/internal/photo"
 	"lancast/internal/presence"
 	"lancast/internal/probe"
@@ -237,6 +238,10 @@ type Server struct {
 	raCache *raCache
 	// presets is the MilkDrop presets an administrator uploaded (ADR 0091).
 	presets *milkdrop.Store
+	// shaders converts a .milk's HLSL at upload (ADR 0091, step g): the
+	// native converter compiled to WebAssembly, run under wazero. Compiled on
+	// the first upload that needs it. Tests may swap in a fake.
+	shaders milkdrop.ShaderConverter
 	// passkeyChallenges holds issued WebAuthn challenges (ADR 0082), and
 	// passkeyRPFor replaces the RP check in tests, whose server has no TLS.
 	passkeyChallenges *passkey.Challenges
@@ -348,6 +353,7 @@ func New(d Deps) *Server {
 		prober:            probe.New(),
 		events:            events.New(0),
 		presets:           milkdrop.NewStore(filepath.Join(d.DataDir, "visualizers", "milkdrop")),
+		shaders:           msc.New(),
 
 		peerKick:     make(chan string, 16),
 		presenceSeen: map[string]string{},

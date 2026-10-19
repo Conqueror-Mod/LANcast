@@ -12763,7 +12763,7 @@
           "visualizers"
         ],
         "summary": "Upload one preset",
-        "description": "**Administrators only.** A preset is something every signed-in person's browser will run, so choosing what is on the server is an administrator's act (ADR 0091).\n\nThe body is the file, at most 512 KB: a `.milk`, or butterchurn 3's JSON. The format is decided by the content, not the extension. A `.milk`'s HLSL shaders are dropped (`shaders: not_converted`). A JSON upload is validated key by key: any unknown key is refused, and butterchurn 2's JavaScript (`*_eqs_str`) is refused by name.\n\n**Every equation block butterchurn would compile is parsed, never evaluated**, in eel-wasm's dialect. A preset eel-wasm would refuse is refused here with where and why, rather than rendering black on every screen. So is one over the limits: a block over 64 KB, nesting over 128 deep, loops nested more than 4 deep, a literal `loop()` count above 1,048,576.\n\nRecorded as `visualizer.preset.upload`.",
+        "description": "**Administrators only.** A preset is something every signed-in person's browser will run, so choosing what is on the server is an administrator's act (ADR 0091).\n\nThe body is the file, at most 512 KB: a `.milk`, or butterchurn 3's JSON. The format is decided by the content, not the extension. A `.milk`'s HLSL shaders are converted to GLSL here, at upload, by butterchurn's own native converter compiled to WebAssembly and run in a sandbox with no files, 3 s and 32 MiB a shader (ADR 0091, step g). When one does not convert the preset is stored all the same, with butterchurn's default shaders, `shaders: not_converted` and the converter's reason in `shaders_reason`: a shader is never a reason to refuse an upload. The HLSL is kept on the server and never served.\n\nRe-uploading a `.milk` that was stored without its shaders (by v0.9.92, or because they did not convert then), when they now convert, gives one preset rather than two: the converted preset takes the old one's place and name under a new id, and the old id is gone. When they still do not convert, the answer is `200` with the same id, now carrying `shaders_reason`. A JSON upload is validated key by key: any unknown key is refused, and butterchurn 2's JavaScript (`*_eqs_str`) is refused by name.\n\n**Every equation block butterchurn would compile is parsed, never evaluated**, in eel-wasm's dialect. A preset eel-wasm would refuse is refused here with where and why, rather than rendering black on every screen. So is one over the limits: a block over 64 KB, nesting over 128 deep, loops nested more than 4 deep, a literal `loop()` count above 1,048,576.\n\nRecorded as `visualizer.preset.upload`.",
         "parameters": [
           {
             "name": "filename",
@@ -20522,7 +20522,11 @@
               "not_converted",
               "converted"
             ],
-            "description": "`none`: the preset has no shaders. `not_converted`: a `.milk` whose HLSL shaders were dropped, because no converter yet produces GLSL that compiles (ADR 0091 §4); it plays with butterchurn's default shaders, **and a client should say so**. `converted`: butterchurn JSON carrying GLSL."
+            "description": "`none`: the preset has no shaders. `not_converted`: a `.milk` whose HLSL shaders did not all convert, or that was uploaded before the server converted shaders (v0.9.92); it plays with butterchurn's default shaders, **and a client should say so**. `converted`: a `.milk` whose shaders were converted at upload, or butterchurn JSON carrying GLSL."
+          },
+          "shaders_reason": {
+            "type": "string",
+            "description": "Only with `not_converted`, and only when the reason is known: the shader, then the converter's first error line, such as `warp: HLSL parse error:(141): ERROR: 'double3' : undeclared identifier`. The line number counts from the header the server wraps the shader in, not from the `.milk`. Absent for a preset uploaded before the server converted shaders."
           },
           "size_bytes": {
             "type": "integer",

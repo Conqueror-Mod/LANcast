@@ -5819,9 +5819,16 @@ stored is JavaScript.
 
 Two formats are accepted, told apart by content rather than extension:
 
-- **`.milk`**, as MilkDrop writes it. Its HLSL shaders are **dropped** — there
-  is no converter yet whose output compiles (ADR 0091 §4) — so the preset plays
-  with butterchurn's default shaders and is marked `"shaders": "not_converted"`.
+- **`.milk`**, as MilkDrop writes it. Its HLSL warp and comp shaders are
+  **converted to GLSL on the server, at upload** (ADR 0091, step g), by
+  butterchurn's own native converter compiled to WebAssembly and run in a
+  sandbox: no files, no network, 3 s and 32 MiB per shader. When every shader
+  converts the preset carries them (`"shaders": "converted"`). When one does
+  not, the preset is still stored, exactly as it would have been without a
+  converter: butterchurn's default shaders, `"shaders": "not_converted"`, and
+  the converter's reason in `shaders_reason`. A shader is never a reason to
+  refuse an upload. The HLSL is kept on the server, so a later converter can
+  convert it again, and is never served.
 - **butterchurn 3 JSON** (`baseVals`, `*_eqs_eel`, GLSL `warp`/`comp`,
   `shapes`, `waves`). Accepted after key validation: any unknown key is
   refused, and butterchurn 2's JavaScript (`*_eqs_str`) is refused by name.
@@ -5849,7 +5856,15 @@ Every preset, by name.
   preset uploaded twice is one preset.
 - `source` is `milk` or `json`.
 - `shaders` is `none` (the preset has none), `not_converted` (a `.milk` whose
-  HLSL was dropped; say so) or `converted` (JSON carrying GLSL).
+  shaders did not all convert, so it plays with butterchurn's defaults; say
+  so) or `converted` (a `.milk` whose shaders converted, or JSON carrying
+  GLSL).
+- `shaders_reason` is present only with `not_converted`, when the reason is
+  known: the shader, then the converter's first error line —
+  `"warp: HLSL parse error:(141): ERROR: 'double3' : undeclared identifier"`.
+  The line number counts from the header the server wraps the shader in, not
+  from the `.milk`. A preset uploaded before the server could convert shaders
+  (v0.9.92) has `not_converted` and no reason.
 - `size_bytes` is the size of the preset as `GET …/{id}` serves it.
 
 ### `POST /api/visualizers/milkdrop?filename=`
@@ -5860,7 +5875,15 @@ extension are removed, and it never becomes a path: the stored file is named
 by the preset's hash.
 
 `201` with the summary above for a new preset; `200` with the existing one's
-summary, name unchanged, when the same preset is already here. A refusal is
+summary, name unchanged, when the same preset is already here.
+
+Re-uploading a `.milk` that was stored without its shaders — by v0.9.92, which
+dropped them, or because they did not convert then — and whose shaders now
+convert gives **one** preset, not two: the converted preset takes the old one's
+place and its name, under a new `id` (the old `id` is then `404`). Its upload
+is `201`, and recorded with the old `id` as `replaces`. Re-uploading one whose
+shaders still do not convert is `200` with the same `id`, now carrying
+`shaders_reason`. A refusal is
 `400` with code `invalid_preset` and a message naming the place, as the person
 would find it in the file:
 
@@ -5881,6 +5904,7 @@ runs is checked, and only what was checked is stored. `Cache-Control` is
 
 ```json
 { "id": "3f1c…", "name": "…", "source": "milk", "shaders": "not_converted",
+  "shaders_reason": "comp: glsl-optimizer: (127,27): error: array constructor must have exactly 4 parameters",
   "size_bytes": 5120, "uploaded_at": 1760832000,
   "preset": {
     "version": 2,

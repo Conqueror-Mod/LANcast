@@ -5,19 +5,23 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"time"
 
 	"lancast/internal/milkdrop"
 )
 
 /*
- * MilkDrop presets (ADR 0091, step b).
+ * MilkDrop presets (ADR 0091, steps b and g3).
  *
  * An administrator uploads a preset, the server reads and checks it, and
  * every signed-in window can then list it and fetch it to play. The checks are
  * the whole of the ADR's security argument on the server side: a .milk or
  * butterchurn JSON either becomes numbers, EEL that internal/milkdrop/eel has
- * parsed, and (for JSON) GLSL — or it is refused with the line and the reason.
- * Nothing in a preset is ever run here.
+ * parsed, and GLSL — or it is refused with the line and the reason. Nothing in
+ * a preset is ever run here as code. A .milk's HLSL shaders are converted to
+ * that GLSL by a converter that runs inside wazero's sandbox, with no files
+ * and a deadline (internal/milkdrop/msc); one that will not convert is stored
+ * with butterchurn's defaults and the converter's reason, never refused.
  *
  * The body of an upload is the file itself, as a plugin bundle's is, and the
  * filename rides in `?filename=` because it is only ever a display name. It
@@ -83,7 +87,23 @@ func (s *Server) uploadMilkdrop(w http.ResponseWriter, r *http.Request) {
 		s.writeInternal(w, err, "read milkdrop preset")
 		return
 	}
-	sm, created, err := s.presets.Put(u)
+	// Parse has accepted it; now its shaders, if it has any. A shader that
+	// will not convert is not a refusal — the preset is stored as step 1
+	// stored it, with the converter's reason — so the only errors here are a
+	// request that ended, which stores nothing, and a converter that is
+	// itself broken, which is logged and stored past.
+	t0 := time.Now()
+	if err := milkdrop.ConvertShaders(r.Context(), s.shaders, &u); err != nil {
+		if r.Context().Err() != nil {
+			return
+		}
+		s.log.Error("milkdrop shader converter failed", "name", u.Name, "error", err)
+	}
+	if u.HLSL != nil {
+		s.log.Info("milkdrop shaders", "name", u.Name, "shaders", u.Shaders,
+			"reason", u.ShadersReason, "ms", time.Since(t0).Milliseconds())
+	}
+	sm, created, replaced, err := s.presets.Put(u)
 	if err != nil {
 		s.writeInternal(w, err, "store milkdrop preset")
 		return
@@ -92,9 +112,15 @@ func (s *Server) uploadMilkdrop(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, sm)
 		return
 	}
+	details := map[string]any{"name": sm.Name, "source": sm.Source, "shaders": sm.Shaders}
+	if sm.ShadersReason != "" {
+		details["shaders_reason"] = sm.ShadersReason
+	}
+	if replaced != "" {
+		details["replaces"] = replaced
+	}
 	s.audit(r, "visualizer.preset.upload", "milkdrop_preset", sm.ID,
-		fmt.Sprintf("Uploaded MilkDrop preset %q", sm.Name),
-		map[string]any{"name": sm.Name, "source": sm.Source, "shaders": sm.Shaders})
+		fmt.Sprintf("Uploaded MilkDrop preset %q", sm.Name), details)
 	writeJSON(w, http.StatusCreated, sm)
 }
 
