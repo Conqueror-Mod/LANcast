@@ -1,0 +1,181 @@
+MILKDROP_PRESET_VERSION=201
+PSVERSION=2
+PSVERSION_WARP=2
+PSVERSION_COMP=2
+[preset00]
+per_frame_1=q1 = 1;
+per_frame_2=monitor = -1;
+per_frame_3=// 1: Exponentiation associativity
+per_frame_4=g = 0; // Reset
+per_frame_5=x = 10; // Reset
+per_frame_6=g = 2 ^ 2 ^ 4;
+per_frame_7=pass = g == 256;
+per_frame_8=monitor = if(!pass && monitor == -1, 1, monitor);
+per_frame_9=q1 = q1 && pass;
+per_frame_10=// 2: ^ has lower precedence than * (left)
+per_frame_11=g = 0; // Reset
+per_frame_12=x = 10; // Reset
+per_frame_13=g = 2 ^ 2 * 4;
+per_frame_14=pass = g == 16;
+per_frame_15=monitor = if(!pass && monitor == -1, 2, monitor);
+per_frame_16=q1 = q1 && pass;
+per_frame_17=// 3: ^ has lower precedence than * (right)
+per_frame_18=g = 0; // Reset
+per_frame_19=x = 10; // Reset
+per_frame_20=g = 2 * 2 ^ 4;
+per_frame_21=pass = g == 32;
+per_frame_22=monitor = if(!pass && monitor == -1, 3, monitor);
+per_frame_23=q1 = q1 && pass;
+per_frame_24=// 4: % has lower precedence than * (right)
+per_frame_25=g = 0; // Reset
+per_frame_26=x = 10; // Reset
+per_frame_27=g = 2 * 5 % 2;
+per_frame_28=pass = g == 2;
+per_frame_29=monitor = if(!pass && monitor == -1, 4, monitor);
+per_frame_30=q1 = q1 && pass;
+per_frame_31=// 5: % has lower precedence than * (left)
+per_frame_32=g = 0; // Reset
+per_frame_33=x = 10; // Reset
+per_frame_34=g = 2 % 5 * 2;
+per_frame_35=pass = g == 4;
+per_frame_36=monitor = if(!pass && monitor == -1, 5, monitor);
+per_frame_37=q1 = q1 && pass;
+per_frame_38=// 6: % and ^ have the same precedence (% first)
+per_frame_39=g = 0; // Reset
+per_frame_40=x = 10; // Reset
+per_frame_41=g = 2 % 5 ^ 2;
+per_frame_42=pass = g == 4;
+per_frame_43=monitor = if(!pass && monitor == -1, 6, monitor);
+per_frame_44=q1 = q1 && pass;
+per_frame_45=// 7: % and ^ have the same precedence (^ first)
+per_frame_46=g = 0; // Reset
+per_frame_47=x = 10; // Reset
+per_frame_48=g = 2 ^ 5 % 2;
+per_frame_49=pass = g == 0;
+per_frame_50=monitor = if(!pass && monitor == -1, 7, monitor);
+per_frame_51=q1 = q1 && pass;
+per_frame_52=// 8: & is looser than - (left)
+per_frame_53=g = 0; // Reset
+per_frame_54=x = 10; // Reset
+per_frame_55=g = 5 - 3 & 6;
+per_frame_56=pass = g == 2;
+per_frame_57=monitor = if(!pass && monitor == -1, 8, monitor);
+per_frame_58=q1 = q1 && pass;
+per_frame_59=// 9: & is looser than - (right)
+per_frame_60=g = 0; // Reset
+per_frame_61=x = 10; // Reset
+per_frame_62=g = 2 & 3 - 1;
+per_frame_63=pass = g == 2;
+per_frame_64=monitor = if(!pass && monitor == -1, 9, monitor);
+per_frame_65=q1 = q1 && pass;
+per_frame_66=// 10: & is looser than *
+per_frame_67=g = 0; // Reset
+per_frame_68=x = 10; // Reset
+per_frame_69=g = 6 & 3 * 2;
+per_frame_70=pass = g == 6;
+per_frame_71=monitor = if(!pass && monitor == -1, 10, monitor);
+per_frame_72=q1 = q1 && pass;
+per_frame_73=// 11: | is looser than +
+per_frame_74=g = 0; // Reset
+per_frame_75=x = 10; // Reset
+per_frame_76=g = 1 + 2 | 4;
+per_frame_77=pass = g == 7;
+per_frame_78=monitor = if(!pass && monitor == -1, 11, monitor);
+per_frame_79=q1 = q1 && pass;
+per_frame_80=// 12: & is tighter than |
+per_frame_81=g = 0; // Reset
+per_frame_82=x = 10; // Reset
+per_frame_83=g = 1 | 2 & 3;
+per_frame_84=pass = g == 3;
+per_frame_85=monitor = if(!pass && monitor == -1, 12, monitor);
+per_frame_86=q1 = q1 && pass;
+per_frame_87=// 13: & is looser than ^
+per_frame_88=g = 0; // Reset
+per_frame_89=x = 10; // Reset
+per_frame_90=g = 3 & 6 ^ 2;
+per_frame_91=pass = g == 0;
+per_frame_92=monitor = if(!pass && monitor == -1, 13, monitor);
+per_frame_93=q1 = q1 && pass;
+per_frame_94=// 14: Unary - is tighter than &
+per_frame_95=g = 0; // Reset
+per_frame_96=x = 10; // Reset
+per_frame_97=g = -3 & 5;
+per_frame_98=pass = g == 5;
+per_frame_99=monitor = if(!pass && monitor == -1, 14, monitor);
+per_frame_100=q1 = q1 && pass;
+per_frame_101=// 15: Unary - is looser than ^
+per_frame_102=g = 0; // Reset
+per_frame_103=x = 10; // Reset
+per_frame_104=g = -2 ^ 2;
+per_frame_105=pass = g == -4;
+per_frame_106=monitor = if(!pass && monitor == -1, 15, monitor);
+per_frame_107=q1 = q1 && pass;
+per_frame_108=// 16: ^ takes a signed right operand
+per_frame_109=g = 0; // Reset
+per_frame_110=x = 10; // Reset
+per_frame_111=g = 2 ^ -1;
+per_frame_112=pass = g == 0.5;
+per_frame_113=monitor = if(!pass && monitor == -1, 16, monitor);
+per_frame_114=q1 = q1 && pass;
+per_frame_115=// 17: ! is tighter than * (zero)
+per_frame_116=g = 0; // Reset
+per_frame_117=x = 10; // Reset
+per_frame_118=g = !0 * 0;
+per_frame_119=pass = g == 0;
+per_frame_120=monitor = if(!pass && monitor == -1, 17, monitor);
+per_frame_121=q1 = q1 && pass;
+per_frame_122=// 18: ! is tighter than *
+per_frame_123=g = 0; // Reset
+per_frame_124=x = 10; // Reset
+per_frame_125=g = !0 * 2;
+per_frame_126=pass = g == 2;
+per_frame_127=monitor = if(!pass && monitor == -1, 18, monitor);
+per_frame_128=q1 = q1 && pass;
+per_frame_129=// 19: && is looser than comparisons
+per_frame_130=g = 0; // Reset
+per_frame_131=x = 10; // Reset
+per_frame_132=g = 1 > 0 && 0 > 1;
+per_frame_133=pass = g == 0;
+per_frame_134=monitor = if(!pass && monitor == -1, 19, monitor);
+per_frame_135=q1 = q1 && pass;
+per_frame_136=// 20: && is looser than +
+per_frame_137=g = 0; // Reset
+per_frame_138=x = 10; // Reset
+per_frame_139=g = 1 + 1 && 0;
+per_frame_140=pass = g == 0;
+per_frame_141=monitor = if(!pass && monitor == -1, 20, monitor);
+per_frame_142=q1 = q1 && pass;
+per_frame_143=// 21: || is looser than comparisons
+per_frame_144=g = 0; // Reset
+per_frame_145=x = 10; // Reset
+per_frame_146=g = 0 || 3 > 2;
+per_frame_147=pass = g == 1;
+per_frame_148=monitor = if(!pass && monitor == -1, 21, monitor);
+per_frame_149=q1 = q1 && pass;
+per_frame_150=// 22: Comparisons are looser than &
+per_frame_151=g = 0; // Reset
+per_frame_152=x = 10; // Reset
+per_frame_153=g = 1 == 1 & 1;
+per_frame_154=pass = g == 1;
+per_frame_155=monitor = if(!pass && monitor == -1, 22, monitor);
+per_frame_156=q1 = q1 && pass;
+per_frame_157=// 23: Comparisons are right associative
+per_frame_158=g = 0; // Reset
+per_frame_159=x = 10; // Reset
+per_frame_160=g = 1 < 2 < 3;
+per_frame_161=pass = g == 0;
+per_frame_162=monitor = if(!pass && monitor == -1, 23, monitor);
+per_frame_163=q1 = q1 && pass;
+warp_1=`shader_body
+warp_2=`{
+warp_3=`    // sample previous frame
+warp_4=`    ret = tex2D( sampler_main, uv ).xyz;
+warp_5=`}
+comp_1=`shader_body
+comp_2=`{
+comp_3=`    if(q1) {
+comp_4=`      ret = float3(0,1,0);
+comp_5=`    } else {
+comp_6=`      ret = float3(1,0,0);
+comp_7=`    }
+comp_8=`}

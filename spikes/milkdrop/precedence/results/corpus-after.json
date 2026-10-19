@@ -1,0 +1,101 @@
+{
+ "stats": {
+  "blocks": 41283,
+  "empty": 31730,
+  "md2err": 1,
+  "ewerr": 4,
+  "bothParsed": 41278,
+  "treeDiff": 24,
+  "valueDiff": 20
+ },
+ "presets": {
+  "all": 9487,
+  "treeDiff": 18,
+  "valueDiff": 14
+ },
+ "pairs": [
+  {
+   "split": "num | num",
+   "stmts": 32,
+   "valueStmts": 32,
+   "presets": 11,
+   "valuePresets": 11,
+   "examples": [
+    {
+     "file": "no rules, no judgement, only hate.milk",
+     "block": "wave0.point",
+     "md2": "2147483647",
+     "ew": "321572340875",
+     "value": true
+    },
+    {
+     "file": "no rules, no judgement, only hate.milk",
+     "block": "wave0.point",
+     "md2": "2147483647",
+     "ew": "189678575575",
+     "value": true
+    },
+    {
+     "file": "no rules, no judgement, only hate.milk",
+     "block": "wave0.point",
+     "md2": "2147483647",
+     "ew": "5865827340875",
+     "value": true
+    }
+   ]
+  },
+  {
+   "split": "+ | seq",
+   "stmts": 4,
+   "valueStmts": 0,
+   "presets": 4,
+   "valuePresets": 0,
+   "examples": [
+    {
+     "file": "more breedre presets.milk",
+     "block": "shape3.init",
+     "md2": "(+ (seq (= sample (/ index n)) (= nc 8) (= size 8) (= spacing 4) (= height 2) (= width 1) (= ss (* (* 4 nc) sample)) (= s0 (% (* nc sample) nc)) (= s1 (neg (call:floor (* nc sample)))) (= c (- (* 4 s0",
+     "ew": "(seq (= sample (/ index n)) (= nc 8) (= size 8) (= spacing 4) (= height 2) (= width 1) (= ss (* (* 4 nc) sample)) (= s0 (% (* nc sample) nc)) (= s1 (neg (call:floor (* nc sample)))) (= c (- (* 4 s0) (",
+     "value": false
+    },
+    {
+     "file": "amandio c - interference pattern 5.milk",
+     "block": "shape0.init",
+     "md2": "(+ (seq (= sample (/ index n)) (= nc 10) (= size 8) (= spacing 4) (= height 2) (= width 1) (= ss (* (* 4 nc) sample)) (= s0 (% (* nc sample) nc)) (= s1 (neg (call:floor (* nc sample)))) (= c (- (* 4 s",
+     "ew": "(seq (= sample (/ index n)) (= nc 10) (= size 8) (= spacing 4) (= height 2) (= width 1) (= ss (* (* 4 nc) sample)) (= s0 (% (* nc sample) nc)) (= s1 (neg (call:floor (* nc sample)))) (= c (- (* 4 s0) ",
+     "value": false
+    }
+   ]
+  },
+  {
+   "split": ">= | call:_aboeq",
+   "stmts": 18,
+   "valueStmts": 18,
+   "presets": 3,
+   "valuePresets": 3,
+   "examples": [
+    {
+     "file": "Stahlregen + Flexi - dots (layered - wavepool).milk",
+     "block": "shape0.frame",
+     "md2": "(>= (call:rand 2) 1)",
+     "ew": "(call:_aboeq (call:rand 2) 1)",
+     "value": true
+    },
+    {
+     "file": "Stahlregen + Flexi - dots (layered - wavepool).milk",
+     "block": "shape0.frame",
+     "md2": "(>= (call:rand 2) 1)",
+     "ew": "(call:_aboeq (call:rand 2) 1)",
+     "value": true
+    },
+    {
+     "file": "Stahlregen + Flexi - dots (layered - wavepool).milk",
+     "block": "shape1.frame",
+     "md2": "(>= (call:rand 2) 1)",
+     "ew": "(call:_aboeq (call:rand 2) 1)",
+     "value": true
+    }
+   ]
+  }
+ ]
+}

@@ -1,0 +1,32 @@
+{
+ "tally": {
+  "warp: pack has shader, no corpus match": 626,
+  "comp: pack has shader, no corpus match": 594,
+  "warp: identical": 510,
+  "comp: identical": 523,
+  "comp: neither": 631,
+  "warp: neither": 612,
+  "warp: differs": 3,
+  "comp: differs": 3,
+  "comp: pack converted, WASI failed": 2,
+  "warp: pack converted, WASI failed": 2,
+  "warp: pack empty, corpus has shader": 1,
+  "comp: pack empty, corpus has shader": 1
+ },
+ "examples": {
+  "differs": [
+   "flexi - lorenz attractor#warp",
+   "flexi - lorenz attractor#comp",
+   "flexi - the distant point between#warp",
+   "martin - baby one more time#warp",
+   "martin - diamond cutter#comp",
+   "martin - time machine#comp"
+  ],
+  "wasiFailed": [
+   "martin - on silent paths#comp rc=1",
+   "martin - volcano#warp rc=1",
+   "orb - quicksand lab#comp rc=4",
+   "orb - sandblade#warp rc=4"
+  ]
+ }
+}

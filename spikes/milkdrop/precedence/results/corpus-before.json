@@ -1,0 +1,557 @@
+{
+ "stats": {
+  "blocks": 41283,
+  "empty": 31730,
+  "md2err": 1,
+  "ewerr": 4,
+  "bothParsed": 41278,
+  "treeDiff": 4854,
+  "valueDiff": 137
+ },
+ "presets": {
+  "all": 9487,
+  "treeDiff": 2733,
+  "valueDiff": 124
+ },
+ "pairs": [
+  {
+   "split": "* | neg",
+   "stmts": 7333,
+   "valueStmts": 4,
+   "presets": 2407,
+   "valuePresets": 4,
+   "examples": [
+    {
+     "file": "271 nz+ m1 w2 i love life so much i can't stand it.milk",
+     "block": "wave0.point",
+     "md2": "(* (neg sample) 0.2)",
+     "ew": "(neg (* sample 0.2))",
+     "value": false
+    },
+    {
+     "file": "271 nz+ m1 w2 i love life so much i can't stand it.milk",
+     "block": "wave1.point",
+     "md2": "(* (neg sample) 0.4)",
+     "ew": "(neg (* sample 0.4))",
+     "value": false
+    },
+    {
+     "file": "Idiot - Typomatic (Remix 2).milk",
+     "block": "pixel",
+     "md2": "(* (neg rot) (call:sin (- (- (+ rad x) (call:tan ang)) (call:cos (* x q3)))))",
+     "ew": "(neg (* rot (call:sin (- (- (+ rad x) (call:tan ang)) (call:cos (* x q3))))))",
+     "value": true
+    }
+   ]
+  },
+  {
+   "split": "/ | neg",
+   "stmts": 934,
+   "valueStmts": 0,
+   "presets": 592,
+   "valuePresets": 0,
+   "examples": [
+    {
+     "file": "LuxXx - Molton Bouncybugs.milk",
+     "block": "pixel",
+     "md2": "(/ (* (* (* (neg 0.5) (call:sin q1)) (call:sign (- isleftytonosy 0.5))) (call:sqr dist)) (- 0.5 q2))",
+     "ew": "(neg (/ (* (* (* 0.5 (call:sin q1)) (call:sign (- isleftytonosy 0.5))) (call:sqr dist)) (- 0.5 q2)))",
+     "value": false
+    },
+    {
+     "file": "LuxXx - disconuggets bleeding color outsiz1dsf.milk",
+     "block": "pixel",
+     "md2": "(/ (* (* (* (neg 0.5) (call:sin q1)) (call:sign (- isleftytonosy 0.5))) (call:sqr dist)) (- 0.5 q2))",
+     "ew": "(neg (/ (* (* (* 0.5 (call:sin q1)) (call:sign (- isleftytonosy 0.5))) (call:sqr dist)) (- 0.5 q2)))",
+     "value": false
+    }
+   ]
+  },
+  {
+   "split": "& | *",
+   "stmts": 238,
+   "valueStmts": 197,
+   "presets": 65,
+   "valuePresets": 48,
+   "examples": [
+    {
+     "file": "i am only here to die slowly in pain.milk",
+     "block": "pixel",
+     "md2": "(& 0 (* (+ 4 (* 2 (call:sin (+ (* rad 20) time)))) 0.1))",
+     "ew": "(* (& 0 (+ 4 (* 2 (call:sin (+ (* rad 20) time))))) 0.1)",
+     "value": false
+    },
+    {
+     "file": "i am only here to die slowly in pain regaliaphite.milk",
+     "block": "pixel",
+     "md2": "(& 0 (* (+ 4 (* 2 (call:sin (+ (* rad 20) time)))) 0.1))",
+     "ew": "(* (& 0 (+ 4 (* 2 (call:sin (+ (* rad 20) time))))) 0.1)",
+     "value": false
+    },
+    {
+     "file": "suksma - egg sacs.milk",
+     "block": "frame",
+     "md2": "(& bass_att (* time 0.54))",
+     "ew": "(* (& bass_att time) 0.54)",
+     "value": true
+    }
+   ]
+  },
+  {
+   "split": "& | -",
+   "stmts": 123,
+   "valueStmts": 122,
+   "presets": 54,
+   "valuePresets": 53,
+   "examples": [
+    {
+     "file": "suksma - egg sacs.milk",
+     "block": "frame",
+     "md2": "(& (- bass new_bass) (* time 0.63))",
+     "ew": "(- bass (* (& new_bass time) 0.63))",
+     "value": true
+    },
+    {
+     "file": "suksma - egg sacs.milk",
+     "block": "frame",
+     "md2": "(& (- treb new_treb) (* time 0.43))",
+     "ew": "(- treb (* (& new_treb time) 0.43))",
+     "value": true
+    },
+    {
+     "file": "suksma - egg sacs.milk",
+     "block": "frame",
+     "md2": "(& (- mid new_mid) (* time 0.23))",
+     "ew": "(- mid (* (& new_mid time) 0.23))",
+     "value": true
+    }
+   ]
+  },
+  {
+   "split": "* | var",
+   "stmts": 104,
+   "valueStmts": 0,
+   "presets": 46,
+   "valuePresets": 0,
+   "examples": [
+    {
+     "file": "craq caqt mbaw.milk",
+     "block": "frame",
+     "md2": "(* wave_g 0.2)",
+     "ew": "wave_g",
+     "value": false
+    },
+    {
+     "file": "oslo.milk",
+     "block": "pixel",
+     "md2": "(* (* rot (call:atan2 (neg rad) (call:sin (* ang 10)))) (neg rot))",
+     "ew": "rot",
+     "value": false
+    }
+   ]
+  },
+  {
+   "split": "* | -",
+   "stmts": 29,
+   "valueStmts": 0,
+   "presets": 29,
+   "valuePresets": 0,
+   "examples": [
+    {
+     "file": "Martin - Pixies Party (Hakan mash-up) 1-3.milk",
+     "block": "frame",
+     "md2": "(* (* (* (- 1 dec_m) (neg 0.05)) n1) n2)",
+     "ew": "(- 1 dec_m)",
+     "value": false
+    },
+    {
+     "file": "Martin - Pixies Party (Hakan mash-up) 2-3.milk",
+     "block": "frame",
+     "md2": "(* (* (* (- 1 dec_m) (neg 0.05)) n1) n2)",
+     "ew": "(- 1 dec_m)",
+     "value": false
+    }
+   ]
+  },
+  {
+   "split": "* | >",
+   "stmts": 64,
+   "valueStmts": 0,
+   "presets": 22,
+   "valuePresets": 0,
+   "examples": [
+    {
+     "file": "amandio c - dynacube (shifter wave) - dead hogs.milk",
+     "block": "shape3.frame",
+     "md2": "(* (> ss 3) (< ss 4))",
+     "ew": "(> ss 3)",
+     "value": false
+    },
+    {
+     "file": "amandio c - dynacube (shifter wave) - flx.milk",
+     "block": "shape3.frame",
+     "md2": "(* (> ss 3) (< ss 4))",
+     "ew": "(> ss 3)",
+     "value": false
+    }
+   ]
+  },
+  {
+   "split": "& | +",
+   "stmts": 21,
+   "valueStmts": 21,
+   "presets": 20,
+   "valuePresets": 20,
+   "examples": [
+    {
+     "file": "suksma - mundane side of eden.milk",
+     "block": "shape0.init",
+     "md2": "(& (+ 3 0) (call:rand 8))",
+     "ew": "(+ 3 (& 0 (call:rand 8)))",
+     "value": true
+    },
+    {
+     "file": "aebsolute bombasticasm.milk",
+     "block": "pixel",
+     "md2": "(& (+ (+ x (* y ang)) (* 0.8 time)) (* bass q3))",
+     "ew": "(+ (+ x (* y ang)) (* (* 0.8 (& time bass)) q3))",
+     "value": true
+    },
+    {
+     "file": "suksma - oxyhydrogen blowpipe.milk",
+     "block": "pixel",
+     "md2": "(& (+ (* ang 10) 0) (* time 10))",
+     "ew": "(+ (* ang 10) (& 0 (* time 10)))",
+     "value": true
+    }
+   ]
+  },
+  {
+   "split": "* | !",
+   "stmts": 18,
+   "valueStmts": 4,
+   "presets": 18,
+   "valuePresets": 4,
+   "examples": [
+    {
+     "file": "martin - city lights v2 c.milk",
+     "block": "shape0.frame",
+     "md2": "(* (! q3) (== (% instance 4) 1))",
+     "ew": "(! (* q3 (== (% instance 4) 1)))",
+     "value": true
+    },
+    {
+     "file": "martin - city lights v2(1).milk",
+     "block": "shape0.frame",
+     "md2": "(* (! q3) (== (% instance 4) 1))",
+     "ew": "(! (* q3 (== (% instance 4) 1)))",
+     "value": true
+    },
+    {
+     "file": "martin - city lights v2.milk",
+     "block": "shape0.frame",
+     "md2": "(* (! q3) (== (% instance 4) 1))",
+     "ew": "(! (* q3 (== (% instance 4) 1)))",
+     "value": true
+    }
+   ]
+  },
+  {
+   "split": "& | neg",
+   "stmts": 19,
+   "valueStmts": 19,
+   "presets": 14,
+   "valuePresets": 14,
+   "examples": [
+    {
+     "file": "$$$ Royal - Mashup (326).milk",
+     "block": "pixel",
+     "md2": "(& (neg 2.5) (* (call:cos time) 5))",
+     "ew": "(neg (& 2.5 (* (call:cos time) 5)))",
+     "value": true
+    },
+    {
+     "file": "$$$ Royal - Mashup (327).milk",
+     "block": "pixel",
+     "md2": "(& (neg 2.5) (* (call:cos time) 5))",
+     "ew": "(neg (& 2.5 (* (call:cos time) 5)))",
+     "value": true
+    },
+    {
+     "file": "$$$ Royal - Mashup (328).milk",
+     "block": "pixel",
+     "md2": "(& (neg 2.5) (* (call:cos time) 5))",
+     "ew": "(neg (& 2.5 (* (call:cos time) 5)))",
+     "value": true
+    }
+   ]
+  },
+  {
+   "split": "* | num",
+   "stmts": 13,
+   "valueStmts": 0,
+   "presets": 13,
+   "valuePresets": 0,
+   "examples": [
+    {
+     "file": "Idiot - 9-7-02 (Remix 2).milk",
+     "block": "pixel",
+     "md2": "(* 0.02 rad)",
+     "ew": "0.02",
+     "value": false
+    },
+    {
+     "file": "Rarian Rakista - Pyraid Power 2.milk",
+     "block": "pixel",
+     "md2": "(* 0.02 rad)",
+     "ew": "0.02",
+     "value": false
+    }
+   ]
+  },
+  {
+   "split": "num | num",
+   "stmts": 32,
+   "valueStmts": 32,
+   "presets": 11,
+   "valuePresets": 11,
+   "examples": [
+    {
+     "file": "no rules, no judgement, only hate.milk",
+     "block": "wave0.point",
+     "md2": "2147483647",
+     "ew": "321572340875",
+     "value": true
+    },
+    {
+     "file": "no rules, no judgement, only hate.milk",
+     "block": "wave0.point",
+     "md2": "2147483647",
+     "ew": "189678575575",
+     "value": true
+    },
+    {
+     "file": "no rules, no judgement, only hate.milk",
+     "block": "wave0.point",
+     "md2": "2147483647",
+     "ew": "5865827340875",
+     "value": true
+    }
+   ]
+  },
+  {
+   "split": "* | call:abs",
+   "stmts": 8,
+   "valueStmts": 0,
+   "presets": 8,
+   "valuePresets": 0,
+   "examples": [
+    {
+     "file": "va ultramix2 - 398_1.milk",
+     "block": "frame",
+     "md2": "(* (call:abs dt) 0.1)",
+     "ew": "(call:abs dt)",
+     "value": false
+    },
+    {
+     "file": "va ultramix2 - 399_1.milk",
+     "block": "frame",
+     "md2": "(* (call:abs dt) 0.1)",
+     "ew": "(call:abs dt)",
+     "value": false
+    }
+   ]
+  },
+  {
+   "split": "+ | seq",
+   "stmts": 4,
+   "valueStmts": 0,
+   "presets": 4,
+   "valuePresets": 0,
+   "examples": [
+    {
+     "file": "more breedre presets.milk",
+     "block": "shape3.init",
+     "md2": "(+ (seq (= sample (/ index n)) (= nc 8) (= size 8) (= spacing 4) (= height 2) (= width 1) (= ss (* (* 4 nc) sample)) (= s0 (% (* nc sample) nc)) (= s1 (neg (call:floor (* nc sample)))) (= c (- (* 4 s0",
+     "ew": "(seq (= sample (/ index n)) (= nc 8) (= size 8) (= spacing 4) (= height 2) (= width 1) (= ss (* (* 4 nc) sample)) (= s0 (% (* nc sample) nc)) (= s1 (neg (call:floor (* nc sample)))) (= c (- (* 4 s0) (",
+     "value": false
+    },
+    {
+     "file": "amandio c - interference pattern 5.milk",
+     "block": "shape0.init",
+     "md2": "(+ (seq (= sample (/ index n)) (= nc 10) (= size 8) (= spacing 4) (= height 2) (= width 1) (= ss (* (* 4 nc) sample)) (= s0 (% (* nc sample) nc)) (= s1 (neg (call:floor (* nc sample)))) (= c (- (* 4 s",
+     "ew": "(seq (= sample (/ index n)) (= nc 10) (= size 8) (= spacing 4) (= height 2) (= width 1) (= ss (* (* 4 nc) sample)) (= s0 (% (* nc sample) nc)) (= s1 (neg (call:floor (* nc sample)))) (= c (- (* 4 s0) ",
+     "value": false
+    }
+   ]
+  },
+  {
+   "split": "/ | *",
+   "stmts": 3,
+   "valueStmts": 0,
+   "presets": 3,
+   "valuePresets": 0,
+   "examples": [
+    {
+     "file": "martin - city lights.milk",
+     "block": "frame",
+     "md2": "(/ (* (call:floor (call:rand 4)) (neg 0.7)) 3)",
+     "ew": "(* (call:floor (call:rand 4)) (neg (/ 0.7 3)))",
+     "value": false
+    },
+    {
+     "file": "ougiel - enough nz.milk",
+     "block": "pixel",
+     "md2": "(/ (* (* (* (call:min q3 dy) g3) (neg dx)) q5) 2)",
+     "ew": "(* (* (call:min q3 dy) g3) (neg (/ (* dx q5) 2)))",
+     "value": false
+    }
+   ]
+  },
+  {
+   "split": "|| | *",
+   "stmts": 3,
+   "valueStmts": 0,
+   "presets": 3,
+   "valuePresets": 0,
+   "examples": [
+    {
+     "file": "martin - beamer code 20h - rhythmic and fast.milk",
+     "block": "frame",
+     "md2": "(|| (* (! (== oldind maxind)) (> t1 10)) (> t1 30))",
+     "ew": "(* (! (== oldind maxind)) (|| (> t1 10) (> t1 30)))",
+     "value": false
+    },
+    {
+     "file": "martin - beamer code 20h - rhythmic and slower.milk",
+     "block": "frame",
+     "md2": "(|| (* (! (== oldind maxind)) (> t1 10)) (> t1 30))",
+     "ew": "(* (! (== oldind maxind)) (|| (> t1 10) (> t1 30)))",
+     "value": false
+    }
+   ]
+  },
+  {
+   "split": ">= | call:_aboeq",
+   "stmts": 18,
+   "valueStmts": 18,
+   "presets": 3,
+   "valuePresets": 3,
+   "examples": [
+    {
+     "file": "Stahlregen + Flexi - dots (layered - wavepool).milk",
+     "block": "shape0.frame",
+     "md2": "(>= (call:rand 2) 1)",
+     "ew": "(call:_aboeq (call:rand 2) 1)",
+     "value": true
+    },
+    {
+     "file": "Stahlregen + Flexi - dots (layered - wavepool).milk",
+     "block": "shape0.frame",
+     "md2": "(>= (call:rand 2) 1)",
+     "ew": "(call:_aboeq (call:rand 2) 1)",
+     "value": true
+    },
+    {
+     "file": "Stahlregen + Flexi - dots (layered - wavepool).milk",
+     "block": "shape1.frame",
+     "md2": "(>= (call:rand 2) 1)",
+     "ew": "(call:_aboeq (call:rand 2) 1)",
+     "value": true
+    }
+   ]
+  },
+  {
+   "split": "&& | >",
+   "stmts": 5,
+   "valueStmts": 4,
+   "presets": 2,
+   "valuePresets": 1,
+   "examples": [
+    {
+     "file": "Nivush - Spiking Mandelbrot.milk",
+     "block": "frame",
+     "md2": "(&& (> rg4 1.2) (== change2 1))",
+     "ew": "(> rg4 (== (&& 1.2 change2) 1))",
+     "value": true
+    },
+    {
+     "file": "Nivush - Spiking Mandelbrot.milk",
+     "block": "frame",
+     "md2": "(&& (> rg4 1.2) (== change2 1))",
+     "ew": "(> rg4 (== (&& 1.2 change2) 1))",
+     "value": true
+    },
+    {
+     "file": "Nivush - Spiking Mandelbrot.milk",
+     "block": "frame",
+     "md2": "(&& (> rg4 1.2) (== change22 1))",
+     "ew": "(> rg4 (== (&& 1.2 change22) 1))",
+     "value": true
+    }
+   ]
+  },
+  {
+   "split": "* | ==",
+   "stmts": 4,
+   "valueStmts": 0,
+   "presets": 2,
+   "valuePresets": 0,
+   "examples": [
+    {
+     "file": "fiShbRaiN - breakfast cruiser.milk",
+     "block": "wave0.point",
+     "md2": "(* (== nd 2) (neg 0.01))",
+     "ew": "(== nd 2)",
+     "value": false
+    },
+    {
+     "file": "fiShbRaiN - breakfast cruiser.milk",
+     "block": "wave0.point",
+     "md2": "(* (== nd 3) (neg 0.01))",
+     "ew": "(== nd 3)",
+     "value": false
+    }
+   ]
+  },
+  {
+   "split": "&& | ==",
+   "stmts": 3,
+   "valueStmts": 0,
+   "presets": 1,
+   "valuePresets": 0,
+   "examples": [
+    {
+     "file": "Nivush - Spiking Mandelbrot.milk",
+     "block": "frame",
+     "md2": "(&& (== n 5) (>= speed 19000))",
+     "ew": "(== n (>= (&& 5 speed) 19000))",
+     "value": false
+    },
+    {
+     "file": "Nivush - Spiking Mandelbrot.milk",
+     "block": "frame",
+     "md2": "(&& (== n 5) (>= speed 19000))",
+     "ew": "(== n (>= (&& 5 speed) 19000))",
+     "value": false
+    }
+   ]
+  },
+  {
+   "split": "& | /",
+   "stmts": 1,
+   "valueStmts": 1,
+   "presets": 1,
+   "valuePresets": 1,
+   "examples": [
+    {
+     "file": "Hexcollie - Surge.milk",
+     "block": "pixel",
+     "md2": "(& ang (/ rad rad))",
+     "ew": "(/ (& ang rad) rad)",
+     "value": true
+    }
+   ]
+  }
+ ]
+}

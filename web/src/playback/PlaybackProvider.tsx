@@ -42,7 +42,7 @@ import {
   nextPos,
   prevPos,
 } from "./queueOrder";
-import { usePrefs, qualityQuery, getPrefs, setPrefs, STAGES, stageTier, type Prefs, type Stage } from "./prefs";
+import { usePrefs, qualityQuery, getPrefs, setPrefs, STAGES, stageTier, resolveMilkdrop, type Prefs, type Stage } from "./prefs";
 import { resumePointAfterFailure } from "./resumePoint";
 import { applyCueVars } from "./cueVars";
 import { refusedNote } from "./transcodeRefused";
@@ -99,12 +99,16 @@ import {
 } from "./elementEngine";
 import { Visualizer, useDocumentHidden, usePrefersReducedMotion, vizShouldRun } from "./Visualizer";
 import { webgl2Supported } from "./trails";
+import { milkdropHeld, useMilkdropOffer, useMilkdropPicked } from "./milkdropStage";
 
 // A stored stage this build does not know (an older or newer one wrote it) is
 // the cover, and so is a trail stored by a browser with WebGL2 and read back
-// by one without it.
+// by one without it. So is MilkDrop where it cannot be drawn, has nothing
+// stored to play, or is held back under reduced motion (milkdropStage.ts):
+// `milkdrop` says whether it can be shown here and now.
 const STAGE_IDS = new Set<Stage>(STAGES.map((s) => s.id));
-function stageShowable(s: Stage): boolean {
+function stageShowable(s: Stage, milkdrop: boolean): boolean {
+  if (s === "milkdrop") return milkdrop;
   return s !== "cover" && STAGE_IDS.has(s) && (stageTier(s) !== 2 || webgl2Supported());
 }
 /*
@@ -809,7 +813,12 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
    */
   const reducedMotion = usePrefersReducedMotion();
   const tabHidden = useDocumentHidden();
-  const vizWanted = isAudio && surface === "full" && stageShowable(prefs.stage) && elementFXSupported();
+  const milkdrop = useMilkdropOffer(isAudio && elementFXSupported());
+  const milkdropPicked = useMilkdropPicked();
+  const milkdropOK = milkdrop.offered && !milkdropHeld("milkdrop", reducedMotion, milkdropPicked);
+  const milkdropOKRef = useRef(milkdropOK);
+  milkdropOKRef.current = milkdropOK;
+  const vizWanted = isAudio && surface === "full" && stageShowable(prefs.stage, milkdropOK) && elementFXSupported();
   const [vizFullAsked, setVizFullAsked] = useState(false);
   const vizFull = vizFullAsked && vizWanted;
   /*
@@ -822,7 +831,7 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
     if (surface !== "full" || (item && !isAudio)) setVizFullAsked(false);
   }, [surface, item, isAudio]);
   const setVizFull = useCallback((on: boolean) => {
-    if (on && !stageShowable(getPrefs().stage)) {
+    if (on && !stageShowable(getPrefs().stage, milkdropOKRef.current)) {
       // The first trail where they can be drawn, which is what full screen is
       // for; the spectrum where they cannot.
       setPrefs({ stage: webgl2Supported() ? "tunnel" : "spectrum" });
@@ -3447,6 +3456,7 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
               running={vizShouldRun({ surface, stage: prefs.stage, playing, hidden: tabHidden })}
               calm={prefs.vizCalm || reducedMotion}
               cover={cover}
+              milkdrop={{ preset: resolveMilkdrop(prefs.milkdrop, milkdrop.ids), ids: milkdrop.ids }}
             />
           </div>
         )}

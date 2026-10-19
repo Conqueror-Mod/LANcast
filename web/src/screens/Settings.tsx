@@ -88,6 +88,7 @@ import { KeyBindings } from "@/components/KeyBindings";
 import { CrashReports } from "@/components/CrashReports";
 import { PeerSettings } from "@/components/PeerSettings";
 import { RetroCoreSettings } from "@/components/RetroCoreSettings";
+import { MilkdropSettings } from "@/components/MilkdropSettings";
 import { useSetPeerVisibility } from "@/api/hooks";
 import { asSentence, errorMessage } from "@/lib/errors";
 import { useBigscreen } from "@/lib/bigscreen";
@@ -3621,6 +3622,13 @@ const SERVER_PANES: Pane[] = [
   { id: "peers", label: "Other servers", admin: true },
   // TVs and consoles on the network, with no LANcast app (ADR 0086).
   { id: "dlna", label: "DLNA", admin: true },
+  /*
+   * MilkDrop presets (ADR 0091): uploads every signed-in browser will run,
+   * so an administrator's pane, and its own, because what is uploaded here
+   * is drawn on everyone's screen and an upload's refusal needs room to say
+   * why.
+   */
+  { id: "visualizers", label: "Visualizers", admin: true },
   { id: "addons", label: "Add-ons", admin: true },
   /*
    * Backup apart from Troubleshooting's maintenance, which throws away what
@@ -3770,6 +3778,7 @@ export function Settings() {
               {pane === "users" && <AuthorizedDevices everyone />}
               {pane === "livetv" && <LiveTVSection />}
               {pane === "addons" && <AddonsSection />}
+              {pane === "visualizers" && <MilkdropSettings />}
               {pane === "pictures" && <PicturesSection />}
               {pane === "retro" && <RetroSection />}
               {pane === "dashboard" && (
