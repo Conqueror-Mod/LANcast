@@ -1,0 +1,20 @@
+{
+ "total": 203,
+ "ran": 140,
+ "agree": 138,
+ "skipped": 63,
+ "disagree": [
+  {
+   "desc": "Line comments (\\\\)",
+   "code": "g = 10; \\\\ g = 20;",
+   "expected": 10,
+   "got": "parse error"
+  },
+  {
+   "desc": "Divide by zero",
+   "code": "g = 100 / 0",
+   "expected": 0,
+   "got": null
+  }
+ ]
+}
