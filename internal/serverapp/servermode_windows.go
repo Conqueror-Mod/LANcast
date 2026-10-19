@@ -15,8 +15,8 @@ import (
 
 	"lancast/internal/desktop"
 	"lancast/internal/mediatools"
-	"lancast/internal/service"
 	"lancast/internal/servermode"
+	"lancast/internal/service"
 	"lancast/internal/store"
 )
 

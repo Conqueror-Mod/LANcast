@@ -17,8 +17,8 @@ import (
 	"golang.org/x/sys/windows"
 
 	"lancast/internal/config"
-	"lancast/internal/service"
 	"lancast/internal/servermode"
+	"lancast/internal/service"
 )
 
 /*
