@@ -1,0 +1,50 @@
+The 37 presets render.html marked black (60+ of 90 frames under 0.002 mean luminance with shaders, not
+without), rerun for 600 frames (10 s). Columns: mean luminance with shaders / without, then the same
+over the last 30 frames. 37 rows because "Geiss - Explosion 2" is in two packs.
+
+Lit by 10 s (slow warm-up; with-shader tail >= 0.01): 12
+  $$$ Royal - Mashup (177)          0.025/0.294   tail 0.060/0.274   (GLSL byte-identical to butterchurn's own packs)
+  ORB - Quicksand                   0.049/0.025   tail 0.044/0.013   (byte-identical to butterchurn's pack)
+  orb - toxic goo                   0.124/0.014   tail 0.103/0.009   (byte-identical to butterchurn's packs)
+  uncompromising hate firehose ...  0.041/0.017   tail 0.054/0.012
+  clinical rejection of ... nz+     0.007/0.132   tail 0.032/0.164
+  Rarian Rakista - Pyraid Power     0.037/0.027   tail 0.120/0.072
+  orb - inferno - burnt to a crisp  0.087/0.032   tail 0.117/0.041
+  ORB - Ocean Glow                  0.050/0.016   tail 0.151/0.013
+  suksma - dash head 'gainst ...    0.003/0.055   tail 0.013/0.030
+  suksma - n19 3 layer overlap ...  0.016/0.006   tail 0.010/0.006
+  Geiss - Explosion 2 (one copy)    0.019/0.005   tail 0.104/0.006
+  213                               0.112/0.052   tail 0.107/0.058
+
+Dark either way (without shaders also under 0.012 at the tail): 5
+  amandio c - pole - mess, Jc - It Burns, goody + EoS + martin - nematodes (Jelly V2),
+  Geiss - Explosion 2 (other copy), Geiss - Bipolar 2 Enhanced
+
+Black with shaders, lit without, at 10 s: 20 (1.8% of the 1,105 that loaded)
+  suksma - party without compromise j4      0.001/0.151
+  Tripgnosis - Dark Matter Glowstix hog rot 0.006/0.063
+  LuxXx - Sup-R-Nova a                      0.003/0.238
+  stbenge - dripping_piles_B nz+            0.000/0.169
+  suksma - autoerotic solipsistic ...       0.001/0.026
+  qroqoschith                               0.002/0.005 (tail 0.002/0.020)
+  suksma - fate spindle                     0.003/0.490
+  suksma - never poo                        0.002/0.012 (tail 0.005/0.052)
+  $$$ Royal - Mashup (372)                  0.002/0.031
+  suksma - barnacle coated hemoclubbin'     0.011/0.212 (tail 0.007/0.028)
+  suksma - flukerication machinist          0.007/0.091
+  suksma - root nz with mycelial symbioses  0.001/0.022
+  cpe domains flacc - vs cpe nz+            0.011/0.986
+  empty flow - collab                       0.000/0.068
+  suksma - prigogine quantum foam ...       0.001/0.056
+  Serge + Jc - Neon Star Formation004       0.000/0.074
+  102                                       0.000/0.017
+  334                                       0.002/0.077
+  Rovastar - Hell Flow Of The Damned (Jelly V3) 0.003/0.124
+  Geiss - Digitunnel                        0.003/0.041
+
+Cause not established. No single feature separates them: 3D noise in 4/20 (others 203/1,087),
+blur3 8/20 (371/1,087), a preset's own texture 1/20 (55/1,087), a loop 1/20 (32/1,087).
+One of the 20, Geiss - Digitunnel, is in butterchurn's 2.4.7 pack with byte-identical warp and comp,
+so it is black in butterchurn's own rendition as well: the conversion is not what darkens it. The
+other 19 are in neither pack, so there is no native rendition to compare with.
+Whether they are black in Winamp's MilkDrop too is not known.

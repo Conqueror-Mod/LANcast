@@ -116,6 +116,10 @@
     {
       "name": "retro",
       "description": "Retro games: identifying ROMs offline (ADR 0073)."
+    },
+    {
+      "name": "visualizers",
+      "description": "MilkDrop presets for Now Playing (ADR 0091). A preset is data, never code: the server parses every equation at upload and executes nothing."
     }
   ],
   "paths": {
@@ -12761,6 +12765,164 @@
           }
         }
       }
+    },
+    "/visualizers/milkdrop": {
+      "get": {
+        "operationId": "listMilkdropPresets",
+        "tags": [
+          "visualizers"
+        ],
+        "summary": "Every uploaded MilkDrop preset",
+        "description": "Any signed-in account: playing a preset is everyone's.",
+        "responses": {
+          "200": {
+            "description": "By name.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MilkdropPresetList"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      },
+      "post": {
+        "operationId": "uploadMilkdropPreset",
+        "tags": [
+          "visualizers"
+        ],
+        "summary": "Upload one preset",
+        "description": "**Administrators only.** A preset is something every signed-in person's browser will run, so choosing what is on the server is an administrator's act (ADR 0091).\n\nThe body is the file, at most 512 KB: a `.milk`, or butterchurn 3's JSON. The format is decided by the content, not the extension. A `.milk`'s HLSL shaders are dropped (`shaders: not_converted`). A JSON upload is validated key by key: any unknown key is refused, and butterchurn 2's JavaScript (`*_eqs_str`) is refused by name.\n\n**Every equation block butterchurn would compile is parsed, never evaluated**, in eel-wasm's dialect. A preset eel-wasm would refuse is refused here with where and why, rather than rendering black on every screen. So is one over the limits: a block over 64 KB, nesting over 128 deep, loops nested more than 4 deep, a literal `loop()` count above 1,048,576.\n\nRecorded as `visualizer.preset.upload`.",
+        "parameters": [
+          {
+            "name": "filename",
+            "in": "query",
+            "required": false,
+            "description": "A display name only. Its directory and extension are removed, and it never becomes a path.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/octet-stream": {
+              "schema": {
+                "type": "string",
+                "format": "binary"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The same preset was already here; its summary, name unchanged.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MilkdropPresetSummary"
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "Stored.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MilkdropPresetSummary"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`invalid_preset`: the message names the place and the reason, as `per_frame_12, column 7: unknown function invsqrt()` for a `.milk` or `frame_eqs_eel, line 3, column 7: …` for JSON.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "413": {
+            "description": "`too_large`: over 512 KB.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/visualizers/milkdrop/{id}": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/PresetId"
+        }
+      ],
+      "get": {
+        "operationId": "getMilkdropPreset",
+        "tags": [
+          "visualizers"
+        ],
+        "summary": "One preset, ready for butterchurn",
+        "description": "Any signed-in account. `Cache-Control` is `immutable`: an id names one preset forever.",
+        "responses": {
+          "200": {
+            "description": "The summary and the preset.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MilkdropPreset"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      },
+      "delete": {
+        "operationId": "deleteMilkdropPreset",
+        "tags": [
+          "visualizers"
+        ],
+        "summary": "Remove a preset",
+        "description": "**Administrators only.** A preset is something every signed-in person's browser will run, so choosing what is on the server is an administrator's act (ADR 0091).\n\nRecorded as `visualizer.preset.delete`.",
+        "responses": {
+          "204": {
+            "description": "Removed. No body."
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
     }
   },
   "components": {
@@ -12972,6 +13134,16 @@
         "schema": {
           "type": "integer",
           "format": "int64"
+        }
+      },
+      "PresetId": {
+        "name": "id",
+        "in": "path",
+        "required": true,
+        "description": "The SHA-256 of the stored preset, in lowercase hex.",
+        "schema": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
         }
       }
     },
@@ -20345,6 +20517,229 @@
           "fetched_at": {
             "type": "integer",
             "format": "int64"
+          }
+        }
+      },
+      "MilkdropPresetSummary": {
+        "type": "object",
+        "description": "What a list shows about one uploaded MilkDrop preset.",
+        "required": [
+          "id",
+          "name",
+          "source",
+          "shaders",
+          "size_bytes",
+          "uploaded_at"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "The SHA-256 of the stored preset. It never changes, and the same preset uploaded twice is one preset."
+          },
+          "name": {
+            "type": "string",
+            "description": "From the uploaded filename, with its directory and extension removed. A display name only; never a path."
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "milk",
+              "json"
+            ],
+            "description": "The format it was uploaded in."
+          },
+          "shaders": {
+            "type": "string",
+            "enum": [
+              "none",
+              "not_converted",
+              "converted"
+            ],
+            "description": "`none`: the preset has no shaders. `not_converted`: a `.milk` whose HLSL shaders were dropped, because no converter yet produces GLSL that compiles (ADR 0091 §4); it plays with butterchurn's default shaders, **and a client should say so**. `converted`: butterchurn JSON carrying GLSL."
+          },
+          "size_bytes": {
+            "type": "integer",
+            "format": "int64",
+            "description": "The size of the preset as `GET /visualizers/milkdrop/{id}` serves it."
+          },
+          "uploaded_at": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Unix seconds."
+          }
+        }
+      },
+      "MilkdropPresetList": {
+        "type": "object",
+        "required": [
+          "presets"
+        ],
+        "properties": {
+          "presets": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MilkdropPresetSummary"
+            },
+            "description": "By name."
+          }
+        }
+      },
+      "ButterchurnShape": {
+        "type": "object",
+        "required": [
+          "baseVals",
+          "init_eqs_eel",
+          "frame_eqs_eel"
+        ],
+        "properties": {
+          "baseVals": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "number"
+            }
+          },
+          "init_eqs_eel": {
+            "type": "string"
+          },
+          "frame_eqs_eel": {
+            "type": "string"
+          }
+        }
+      },
+      "ButterchurnWave": {
+        "type": "object",
+        "required": [
+          "baseVals",
+          "init_eqs_eel",
+          "frame_eqs_eel",
+          "point_eqs_eel"
+        ],
+        "properties": {
+          "baseVals": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "number"
+            }
+          },
+          "init_eqs_eel": {
+            "type": "string"
+          },
+          "frame_eqs_eel": {
+            "type": "string"
+          },
+          "point_eqs_eel": {
+            "type": "string"
+          }
+        }
+      },
+      "ButterchurnPreset": {
+        "type": "object",
+        "description": "A preset in butterchurn 3's own shape, for loading with `onlyUseWASM` (ADR 0091). Field names are butterchurn's. Every `*_eqs_eel` block has been parsed by the server in eel-wasm's dialect; a shape or wave that is not enabled carries none, because only what butterchurn runs is checked and only what was checked is stored. There is never a `*_eqs_str`.",
+        "required": [
+          "version",
+          "baseVals",
+          "init_eqs_eel",
+          "frame_eqs_eel",
+          "pixel_eqs_eel",
+          "warp",
+          "comp",
+          "shapes",
+          "waves"
+        ],
+        "properties": {
+          "version": {
+            "type": "integer",
+            "enum": [
+              1,
+              2
+            ],
+            "description": "MilkDrop 1 or 2."
+          },
+          "baseVals": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "number"
+            }
+          },
+          "init_eqs_eel": {
+            "type": "string"
+          },
+          "frame_eqs_eel": {
+            "type": "string"
+          },
+          "pixel_eqs_eel": {
+            "type": "string"
+          },
+          "warp": {
+            "type": "string",
+            "description": "GLSL, or empty for butterchurn's default."
+          },
+          "comp": {
+            "type": "string",
+            "description": "GLSL, or empty for butterchurn's default."
+          },
+          "shapes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ButterchurnShape"
+            },
+            "minItems": 4,
+            "maxItems": 4
+          },
+          "waves": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ButterchurnWave"
+            },
+            "minItems": 4,
+            "maxItems": 4
+          }
+        }
+      },
+      "MilkdropPreset": {
+        "type": "object",
+        "description": "One uploaded preset: its summary, and the preset itself.",
+        "required": [
+          "id",
+          "name",
+          "source",
+          "shaders",
+          "size_bytes",
+          "uploaded_at",
+          "preset"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "milk",
+              "json"
+            ]
+          },
+          "shaders": {
+            "type": "string",
+            "enum": [
+              "none",
+              "not_converted",
+              "converted"
+            ]
+          },
+          "size_bytes": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "uploaded_at": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "preset": {
+            "$ref": "#/components/schemas/ButterchurnPreset"
           }
         }
       }

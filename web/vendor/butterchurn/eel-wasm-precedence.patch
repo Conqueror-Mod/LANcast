@@ -1,0 +1,77 @@
+diff --git a/packages/compiler/tools/buildParser.js b/packages/compiler/tools/buildParser.js
+index ffe920d..c5e22c6 100644
+--- a/packages/compiler/tools/buildParser.js
++++ b/packages/compiler/tools/buildParser.js
+@@ -28,15 +28,28 @@ const grammar = {
+     // associativity. Operators of the same precedence should be on the same
+     // line.
+     // https://www.gnu.org/software/bison/manual/bison.html#Precedence
+-    // TODO: Confirm these orders
++    //
++    // These follow MilkDrop 2's ns-eel2 (2004-2008). Its grammar (cal.y, shipped
++    // as nseel-caltab.c) declares, loosest first:
++    //   %left '|'   %left '&'   %left '+' '-'   %left '*' '/' '%'   %left UMINUS
++    // and its preprocessCode() (nseel-compiler.c) rewrites the rest as calls
++    // before parsing: `a && b` -> _and(a,b) and the comparisons -> _equal() etc.
++    // take everything up to the nearest `,` `;` `)` (so they are looser than
++    // any arithmetic, and `&&`/`||` looser than the comparisons), while `a ^ b`
++    // -> pow(a,b), `a % b` -> _mod(a,b) and `!a` -> _not(a) take only the
++    // operand next to them (so they are tighter than anything, including a
++    // unary minus on their left: `-2 ^ 2` is -4).
+     ["right", "ASSIGNMENT_OPERATOR_TOKEN"],
++    ["left", "LOGICAL_OPERATOR_TOKEN"],
+     ["right", "COMPARISON_TOKEN"],
+-    ["left", "+", "-", "!"],
++    ["left", "|"],
++    ["left", "&" /* "~"" will go here as well */],
++    ["left", "+", "-"],
+     ["left", "*", "/"],
++    ["right", "UMINUS"],
+     // Unlike many other languages, `^` _is_ left associative in Eel.
+     ["left", "%", "^"],
+-    ["left", "&", "|" /* "~"" will go here as well */],
+-    ["left", "LOGICAL_OPERATOR_TOKEN"],
++    ["right", "!"],
+     // TODO: Theoretically it should be possible to make `--1` a parse error.
+   ],
+ 
+@@ -115,8 +128,8 @@ const grammar = {
+       ["number", "$$ = {type: 'NUMBER_LITERAL', value: $1, loc: @$}"],
+     ],
+     UNARY_EXPRESSION: [
+-      ["- expression", unaryExpression],
+-      ["+ expression", unaryExpression],
++      ["- expression", unaryExpression, { prec: "UMINUS" }],
++      ["+ expression", unaryExpression, { prec: "UMINUS" }],
+       ["! expression", unaryExpression],
+     ],
+     BINARY_EXPRESSION: [
+diff --git a/packages/compiler/tools/testCases.ts b/packages/compiler/tools/testCases.ts
+index ca39c47..8c7468b 100644
+--- a/packages/compiler/tools/testCases.ts
++++ b/packages/compiler/tools/testCases.ts
+@@ -195,6 +195,24 @@ const testCases: [string, string, number][] = [
+   ["% has lower precedence than * (left)", "g = 2 % 5 * 2", 4],
+   ["% and ^ have the same precedence (% first)", "g = 2 % 5 ^ 2", 4],
+   ["% and ^ have the same precedence (^ first)", "g = 2 ^ 5 % 2", 0],
++  // Precedence as MilkDrop 2's ns-eel2 has it: | < & < + - < * / < unary - < % ^ < !,
++  // with && || looser than the comparisons and both looser than arithmetic.
++  ["& is looser than - (left)", "g = 5 - 3 & 6", 2],
++  ["& is looser than - (right)", "g = 2 & 3 - 1", 2],
++  ["& is looser than *", "g = 6 & 3 * 2", 6],
++  ["| is looser than +", "g = 1 + 2 | 4", 7],
++  ["& is tighter than |", "g = 1 | 2 & 3", 3],
++  ["& is looser than ^", "g = 3 & 6 ^ 2", 0],
++  ["Unary - is tighter than &", "g = -3 & 5", 5],
++  ["Unary - is looser than ^", "g = -2 ^ 2", -4],
++  ["^ takes a signed right operand", "g = 2 ^ -1", 0.5],
++  ["! is tighter than * (zero)", "g = !0 * 0", 0],
++  ["! is tighter than *", "g = !0 * 2", 2],
++  ["&& is looser than comparisons", "g = 1 > 0 && 0 > 1", 0],
++  ["&& is looser than +", "g = 1 + 1 && 0", 0],
++  ["|| is looser than comparisons", "g = 0 || 3 > 2", 1],
++  ["Comparisons are looser than &", "g = 1 == 1 & 1", 1],
++  ["Comparisons are right associative", "g = 1 < 2 < 3", 0],
+   ["Loop limit", "g = 0; while(g = g + 1)", 1048576],
+   ["Divide by zero", "g = 100 / 0", 0],
+   ["Divide by less than epsilon", "g = 100 / 0.000001", 100000000],

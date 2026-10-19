@@ -117,15 +117,24 @@ export interface Prefs {
   stage: Stage;
   /** Half the motion in a visualizer; always on under reduced motion. */
   vizCalm: boolean;
+  /**
+   * Which uploaded MilkDrop preset the MilkDrop stage plays (ADR 0091), by
+   * its id, which is a hash and names one preset for ever. "" for the first.
+   */
+  milkdrop: string;
 }
 
 /*
  * The stage's choices. Tier 1 is drawn in Canvas 2D and offered wherever a
  * visualizer is; tier 2 is the feedback trails (step 3), WebGL2 only, and
  * listed after tier 1 so `,` and `.` step from the classic pair into them.
+ * Tier 3 is MilkDrop (ADR 0091): one stage, whose presets are the server's
+ * uploads rather than this build's, so which one plays is `milkdrop` beside
+ * it, and it is offered only with WebGL2 and at least one preset stored.
  */
-export type Stage = "cover" | "spectrum" | "scope" | TrailId;
-export const STAGES: { id: Stage; label: string; tier: 0 | 1 | 2 }[] = [
+export type Stage = "cover" | "spectrum" | "scope" | TrailId | "milkdrop";
+export type StageTier = 0 | 1 | 2 | 3;
+export const STAGES: { id: Stage; label: string; tier: StageTier }[] = [
   { id: "cover", label: "Cover", tier: 0 },
   { id: "spectrum", label: "Spectrum", tier: 1 },
   { id: "scope", label: "Scope", tier: 1 },
@@ -134,6 +143,7 @@ export const STAGES: { id: Stage; label: string; tier: 0 | 1 | 2 }[] = [
   { id: "smoke", label: "Smoke", tier: 2 },
   { id: "bloom", label: "Bloom", tier: 2 },
   { id: "drift", label: "Drift", tier: 2 },
+  { id: "milkdrop", label: "MilkDrop", tier: 3 },
 ];
 
 /** The visualizers this screen can show, in order: tier 2 only with WebGL2. */
@@ -142,7 +152,7 @@ export function vizStages(webgl2: boolean): Stage[] {
 }
 
 /** A stage's tier, 0 for the cover and for anything this build does not know. */
-export function stageTier(id: Stage): 0 | 1 | 2 {
+export function stageTier(id: Stage): StageTier {
   return STAGES.find((s) => s.id === id)?.tier ?? 0;
 }
 
@@ -151,13 +161,52 @@ export function stageTier(id: Stage): 0 | 1 | 2 {
  * offered list and back to its start, never onto the cover: those keys move
  * between visualizers, and the cover is not one. From the cover, or from a
  * stage this screen cannot offer, the first step lands on the list's first or
- * last visualizer.
+ * last visualizer. Generic, because the same walk runs over VizKeys.
  */
-export function cycleStage(current: Stage, dir: 1 | -1, offered: Stage[]): Stage {
+export function cycleStage<T extends string>(current: T, dir: 1 | -1, offered: T[]): T {
   if (offered.length === 0) return current;
   const at = offered.indexOf(current);
   if (at < 0) return dir > 0 ? offered[0] : offered[offered.length - 1];
   return offered[(at + dir + offered.length) % offered.length];
+}
+
+/*
+ * A VizKey names one thing `,` and `.` can land on: a built-in stage by its
+ * id, or one MilkDrop preset as `milkdrop:<id>`. The stage alone cannot say
+ * which preset, and stepping has to walk through each of them.
+ */
+export type VizKey = string;
+
+const MILKDROP_KEY = "milkdrop:";
+
+/*
+ * vizChoices: everything this screen can step through, in order: the classic
+ * pair, the trails with WebGL2, then each stored MilkDrop preset, also only
+ * with WebGL2, because butterchurn and the output pass are both WebGL2.
+ */
+export function vizChoices(webgl2: boolean, milkdrop: string[]): VizKey[] {
+  return [...vizStages(webgl2), ...(webgl2 ? milkdrop.map((id) => MILKDROP_KEY + id) : [])];
+}
+
+/** The VizKey the prefs are showing. A MilkDrop stage with no preset named is its first. */
+export function vizKeyOf(p: Pick<Prefs, "stage" | "milkdrop">, milkdrop: string[]): VizKey {
+  if (p.stage !== "milkdrop") return p.stage;
+  return MILKDROP_KEY + resolveMilkdrop(p.milkdrop, milkdrop);
+}
+
+/** The prefs that show a VizKey. */
+export function prefsForVizKey(key: VizKey): Partial<Prefs> {
+  if (key.startsWith(MILKDROP_KEY)) return { stage: "milkdrop", milkdrop: key.slice(MILKDROP_KEY.length) };
+  return { stage: key as Stage };
+}
+
+/*
+ * resolveMilkdrop: the preset the MilkDrop stage plays. The one remembered if
+ * it is still stored; otherwise the first, so a preset deleted on the server
+ * gives way to another rather than to a blank stage. "" when there are none.
+ */
+export function resolveMilkdrop(wanted: string, stored: string[]): string {
+  return stored.includes(wanted) ? wanted : (stored[0] ?? "");
 }
 
 /** The crossfade lengths offered, in seconds; 0 is Off. */
@@ -184,6 +233,7 @@ export const DEFAULTS: Prefs = {
   eqPreset: "flat",
   stage: "cover",
   vizCalm: false,
+  milkdrop: "",
 };
 
 const KEY = "lancast:playback-prefs";

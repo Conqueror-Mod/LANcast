@@ -1,0 +1,95 @@
+{
+ "packs": {
+  "presets-milkdrop-original": {
+   "presets": 434,
+   "md2": 186,
+   "withShaders": 186,
+   "allConverted": 176,
+   "someFailed": 10
+  },
+  "presets-cream-of-the-crop": {
+   "presets": 5236,
+   "md2": 4012,
+   "withShaders": 4012,
+   "allConverted": 3714,
+   "someFailed": 298
+  },
+  "presets-projectm-classic": {
+   "presets": 3817,
+   "md2": 554,
+   "withShaders": 556,
+   "allConverted": 543,
+   "someFailed": 13
+  }
+ },
+ "reasons": {
+  "rc1: (N): ERROR: '…' : undeclared identifier": 94,
+  "rc1: (N): ERROR: '…' :  wrong operand type no operation '…' exists that takes an operand of typ": 80,
+  "rc4: syntax error, unexpected NEW_IDENTIFIER, expecting '…'": 76,
+  "rc4: array constructor must have exactly N parameters": 39,
+  "rc4: value of type vecN cannot be assigned to variable of type float": 25,
+  "rc1: (N): ERROR: '…' : cannot resolve function call unambiguously (check parameter types)": 3,
+  "rc1: (N): ERROR: '…' :  non-matching types for const initializer": 2,
+  "rc1: (N): ERROR: '…' : function does not return a value: rsp": 2,
+  "rc4: no function with name '…'": 1,
+  "rc1: (N): ERROR: '…' : overloaded functions must have the same return type": 1,
+  "rc4: too many parameters to `…' constructor": 1,
+  "rc1: (N): ERROR: '…' : syntax error syntax error": 1,
+  "rc4: initializer of type int cannot be assigned to variable of type vecN": 1,
+  "rc1: (N): ERROR: '…' : no matching overloaded function found": 1
+ },
+ "rcs": {
+  "0": 8814,
+  "1": 184,
+  "4": 143
+ },
+ "textures": {
+  "presetsNamingUserSampler": 254,
+  "presetsNaming2PlusUserSamplers": 4,
+  "presetsUsingTexsizeOfUserSampler": 13,
+  "presetsUsingRandSampler": 61,
+  "samplerNames": {
+   "rand00": 43,
+   "seaweed": 38,
+   "cells": 31,
+   "lichen": 23,
+   "fw_clouds": 18,
+   "prayerwheel": 17,
+   "ruin": 11,
+   "fc_colors": 10,
+   "rand02": 8,
+   "grad16": 8,
+   "rand00_smalltiled": 7,
+   "smalltiled_electric_nebula": 6,
+   "clouds2": 4,
+   "onefish": 4,
+   "fw_noise_hq": 4,
+   "manyfish": 3,
+   "paper": 2,
+   "sunrise": 2,
+   "rand01_OI": 2,
+   "OIcurved4": 2,
+   "fc_seaweed": 1,
+   "heart": 1,
+   "rand01_PE": 1,
+   "OIchess1": 1,
+   "OIcurved1": 1,
+   "OIcurved3": 1,
+   "OIpoggendo": 1,
+   "PEcubesBW": 1,
+   "PElosang1": 1,
+   "PEsticks1": 1
+  },
+  "prefixes": {
+   "(none)": 224,
+   "fc_": 11,
+   "fw_": 23
+  },
+  "distinctSamplerNames": 35
+ },
+ "glslBytes": {
+  "p50": 1762,
+  "p99": 14750,
+  "max": 23674
+ }
+}

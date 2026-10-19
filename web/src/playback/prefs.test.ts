@@ -13,6 +13,10 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import {
   cycleStage,
+  prefsForVizKey,
+  resolveMilkdrop,
+  vizChoices,
+  vizKeyOf,
   stageTier,
   vizStages,
   QUALITIES,
@@ -140,5 +144,35 @@ describe("the stage's visualizers", () => {
     expect(stageTier("cover")).toBe(0);
     expect(stageTier("scope")).toBe(1);
     expect(stageTier("smoke")).toBe(2);
+  });
+});
+
+describe("the MilkDrop stage", () => {
+  const ids = ["a1", "b2", "c3"];
+
+  it("is tier 3, after the trails", () => {
+    expect(stageTier("milkdrop")).toBe(3);
+  });
+
+  it("offers each stored preset as its own stop, after the built-ins, and only with WebGL2", () => {
+    expect(vizChoices(true, ids).slice(-3)).toEqual(["milkdrop:a1", "milkdrop:b2", "milkdrop:c3"]);
+    expect(vizChoices(true, ids).slice(0, vizStages(true).length)).toEqual(vizStages(true));
+    expect(vizChoices(false, ids)).toEqual(vizStages(false));
+    expect(vizChoices(true, [])).toEqual(vizStages(true));
+  });
+
+  it("steps from the last trail into the first preset, and between presets", () => {
+    const offered = vizChoices(true, ids);
+    const lastTrail = vizStages(true)[vizStages(true).length - 1];
+    expect(cycleStage(lastTrail, 1, offered)).toBe("milkdrop:a1");
+    expect(prefsForVizKey(cycleStage("milkdrop:a1", 1, offered))).toEqual({ stage: "milkdrop", milkdrop: "b2" });
+    expect(prefsForVizKey(cycleStage("milkdrop:c3", 1, offered))).toEqual({ stage: "spectrum" });
+  });
+
+  it("names the preset showing, and the first when the remembered one is gone", () => {
+    expect(vizKeyOf({ stage: "milkdrop", milkdrop: "b2" }, ids)).toBe("milkdrop:b2");
+    expect(vizKeyOf({ stage: "milkdrop", milkdrop: "deleted" }, ids)).toBe("milkdrop:a1");
+    expect(vizKeyOf({ stage: "scope", milkdrop: "b2" }, ids)).toBe("scope");
+    expect(resolveMilkdrop("x", [])).toBe("");
   });
 });
