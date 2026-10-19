@@ -18,6 +18,11 @@ export default defineConfig({
       "hls.js": fileURLToPath(
         new URL("./vendor/hls.js/hls.min.js", import.meta.url),
       ),
+      // The same alias the real build uses; loadButterchurn.test.ts proves the
+      // two agree.
+      butterchurn: fileURLToPath(
+        new URL("./vendor/butterchurn/butterchurn.min.js", import.meta.url),
+      ),
     },
   },
   test: {

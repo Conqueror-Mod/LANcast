@@ -31,6 +31,17 @@ export default defineConfig({
       "hls.js": fileURLToPath(
         new URL("./vendor/hls.js/hls.min.js", import.meta.url),
       ),
+      /*
+       * butterchurn, the MilkDrop engine, by the same rule (ADR 0091).
+       *
+       * Not in package.json either. The file is LANcast's own build of a
+       * pinned commit with the JavaScript preset path removed, so the registry
+       * copy is a different program: it still holds the `new Function` the
+       * vendoring exists to keep out. web/vendor/butterchurn/README.md.
+       */
+      butterchurn: fileURLToPath(
+        new URL("./vendor/butterchurn/butterchurn.min.js", import.meta.url),
+      ),
     },
   },
   server: {
