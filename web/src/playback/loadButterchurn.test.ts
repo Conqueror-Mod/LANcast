@@ -53,12 +53,31 @@ describe("vendored butterchurn", () => {
   });
 
   it("matches the sha256 its README records", () => {
+    // The recorded build has both of LANcast's patches in it: no-js-presets
+    // (butterchurn) and eel-wasm-precedence (the compiler it bundles). A
+    // rebuild that leaves either out comes out with a different hash.
     const actual = createHash("sha256").update(readFileSync(vendored)).digest("hex");
     const recorded = readFileSync(readme, "utf8").match(
       /\| sha256 \(vendored\) \| `([0-9a-f]{64})` \|/,
     )?.[1];
     expect(recorded, "README.md has no `sha256 (vendored)` row").toBeDefined();
     expect(actual, "the artefact and its README disagree; redo the reproduction").toBe(recorded);
+  });
+
+  it("carries the precedence patch the README records", () => {
+    // ADR 0091 step f′: eel-wasm 0.0.16 groups `&`, `|`, `!` and `&&` unlike
+    // MilkDrop, and 110 corpus presets compute something their authors never
+    // saw. The patch is not visible in the minified artefact (it changes only
+    // jison's LR table), so the artefact hash above is what proves it was
+    // applied; this proves the patch it was built with is the one on disk.
+    const patch = resolve(process.cwd(), "vendor/butterchurn/eel-wasm-precedence.patch");
+    expect(existsSync(patch)).toBe(true);
+    const actual = createHash("sha256").update(readFileSync(patch)).digest("hex");
+    const recorded = readFileSync(readme, "utf8").match(
+      /\| sha256 \(eel-wasm-precedence\.patch\) \| `([0-9a-f]{64})` \|/,
+    )?.[1];
+    expect(recorded, "README.md has no `sha256 (eel-wasm-precedence.patch)` row").toBeDefined();
+    expect(actual, "the patch and its README disagree; redo the reproduction").toBe(recorded);
   });
 
   it("has no way to turn a string into code", () => {

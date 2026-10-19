@@ -1,6 +1,6 @@
 # ADR 0091 — A MilkDrop preset is data, never code
 
-Date: 2026-10-18 · Status: **accepted** 2026-10-18
+Date: 2026-10-18 · Status: **accepted** 2026-10-18 · Amended 2026-10-18 (step f′: operator precedence settled, eel-wasm patched)
 
 Chris asked whether LANcast could accept uploaded Winamp visualizations, so
 fewer would need building by hand. Now Playing shipped in v0.9.89. Its own
@@ -116,6 +116,10 @@ agreement. They are noted in the README, so nobody repeats them.
   - eel-wasm's author checked his compiler against real MilkDrop with a
     test preset, which may mean eel-wasm is the faithful one.
   - Settling it needs MilkDrop itself, and is a step in the build.
+  - *Settled by the amendment below (step f′).* On `&` the interpreter is
+    right and eel-wasm wrong. On `^` eel-wasm is right and the interpreter
+    wrong. `!` and `&&` matter too, so "only `&` matters" does not hold.
+    eel-wasm is now patched.
 
 The presets that fail are almost all typos in the preset itself:
 - `above(x,0.99l)`;
@@ -555,7 +559,7 @@ The remaining risks, plainly:
 | d | Client: MilkDrop tier in the visualizer picker, chunk loading, preset list, `onlyUseWASM` | M |
 | e | Client: output pass (limiter + gold guard), Calm and reduced-motion wiring, vitest for the maths the way `trailMath` is tested | M |
 | f | Verify on a TV and a phone: memory (128 MiB modules), frame time | S, but must happen before release |
-| f′ | Settle `&` precedence against Winamp's MilkDrop (eel-wasm's test-preset method); if eel-wasm is wrong, patch upstream or carry a patch | S |
+| f′ | Settle `&` precedence against Winamp's MilkDrop (eel-wasm's test-preset method); if eel-wasm is wrong, patch upstream or carry a patch | S — **done**: wrong, patch carried (amendment below); upstream issue drafted, not filed |
 | g | **Step 2 spike:** hlsl2glslfork + glsl-optimizer → WASI → wazero; texture uploads | unknown until spiked |
 
 The plan's other open item, a visualizer as a wazero plugin, is unaffected.
@@ -587,3 +591,83 @@ A MilkDrop preset is data for a built-in engine, not a plugin.
 - Editing presets in LANcast.
 - Sharing presets between paired servers. A preset is data, so it could
   travel later, under the federation rules.
+
+## Amendment, 2026-10-18 — step f′: eel-wasm groups operators unlike MilkDrop, so LANcast carries a patch
+
+§1 left open which engine groups `&` and `^` the way Winamp's MilkDrop does.
+Neither does throughout. eel-wasm was wrong for 110 presets of the 9,487,
+and the vendored build now carries a one-file grammar patch that makes it
+agree with MilkDrop in every case the corpus contains. The full record,
+reproduction and hashes are in
+[web/vendor/butterchurn/README.md](../../web/vendor/butterchurn/README.md)
+("The second patch"). This is the decision and the evidence behind it.
+
+**The reference is MilkDrop 2's own front end, not a reading of it.**
+- MilkDrop 2's expression library is ns-eel2 (2004–2008, `code/ns-eel2` in
+  the open MilkDrop 2 source). Four of its files were compiled unchanged:
+  - `nseel-caltab.c`, the bison tables generated from its grammar `cal.y`;
+  - `nseel-yylex.c` and `nseel-lextab.c`, the lexer;
+  - `nseel-eval.c`, the name lookup;
+  - and `preprocessCode()`, lines 1010–1455 of `nseel-compiler.c`, which
+    rewrites `^`, `%`, `!`, the comparisons and `&&`/`||` as calls before
+    parsing.
+- Only the x86 code generator was replaced, with one that prints and
+  evaluates the tree.
+- That harness reproduces 122 of the 124 cases it can evaluate in eel-wasm's
+  `testCases.ts`. Those are the cases eel-wasm's author confirmed in real
+  MilkDrop with `buildTestPreset.js`, the "test-preset method" row f′ named.
+  The two misses are not about grouping.
+- The author's cases never combine `&`, `|`, `!` or `&&` with another
+  operator. That is why his method did not catch this.
+- MilkDrop 1 used Nullsoft's evallib, whose `cal.y` is public in the AVS
+  source. Its declarations for `|`, `&`, `+ -`, `* /` and unary minus are the
+  ones ns-eel2's tables encode. So MilkDrop 1 and 2 agree on everything here
+  except `%`, which version 1 parsed at the `*` level. Version 1 also had no
+  `^`, comparison operators or `&&`.
+
+**MilkDrop's grouping, loosest first:** assignment; `&&` `||`; comparisons
+(right-associative); `|`; `&`; `+` `-`; `*` `/`; unary `-`; `%` `^`
+(left-associative); `!`. eel-wasm 0.0.16 had `^` and `%` right. It put `&`,
+`|` and `&&`/`||` tighter than everything, and `!` and unary minus at the level
+of binary `+`.
+
+**What it changed, measured on every compiled block of the corpus.** One
+evaluator ran both parses, so only grouping can differ:
+
+| | presets |
+|---|---|
+| parse differs at all | 2,733, nearly all a sign moving through `*` or `/` (no value change) |
+| **computed value differs** (stock eel-wasm) | **110** (1.16%): `&` 105, `!` 4, `&&` 1 |
+| computed value differs (patched) | 14, none of it grouping: integer literals over 2³¹ that MilkDrop's `atoi` saturates (11), and `_aboeq()` called by name (3, already refused by the validator) |
+
+The examples are real and visible:
+- `bass-new_bass&time*.63` means `(bass-new_bass) & (time*.63)` to MilkDrop.
+  eel-wasm read it as `bass - (new_bass&time)*.63`.
+- `!q3*(instance%4==1)` was negated whole by eel-wasm.
+- `rg4>1.2 && change2==1` became `rg4 > ((1.2 && change2) == 1)`.
+
+**The spike's interpreter is not a reference either.** It gets `&` right but
+`^` wrong (`-2^2` = 4, `2^3^2` = 512; MilkDrop gives −4 and 64). It also gets
+`%` after `/` wrong, and comparison chains (it groups them to the left). It
+remains the fallback named in "Alternatives", with those fixes owed if it is
+ever used. The Go validator never models grouping, and agrees with the
+patched compiler on all 73,013 blocks (`godiff.mjs`).
+
+**Decision.**
+- Carry `web/vendor/butterchurn/eel-wasm-precedence.patch`. It is
+  eel-wasm's operator table plus 16 test cases (10 fail before it, all pass
+  after; eel-wasm's own suite passes).
+- Rebuild butterchurn with it, reproducibly: `a932cffc…` in two fresh clones.
+  `loadButterchurn.test.ts` pins both that hash and the patch's.
+- Fix it upstream too, but that is Chris's to file:
+  - the issue and PR text are drafted in
+    [spikes/milkdrop/precedence/UPSTREAM.md](../../spikes/milkdrop/precedence/UPSTREAM.md);
+  - nothing has been posted.
+  - Once eel-wasm releases the fix and butterchurn takes it, drop the patch
+    and re-vendor.
+
+**Not settled by this amendment:**
+- the 16 new cases have not yet been run as a test preset in real Winamp
+  (`buildTestPreset.js` generates it; a green screen confirms);
+- `?:`, which MilkDrop 2 parses and eel-wasm does not;
+- integer literals above 2³¹.

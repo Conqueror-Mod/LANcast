@@ -26,10 +26,12 @@ deliberately.
 | commit | `63e587a7ba3093382e456cce4538e70babcd7197` (npm `gitHead`; 2025-07-12, "Upgrade eel-wasm to emit ES module and avoid need for patch (#96)") |
 | upstream | https://github.com/jberg/butterchurn |
 | licence | MIT (`LICENSE`) |
-| artefact | `butterchurn.min.js`: upstream's production build **with `no-js-presets.patch` applied** |
-| sha256 (vendored) | `130e4f3fdd103b80c64bc3404057ff73670229a2b035a82f88beaa80fd53036f` |
-| size | 233,490 bytes |
+| artefact | `butterchurn.min.js`: upstream's production build **with `no-js-presets.patch` applied, and eel-wasm rebuilt with `eel-wasm-precedence.patch`** |
+| sha256 (vendored) | `a932cffc715509b0403e288a3a7b49a46bcacda73a0282430192695ba39715de` |
+| size | 233,406 bytes |
 | sha256 (stock build, unpatched) | `2e1914624666361a06b4aac4df8475dd53d59eac3425bb680c4b3529b2a4e401` |
+| sha256 (no-js-presets.patch only) | `130e4f3fdd103b80c64bc3404057ff73670229a2b035a82f88beaa80fd53036f` (the build vendored before the precedence patch) |
+| sha256 (eel-wasm-precedence.patch) | `7f93cd28a65c1d84d5cf20b0709aad4787aeb55ba401ae248ef335c88918b0d7` |
 | sha256 (npm `dist/butterchurn.min.js`) | `b5353af542b95cb5264069a0a4f52a23174e45745b58c48e245a3557d229b640` — **not** reproducible; see below |
 
 Everything else in `butterchurn.min.js` is other people's code, inlined at
@@ -37,14 +39,20 @@ build time from the versions butterchurn's `pnpm-lock.yaml` pins:
 
 | bundled | version | licence | file here |
 | --- | --- | --- | --- |
-| eel-wasm (the EEL → WebAssembly compiler) | 0.0.16, commit `f7394d36640a8238e89e211ca7bbad73b34d7936` | MIT, declared in `package.json` only | `LICENSE.eel-wasm` |
+| eel-wasm (the EEL → WebAssembly compiler) | 0.0.16, commit `f7394d36640a8238e89e211ca7bbad73b34d7936`, **rebuilt with `eel-wasm-precedence.patch`** | MIT, declared in `package.json` only | `LICENSE.eel-wasm` |
 | @assemblyscript/loader | 0.17.14 | Apache-2.0 | `LICENSE.assemblyscript`, `NOTICE.assemblyscript` |
 | ecma-proposal-math-extensions | 0.0.2 | MIT, declared in `package.json` only | `LICENSE.math-extensions` |
 | butterchurn's `presetFunctions.ts`, compiled to WebAssembly by assemblyscript 0.17.14 and embedded as base64 | — | MIT (butterchurn) plus the AssemblyScript runtime it links | `LICENSE`, `LICENSE.assemblyscript` |
 
 `butterchurn.d.ts` is written by hand, from the source at the commit above;
-upstream ships no types. `no-js-presets.patch` is LANcast's, and is the whole
-of LANcast's change to upstream.
+upstream ships no types. The two patches are LANcast's, and are the whole of
+LANcast's change to upstream:
+- `no-js-presets.patch`, to butterchurn: removes the JavaScript preset path
+  (below).
+- `eel-wasm-precedence.patch`, to eel-wasm: gives the EEL operators the
+  precedence MilkDrop's own compiler gives them, so a preset computes what its
+  author saw. Without it 110 of the 9,487 corpus presets compute something else
+  (below, and ADR 0091's amendment of 2026-10-18).
 
 ### eel-wasm is 0.0.16, not 0.0.17
 
@@ -88,12 +96,33 @@ Node 20.11.1 and pnpm 10.6.5 (the `packageManager` butterchurn names).
 downloading a browser. Verified 2026-10-18, twice, in two fresh clones: both
 hashes came out the same each time.
 
+That is the build with `no-js-presets.patch` alone. The vendored file also
+has eel-wasm rebuilt with `eel-wasm-precedence.patch`. Build that compiler
+first ("Then the patched compiler", below), then put it in place of the npm
+copy and build butterchurn again:
+
+```powershell
+# in the butterchurn clone, after the no-js-presets build above:
+$ew = "node_modules\.pnpm\eel-wasm@0.0.16\node_modules\eel-wasm\dist"
+Remove-Item "$ew\index.js", "$ew\index.js.map"   # delete first: pnpm hard-links
+                                                  # these into its global store
+Copy-Item <eel-wasm>\packages\compiler\dist\index.js, <eel-wasm>\packages\compiler\dist\index.js.map $ew
+npx rollup -c
+Get-FileHash dist\butterchurn.min.js     # vendored: a932cffc...9715de
+```
+
+The copy is deleted before it is replaced because pnpm hard-links package
+files from its content store: writing through the link would change eel-wasm
+0.0.16 for every project on the machine. The store's copy was checked after
+the build and is still `4c3eef09…`. Verified 2026-10-18 in two fresh clones of
+each repository, with the same hashes both times.
+
 And the compiler it bundles:
 
 ```powershell
-git clone https://github.com/captbaritone/eel-wasm.git
+git -c core.autocrlf=false clone https://github.com/captbaritone/eel-wasm.git
 cd eel-wasm
-git checkout f7394d36640a8238e89e211ca7bbad73b34d7936   # npm gitHead of 0.0.16
+git -c core.autocrlf=false checkout f7394d36640a8238e89e211ca7bbad73b34d7936   # npm gitHead of 0.0.16
 npx pnpm@10.6.5 install --frozen-lockfile --ignore-scripts
 cd packages\compiler
 npx pnpm@10.6.5 run build
@@ -103,7 +132,27 @@ Get-FileHash dist\index.js   # 4c3eef09dacd560e8509eab86d230ed1c483a5cd92499f7bc
 That `dist/index.js` (and its `.map`) is **byte-identical** to the published
 npm package `eel-wasm@0.0.16`, and `build/parser.js` regenerates identical to
 the committed file. So the compiler inside the vendored build is reproduced
-from source, not taken on trust.
+from source, not taken on trust. (Use the same short directory, and keep
+`core.autocrlf=false`: a CRLF checkout builds a different `dist/index.js`, and
+under a long path the build fails outright.)
+
+Then the patched compiler, in the same clone:
+
+```powershell
+cd ..\..
+git apply <LANcast>\web\vendor\butterchurn\eel-wasm-precedence.patch
+cd packages\compiler
+npx pnpm@10.6.5 run build    # regenerates build\parser.js from the patched grammar
+Get-FileHash dist\index.js   # 4acb6f347ba1dd5808508518d15a361005a5eb02e75f980eaf5a64b3fe6af22a
+npx vitest run               # eel-wasm's own suite, 16 new precedence cases included: 255 pass
+```
+
+`build/parser.js` comes out `f316085c9561c2dac1dec49fabaa80d63fd5037dcbf49aa609306c4cad04c077`,
+and differs from the committed one only in jison's LR table (the `$V…`
+constants and `table`). The lexer, the productions and every semantic action
+are untouched, so the patch cannot change what a preset may say. It changes
+only how an expression groups. This `dist/index.js` is the one the butterchurn
+step above copies in.
 
 `@assemblyscript/loader` and `ecma-proposal-math-extensions` ship their source
 as their published files (`index.js` and `reference-implementation/index.js`;
@@ -148,7 +197,7 @@ pre-0.0.16 eel-wasm. Since that compiler's emitting code is identical to
 0.0.16's (above), those numbers stand for this build — but step d should
 re-run a sample against the vendored file rather than assume it.
 
-## The patch: the JavaScript preset path is removed
+## The first patch: the JavaScript preset path is removed
 
 Upstream's `Visualizer` has two ways to load a preset. `loadWASMPreset`
 compiles a preset's EEL through eel-wasm. `loadJSPreset` takes a preset's
@@ -178,6 +227,96 @@ this build. It is there because an upgrade that forgot to re-apply the patch
 would otherwise reopen `new Function` with nothing to say so —
 `loadButterchurn.test.ts` would say so first, because it fails on any
 `Function(` in the file.
+
+## The second patch: operators group as they do in MilkDrop
+
+ADR 0091 left one question open, step f′: does eel-wasm group `&` and `^` the
+way Winamp's MilkDrop does? It does not, and nor do several other operators.
+`eel-wasm-precedence.patch` (37 lines in, 6 out, two files) fixes the grammar's operator
+table and adds the cases that prove it to eel-wasm's own test list.
+
+**The reference.** MilkDrop 2's expression library, ns-eel2 (2004–2008, as
+in the open MilkDrop 2 source; read in the MilkDrop3 repository,
+`code/ns-eel2`), groups operators in two ways:
+- Its grammar is a bison grammar, `cal.y`. It ships only as the generated
+  `nseel-caltab.c`, whose actions still carry `//#ln … "cal.y"`. The same
+  grammar is in AVS's evallib, the library MilkDrop 1 used, as source
+  (`avs/vis_avs/evallib/cal.y`, lines 22–27 of the 2013 open release):
+  `%left '|'`, `%left '&'`, `%left '+' '-'`, `%left '*' '/' '%'`,
+  `%left UMINUS`. So `|` is the loosest operator, `&` is next, and both are
+  looser than all the arithmetic.
+- Before parsing, `preprocessCode()` (`nseel-compiler.c`, lines 1010–1455)
+  rewrites the other operators as function calls by scanning the text:
+  - `a && b`, `a || b` and the comparisons become `_and(a,b)`, `_equal(a,b)`
+    and so on. Each operand extends to the nearest `,` `;` `)` (or, for a
+    comparison, to a `&&` or `||`). So these are looser than any arithmetic,
+    and `&&`/`||` are looser than the comparisons.
+  - `a ^ b` → `pow(a,b)`, `a % b` → `_mod(a,b)` and `!a` → `_not(a)` take
+    only the operand beside them. So these are tighter than anything, a
+    unary minus on their left included: `-2 ^ 2` is −4.
+
+MilkDrop 1 and 2 agree on `&` and `|`. MilkDrop 1 had no `^`, no comparison
+operators and no `&&`, and its `%` was integer modulo at the `*` level.
+Presets written for it use `pow()`, `above()` and `band()`, which group the
+same way in either version.
+
+**How it was checked.** MilkDrop 2's own parse tables, lexer, lookup and
+`preprocessCode()` were compiled unchanged with gcc. Only the code generator
+was replaced, with one that prints the tree and evaluates it, so nothing of
+MilkDrop's was run as shipped. That harness reproduces 122 of the 124 cases in
+eel-wasm's own `testCases.ts` it can evaluate. Those are the cases eel-wasm's
+author checked in real MilkDrop with `buildTestPreset.js`, the test-preset
+method ADR 0091 named. The other two are a `\` comment (stripped by
+MilkDrop's preset loader, not by ns-eel2) and division by zero, a runtime
+detail. The harness and its scripts are in
+`spikes/milkdrop/precedence/`.
+
+| expression | MilkDrop 2 | eel-wasm 0.0.16 | patched |
+|---|---|---|---|
+| `5 - 3 & 6` | 2 | 3 ✗ | 2 |
+| `6 & 3 * 2` | 6 | 4 ✗ | 6 |
+| `3 & 6 ^ 2` | 0 | 4 ✗ | 0 |
+| `-3 & 5` | 5 | −1 ✗ | 5 |
+| `!0 * 2` | 2 | 1 ✗ | 2 |
+| `1 > 0 && 0 > 1` | 0 | 1 ✗ | 0 |
+| `1 + 1 && 0` | 0 | 1 ✗ | 0 |
+| `0 \|\| 3 > 2` | 1 | 0 ✗ | 1 |
+| `-2 ^ 2` | −4 | −4 | −4 |
+| `2 ^ 3 ^ 2` | 64 | 64 | 64 |
+| `10 / 4 % 3` | 10 | 10 | 10 |
+| `1 < 2 < 3` | 0 | 0 | 0 |
+
+eel-wasm already had `^` and `%` right. Its grammar put `&`, `|` and `&&`/`||`
+*tighter* than everything else, and `!` and unary minus at the level of
+binary `+`. The patched table, loosest first: assignment, `&&` `||`,
+comparisons (right-associative), `|`, `&`, `+` `-`, `*` `/`, unary `-` `+`,
+`%` `^` (left-associative), `!`.
+
+**What it changes in real presets.** Every compiled block of the 9,487-preset
+corpus was parsed by both, and each pair of trees was evaluated by one
+evaluator. Where they disagree, the difference is grouping and nothing else.
+- Before the patch, the trees differ in 2,733 presets. In most of them the
+  difference is invisible, because a sign moves through `*` or `/`
+  (`-a*b` versus `-(a*b)`).
+- The computed values differ in **110 presets** (1.16%), for at least one of
+  three input ranges.
+- After the patch, no precedence difference is left anywhere in the corpus.
+  14 presets still compute differently, for reasons that are not precedence:
+  - integer literals above 2³¹, which MilkDrop's `atoi` saturates (11);
+  - a preset calling ns-eel2's internal `_aboeq()` by name (3), which the Go
+    validator already refuses.
+- The Go validator agrees with the patched compiler on all 73,013 blocks
+  (`godiff.mjs`). It never modelled precedence, and does not need to.
+
+eel-wasm does not support `?:`, which MilkDrop 2 does. That is a missing
+feature, not a grouping, and it is outside this patch.
+
+**Upstream.** The same change suits eel-wasm upstream, and butterchurn would
+then take it by bumping its lockfile. A draft issue for
+captbaritone/eel-wasm is in ADR 0091's amendment. Until it is merged and
+released, this patch is carried here and re-applied on every update.
+`loadButterchurn.test.ts` pins both the artefact's hash and the patch's, so an
+upgrade cannot drop it without the suite saying so.
 
 ## How it is loaded
 

@@ -21,6 +21,7 @@
 | `browser/bc3.html` | butterchurn 3, `onlyUseWASM`, under `script-src 'self' 'wasm-unsafe-eval'`. Records shader-compile failures, frame time, flashes (raw and limited) and gold. |
 | `browser/bc2.html` | butterchurn 2 handed the interpreter's closures, under `script-src 'self'`. |
 | `browser/common.js` | Synthetic music, readback, the flash detector, the limiter simulation and the gold sampler. |
+| `precedence/` | Written after the spike, for step f′: MilkDrop 2's own EEL front end built as a reference, and the corpus differential that found eel-wasm grouping `&`, `!` and `&&` unlike MilkDrop. Its README has the results. |
 | `avs/*.mjs` | The AVS corpus: decode with webvsc, check webvs coverage, parse AVS expressions with `eel.mjs`. |
 | `results/` | Summaries of the runs quoted in the ADR. |
 
