@@ -19,7 +19,13 @@ import {
 } from "@/playback/prefs";
 import { elementFXSupported } from "@/playback/elementEngine";
 import { webgl2Supported } from "@/playback/trails";
-import { markMilkdropPicked, useMilkdropOffer, type MilkdropOffer } from "@/playback/milkdropStage";
+import {
+  markMilkdropPicked,
+  milkdropStatusText,
+  useMilkdropOffer,
+  useMilkdropStatus,
+  type MilkdropOffer,
+} from "@/playback/milkdropStage";
 import { LyricsPanel } from "@/components/LyricsPanel";
 import { QueuePanel } from "@/components/QueuePanel";
 import "./NowPlaying.css";
@@ -58,11 +64,17 @@ export function NowPlaying() {
 
   const year = item?.year ?? album?.year ?? null;
   const albumTitle = item?.series ?? album?.title ?? null;
+  // On a phone the column starts under the switcher's rows, which live in
+  // another box; it is told how many there are (NowPlaying.css).
+  const rows = useStageRows();
 
   return (
     <>
       <StageSwitch />
-      <section className="np" aria-label="Now playing">
+      <section
+        className={"np" + (rows.fx ? " np--switch" : "") + (rows.step ? " np--step" : "")}
+        aria-label="Now playing"
+      >
         <div className="np__head">
           <span className="section-label">Now playing</span>
           <h1 className="np__title">{item?.title ?? "Playing"}</h1>
@@ -167,14 +179,36 @@ function stageLabel(p: Pick<Prefs, "stage" | "milkdrop">, milkdrop: MilkdropOffe
  * visualizer is an analyser on that graph. The chosen one is marked the
  * neutral way the column's tabs are: gold is focus only.
  */
-function StageSwitch() {
-  const pb = usePlayback();
-  const [prefs, update] = usePrefs();
+/*
+ * Which of the switcher's rows show: the choices wherever Web Audio can take
+ * the music, and the preset's stepper under them for the trails or MilkDrop.
+ * One answer for the switcher and for the column that has to start below it.
+ */
+export function useStageRows() {
+  const [prefs] = usePrefs();
   const fx = elementFXSupported();
   const milkdrop = useMilkdropOffer(fx);
-  if (!fx) return null;
   const trails = webgl2Supported();
   const tier = stageTier(prefs.stage);
+  const step = fx && ((trails && tier === 2) || (milkdrop.offered && tier === 3));
+  return { fx, trails, tier, milkdrop, step };
+}
+
+/*
+ * On a phone the switcher is one row under the stage, the width of the
+ * screen's gutters rather than of the stage, with the full-screen button
+ * outside the choices. Five choices and that button fit at 375px with ~40px
+ * targets; on a narrower screen the choices scroll sideways while the button
+ * stays put. Not a wrap: the column under it is in another layer and starts at
+ * a height set in CSS, so the row's height must not depend on the screen's
+ * width. Not a menu: the choices fit, and a menu would hide four of them
+ * behind a tap.
+ */
+export function StageSwitch() {
+  const pb = usePlayback();
+  const [prefs, update] = usePrefs();
+  const { fx, trails, tier, milkdrop } = useStageRows();
+  if (!fx) return null;
   const choices: { id: Stage; label: string; on: boolean }[] = [
     ...STAGES.filter((s) => s.tier < 2).map((s) => ({ id: s.id, label: s.label, on: prefs.stage === s.id })),
     ...(trails ? [{ id: "tunnel" as Stage, label: "Trails", on: tier === 2 }] : []),
@@ -186,21 +220,23 @@ function StageSwitch() {
   };
   return (
     <div className="np__stage">
-      <div className="np__stage-row" role="radiogroup" aria-label="Stage">
-        {choices.map((c) => (
-          <button
-            key={c.label}
-            role="radio"
-            aria-checked={c.on}
-            className={"np__stage-btn" + (c.on ? " is-on" : "")}
-            // MilkDrop remembered from another session reads as chosen but is
-            // held on the cover under reduced motion; pressing it is the pick
-            // that starts it.
-            onClick={() => (!c.on || c.id === "milkdrop") && pick(c.id)}
-          >
-            {c.label}
-          </button>
-        ))}
+      <div className="np__stage-row">
+        <div className="np__stage-choices" role="radiogroup" aria-label="Stage">
+          {choices.map((c) => (
+            <button
+              key={c.label}
+              role="radio"
+              aria-checked={c.on}
+              className={"np__stage-btn" + (c.on ? " is-on" : "")}
+              // MilkDrop remembered from another session reads as chosen but is
+              // held on the cover under reduced motion; pressing it is the pick
+              // that starts it.
+              onClick={() => (!c.on || c.id === "milkdrop") && pick(c.id)}
+            >
+              {c.label}
+            </button>
+          ))}
+        </div>
         <button
           className="np__stage-btn np__stage-full"
           onClick={() => pb.setVizFull(true)}
@@ -225,12 +261,34 @@ function StageSwitch() {
  * meant.
  */
 export function VizStep({ only }: { only?: StageTier }) {
+  const pb = usePlayback();
   const [prefs] = usePrefs();
   const milkdrop = useMilkdropOffer(elementFXSupported());
-  const shown =
-    prefs.stage === "milkdrop"
-      ? milkdrop.presets.find((m) => m.id === resolveMilkdrop(prefs.milkdrop, milkdrop.ids))
-      : undefined;
+  const status = useMilkdropStatus();
+  const onMilkdrop = prefs.stage === "milkdrop";
+  const shown = onMilkdrop
+    ? milkdrop.presets.find((m) => m.id === resolveMilkdrop(prefs.milkdrop, milkdrop.ids))
+    : undefined;
+  // The engine would not load: no preset to step to, so the row says so and
+  // offers the cover back. Picking MilkDrop again tries the download again.
+  if (onMilkdrop && status === "failed") {
+    return (
+      <div className="np__step" role="group" aria-label="Visualizer">
+        <span className="np__step-name np__step-name--failed" role="status">
+          {milkdropStatusText(status)}
+        </span>
+        <button
+          className="np__step-cover"
+          onClick={() => {
+            pb.setVizFull(false);
+            setPrefs({ stage: "cover" });
+          }}
+        >
+          Show the cover
+        </button>
+      </div>
+    );
+  }
   return (
     <div className="np__step" role="group" aria-label="Visualizer">
       <button
@@ -243,6 +301,7 @@ export function VizStep({ only }: { only?: StageTier }) {
       <span className="np__step-name" aria-live="polite">
         {stageLabel(prefs, milkdrop)}
         {shown?.shaders === "not_converted" && <span className="np__step-note"> · shaders not converted</span>}
+        {onMilkdrop && status === "loading" && <span className="np__step-note"> · loading</span>}
       </span>
       <button
         className="np__step-btn"
