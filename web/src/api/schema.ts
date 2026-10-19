@@ -501,6 +501,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/items/{id}/afterwards": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The item's id. */
+                id: components["parameters"]["ItemId"];
+            };
+            cookie?: never;
+        };
+        /**
+         * What to watch after a film
+         * @description For the page a film ends on: the film after this one in its collection, then up to three similar films from outside its franchise. The collection's next film is the first in release order after this one that the caller has not watched, and is the only item carrying `continues_from` (the collection, and this film as the one it follows); it is absent when the film is the last of its collection or in none. Similar films come from the same library, share a genre, the director or one of the first five billed actors, are unwatched, and are never in a collection with this film or another copy of it. Best match first. Decorated like any listing; the rating limit and hidden libraries apply. Anything but a film answers an empty list. `Cache-Control: no-store`, since it reads watch state. An item the caller cannot open is 404.
+         */
+        get: operations["listItemAfterwards"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/items/{id}/progress": {
         parameters: {
             query?: never;
@@ -9635,6 +9658,31 @@ export interface operations {
         requestBody?: never;
         responses: {
             /** @description The collections, or an empty list. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ItemsPage"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    listItemAfterwards: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The item's id. */
+                id: components["parameters"]["ItemId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The suggestions, possibly none. */
             200: {
                 headers: {
                     [name: string]: unknown;

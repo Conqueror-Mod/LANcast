@@ -399,6 +399,12 @@ interface PlaybackState {
    * the person, and only one of those is the player's business.
    */
   stillWatching: string | null;
+  /**
+   * The item that played to its end with nothing queued after it, while it
+   * stays on screen; null otherwise. What the player screen offers suggestions
+   * against (AfterFilm). Cleared when anything plays again.
+   */
+  endedID: number | null;
   /** Answering it: resume, and start the run over. */
   keepWatching: () => void;
   playNext: () => void;
@@ -545,6 +551,7 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
    */
   const runRef = useRef<WatchRun>(NO_RUN);
   const [stillWatching, setStillWatching] = useState<string | null>(null);
+  const [endedID, setEndedID] = useState<number | null>(null);
   /*
    * The prompt, readable from an event handler without re-subscribing it.
    *
@@ -747,6 +754,17 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
   const [pos, setPos] = useState(-1);
 
   const [playing, setPlaying] = useState(false);
+  /*
+   * An ending stops being one the moment anything plays: Watch again, a seek
+   * back and play, or another item. Otherwise a later pause would bring the
+   * suggestions back over a film somebody is watching.
+   */
+  useEffect(() => {
+    if (playing) setEndedID(null);
+  }, [playing]);
+  useEffect(() => {
+    setEndedID((e) => (e === itemID ? e : null));
+  }, [itemID]);
   const [current, setCurrent] = useState(0);
   const [duration, setDuration] = useState(0);
   // Mirrors the transcode offset (offset.current) as state, so the subtitle
@@ -2978,6 +2996,7 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
     setShuffle: setShuffleMode,
     cycleRepeat,
     stillWatching,
+    endedID,
     keepWatching,
     playNext,
     upNext,
@@ -3353,8 +3372,12 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
         setPlaying(false);
         return;
       }
-      // Roll on to the next queued item; if there is none, it ends here.
-      if (!advanceQueue()) setPlaying(false);
+      // Roll on to the next queued item; if there is none, it ends here —
+      // and says so, so the screen can offer what to watch next.
+      if (!advanceQueue()) {
+        setPlaying(false);
+        setEndedID(itemID);
+      }
     },
   };
   /*
