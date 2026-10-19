@@ -610,7 +610,9 @@ Every error returns a consistent shape. Handlers never surface raw SQL errors.
 |---|---|---|
 | `bad_request` | 400 | Malformed body or invalid parameter |
 | `not_found` | 404 | No such resource |
+| `invalid_preset` | 400 | A visualizer preset that does not parse or breaks a limit; the message says where |
 | `conflict` | 409 | Scan already running; duplicate library path |
+| `too_large` | 413 | An upload over its limit (a save, a preset) |
 | `unavailable` | 503 | File missing from disk |
 | `internal` | 500 | Unexpected failure |
 
@@ -3152,6 +3154,7 @@ handlers.
 | `user.create`, `user.delete`, `user.password_reset` | Account changes |
 | `auth.password_change` | Someone changes their own password |
 | `plugin.install`, `plugin.grant`, `plugin.enable`, `plugin.disable`, `plugin.remove` | The trust decisions of ADR 0021 |
+| `visualizer.preset.upload`, `visualizer.preset.delete` | A MilkDrop preset is added or removed (ADR 0091) |
 | `settings.update` | Settings change — **field names only, never values** |
 
 **Reads are never recorded.** Browsing, playback and progress are the normal
@@ -5799,6 +5802,102 @@ Flip a plugin on or off. `204`; the registry reloads. `404` if unknown.
 ### `DELETE /api/plugins/{name}`
 
 Forget a plugin and delete its unpacked files. `204`, `404` if unknown.
+
+---
+
+## Visualizer presets
+
+> [ADR 0091](adr/0091-milkdrop-presets.md): a MilkDrop preset is data, never
+> code. **Uploading and removing are admin only**; listing and fetching are
+> open to every signed-in account, because playing a preset is.
+
+An administrator uploads MilkDrop presets for Now Playing. The server reads
+each one, checks it, and stores it under the data directory as
+butterchurn 3's own preset format, which the client hands to butterchurn with
+`onlyUseWASM`. Nothing in a preset is ever executed on the server, and nothing
+stored is JavaScript.
+
+Two formats are accepted, told apart by content rather than extension:
+
+- **`.milk`**, as MilkDrop writes it. Its HLSL shaders are **dropped** — there
+  is no converter yet whose output compiles (ADR 0091 §4) — so the preset plays
+  with butterchurn's default shaders and is marked `"shaders": "not_converted"`.
+- **butterchurn 3 JSON** (`baseVals`, `*_eqs_eel`, GLSL `warp`/`comp`,
+  `shapes`, `waves`). Accepted after key validation: any unknown key is
+  refused, and butterchurn 2's JavaScript (`*_eqs_str`) is refused by name.
+
+Every equation block butterchurn would compile is **parsed at upload**, in
+eel-wasm's dialect, and never evaluated. A preset eel-wasm would refuse — a
+syntax error, an unknown function (`invsqrt`, `fmod`, `memcpy` included: eel-wasm
+lacks them), the wrong number of arguments — is refused here, with where and
+why, instead of rendering black on every screen that picks it. So are a block
+over 64 KB, nesting over 128 deep, loops nested more than 4 deep, and a literal
+`loop()` count above eel-wasm's cap of 1,048,576.
+
+### `GET /api/visualizers/milkdrop`
+
+Every preset, by name.
+
+```json
+{ "presets": [ {
+  "id": "3f1c…64 hex", "name": "Rovastar - Destiny Star (Starbrust Mix)",
+  "source": "milk", "shaders": "none", "size_bytes": 3104,
+  "uploaded_at": 1760832000 } ] }
+```
+
+- `id` is the SHA-256 of the stored preset, so it never changes and the same
+  preset uploaded twice is one preset.
+- `source` is `milk` or `json`.
+- `shaders` is `none` (the preset has none), `not_converted` (a `.milk` whose
+  HLSL was dropped; say so) or `converted` (JSON carrying GLSL).
+- `size_bytes` is the size of the preset as `GET …/{id}` serves it.
+
+### `POST /api/visualizers/milkdrop?filename=`
+
+Upload one preset: the body is the file, at most 512 KB (`413 too_large`
+beyond). `filename` is a display name only. The directory part and the
+extension are removed, and it never becomes a path: the stored file is named
+by the preset's hash.
+
+`201` with the summary above for a new preset; `200` with the existing one's
+summary, name unchanged, when the same preset is already here. A refusal is
+`400` with code `invalid_preset` and a message naming the place, as the person
+would find it in the file:
+
+```json
+{ "error": { "code": "invalid_preset",
+  "message": "per_frame_12, column 7: unknown function invsqrt()" } }
+```
+
+For a JSON upload the place is the key: `frame_eqs_eel, line 3, column 7: …`.
+Recorded as `visualizer.preset.upload`.
+
+### `GET /api/visualizers/milkdrop/{id}`
+
+One preset: the summary, plus `preset` in butterchurn 3's shape. A shape or a
+wave that is not enabled carries no equations, because only what butterchurn
+runs is checked, and only what was checked is stored. `Cache-Control` is
+`immutable`: an id names one preset forever.
+
+```json
+{ "id": "3f1c…", "name": "…", "source": "milk", "shaders": "not_converted",
+  "size_bytes": 5120, "uploaded_at": 1760832000,
+  "preset": {
+    "version": 2,
+    "baseVals": { "decay": 0.98, "zoom": 1.01, "wave_mode": 2 },
+    "init_eqs_eel": "", "frame_eqs_eel": "zoom = zoom + 0.01*sin(time);",
+    "pixel_eqs_eel": "", "warp": "", "comp": "",
+    "shapes": [ { "baseVals": { "enabled": 0 }, "init_eqs_eel": "", "frame_eqs_eel": "" } ],
+    "waves": [ { "baseVals": { "enabled": 1, "samples": 512 }, "init_eqs_eel": "",
+                 "frame_eqs_eel": "", "point_eqs_eel": "x = sample; y = value1;" } ] } }
+```
+
+(`shapes` and `waves` always hold four entries each; one is shown.)
+
+### `DELETE /api/visualizers/milkdrop/{id}`
+
+Remove a preset. `204`, `404` if there is no such preset. Recorded as
+`visualizer.preset.delete`.
 
 ---
 
