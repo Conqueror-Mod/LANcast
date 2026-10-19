@@ -21,7 +21,11 @@
     "noUncheckedSideEffectImports": true,
 
     "baseUrl": ".",
-    "paths": { "@/*": ["src/*"], "hls.js": ["vendor/hls.js/hls.d.ts"] }
+    "paths": {
+      "@/*": ["src/*"],
+      "hls.js": ["vendor/hls.js/hls.d.ts"],
+      "butterchurn": ["vendor/butterchurn/butterchurn.d.ts"]
+    }
   },
   "include": ["src"]
 }

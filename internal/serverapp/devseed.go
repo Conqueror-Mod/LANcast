@@ -138,7 +138,7 @@ keep between sessions.
 
 	if *doScan && len(created) > 0 {
 		fmt.Println()
-		if err := scanAll(db, created); err != nil {
+		if err := scanSeeded(db, created); err != nil {
 			return err
 		}
 	}
@@ -178,7 +178,14 @@ func libraryAt(libs []store.Library, path string) (store.Library, bool) {
 	return store.Library{}, false
 }
 
-func scanAll(db *store.Store, libs []store.Library) error {
+// scanSeeded scans the seeded libraries one at a time and waits for each.
+//
+// It is not tasks.go's scanAll, and cannot be: that one runs inside a live
+// server, starts a scan of every library on the server's own scanner and
+// returns at once. devseed has no server — it builds a scanner of its own, must
+// block until each scan finishes so the command exits with the rows written,
+// and reports per-library counts.
+func scanSeeded(db *store.Store, libs []store.Library) error {
 	log := newLogger(false)
 	sc := scan.New(db, log)
 	// Same wiring the server does, so a seeded scan produces the same rows a

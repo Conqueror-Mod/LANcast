@@ -12,6 +12,8 @@ import type {
   BackupFile,
   BackupsResponse,
   Duplicates,
+  MilkdropPreset,
+  MilkdropPresetSummary,
   NearCopies,
   PhotoPlaces,
   RetroDatabase,
@@ -4601,6 +4603,68 @@ export function usePeerItems(
     getNextPageParam: (last, pages) => {
       const loaded = pages.reduce((n, pg) => n + pg.items.length, 0);
       return loaded < last.total ? loaded : undefined;
+    },
+  });
+}
+
+// ------------------------------------------------------------------ MilkDrop presets (ADR 0091)
+
+/*
+ * The query keys, and why there are two roots.
+ *
+ * The list changes (an upload, a delete) and is invalidated by exactly
+ * MILKDROP_LIST_KEY. One preset never changes: its id is the hash of what is
+ * stored, so it is cached for ever under a key that is deliberately *not* a
+ * child of the list's. Were it `["visualizers", "milkdrop", id]`, every upload
+ * would refetch every preset ever played, and a deleted one would come back
+ * as a 404 into the visualizer.
+ *
+ * The list is also what the stage switcher offers MilkDrop from, so
+ * invalidating it is what makes an upload appear there, and the last delete
+ * take the choice away.
+ */
+export const MILKDROP_LIST_KEY = ["visualizers", "milkdrop"] as const;
+export const milkdropPresetKey = (id: string) => ["milkdrop-preset", id] as const;
+
+/** Every stored preset, by name. Any signed-in account may list them. */
+export function useMilkdropPresets(enabled = true) {
+  return useQuery({
+    queryKey: MILKDROP_LIST_KEY,
+    queryFn: ({ signal }) =>
+      apiGet<{ presets: MilkdropPresetSummary[] }>("/api/visualizers/milkdrop", signal).then((r) => r.presets ?? []),
+    enabled,
+    staleTime: 60_000,
+  });
+}
+
+export function fetchMilkdropPreset(qc: QueryClient, id: string): Promise<MilkdropPreset> {
+  return qc.fetchQuery({
+    queryKey: milkdropPresetKey(id),
+    queryFn: ({ signal }) => apiGet<MilkdropPreset>(`/api/visualizers/milkdrop/${encodeURIComponent(id)}`, signal),
+    staleTime: Infinity,
+  });
+}
+
+/** Upload one file, a `.milk` or butterchurn JSON. Administrators only. */
+export function useUploadMilkdropPreset() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (args: { name: string; data: ArrayBuffer }) =>
+      apiUpload<MilkdropPresetSummary>(
+        `/api/visualizers/milkdrop?filename=${encodeURIComponent(args.name)}`,
+        args.data,
+      ),
+    onSuccess: () => qc.invalidateQueries({ queryKey: MILKDROP_LIST_KEY, exact: true }),
+  });
+}
+
+export function useDeleteMilkdropPreset() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => apiSend(`/api/visualizers/milkdrop/${encodeURIComponent(id)}`, "DELETE"),
+    onSuccess: (_, id) => {
+      qc.removeQueries({ queryKey: milkdropPresetKey(id), exact: true });
+      return qc.invalidateQueries({ queryKey: MILKDROP_LIST_KEY, exact: true });
     },
   });
 }

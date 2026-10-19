@@ -1,0 +1,8 @@
+# The vendored artefact is verified by its sha256, so git must not touch a byte
+# of it -- the same rule as web/vendor/hls.js, for the same reason. The patch
+# must apply to upstream's LF source, so it is pinned byte for byte too.
+butterchurn.min.js -text -diff
+no-js-presets.patch -text
+LICENSE* -text
+NOTICE* -text
+butterchurn.d.ts -text

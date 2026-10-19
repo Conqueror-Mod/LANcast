@@ -1,0 +1,41 @@
+Does the step-e output pass (luminance limiter + gold guard) still run after a preset's own shaders?
+
+Scratch devseed server (go build -tags devseed ./cmd/lancast from this branch, LANCAST_INSTANCE=mdshaders,
+127.0.0.1:8099, a copy of the step d/e session's scratch data dir; never the live data dir), the client
+embedded in that build, the desktop app's built-in Chromium pane, 2026-10-19.
+
+Uploaded through POST /api/visualizers/milkdrop as butterchurn JSON (the server stored all four with
+shaders = "converted"):
+  Control - 8 Hz strobe comp   comp: ret = vec3(step(0.5, fract(time * 8.0)));
+  Control - amber comp         comp: ret = vec3(1.0, 0.72, 0.1);           (hue 43 deg, inside the gold band)
+  two real presets from the corpus with WASI-converted warp and comp shaders
+
+Silence: before anything played, AudioNode.prototype.connect was patched to drop any connection to the
+AudioDestinationNode (1 dropped), and play() muted any element Web Audio had not captured. The playing
+element was routed and unmuted, so the analyser had the signal and the speakers had nothing.
+
+Measured on the visible canvas, inside requestAnimationFrame, 32x32 readback, 3-4 s each:
+
+  preset                          on screen: luminance   max step/frame  flashes/s  gold pixels
+  Control - 8 Hz strobe comp      0.063 - 0.171          0.011           0          0
+  Control - amber comp            0.242 (steady)         0               0          0  (pixel 255,56,25)
+  LuxXx - Benefiscient Prescience 0.353 - 0.856          0.008           0.25       0.2%
+  suksma - ... moish dt r3        0.454 - 0.717          0.010           0.5        0.8%
+
+The same two controls straight out of butterchurn (browser/render.html, no pass, 120 frames):
+  strobe: mean luminance 0.508, 59 of 120 frames black -- a full-field strobe at ~8 Hz
+  amber:  mean luminance 0.556, a solid amber field
+
+So the preset's comp shader drew a full-field 8 Hz strobe and a solid gold field, and what reached the
+screen was a slow grey and a red-orange field. The pass runs after preset shaders.
+
+Why that is structural, not luck (web/src/playback/MilkdropCanvas.tsx): butterchurn renders warp and
+comp into its own WebGL2 context and copies the result into a 2D canvas that is never on the page;
+milkdropPass.frame() uploads that canvas as a texture into a second WebGL2 context, which owns the
+visible canvas. A preset's shaders run only in the first context and cannot reach the second.
+No console errors during the session.
+
+Note: the client embedded in that build is main's committed internal/web/dist, which was built before
+#910 patched eel-wasm's operator precedence (dist 22:53, patch 23:16 on 2026-10-18). The two controls have no
+EEL at all; for the two real presets a grouping difference would change what they draw, not whether
+the pass applies to it. browser/render.html loads web/vendor/butterchurn directly, patched.

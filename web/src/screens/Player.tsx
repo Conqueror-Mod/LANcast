@@ -14,6 +14,7 @@ import { showsSubtitleButton } from "@/lib/subtitleButton";
 import { matchesBinding, bindingKeys } from "@/lib/keys";
 import { Scrubber } from "@/components/Scrubber";
 import { NowPlaying, VizStep, stepVisualizer } from "@/components/NowPlaying";
+import { useMilkdropOffer } from "@/playback/milkdropStage";
 import { stageTier } from "@/playback/prefs";
 import { elementFXSupported } from "@/playback/elementEngine";
 import { PlaybackStats } from "@/components/PlaybackStats";
@@ -408,6 +409,8 @@ export function Player() {
   // A visualizer can be on screen: a track, with Web Audio to tap.
   const vizOffered = pb.isAudio && elementFXSupported();
   const vizShowing = vizOffered && (pb.vizFull || stageTier(pb.prefs.stage) > 0);
+  // The stored MilkDrop presets, each a stop for `,` and `.` (ADR 0091).
+  const milkdropIDs = useMilkdropOffer(vizOffered).ids;
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       // While typing in the subtitle search box, keys are text — not transport.
@@ -458,9 +461,9 @@ export function Player() {
         // Only while a visualizer is showing: over the cover they would turn
         // one on, and routing the music is not a side effect a stray key gets.
         else if (e.key === viz[0]) {
-          if (vizShowing) stepVisualizer(-1);
+          if (vizShowing) stepVisualizer(-1, undefined, milkdropIDs);
         } else if (e.key === viz[1]) {
-          if (vizShowing) stepVisualizer(1);
+          if (vizShowing) stepVisualizer(1, undefined, milkdropIDs);
         }
         else if (e.key === "i" || e.key === "I") {
           /*
@@ -494,6 +497,7 @@ export function Player() {
     pb.vizFull,
     vizOffered,
     vizShowing,
+    milkdropIDs,
     wakeChrome,
   ]);
 
