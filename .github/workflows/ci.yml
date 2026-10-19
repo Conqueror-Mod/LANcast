@@ -35,6 +35,13 @@ jobs:
       - name: go vet
         run: go vet ./...
 
+      # devseed is behind a build tag so release binaries never carry it, which
+      # also means no ordinary build ever compiles it. It broke unnoticed once,
+      # when serverapp gained a scanAll of its own beside devseed's. Vet with
+      # the tag type-checks those files without building anything that ships.
+      - name: go vet (devseed tag)
+        run: go vet -tags devseed ./...
+
       # build before test: the embed of internal/web/dist must compile, and a
       # broken build is a clearer failure than a test that can't link.
       - name: go build
