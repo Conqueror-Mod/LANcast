@@ -13,6 +13,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strconv"
 	"sync"
 	"time"
@@ -30,6 +31,7 @@ import (
 	"lancast/internal/identity"
 	"lancast/internal/marker"
 	"lancast/internal/meta"
+	"lancast/internal/milkdrop"
 	"lancast/internal/photo"
 	"lancast/internal/presence"
 	"lancast/internal/probe"
@@ -233,6 +235,8 @@ type Server struct {
 	// nil when the server could not prepare it.
 	ra      *RetroAchievements
 	raCache *raCache
+	// presets is the MilkDrop presets an administrator uploaded (ADR 0091).
+	presets *milkdrop.Store
 	// passkeyChallenges holds issued WebAuthn challenges (ADR 0082), and
 	// passkeyRPFor replaces the RP check in tests, whose server has no TLS.
 	passkeyChallenges *passkey.Challenges
@@ -343,6 +347,7 @@ func New(d Deps) *Server {
 		together:          together.New(),
 		prober:            probe.New(),
 		events:            events.New(0),
+		presets:           milkdrop.NewStore(filepath.Join(d.DataDir, "visualizers", "milkdrop")),
 
 		peerKick:     make(chan string, 16),
 		presenceSeen: map[string]string{},
@@ -506,6 +511,17 @@ func (s *Server) Handler() http.Handler {
 	// every server-side download is; knowing which consoles play here, and
 	// loading a core to play one, is every signed-in account's.
 	mux.HandleFunc("GET /api/retro/web-cores", s.webCores)
+
+	/*
+	 * MilkDrop presets for Now Playing (ADR 0091). Uploading and removing one
+	 * is an administrator's act, because a preset is something every
+	 * signed-in person's browser will run; listing and fetching them is
+	 * everyone's, because playing one is.
+	 */
+	mux.HandleFunc("GET /api/visualizers/milkdrop", s.listMilkdrop)
+	mux.HandleFunc("POST /api/visualizers/milkdrop", s.adminOnly(s.uploadMilkdrop))
+	mux.HandleFunc("GET /api/visualizers/milkdrop/{id}", s.getMilkdrop)
+	mux.HandleFunc("DELETE /api/visualizers/milkdrop/{id}", s.adminOnly(s.deleteMilkdrop))
 	mux.HandleFunc("POST /api/retro/web-cores/install", s.adminOnly(s.installWebCores))
 	mux.HandleFunc("POST /api/retro/web-cores/install/cancel", s.adminOnly(s.cancelWebCoresInstall))
 	mux.HandleFunc("GET /api/retro/web-cores/{core}/{kind}", s.webCoreFile)

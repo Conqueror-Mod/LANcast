@@ -15,6 +15,7 @@
 | `run.mjs` / `run-lib.mjs` | Bulk pass: parse, compile and run every preset under a directory (60 frames, 48×36 mesh, waves and shapes). |
 | `diff3.mjs` | The three-way comparison: butterchurn 2's `new Function` output, the interpreter, and eel-wasm, on identical inputs, compared after every frame. |
 | `wasm-bulk.mjs` | Does eel-wasm compile every preset? |
+| `godiff.mjs` | Written after the spike, for step c: does the Go validator (`internal/milkdrop/eel`) accept exactly the blocks eel-wasm accepts? Reads the blocks `internal/milkdrop/corpus_test.go` writes. |
 | `shaders.mjs` | What the HLSL shaders depend on: textures, `tex3D`, loops. |
 | `pick.mjs`, `prep-browser.mjs` | Choose the named dozen and the random sample, and build the browser JSON. The JSON keeps the EEL and drops every `*_eqs_str`. |
 | `browser/bc3.html` | butterchurn 3, `onlyUseWASM`, under `script-src 'self' 'wasm-unsafe-eval'`. Records shader-compile failures, frame time, flashes (raw and limited) and gold. |
