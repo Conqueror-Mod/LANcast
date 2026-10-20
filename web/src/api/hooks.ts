@@ -3509,6 +3509,27 @@ export function useItemCollections(itemID: number) {
   });
 }
 
+/*
+ * What the end of a film offers (GET /api/items/{id}/afterwards): its
+ * collection's next film, marked with continues_from, then similar films from
+ * outside its franchise.
+ *
+ * Asked fresh every time the page appears and never kept: it reads watch
+ * state at the moment the film just finished is being saved as watched, and
+ * the next ending is a different question. Nothing invalidates it because
+ * nothing outlives the page that asked.
+ */
+export function useAfterwards(itemID: number) {
+  return useQuery({
+    queryKey: ["afterwards", itemID],
+    queryFn: ({ signal }) =>
+      apiGet<{ items: Item[] }>(`/api/items/${itemID}/afterwards`, signal).then((r) => r.items ?? []),
+    enabled: itemID > 0,
+    staleTime: 0,
+    gcTime: 0,
+  });
+}
+
 export function useToRate() {
   return useQuery({
     queryKey: ["to-rate"],

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"strings"
 	"testing"
 
 	"lancast/internal/clientwindow"
@@ -63,11 +64,54 @@ func TestOpeningAnExistingWindowShowsIt(t *testing.T) {
 	d.attach(w)
 	d.open("")
 	d.open("x/settings?pane=libraries&tray=scan")
-	if w.shown != 2 || len(w.navigated) != 1 {
-		t.Fatalf("shown %d, navigated %v", w.shown, w.navigated)
+	if w.shown != 2 || len(w.evals) != 1 {
+		t.Fatalf("shown %d, evals %v", w.shown, w.evals)
 	}
 	if requested(d) {
 		t.Fatal("an existing window asked for another")
+	}
+}
+
+/*
+ * An open window routes; it is not reloaded.
+ *
+ * Reported: "Update libraries" from the tray reloaded the open window. A
+ * Navigate is a page load, so the destination is handed to the page's router
+ * instead, and loaded only if the page has no router to take it.
+ */
+func TestAnOpenWindowRoutesRatherThanReloads(t *testing.T) {
+	d := newDesk("https://127.0.0.1:8080", false)
+	w := &fakeWindow{}
+	d.attach(w)
+	d.open("https://127.0.0.1:8080/settings?pane=libraries&tray=scan")
+	if len(w.navigated) != 0 {
+		t.Fatalf("the open window was reloaded: %v", w.navigated)
+	}
+	if len(w.evals) != 1 {
+		t.Fatalf("evals %v", w.evals)
+	}
+	js := w.evals[0]
+	for _, want := range []string{
+		`window.__lancastNavigate(p)`,
+		`"/settings?pane=libraries\u0026tray=scan"`,
+		`location.assign(u)`,
+	} {
+		if !strings.Contains(js, want) {
+			t.Errorf("script lacks %s:\n%s", want, js)
+		}
+	}
+}
+
+// Somewhere that is not this server is not a route, and is loaded.
+func TestAForeignAddressIsStillLoaded(t *testing.T) {
+	w := &fakeWindow{}
+	goInPage(w, "https://127.0.0.1:8080", "https://example.test/x")
+	if len(w.navigated) != 1 || len(w.evals) != 0 {
+		t.Fatalf("navigated %v, evals %v", w.navigated, w.evals)
+	}
+	// A base that merely prefixes another host is not this server either.
+	if _, ok := inPageScript("https://127.0.0.1:8080", "https://127.0.0.1:80801/x"); ok {
+		t.Fatal("a different port was treated as this server")
 	}
 }
 
