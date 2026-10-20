@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { fetchShowEpisodes } from "@/api/hooks";
 import { showContinueTarget } from "@/lib/continueShow";
+import { continueQueue } from "@/lib/continueQueue";
 import { artworkURL } from "@/api/client";
 import { useFocusable } from "@/focus/FocusController";
 import { isMusic, isSquareArt } from "@/lib/kind";
@@ -162,7 +162,7 @@ export function HomeHero({
    * page's Continue follows, and the same shape — history state rather than the
    * URL, because a long series is far too many ids for a query string.
    *
-   * A film takes the same path and simply has no episodes to fetch.
+   * A film in a collection takes the same path through its franchise.
    */
   const resume = async () => {
     /*
@@ -200,26 +200,19 @@ export function HomeHero({
       return;
     }
 
-    if (item.kind !== "episode") {
-      navigate(`/watch/${item.id}`);
-      return;
-    }
-    try {
-      // The endpoint resolves an episode to its show, so the client does not
-      // walk the hierarchy — that walk is what every caller would get wrong.
-      const eps = await fetchShowEpisodes(item.id);
-      const from = eps.findIndex((e) => e.id === item.id);
-      if (from >= 0 && eps.length > 1) {
-        navigate(`/watch/${item.id}`, {
-          state: { queue: eps.slice(from).map((e) => e.id) },
-        });
-        return;
-      }
-    } catch {
-      // A failed lookup is not a reason to refuse to play. One episode is a
-      // worse outcome than a whole show and a far better one than nothing.
-    }
-    navigate(`/watch/${item.id}`);
+    /*
+     * An episode carries on through its show; a film in a collection carries
+     * on through the franchise (continueQueue). Reported: a collection's next
+     * film, resumed from here, played and stopped.
+     *
+     * Only when resuming or continuing a franchise. "Just added" and a pinned
+     * film are a film somebody chose on its own, and pressing Play on one is
+     * not a request for the rest of its box set.
+     */
+    const carriesOn =
+      item.kind === "episode" || reason === "resuming" || !!item.continues_from;
+    const queue = carriesOn ? await continueQueue(item) : undefined;
+    navigate(`/watch/${item.id}`, queue ? { state: { queue } } : undefined);
   };
   const reduced = usePrefersReducedMotion();
   const parallaxRef = useParallax(!reduced);
