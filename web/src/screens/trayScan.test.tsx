@@ -10,7 +10,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { MemoryRouter, useLocation } from "react-router-dom";
+import { MemoryRouter, useLocation, useNavigate, type NavigateFunction } from "react-router-dom";
 import { Settings } from "./Settings";
 
 declare global {
@@ -23,9 +23,11 @@ let host: HTMLDivElement;
 let root: Root;
 let scans: number;
 let where = "";
+let go: NavigateFunction;
 
 function Where() {
   where = useLocation().search;
+  go = useNavigate();
   return null;
 }
 
@@ -95,6 +97,21 @@ describe("Update libraries from the tray", () => {
   it("does nothing without the request", async () => {
     await render("/settings?pane=libraries");
     expect(scans).toBe(0);
+  });
+
+  /*
+   * The tray routes an open window now instead of reloading it, so the pane
+   * is still mounted when the next request arrives. It must still answer.
+   */
+  it("scans again when the tray asks again while the pane is open", async () => {
+    await render("/settings?pane=libraries&tray=scan");
+    expect(scans).toBe(1);
+    await act(async () => {
+      go("/settings?pane=libraries&tray=scan");
+    });
+    await settle();
+    expect(scans).toBe(2);
+    expect(where).not.toContain("tray=");
   });
 
   it("does not scan again when the pane re-renders", async () => {

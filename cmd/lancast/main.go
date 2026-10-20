@@ -465,7 +465,8 @@ func runWindow(l *launcher, d *desk) {
 				 * anybody off the page they were on.
 				 */
 				if pane != "" {
-					c.Navigate(l.windowURL(l.addr) + "/settings?pane=" + pane)
+					base := l.windowURL(l.addr)
+					goInPage(c, base, base+"/settings?pane="+pane)
 				}
 				c.Show()
 			}, func() {

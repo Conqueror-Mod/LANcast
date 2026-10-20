@@ -1,4 +1,5 @@
 import { useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import { useActivity, useCancelScans } from "@/api/hooks";
 
 declare global {
@@ -9,6 +10,10 @@ declare global {
     // Called by the tray, with a fixed action name. The page owns what each
     // name means and does it as the signed-in person.
     __lancastTray?: (action: string) => void;
+    // Called by the desktop window to change route without a page load: the
+    // tray's menu items name a destination, and loading it would throw away
+    // everything on screen, a playing film included (desk.go, goInPage).
+    __lancastNavigate?: (path: string) => void;
   }
 }
 
@@ -64,6 +69,24 @@ export function TrayBridge() {
       delete window.__lancastTray;
     };
   }, [report, mutate]);
+
+  /*
+   * Routing for the window, so a tray item moves an open window rather than
+   * reloading it. Reported: "Update libraries" with LANcast open reloaded the
+   * whole client. Only a path on this server is accepted — the window never
+   * sends anything else, and a router handed a full address would treat it
+   * as a relative path.
+   */
+  const navigate = useNavigate();
+  useEffect(() => {
+    if (!report) return;
+    window.__lancastNavigate = (path: string) => {
+      if (typeof path === "string" && path.startsWith("/") && !path.startsWith("//")) navigate(path);
+    };
+    return () => {
+      delete window.__lancastNavigate;
+    };
+  }, [report, navigate]);
 
   return null;
 }
