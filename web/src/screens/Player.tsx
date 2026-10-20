@@ -640,7 +640,10 @@ export function Player() {
             pb.seekTo(0);
             if (!pb.playing) pb.togglePlay();
           }}
-          onClose={close}
+          // Stop, not just leave: the film is over, and leaving alone docked
+          // it in the mini player with nothing left to play — seen on the
+          // installed build the first time this page was closed.
+          onClose={stopAndLeave}
         />
       )}
 
