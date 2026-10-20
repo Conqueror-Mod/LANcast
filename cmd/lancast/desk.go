@@ -1,6 +1,8 @@
 package main
 
 import (
+	"encoding/json"
+	"strings"
 	"sync"
 
 	"lancast/internal/clientwindow"
@@ -80,7 +82,7 @@ func (d *desk) open(url string) {
 		_ = desktop.OpenBrowser(url)
 	case w != nil:
 		if url != "" {
-			w.Navigate(url)
+			goInPage(w, base, url)
 		}
 		w.Show()
 	default:
@@ -89,6 +91,41 @@ func (d *desk) open(url string) {
 		default: // already asked; one window is enough
 		}
 	}
+}
+
+/*
+ * goInPage sends an open window somewhere without reloading it.
+ *
+ * Navigate is a full page load. Reported: with LANcast already open, the
+ * tray's "Update libraries" reloaded the window rather than going to the
+ * pane — whatever was on screen was thrown away, a film included, and the
+ * whole client booted again just to change route. The page is a single-page
+ * app with a router, so the window asks it to route (TrayBridge's
+ * __lancastNavigate) and only falls back to loading the address when there is
+ * no router to ask: the sign-in page, or a page still starting.
+ *
+ * A url outside this server's base is not a route, and is loaded as before.
+ */
+func goInPage(w clientwindow.Controller, base, url string) {
+	if js, ok := inPageScript(base, url); ok {
+		w.Eval(js)
+		return
+	}
+	w.Navigate(url)
+}
+
+// inPageScript is goInPage's script, separate so it is tested without a window.
+func inPageScript(base, url string) (string, bool) {
+	path, ok := strings.CutPrefix(url, base)
+	if !ok || !strings.HasPrefix(path, "/") {
+		return "", false
+	}
+	// JSON is a JavaScript string literal, quotes and escapes included, so
+	// nothing in a path can end the string early.
+	p, _ := json.Marshal(path)
+	u, _ := json.Marshal(url)
+	return `(function(p,u){if(window.__lancastNavigate){window.__lancastNavigate(p)}else{location.assign(u)}})(` +
+		string(p) + `,` + string(u) + `)`, true
 }
 
 // setScanning is the page telling the tray whether a scan is running.

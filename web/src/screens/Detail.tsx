@@ -25,6 +25,7 @@ import {
 } from "@/api/hooks";
 import { resumeSeconds } from "@/playback/resumePoint";
 import { playAllLabel } from "@/lib/playAll";
+import { continueQueue } from "@/lib/continueQueue";
 import { showContinueTarget } from "@/lib/continueShow";
 import { artworkURL } from "@/api/client";
 import { CastRow } from "./CastRow";
@@ -740,10 +741,27 @@ export function Detail() {
         setShowNote("You have watched every film in this collection.");
         return;
       }
-      navigate(`/watch/${next.episode.id}`);
+      /*
+       * The rest of the franchise rides along, so it carries on past this
+       * film the way a show carries on past an episode. Reported: it played
+       * the one film and stopped.
+       */
+      const queue = await continueQueue(next.episode, item.id);
+      navigate(`/watch/${next.episode.id}`, queue ? { state: { queue } } : undefined);
     } finally {
       setShowBusy(null);
     }
+  };
+
+  /*
+   * An episode's own page plays on through its show, as its season's list and
+   * the home page already do. It handed the player one id, so the show
+   * stopped after it. A film plays alone here: pressing Play on one film is
+   * not a request for its box set, and the end of it offers the next one.
+   */
+  const continueLeaf = async (leaf: Item) => {
+    const queue = leaf.kind === "episode" ? await continueQueue(leaf) : undefined;
+    navigate(`/watch/${leaf.id}`, queue ? { state: { queue } } : undefined);
   };
 
   const playShow = async (shuffle: boolean) => {
@@ -1068,7 +1086,7 @@ export function Detail() {
                   <>
                     <PlayButton
                       label={isMusic ? "Continue listening" : "Continue watching"}
-                      onPlay={() => navigate(`/watch/${item.id}`)}
+                      onPlay={() => void continueLeaf(item)}
                     />
                     <SecondaryButton
                       label="Play from start"
@@ -1092,7 +1110,7 @@ export function Detail() {
                     />
                   </>
                 ) : (
-                  <PlayButton onPlay={() => navigate(`/watch/${item.id}`)} />
+                  <PlayButton onPlay={() => void continueLeaf(item)} />
                 ))}
               {/*
                * A season leads with Continue, matching the show page so the

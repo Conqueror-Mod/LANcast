@@ -1613,7 +1613,17 @@ function ScanEverything() {
   const fromTray = params.get("tray") === "scan";
   const handled = useRef(false);
   useEffect(() => {
-    if (!fromTray || handled.current) return;
+    /*
+     * Re-armed once the request has left the address. The tray now routes an
+     * open window rather than reloading it, so this pane can still be mounted
+     * when the next "Update libraries" arrives, and a ref that stayed set
+     * would ignore it.
+     */
+    if (!fromTray) {
+      handled.current = false;
+      return;
+    }
+    if (handled.current) return;
     handled.current = true;
     const next = new URLSearchParams(params);
     next.delete("tray");

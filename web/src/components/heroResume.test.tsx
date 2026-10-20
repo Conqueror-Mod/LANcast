@@ -76,9 +76,12 @@ function Landing() {
 
 // Which episode the server says is next, or null for a show already finished.
 let nextEpisode: number | null = null;
+// The films of the collection the film under test belongs to; empty for none.
+let collectionOf: number[] = [];
 
-function mount(episodes: number[], next: number | null = null) {
+function mount(episodes: number[], next: number | null = null, films: number[] = []) {
   landed = null;
+  collectionOf = films;
   nextEpisode = next;
   vi.stubGlobal(
     "fetch",
@@ -94,6 +97,14 @@ function mount(episodes: number[], next: number | null = null) {
        */
       if (url.includes("/continue")) {
         return json(nextEpisode ? { episode: { id: nextEpisode } } : { exhausted: true });
+      }
+      if (url.endsWith("/collections")) {
+        return json({ items: collectionOf.length ? [{ id: 900, kind: "collection", title: "Saga" }] : [] });
+      }
+      if (url.includes("collection_id=900")) {
+        return json({
+          items: collectionOf.map((id) => ({ id, kind: "movie", title: `F${id}`, library_id: 1, artwork: {} })),
+        });
       }
       if (url.includes("/episodes")) {
         return json({
@@ -220,6 +231,29 @@ describe("resuming from the home page", () => {
   it("plays a film without a queue", async () => {
     mount([]);
     await render(film);
+    await pressResume();
+    expect(landed?.path).toBe("/watch/70");
+    expect((landed?.state as { queue?: number[] })?.queue).toBeUndefined();
+  });
+
+  /*
+   * A collection carries on the way a show does.
+   *
+   * Reported: a collection's next film, resumed from the spotlight, played and
+   * stopped. The rest of the franchise rides along now.
+   */
+  it("queues the rest of the collection when resuming a film in one", async () => {
+    mount([], null, [69, 70, 71, 72]);
+    await render(film);
+    await pressResume();
+    expect(landed?.path).toBe("/watch/70");
+    expect((landed?.state as { queue?: number[] })?.queue).toEqual([70, 71, 72]);
+  });
+
+  // "Just added" is a film chosen on its own, not a request for its box set.
+  it("does not queue the collection for a film that is only new", async () => {
+    mount([], null, [69, 70, 71, 72]);
+    await render(film, "recent");
     await pressResume();
     expect(landed?.path).toBe("/watch/70");
     expect((landed?.state as { queue?: number[] })?.queue).toBeUndefined();
