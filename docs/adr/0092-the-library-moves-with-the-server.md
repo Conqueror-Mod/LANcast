@@ -1,6 +1,6 @@
 # ADR 0092 — The library moves with the server
 
-Date: 2026-10-19 · Status: **proposed**
+Date: 2026-10-19 · Status: **proposed** · Proven 2026-10-19 on Aither's installed build, both directions (service → app → service, 10.1 GB, counts identical)
 
 Chris asked for "a tickable option in the app to install as a service",
 because not every user needs LANcast as one. The installer now asks

@@ -135,7 +135,9 @@ export function ServerModeSettings({ isAdmin }: { isAdmin: boolean }) {
   };
 
   const isService = state.mode === "service";
-  const outcome = !running ? progress?.outcome : undefined;
+  // The last switch's outcome stands until another is asked for: shown under
+  // a new confirmation it reads as the answer to the question being asked.
+  const outcome = !running && !confirming ? progress?.outcome : undefined;
 
   return (
     <section className="settings__section">
