@@ -66,7 +66,7 @@ import (
 // flags of its own and hands such a launch to Main untouched.
 func IsCommand(arg string) bool {
 	switch arg {
-	case "serve", "service", "tray", "devseed", "reset-auth", "restore", relaunchArg:
+	case "serve", "service", "server-mode", "tray", "devseed", "reset-auth", "restore", relaunchArg:
 		return true
 	}
 	return false
@@ -101,6 +101,17 @@ func Main() {
 	if len(os.Args) > 1 && os.Args[1] == "service" {
 		if err := runService(os.Args[2:]); err != nil {
 			fmt.Fprintln(os.Stderr, "lancast service:", err)
+			os.Exit(1)
+		}
+		return
+	}
+
+	// `lancast server-mode to-app|to-service` moves the library between the
+	// service's folder and the person's own (ADR 0092). The app runs it
+	// elevated and reads its report file; it prints nothing.
+	if len(os.Args) > 1 && os.Args[1] == "server-mode" {
+		if err := runServerMode(os.Args[2:]); err != nil {
+			fmt.Fprintln(os.Stderr, "lancast server-mode:", err)
 			os.Exit(1)
 		}
 		return

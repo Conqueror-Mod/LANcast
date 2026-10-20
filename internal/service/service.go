@@ -36,6 +36,10 @@ type Config struct {
 	// FFmpegDir, when set, is prepended to the service's PATH so a
 	// user-installed ffmpeg is found even though a service PATH usually omits it.
 	FFmpegDir string
+	// Manual registers the service to start only when asked, not at boot. A
+	// mode switch installs it this way and turns boot start on once the
+	// service has answered (ADR 0092 §6); the installer never sets it.
+	Manual bool
 }
 
 // DefaultDataDir is the machine-wide data directory for the platform — the pin

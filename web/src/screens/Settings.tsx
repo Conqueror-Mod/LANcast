@@ -100,6 +100,7 @@ import { UpdateSettings } from "@/components/UpdateSettings";
 import { PublicCertificateSettings } from "@/components/PublicCertificateSettings";
 import { PasskeySettings } from "@/components/PasskeySettings";
 import { DesktopSettings } from "@/components/DesktopSettings";
+import { ServerModeSettings } from "@/components/ServerModeSettings";
 import { GamesSettings } from "@/components/GamesSettings";
 import { ClientLog } from "@/components/ClientLog";
 import { LanguagePreferences } from "@/components/LanguagePreferences";
@@ -3828,6 +3829,7 @@ export function Settings() {
           {pane === "app" && (
             <>
               <DesktopSettings />
+              <ServerModeSettings isAdmin={isAdmin} />
               <RetroCoreSettings />
               {/*
                 On the device pane rather than the admin Logs one. This file is
