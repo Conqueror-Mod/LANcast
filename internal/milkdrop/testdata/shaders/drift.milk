@@ -1,0 +1,22 @@
+[preset00]
+MILKDROP_PRESET_VERSION=201
+PSVERSION=2
+PSVERSION_WARP=2
+PSVERSION_COMP=2
+fDecay=0.970000
+zoom=1.000000
+per_frame_1=q1 = 0.5 + 0.5*sin(time*0.3);
+per_frame_2=q2 = bass_att*0.02;
+warp_1=`shader_body
+warp_2=`{
+warp_3=`    // drift the picture outward, a little more on the bass
+warp_4=`    float2 d = (uv - 0.5) * (0.99 - q2);
+warp_5=`    ret = tex2D(sampler_main, d + 0.5).xyz * 0.98;
+warp_6=`    ret += 0.02 * (GetBlur1(uv) - ret);
+warp_7=`}
+comp_1=`shader_body
+comp_2=`{
+comp_3=`    float3 c = GetPixel(uv) + 0.4*GetBlur1(uv);
+comp_4=`    float l = lum(c);
+comp_5=`    ret = lerp(c, l * hue_shader, q1);
+comp_6=`}

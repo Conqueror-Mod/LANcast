@@ -2,6 +2,9 @@ package api
 
 import (
 	"bytes"
+	"context"
+	"errors"
+	"io"
 	"net/http"
 	"net/url"
 	"os"
@@ -64,8 +67,8 @@ func TestUploadingAMilkStoresItForEveryone(t *testing.T) {
 	}
 	var sm milkdrop.Summary
 	decode(t, resp, &sm)
-	if sm.Name != "Test - Gentle Drift" || sm.Source != "milk" || sm.Shaders != "not_converted" {
-		t.Errorf("summary = %+v, want the name without .milk, source milk, shaders not_converted", sm)
+	if sm.Name != "Test - Gentle Drift" || sm.Source != "milk" || sm.Shaders != "converted" || sm.ShadersReason != "" {
+		t.Errorf("summary = %+v, want the name without .milk, source milk, shaders converted", sm)
 	}
 
 	m := h.member(t, "georgia", "another long password")
@@ -98,9 +101,110 @@ func TestUploadingAMilkStoresItForEveryone(t *testing.T) {
 	if p.Shapes[0].FrameEqs != "" {
 		t.Errorf("disabled shape kept %q; only what was checked is stored", p.Shapes[0].FrameEqs)
 	}
-	if p.Warp != "" || p.Comp != "" {
-		t.Errorf("warp/comp = %q/%q, want the HLSL dropped", p.Warp, p.Comp)
+	// The warp was converted on the server (ADR 0091, step g); the preset has
+	// no comp, so butterchurn keeps its own.
+	if !strings.HasPrefix(p.Warp, " shader_body { ") || !strings.Contains(p.Warp, "texture (sampler_main, uv)") || p.Comp != "" {
+		t.Errorf("warp/comp = %q/%q, want the warp as GLSL and no comp", p.Warp, p.Comp)
 	}
+}
+
+// What a fetch serves is butterchurn's preset and the summary: the HLSL it was
+// converted from stays on the server.
+func TestTheHLSLIsNeverServed(t *testing.T) {
+	h := newHarness(t)
+	h.secure(t, "correct horse battery")
+	var sm milkdrop.Summary
+	decode(t, h.uploadPreset(t, "drift.milk", testMilk), &sm)
+	for _, path := range []string{"/api/visualizers/milkdrop", "/api/visualizers/milkdrop/" + sm.ID} {
+		resp := h.authed(t, "GET", path, nil)
+		b, _ := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		if strings.Contains(string(b), "hlsl") || strings.Contains(string(b), "tex2D") {
+			t.Errorf("%s serves the HLSL: %s", path, b)
+		}
+	}
+	if src, err := h.srvAPI.presets.HLSL(sm.ID); err != nil || src == nil || !strings.Contains(src.Warp, "tex2D(sampler_main, uv)") {
+		t.Errorf("stored HLSL = %+v, %v; want it kept on the server", src, err)
+	}
+}
+
+func TestAShaderThatWillNotConvertIsStoredWithTheReason(t *testing.T) {
+	h := newHarness(t)
+	h.secure(t, "correct horse battery")
+	bad := strings.Replace(testMilk, "tex2D(sampler_main, uv).xyz;", "tex2D(sampler_main, uv).xyz * brightnes;", 1)
+	resp := h.uploadPreset(t, "bad shader.milk", bad)
+	if resp.StatusCode != http.StatusCreated {
+		t.Fatalf("status = %d, want 201: a shader that will not convert is not a refusal", resp.StatusCode)
+	}
+	var sm milkdrop.Summary
+	decode(t, resp, &sm)
+	if sm.Shaders != "not_converted" || !strings.HasPrefix(sm.ShadersReason, "warp: HLSL parse error:") ||
+		!strings.Contains(sm.ShadersReason, "'brightnes' : undeclared identifier") {
+		t.Errorf("summary = %+v, want not_converted with the converter's first line", sm)
+	}
+	var e milkdrop.Entry
+	decode(t, h.authed(t, "GET", "/api/visualizers/milkdrop/"+sm.ID, nil), &e)
+	if e.Preset.Warp != "" || e.ShadersReason != sm.ShadersReason {
+		t.Errorf("stored warp %q, reason %q: want the defaults, and the reason served", e.Preset.Warp, e.ShadersReason)
+	}
+}
+
+// failingConverter is a converter that is itself broken: the module did not
+// compile, say. Nothing about the shader.
+type failingConverter struct{}
+
+func (failingConverter) Convert(context.Context, string) (string, error) {
+	return "", errors.New("shader converter: compile module: test")
+}
+
+func TestABrokenConverterStillStoresThePreset(t *testing.T) {
+	h := newHarness(t)
+	h.secure(t, "correct horse battery")
+	h.srvAPI.shaders = failingConverter{}
+	resp := h.uploadPreset(t, "a.milk", testMilk)
+	if resp.StatusCode != http.StatusCreated {
+		t.Fatalf("status = %d, want 201: nothing is refused that step 1 accepts", resp.StatusCode)
+	}
+	var sm milkdrop.Summary
+	decode(t, resp, &sm)
+	if sm.Shaders != "not_converted" || !strings.Contains(sm.ShadersReason, "not working on this server") {
+		t.Errorf("summary = %+v", sm)
+	}
+}
+
+/*
+ * A preset uploaded to v0.9.92 had its shaders dropped and no HLSL kept, so the
+ * only way to its shaders is to upload it again. That must give one preset,
+ * converted, under the name it already had — not a second copy beside it.
+ */
+func TestReuploadingAPresetStoredWithoutShadersReplacesIt(t *testing.T) {
+	h := newHarness(t)
+	h.secure(t, "correct horse battery")
+	old, err := milkdrop.Parse([]byte(testMilk), "Old Name.milk")
+	if err != nil {
+		t.Fatal(err)
+	}
+	old.HLSL = nil // as v0.9.92 stored it
+	first, _, _, err := h.srvAPI.presets.Put(old)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	resp := h.uploadPreset(t, "Test - Gentle Drift.milk", testMilk)
+	if resp.StatusCode != http.StatusCreated {
+		t.Fatalf("status = %d, want 201", resp.StatusCode)
+	}
+	var sm milkdrop.Summary
+	decode(t, resp, &sm)
+	if sm.Shaders != "converted" || sm.Name != "Old Name" || sm.ID == first.ID {
+		t.Errorf("summary = %+v, want converted, under the old name, with a new id", sm)
+	}
+	var list milkdropList
+	decode(t, h.authed(t, "GET", "/api/visualizers/milkdrop", nil), &list)
+	if len(list.Presets) != 1 || list.Presets[0].ID != sm.ID {
+		t.Fatalf("list = %+v, want only the converted preset", list.Presets)
+	}
+	wantError(t, h.authed(t, "GET", "/api/visualizers/milkdrop/"+first.ID, nil), http.StatusNotFound, "not_found")
 }
 
 func TestTheSamePresetTwiceIsOnePreset(t *testing.T) {

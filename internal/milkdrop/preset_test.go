@@ -303,7 +303,7 @@ func TestStoreKeepsPresetsByHash(t *testing.T) {
 	s := NewStore(dir)
 	u := mustParse(t, milk("zoom=1", "per_frame_1=q1 = 1;"))
 	u.Name = "One"
-	sm, created, err := s.Put(u)
+	sm, created, _, err := s.Put(u)
 	if err != nil || !created {
 		t.Fatalf("Put: %+v %v %v", sm, created, err)
 	}
@@ -329,7 +329,7 @@ func TestStoreListsByNameIgnoringCase(t *testing.T) {
 	for i, name := range []string{"beta", "Alpha", "gamma"} {
 		u := mustParse(t, milk("zoom="+string(rune('1'+i))))
 		u.Name = name
-		if _, _, err := s.Put(u); err != nil {
+		if _, _, _, err := s.Put(u); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -348,7 +348,7 @@ func TestStoreSkipsADamagedFile(t *testing.T) {
 	dir := t.TempDir()
 	s := NewStore(dir)
 	u := mustParse(t, milk("zoom=1"))
-	sm, _, err := s.Put(u)
+	sm, _, _, err := s.Put(u)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -385,7 +385,7 @@ func TestStoreRefusesWhatIsNotAnID(t *testing.T) {
 func TestStoreDelete(t *testing.T) {
 	dir := t.TempDir()
 	s := NewStore(dir)
-	sm, _, err := s.Put(mustParse(t, milk("zoom=1")))
+	sm, _, _, err := s.Put(mustParse(t, milk("zoom=1")))
 	if err != nil {
 		t.Fatal(err)
 	}

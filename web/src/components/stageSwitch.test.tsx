@@ -16,7 +16,7 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { getPrefs, setPrefs } from "@/playback/prefs";
-import { resetMilkdropPickedForTests, setMilkdropStatus } from "@/playback/milkdropStage";
+import { resetMilkdropPickedForTests, setMilkdropStatus, setShaderFallback } from "@/playback/milkdropStage";
 import { setWebGL2ForTests } from "@/playback/trails";
 
 const pb = { setVizFull: vi.fn() };
@@ -175,5 +175,18 @@ describe("MilkDrop's state under the stage", () => {
     expect(getPrefs().stage).toBe("cover");
     // From the full-screen visualizer too, back to where the cover is.
     expect(pb.setVizFull).toHaveBeenCalledWith(false);
+  });
+
+  it("says when the preset's shaders could not run here, and only for that preset", async () => {
+    setPrefs({ stage: "milkdrop", milkdrop: "p1" });
+    await mount(<VizStep only={3} />);
+    expect(host.querySelector(".np__step-name")?.textContent).toBe("Aurora");
+    act(() => setShaderFallback("p1", ["comp"]));
+    expect(host.querySelector(".np__step-name")?.textContent).toBe("Aurora · shaders could not run here");
+    // Another preset is not tarred with the first one's fault.
+    act(() => setPrefs({ stage: "milkdrop", milkdrop: "p2" }));
+    expect(host.querySelector(".np__step-name")?.textContent).toBe("Bloom");
+    act(() => setShaderFallback("p2", ["warp"]));
+    expect(host.querySelector(".np__step-name")?.textContent).toBe("Bloom · shaders could not run here");
   });
 });

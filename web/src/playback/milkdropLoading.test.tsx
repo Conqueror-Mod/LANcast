@@ -10,7 +10,8 @@ import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { resetMilkdropPickedForTests } from "./milkdropStage";
+import { resetMilkdropPickedForTests, shaderFallback } from "./milkdropStage";
+import { getPrefs } from "./prefs";
 
 declare global {
   // eslint-disable-next-line no-var
@@ -193,6 +194,102 @@ describe("the MilkDrop stage while it loads", () => {
     await render("a");
     await settle();
     expect(made).toHaveBeenCalledTimes(1);
+  });
+});
+
+/*
+ * An engine whose programs link or not by the preset's text: a stage whose
+ * shader says BROKEN fails to link, as a converted shader naming a texture
+ * nobody uploaded does in a real browser. Each load is recorded with its
+ * blend, and resolves at once.
+ */
+function shaderEngine(loads: { warp?: string; comp?: string; blend: number }[]) {
+  const LINK_STATUS = 0x8b82;
+  const prog = (ok: boolean) => ({ ok });
+  const renderer = { warpShader: { shaderProgram: prog(true) }, compShader: { shaderProgram: prog(true) } };
+  const gl = {
+    LINK_STATUS,
+    COMPILE_STATUS: 0x8b81,
+    isContextLost: () => false,
+    getProgramParameter: (p: { ok: boolean }) => p.ok,
+    getAttachedShaders: () => [],
+    getProgramInfoLog: () => "ERROR: 0:12: 'texsize_rand00' : undeclared identifier",
+  };
+  return {
+    createVisualizer: () => ({
+      gl,
+      renderer,
+      loadPreset: async (p: { warp?: string; comp?: string }, blend: number) => {
+        loads.push({ warp: p.warp, comp: p.comp, blend });
+        renderer.warpShader.shaderProgram = prog(!p.warp?.includes("BROKEN"));
+        renderer.compShader.shaderProgram = prog(!p.comp?.includes("BROKEN"));
+      },
+      setRendererSize: () => {},
+      render: () => {},
+    }),
+  };
+}
+
+describe("a preset whose shaders will not compile here", () => {
+  beforeEach(() => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string) => {
+        const id = decodeURIComponent(new URL(url, "http://x").pathname.split("/").pop() ?? "");
+        fetched.push(id);
+        const comp = id === "a" ? "shader_body { ret = tex2D(sampler_rand00, uv); } BROKEN" : "shader_body {}";
+        return new Response(
+          JSON.stringify({ id, name: id, shaders: "converted", preset: { warp: "shader_body {}", comp } }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        );
+      }),
+    );
+  });
+
+  it("plays it with the default for the stage that failed, keeping its own other stage", async () => {
+    const loads: { warp?: string; comp?: string; blend: number }[] = [];
+    await render("a");
+    await act(async () => chunk.resolve(shaderEngine(loads)));
+    await settle();
+
+    expect(loads).toHaveLength(2);
+    expect(loads[0].comp).toContain("BROKEN");
+    // The reload: comp emptied, warp kept, cut rather than blended.
+    expect(loads[1]).toEqual({ warp: "shader_body {}", comp: "", blend: 0 });
+    expect(shaderFallback("a")).toEqual(["comp"]);
+    // It plays, so it is not dropped, and the stage is not left loading.
+    expect(getPrefs().milkdrop).not.toBe("b");
+    expect(note()).toBeNull();
+    expect(console.warn).toHaveBeenCalledWith(
+      "milkdrop: shaders did not compile here, playing the defaults",
+      "a",
+      "comp: ERROR: 0:12: 'texsize_rand00' : undeclared identifier",
+    );
+  });
+
+  it("goes straight to the defaults the next time, with the usual blend", async () => {
+    const loads: { warp?: string; comp?: string; blend: number }[] = [];
+    await render("a");
+    await act(async () => chunk.resolve(shaderEngine(loads)));
+    await settle();
+    await render("b");
+    await settle();
+    await render("a");
+    await settle();
+
+    const back = loads.slice(3);
+    expect(back).toHaveLength(1);
+    expect(back[0].comp).toBe("");
+    expect(back[0].blend).toBeGreaterThan(0);
+  });
+
+  it("leaves a preset whose shaders compile alone", async () => {
+    const loads: { warp?: string; comp?: string; blend: number }[] = [];
+    await render("b");
+    await act(async () => chunk.resolve(shaderEngine(loads)));
+    await settle();
+    expect(loads).toHaveLength(1);
+    expect(shaderFallback("b")).toBeUndefined();
   });
 });
 

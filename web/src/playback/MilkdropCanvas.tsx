@@ -5,7 +5,15 @@ import { fetchMilkdropPreset } from "@/api/hooks";
 import { loadButterchurn, type MilkdropEngine } from "./loadButterchurn";
 import { createOutputPass, type OutputPass } from "./milkdropPass";
 import { limitRate } from "./limiterMath";
-import { dropPreset, milkdropStatusText, setMilkdropStatus, useMilkdropStatus } from "./milkdropStage";
+import {
+  dropPreset,
+  milkdropStatusText,
+  setMilkdropStatus,
+  setShaderFallback,
+  shaderFallback,
+  useMilkdropStatus,
+} from "./milkdropStage";
+import { shaderFaults, withDefaultShaders } from "./milkdropShaders";
 import { trailSize } from "./trailMath";
 
 /*
@@ -231,7 +239,39 @@ export function MilkdropCanvas({ preset, ids, running, calm, analyser: analyserR
       setMilkdropStatus("loading");
     }
     fetchMilkdropPreset(qc, id)
-      .then((p) => e.viz.loadPreset(p.preset as unknown as Preset, blend))
+      .then(async (p) => {
+        const own = p.preset as unknown as Preset;
+        // Known from earlier this session not to compile here: straight to
+        // the defaults, with the blend a working preset gets.
+        const known = shaderFallback(id);
+        if (known) return e.viz.loadPreset(withDefaultShaders(own, known), blend);
+        await e.viz.loadPreset(own, blend);
+        // Overtaken: the newer load replaces this one's programs anyway.
+        if (token !== loadToken.current) return;
+        /*
+         * Checked here, before a frame can draw: loadPreset compiled the
+         * shaders on its last step, and this continuation runs in the same
+         * task. A fault means the preset would draw black (milkdropShaders.ts).
+         */
+        const faults = shaderFaults(e.viz, own);
+        if (faults.length === 0) return;
+        const stages = faults.map((f) => f.stage);
+        console.warn(
+          "milkdrop: shaders did not compile here, playing the defaults",
+          id,
+          faults.map((f) => `${f.stage}: ${f.log}`).join("; "),
+        );
+        setShaderFallback(id, stages);
+        /*
+         * The reload compiles the preset's equations again, which awaits
+         * WebAssembly: frames would draw the broken program meanwhile. So the
+         * stage holds the last good frame through it, and cuts rather than
+         * blends: butterchurn would blend from the broken programs, which is
+         * the black this exists to avoid.
+         */
+        readyRef.current = false;
+        await e.viz.loadPreset(withDefaultShaders(own, stages), 0);
+      })
       .then(() => {
         if (token !== loadToken.current) return;
         window.clearTimeout(slowTimer.current);

@@ -1,0 +1,75 @@
+{
+ "comp-only-crlf.milk": {
+  "comp": {
+   "source": "shader_body\n{\n    ret = 1 - GetPixel(uv);\n}",
+   "hlsl_sha256": "1016980b4f7c8aebb3df1bb60b58b06532feb96ed2718d37283c358f8cd59cf7",
+   "rc": 0,
+   "glsl": " shader_body { \n  vec4 tmpvar_1;\n  tmpvar_1.w = 1.0;\n  tmpvar_1.xyz = (1.0 - texture (sampler_main, uv).xyz);\n  ret = tmpvar_1.xyz;\n }"
+  }
+ },
+ "drift.milk": {
+  "warp": {
+   "source": "shader_body\n{\n    // drift the picture outward, a little more on the bass\n    float2 d = (uv - 0.5) * (0.99 - q2);\n    ret = tex2D(sampler_main, d + 0.5).xyz * 0.98;\n    ret += 0.02 * (GetBlur1(uv) - ret);\n}",
+   "hlsl_sha256": "9682ac270488310d635f12aa935adf093ae920f4cb63232f25992c9f0b77ebfc",
+   "rc": 0,
+   "glsl": " shader_body { \n  vec3 ret_1;\n  ret_1 = (texture (sampler_main, ((\n    (uv - 0.5)\n   * \n    (0.99 - q2)\n  ) + 0.5)).xyz * 0.98);\n  ret_1 = (ret_1 + (0.02 * (\n    ((texture (sampler_blur1, uv).xyz * scale1) + bias1)\n   - ret_1)));\n  vec4 tmpvar_2;\n  tmpvar_2.w = 1.0;\n  tmpvar_2.xyz = ret_1;\n  ret = tmpvar_2.xyz;\n }"
+  },
+  "comp": {
+   "source": "shader_body\n{\n    float3 c = GetPixel(uv) + 0.4*GetBlur1(uv);\n    float l = lum(c);\n    ret = lerp(c, l * hue_shader, q1);\n}",
+   "hlsl_sha256": "03144578d31dd38773646245cacbe8c68b037dcaaa35dcfe550bae720339b059",
+   "rc": 0,
+   "glsl": " shader_body { \n  vec3 tmpvar_1;\n  tmpvar_1 = (texture (sampler_main, uv).xyz + (0.4 * (\n    (texture (sampler_blur1, uv).xyz * scale1)\n   + bias1)));\n  vec4 tmpvar_2;\n  tmpvar_2.w = 1.0;\n  tmpvar_2.xyz = mix (tmpvar_1, (dot (tmpvar_1, vec3(0.32, 0.49, 0.29)) * hue_shader), vec3(q1));\n  ret = tmpvar_2.xyz;\n }"
+  }
+ },
+ "no-shaders.milk": {},
+ "noise-loop.milk": {
+  "warp": {
+   "source": "float2 swirl(float2 p, float a)\n{\n    float s = sin(a), c = cos(a);\n    return float2(p.x*c - p.y*s, p.x*s + p.y*c);\n}\n\nshader_body\n{\n    float2 p = swirl(uv - 0.5, 0.01*rad) + 0.5;\n    float3 n = tex2D(sampler_noise_lq, uv*4 + q3).xyz - 0.5;\n    ret = tex2D(sampler_fw_main, p + n.xy*0.002).xyz - 0.004;\n}",
+   "hlsl_sha256": "a14a6c28beb09a857c2dc89f081ca2fc12d06be67b2f01d6680a8ef1a20b4e82",
+   "rc": 0,
+   "glsl": " shader_body { \n  vec2 p_1;\n  p_1 = (uv - 0.5);\n  float a_2;\n  a_2 = (0.01 * rad);\n  float tmpvar_3;\n  tmpvar_3 = sin(a_2);\n  float tmpvar_4;\n  tmpvar_4 = cos(a_2);\n  vec2 tmpvar_5;\n  tmpvar_5.x = ((p_1.x * tmpvar_4) - (p_1.y * tmpvar_3));\n  tmpvar_5.y = ((p_1.x * tmpvar_3) + (p_1.y * tmpvar_4));\n  vec4 tmpvar_6;\n  tmpvar_6.w = 1.0;\n  tmpvar_6.xyz = (texture (sampler_fw_main, ((tmpvar_5 + 0.5) + (\n    (texture (sampler_noise_lq, ((uv * 4.0) + q3)).xyz - 0.5)\n  .xy * 0.002))).xyz - 0.004);\n  ret = tmpvar_6.xyz;\n }"
+  },
+  "comp": {
+   "source": "shader_body\n{\n    float3 acc = 0;\n    for (int i = 0; i < 4; i++) {\n        float3 p = float3(uv*2, q3 + i*0.25);\n        acc += tex3D(sampler_noisevol_lq, p).xyz / 4;\n    }\n    ret = GetMain(uv) + acc*0.1;\n}",
+   "hlsl_sha256": "e6e7fb30e150f58fd12e0d7e8e6f48312574bbd7ef03848ac3f1c5a86e9bc6a4",
+   "rc": 0,
+   "glsl": " shader_body { \n  vec3 acc_1;\n  vec3 tmpvar_2;\n  vec2 tmpvar_3;\n  tmpvar_3 = (uv * 2.0);\n  tmpvar_2.xy = tmpvar_3;\n  tmpvar_2.z = q3;\n  acc_1 = (texture (sampler_noisevol_lq, tmpvar_2).xyz / 4.0);\n  vec3 tmpvar_4;\n  tmpvar_4.xy = tmpvar_3;\n  tmpvar_4.z = (q3 + 0.25);\n  acc_1 = (acc_1 + (texture (sampler_noisevol_lq, tmpvar_4).xyz / 4.0));\n  vec3 tmpvar_5;\n  tmpvar_5.xy = tmpvar_3;\n  tmpvar_5.z = (q3 + 0.5);\n  acc_1 = (acc_1 + (texture (sampler_noisevol_lq, tmpvar_5).xyz / 4.0));\n  vec3 tmpvar_6;\n  tmpvar_6.xy = tmpvar_3;\n  tmpvar_6.z = (q3 + 0.75);\n  acc_1 = (acc_1 + (texture (sampler_noisevol_lq, tmpvar_6).xyz / 4.0));\n  vec4 tmpvar_7;\n  tmpvar_7.w = 1.0;\n  tmpvar_7.xyz = (texture (sampler_main, uv).xyz + (acc_1 * 0.1));\n  ret = tmpvar_7.xyz;\n }"
+  }
+ },
+ "optimizer-refuses.milk": {
+  "warp": {
+   "source": "shader_body\n{\n    ret = tex2D(sampler_main, uv).xyz;\n}",
+   "hlsl_sha256": "97baee98a7c5d50a7c8a880a262c0da90c73442f589c03aa3dc79537930c862f",
+   "rc": 0,
+   "glsl": " shader_body { \n  vec4 tmpvar_1;\n  tmpvar_1.w = 1.0;\n  tmpvar_1.xyz = texture (sampler_main, uv).xyz;\n  ret = tmpvar_1.xyz;\n }"
+  },
+  "comp": {
+   "source": "shader_body\n{\n    float3 v = transpose(float3x2(1,0,0,1,0,0))[0];\n    ret = GetPixel(uv) * v;\n}",
+   "hlsl_sha256": "72083cf76bc44bab1de99f82e1eabe663b2a37c90a6033b251d90187594173b9",
+   "rc": 4,
+   "first_line": "glsl-optimizer: (135,42): error: `v' undeclared"
+  }
+ },
+ "own-texture.milk": {
+  "comp": {
+   "source": "sampler sampler_lancast_tiles;\nshader_body\n{\n    float3 t = tex2D(sampler_lancast_tiles, uv*3).xyz;\n    ret = GetPixel(uv) * (0.7 + 0.3*t);\n}",
+   "hlsl_sha256": "f1788fae9cfabe80dd3694a41f9915ac54fc27993a4b78d60ebedd68f901f1d2",
+   "rc": 0,
+   "glsl": "uniform sampler2D sampler_lancast_tiles;\n shader_body { \n  vec4 tmpvar_1;\n  tmpvar_1.w = 1.0;\n  tmpvar_1.xyz = (texture (sampler_main, uv).xyz * (0.7 + (0.3 * texture (sampler_lancast_tiles, \n    (uv * 3.0)\n  ).xyz)));\n  ret = tmpvar_1.xyz;\n }"
+  }
+ },
+ "undeclared.milk": {
+  "warp": {
+   "source": "shader_body\n{\n    ret = tex2D(sampler_main, uv).xyz * brightnes;\n}",
+   "hlsl_sha256": "be197763c7e0b44c4209174c0e66982a8fef2252f2d43d689f0b9f109e793001",
+   "rc": 1,
+   "first_line": "HLSL parse error:(133): ERROR: 'brightnes' : undeclared identifier"
+  },
+  "comp": {
+   "source": "shader_body\n{\n    ret = GetPixel(uv);\n}",
+   "hlsl_sha256": "35659fdb0241b672e8482392e5bac557c794b13a76710c463af62324976a6607",
+   "rc": 0,
+   "glsl": " shader_body { \n  vec4 tmpvar_1;\n  tmpvar_1.w = 1.0;\n  tmpvar_1.xyz = texture (sampler_main, uv).xyz;\n  ret = tmpvar_1.xyz;\n }"
+  }
+ }
+}

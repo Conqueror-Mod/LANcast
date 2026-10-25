@@ -1,0 +1,10 @@
+[preset00]
+MILKDROP_PRESET_VERSION=201
+PSVERSION=2
+per_frame_1=zoom = 1.01;
+comp_1=`sampler sampler_lancast_tiles;
+comp_2=`shader_body
+comp_3=`{
+comp_4=`    float3 t = tex2D(sampler_lancast_tiles, uv*3).xyz;
+comp_5=`    ret = GetPixel(uv) * (0.7 + 0.3*t);
+comp_6=`}

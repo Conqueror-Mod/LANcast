@@ -3,6 +3,7 @@ import { useMilkdropPresets } from "@/api/hooks";
 import type { MilkdropPresetSummary } from "@/api/types";
 import { webgl2Supported } from "./trails";
 import { getPrefs, resolveMilkdrop, setPrefs, type Stage } from "./prefs";
+import type { ShaderStage } from "./milkdropShaders";
 
 /*
  * The MilkDrop stage's state outside the canvas (ADR 0091, step d): what is
@@ -61,9 +62,11 @@ export function markMilkdropPicked() {
 export function resetMilkdropPickedForTests() {
   picked = false;
   broken = new Set();
+  fellBack = new Map();
   status = "idle";
   for (const fn of pickedSubs) fn();
   for (const fn of brokenSubs) fn();
+  for (const fn of fellBackSubs) fn();
   for (const fn of statusSubs) fn();
 }
 
@@ -118,6 +121,40 @@ export function dropPreset(id: string, ids: string[]) {
   const p = getPrefs();
   if (p.stage !== "milkdrop" || resolveMilkdrop(p.milkdrop, ids) !== id) return;
   setPrefs(nextAfterBroken(id, ids, broken));
+}
+
+// ---- shaders that do not run here ------------------------------------------------
+
+/*
+ * A preset whose own warp or comp shader would not compile in this browser is
+ * not dropped: it plays with butterchurn's default for that stage, and the
+ * row under the stage says so (ADR 0091, step g4). Remembered for the session
+ * so the next visit loads the defaults at once rather than compiling the
+ * broken shader again, and per session for the same reasons as `broken`: a
+ * driver update, or a re-upload, may fix it.
+ */
+let fellBack = new Map<string, readonly ShaderStage[]>();
+const fellBackSubs = new Set<() => void>();
+
+export function setShaderFallback(id: string, stages: readonly ShaderStage[]) {
+  fellBack = new Map(fellBack).set(id, stages);
+  for (const fn of fellBackSubs) fn();
+}
+
+/** The stages of `id` that play with the defaults here, if any. */
+export function shaderFallback(id: string): readonly ShaderStage[] | undefined {
+  return fellBack.get(id);
+}
+
+export function useShaderFallback(id: string | undefined): readonly ShaderStage[] | undefined {
+  const map = useSyncExternalStore(
+    (fn) => {
+      fellBackSubs.add(fn);
+      return () => fellBackSubs.delete(fn);
+    },
+    () => fellBack,
+  );
+  return id ? map.get(id) : undefined;
 }
 
 // ---- loading ---------------------------------------------------------------------

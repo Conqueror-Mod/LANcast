@@ -1,0 +1,12 @@
+[preset00]
+MILKDROP_PRESET_VERSION=201
+PSVERSION=2
+per_frame_1=zoom = 1.0;
+warp_1=`shader_body
+warp_2=`{
+warp_3=`    ret = tex2D(sampler_main, uv).xyz * brightnes;
+warp_4=`}
+comp_1=`shader_body
+comp_2=`{
+comp_3=`    ret = GetPixel(uv);
+comp_4=`}
