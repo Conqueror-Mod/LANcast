@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { createContext, useContext, useEffect, useRef, useState } from "react";
 import { useItem } from "@/api/hooks";
 import type { MediaStream } from "@/api/types";
 import "./QueuePanel.css";
@@ -10,6 +10,10 @@ import "./QueuePanel.css";
 // row owns its query without anyone calling hooks in a loop. The rows are
 // already in the cache in the ordinary case — the queue came from a container
 // whose children were just listed — so this is usually no request at all.
+//
+// A row asks for its item only once it is near enough to be seen (RowSight
+// below). "Shuffle the whole library" is a queue of 1,600 tracks, none of them
+// cached, and asking for all of them at once broke playback itself.
 export function QueuePanel({
   ids,
   currentID,
@@ -54,6 +58,7 @@ export function QueuePanel({
    */
   const currentRow = useRef<HTMLButtonElement>(null);
   const panel = useRef<HTMLDivElement>(null);
+  const sight = useRowSight(panel);
   useEffect(() => {
     if (inline) return;
     currentRow.current?.scrollIntoView({ block: "center" });
@@ -85,6 +90,7 @@ export function QueuePanel({
   }, [inline, currentID]);
 
   return (
+    <RowSightContext.Provider value={sight}>
     <div
       ref={panel}
       className={"queue" + (inline ? " queue--inline" : "")}
@@ -134,7 +140,80 @@ export function QueuePanel({
         ))}
       </div>
     </div>
+    </RowSightContext.Provider>
   );
+}
+
+/*
+ * ---- which rows are worth fetching ------------------------------------------
+ *
+ * Every row used to fetch its item the moment it mounted. On a queue of an
+ * album that is a dozen requests, mostly answered from the cache. On "shuffle
+ * the whole library" it was 1,600 requests in the same instant, none cached,
+ * and Chromium does not queue that many: it fails the overflow locally with
+ * "Failed to fetch" before anything reaches the server.
+ *
+ * Among the failures were the two requests that mattered. Now Playing mounts
+ * this list as the first track starts, so the track's own `/playback` question
+ * and its direct stream were in the same burst. Measured on the reporting
+ * install, 2026-10-25: with 1,600 item fetches in flight, the `/playback` fetch
+ * and a direct `<audio>` load of an ordinary 320 kbps MP3 both failed in 858 ms,
+ * and neither one reached the server. The player read the failed load as "this
+ * browser cannot play the file", asked for a conversion, and was told —
+ * correctly — that the file plays directly. Shown as "That file would not play
+ * directly" and then "The server refused to start playback" on the first
+ * track of nearly every whole-library shuffle.
+ *
+ * So a row asks only once it has been near the visible part of the list, and
+ * then keeps asking — scrolling it away again must not blank a title already
+ * shown. Without IntersectionObserver there is nothing to measure with, and
+ * every row asks, as before.
+ */
+type RowSight = ((el: Element, onSeen: () => void) => () => void) | null;
+const RowSightContext = createContext<RowSight>(null);
+
+function useRowSight(panel: React.RefObject<HTMLDivElement>): RowSight {
+  const [sight, setSight] = useState<RowSight>(null);
+  useEffect(() => {
+    if (typeof IntersectionObserver === "undefined") return;
+    const waiting = new Map<Element, () => void>();
+    const io = new IntersectionObserver(
+      (entries) => {
+        for (const e of entries) {
+          if (!e.isIntersecting) continue;
+          const seen = waiting.get(e.target);
+          waiting.delete(e.target);
+          io.unobserve(e.target);
+          seen?.();
+        }
+      },
+      // A screen's worth ahead, so a row has its title by the time it is
+      // scrolled to rather than as it arrives.
+      { root: panel.current, rootMargin: "400px 0px" },
+    );
+    setSight(() => (el: Element, onSeen: () => void) => {
+      waiting.set(el, onSeen);
+      io.observe(el);
+      return () => {
+        waiting.delete(el);
+        io.unobserve(el);
+      };
+    });
+    return () => io.disconnect();
+  }, [panel]);
+  return sight;
+}
+
+/** Whether this row has been near enough to view to be worth its request. */
+function useSeen(el: React.RefObject<Element>): boolean {
+  const sight = useContext(RowSightContext);
+  const [seen, setSeen] = useState(false);
+  const measurable = typeof IntersectionObserver !== "undefined";
+  useEffect(() => {
+    if (seen || !sight || !el.current) return;
+    return sight(el.current, () => setSeen(true));
+  }, [seen, sight, el]);
+  return seen || !measurable;
 }
 
 function QueueRow({
@@ -153,7 +232,15 @@ function QueueRow({
   /** Present only on the hand-queued lane, where taking one back off is safe. */
   onDrop?: () => void;
 }) {
-  const { data: item } = useItem(id);
+  const own = useRef<HTMLButtonElement>(null);
+  const seen = useSeen(own);
+  const { data: item } = useItem(seen ? id : 0);
+  // The current row's ref belongs to the panel, which scrolls to it; this one
+  // is the row's own, for being seen. A button takes one ref, so both are set.
+  const setRef = (el: HTMLButtonElement | null) => {
+    (own as React.MutableRefObject<HTMLButtonElement | null>).current = el;
+    if (rowRef) (rowRef as React.MutableRefObject<HTMLButtonElement | null>).current = el;
+  };
   /*
    * The drop control sits beside the row rather than inside it, for the reason
    * TrackList records: a button cannot contain a button, and the browser's
@@ -163,7 +250,7 @@ function QueueRow({
   const row = (
     <button
       role="menuitem"
-      ref={rowRef}
+      ref={setRef}
       className={"queue__row" + (current ? " is-current" : "")}
       onClick={onPick}
       aria-current={current ? "true" : undefined}
