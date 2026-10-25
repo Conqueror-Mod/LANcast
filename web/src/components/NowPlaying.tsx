@@ -24,6 +24,7 @@ import {
   milkdropStatusText,
   useMilkdropOffer,
   useMilkdropStatus,
+  useShaderFallback,
   type MilkdropOffer,
 } from "@/playback/milkdropStage";
 import { LyricsPanel } from "@/components/LyricsPanel";
@@ -258,7 +259,8 @@ export function StageSwitch() {
  * visualizer, through all of them, as `,` and `.` do. A MilkDrop preset whose
  * shaders the server could not convert says so, as the API asks clients to:
  * it plays with butterchurn's default shaders, and may not look as its author
- * meant.
+ * meant. So does one whose converted shaders would not compile in this
+ * browser, which plays the defaults for that stage instead of drawing black.
  */
 export function VizStep({ only }: { only?: StageTier }) {
   const pb = usePlayback();
@@ -269,6 +271,9 @@ export function VizStep({ only }: { only?: StageTier }) {
   const shown = onMilkdrop
     ? milkdrop.presets.find((m) => m.id === resolveMilkdrop(prefs.milkdrop, milkdrop.ids))
     : undefined;
+  // Converted on the server but would not compile in this browser, so it is
+  // playing butterchurn's defaults for that stage (ADR 0091, step g4).
+  const fellBack = useShaderFallback(shown?.id);
   // The engine would not load: no preset to step to, so the row says so and
   // offers the cover back. Picking MilkDrop again tries the download again.
   if (onMilkdrop && status === "failed") {
@@ -301,6 +306,7 @@ export function VizStep({ only }: { only?: StageTier }) {
       <span className="np__step-name" aria-live="polite">
         {stageLabel(prefs, milkdrop)}
         {shown?.shaders === "not_converted" && <span className="np__step-note"> · shaders not converted</span>}
+        {fellBack && <span className="np__step-note"> · shaders could not run here</span>}
         {onMilkdrop && status === "loading" && <span className="np__step-note"> · loading</span>}
       </span>
       <button
