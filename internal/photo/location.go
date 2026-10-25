@@ -192,9 +192,9 @@ func readDegrees(tiff []byte, bo binary.ByteOrder, kind uint16, count, valueOff 
 // The proper route is the container's own index (iinf names the item, iloc
 // says where its bytes are). The item's payload is always the same shape,
 // though — a four-byte offset, then "Exif\0\0", then the TIFF header — and that
-// is distinctive enough to find directly. It is only used here, for the
-// location; orientation is deliberately left to ffmpeg's conversion for HEIC,
-// which already applies the container's rotation.
+// is distinctive enough to find directly. It is used for the location and for
+// the capture time (readHEIFCaptureTime); orientation is deliberately left to
+// ffmpeg's conversion for HEIC, which already applies the container's rotation.
 func findHEIFExif(raw []byte) []byte {
 	if len(raw) < 12 || string(raw[4:8]) != "ftyp" {
 		return nil

@@ -46,6 +46,35 @@ func readEXIF(raw []byte) (exifData, error) {
 	if err != nil {
 		return exifData{}, err
 	}
+	return readTIFF(tiff)
+}
+
+// readHEIFCaptureTime is when a HEIF/HEIC photo was taken, from the Exif item
+// inside the container, or 0 when it does not say.
+//
+// The capture time only. A HEIC's orientation is its container's own rotation
+// (the irot and imir boxes), which ffmpeg's conversion already applies; the
+// EXIF orientation inside is the phone repeating it, and honouring it as well
+// would turn every rotated HEIC twice.
+//
+// Before this, readEXIF looked for JPEG and TIFF only, so every HEIC on the
+// live library was thumbnailed with no capture time and sat outside the
+// Timeline and On this day: 19 photos, noticed during the photo places work
+// (ADR 0078).
+func readHEIFCaptureTime(raw []byte) int64 {
+	tiff := findHEIFExif(raw)
+	if tiff == nil {
+		return 0
+	}
+	e, err := readTIFF(tiff)
+	if err != nil {
+		return 0
+	}
+	return e.takenAt
+}
+
+// readTIFF reads the two tags that matter from a TIFF block.
+func readTIFF(tiff []byte) (exifData, error) {
 	if len(tiff) < 8 {
 		return exifData{}, errNoEXIF
 	}

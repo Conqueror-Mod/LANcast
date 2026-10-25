@@ -85,6 +85,11 @@ func (d *Decoder) Read(ctx context.Context, path string) (image.Image, Meta, err
 	// where they matter most.
 	if e, err := readEXIF(raw); err == nil {
 		meta.TakenAt, meta.Orientation = e.takenAt, e.orientation
+	} else {
+		// A HEIC keeps its EXIF inside the container, not where readEXIF looks.
+		// Its capture time is read from there; its orientation is not, because
+		// ffmpeg's conversion below already turns it (readHEIFCaptureTime).
+		meta.TakenAt = readHEIFCaptureTime(raw)
 	}
 
 	img, _, err := image.Decode(bytes.NewReader(raw))

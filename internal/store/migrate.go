@@ -6,7 +6,7 @@ import (
 )
 
 // CurrentSchemaVersion is the revision this build expects.
-const CurrentSchemaVersion = 77
+const CurrentSchemaVersion = 78
 
 // migration is one forward step. There are deliberately no down migrations:
 // rolling a media library's schema backwards loses data that a rescan cannot
@@ -144,6 +144,7 @@ var migrations = []migration{
 	{version: 75, sql: schemaRevision75},
 	{version: 76, sql: schemaRevision76},
 	{version: 77, sql: schemaRevision77},
+	{version: 78, sql: schemaRevision78},
 }
 
 // migrate brings the database up to CurrentSchemaVersion.
@@ -2405,4 +2406,24 @@ CREATE TABLE IF NOT EXISTS retro_account (
     api_key_sealed BLOB    NOT NULL,
     connected_at   INTEGER NOT NULL
 );
+`
+
+/*
+ * Revision 78 -- photos with no capture time are read again.
+ *
+ * No shape changes. The photo worker read EXIF from JPEG and TIFF only, so a
+ * HEIC was thumbnailed with no capture time and stamped done, and nothing read
+ * it again: 19 photos on the live library sat outside the Timeline and On this
+ * day. The worker now finds the Exif item inside a HEIF container.
+ *
+ * Every photo still without a capture time goes back through the photo worker
+ * once. By what is missing rather than by extension, as the decoder decides
+ * format by content: a HEIC named .jpg is caught too. Most of what comes back
+ * (screenshots, scans, PNGs) simply finds no date again, landing on the
+ * content-addressed thumbnails it already had. The photo pass starts at boot,
+ * so nothing waits on a scan, as revision 60 relied on.
+ */
+const schemaRevision78 = `
+UPDATE media_item SET cover_checked_at = NULL
+ WHERE kind = 'photo' AND missing = 0 AND taken_at IS NULL;
 `

@@ -204,3 +204,37 @@ func TestRevision60QueuesEveryPhotoForAHash(t *testing.T) {
 		t.Errorf("pending = %d photos, want the one already thumbnailed queued for its hash", len(pending))
 	}
 }
+
+// Revision 78 sends back the photos the worker read without a capture time,
+// so a HEIC thumbnailed before it could read one gets its date. Only those: a
+// dated photo has nothing to gain from another read.
+func TestRevision78QueuesOnlyPhotosWithoutACaptureTime(t *testing.T) {
+	s := openTestStore(t)
+	sh := makeShots(t, s)
+	ctx := context.Background()
+	when := int64(1_600_000_000)
+	undated := sh.photo(t, s, `phone.heic`, nil, nil)
+	dated := sh.photo(t, s, `camera.jpg`, &when, nil)
+	for _, id := range []int64{undated, dated} {
+		if err := s.MarkArtworkChecked(ctx, id); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := s.db.Exec(`UPDATE meta SET value = '77' WHERE key = 'schema_version'`); err != nil {
+		t.Fatal(err)
+	}
+	if err := migrate(s.db); err != nil {
+		t.Fatalf("migrate: %v", err)
+	}
+	pending, err := s.PendingPhotos(ctx, 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(pending) != 1 || pending[0].ID != undated {
+		var ids []int64
+		for _, p := range pending {
+			ids = append(ids, p.ID)
+		}
+		t.Errorf("pending = %v, want only the undated photo %d", ids, undated)
+	}
+}
