@@ -30,13 +30,18 @@ import (
  * (MIT, Jordan Berg; LICENSE.milkdrop-preset-utils in msc/) by way of the
  * spike's transcription, spikes/milkdrop/shaders/pipeline.mjs, which was
  * checked byte for byte against the shipped packs. They are ported *exactly*,
- * oddities included — a filter that drops every header line starting "in",
- * `int` declarations with it; replacements that take only the first match —
+ * oddities included — replacements that take only the first match, say —
  * because the point is to make what butterchurn's packs were made with, and a
  * port that improved on them would be a third converter nobody has measured.
  * The tests hold the port to pipeline.mjs's own output on LANcast's fixtures,
  * and the corpus test (outside the repository) holds it to the spike's run
  * over 9,141 shaders.
+ *
+ * One exception, made after g5 watched it fail in a browser: the header
+ * filter in processOptimizedShader keeps the declarations a preset made
+ * itself, which the packs' filter threw away, leaving the body naming things
+ * nothing declared. See "Where LANcast parts from the packs" below;
+ * processOptimizedShaderAsPacks is the exact port, for the tests.
  *
  * WHY THIS IS NOT IN Parse
  *
@@ -379,10 +384,111 @@ func isUserSampler(line string) bool {
 	return m != nil && !builtinSamplers["sampler_"+m[1]]
 }
 
+/*
+ * Where LANcast parts from the packs: the declarations a preset made itself.
+ *
+ * The port's header filter drops every `uniform` line but a preset's own
+ * sampler, and every line starting "in". Both are meant for what butterchurn
+ * declares again in its own wrapper. But in HLSL a global like `float glow;`
+ * is a uniform, so the converter prints `uniform float glow;` and the filter
+ * takes it; and `int xlat_mutablen;`, the converter's copy of a global the
+ * shader writes to, goes with the "in" lines. Either way the body is left
+ * naming something nothing declares, the browser refuses the shader, and the
+ * preset falls back to butterchurn's defaults (web/src/playback/milkdropShaders.ts).
+ * Four of the spike's six compile failures in its 1,105-preset browser sample
+ * named an undeclared identifier (`n`, `xlat_mutablen`, `tele`, `uv3`), which
+ * is what this does; the spike did not record which filter took each.
+ *
+ * So the server keeps a `uniform` line when its name came from the preset —
+ * declared by neither MilkDrop's header (shaderHeader) nor butterchurn's
+ * wrappers — and drops only real `in ` inputs. A kept uniform is never set, so
+ * it reads zero, which is what MilkDrop gives a global a preset declares and
+ * never assigns. A name either of those declares is still dropped as before:
+ * keeping one butterchurn declares would declare it twice, and one only the
+ * header declares (`hue_shader` in a warp, `progress`) has no value here to
+ * give, so it still fails honestly rather than reading a silent zero.
+ *
+ * processOptimizedShaderAsPacks keeps the packs' behaviour, so the fixtures
+ * and the corpus test can still hold the port to pipeline.mjs byte for byte.
+ */
+
+// butterchurnDeclares is every name butterchurn's warp and comp wrappers
+// declare around a preset's shader: uniforms, inputs and outputs, globals and
+// functions, both stages together. A preset declaration of one of these is
+// dropped, never kept. Pinned to the vendored build by
+// TestButterchurnDeclaresMatchesTheVendoredWrappers.
+var butterchurnDeclares = setOf(
+	// uniforms, warp and comp
+	"_qa", "_qb", "_qc", "_qd", "_qe", "_qf", "_qg", "_qh",
+	"aspect", "bass", "bass_att", "bias1", "bias2", "bias3",
+	"blur1_max", "blur1_min", "blur2_max", "blur2_min", "blur3_max", "blur3_min",
+	"decay", "fps", "frame", "mid", "mid_att", "rand_frame", "rand_preset", "resolution",
+	"roam_cos", "roam_sin", "slow_roam_cos", "slow_roam_sin",
+	"sampler_blur1", "sampler_blur2", "sampler_blur3", "sampler_fc_main", "sampler_fw_main",
+	"sampler_main", "sampler_noise_hq", "sampler_noise_lq", "sampler_noise_lq_lite",
+	"sampler_noise_mq", "sampler_noisevol_hq", "sampler_noisevol_lq", "sampler_pc_main",
+	"sampler_pw_main", "sampler_pw_noise_lq",
+	"scale1", "scale2", "scale3",
+	"texsize", "texsize_noise_hq", "texsize_noise_lq", "texsize_noise_lq_lite", "texsize_noise_mq",
+	"texsize_noisevol_hq", "texsize_noisevol_lq",
+	"time", "treb", "treb_att", "vol", "vol_att",
+	// uniforms, comp only
+	"brighten", "darken", "echo_alpha", "echo_orientation", "echo_zoom", "fShader", "gammaAdj",
+	"invert", "solarize",
+	// inputs, outputs, globals and functions
+	"uv", "uv_orig", "vUv", "vColor", "fragColor", "PI", "ret", "rad", "ang", "hue_shader", "lum",
+)
+
+// headerDeclares is every name shaderHeader declares, read from it.
+var headerDeclares = func() map[string]bool {
+	m := map[string]bool{}
+	for _, g := range regexp.MustCompile(`(?m)^\s*(?:uniform\s+)?\w+\s+(\w+)\s*;`).FindAllStringSubmatch(shaderHeader, -1) {
+		m[g[1]] = true
+	}
+	return m
+}()
+
+func setOf(names ...string) map[string]bool {
+	m := make(map[string]bool, len(names))
+	for _, n := range names {
+		m[n] = true
+	}
+	return m
+}
+
+var uniformDecl = regexp.MustCompile(`^uniform\s+\w+\s+(\w+)\s*(?:\[\s*\d+\s*\])?\s*;`)
+
+// isPresetUniform: a uniform the preset declared itself, which nothing else
+// will declare for it.
+func isPresetUniform(line string) bool {
+	m := uniformDecl.FindStringSubmatch(line)
+	return m != nil && !headerDeclares[m[1]] && !butterchurnDeclares[m[1]]
+}
+
 // processOptimizedShader trims the converter's GLSL back to declarations and a
 // `shader_body { … }`, which butterchurn wraps in its own header and main
-// when it loads the preset.
+// when it loads the preset. It keeps the preset's own declarations (above).
 func processOptimizedShader(shader string) string {
+	return trimOptimized(shader, false)
+}
+
+// processOptimizedShaderAsPacks is processOptimizedShader as
+// milkdrop-preset-utils has it, the preset's own declarations dropped too.
+func processOptimizedShaderAsPacks(shader string) string {
+	return trimOptimized(shader, true)
+}
+
+func dropDeclaration(l string, asPacks bool) bool {
+	if asPacks {
+		return strings.HasPrefix(l, "in") || (strings.HasPrefix(l, "uniform") && !isUserSampler(l))
+	}
+	if strings.HasPrefix(l, "in ") {
+		return true
+	}
+	return strings.HasPrefix(l, "uniform") && !isUserSampler(l) && !isPresetUniform(l)
+}
+
+func trimOptimized(shader string, asPacks bool) string {
 	if shader == "" {
 		return ""
 	}
@@ -399,7 +505,7 @@ func processOptimizedShader(shader string) string {
 	before, body := shaderParts(s)
 	var keep []string
 	for _, l := range strings.Split(before, "\n") {
-		if strings.HasPrefix(l, "in") || (strings.HasPrefix(l, "uniform") && !isUserSampler(l)) {
+		if dropDeclaration(l, asPacks) {
 			continue
 		}
 		keep = append(keep, l)

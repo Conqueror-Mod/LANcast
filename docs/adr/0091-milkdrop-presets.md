@@ -978,3 +978,29 @@ decision once g has shipped.
 | g4 | Client: check `COMPILE_STATUS` and `LINK_STATUS` of a preset's shaders. On failure, reload it with the default shaders and say so, rather than show black | S — **built**: `milkdropShaders.ts`; only the stage that failed falls back, the reload cuts rather than blends from the broken program, and it is remembered for the session |
 | g5 | Verify: swap the build into the installed service and upload a few presets. Rerun the browser sample against the shipped client | S |
 | h | Textures (§7): upload, re-encode, name resolution, `texsize_`; its own spike for TGA/DDS and the one-unit limit | later |
+
+**Amendment, 2026-10-25: the server keeps a preset's own declarations.** g5
+watched a converted shader fail in Chrome with `'lancast_glow' : undeclared
+identifier`. The cause is the packs' header filter, which g2 ported exactly. It
+drops every `uniform` line but a preset's own sampler, and every line starting
+"in". But an HLSL global the preset declares (`float glow;`) comes out as a
+uniform, and `int` lines start with "in", so the body is left naming things
+nothing declares. Four of the spike's six browser compile failures named an
+undeclared identifier (`n`, `xlat_mutablen`, `tele`, `uv3`).
+
+`processOptimizedShader` now keeps a `uniform` line whose name neither MilkDrop's
+header nor butterchurn's wrappers declare, and drops only real `in ` inputs. A
+kept uniform is never set, so it reads zero, as an unassigned global does in
+MilkDrop. A name butterchurn declares is still dropped, because keeping it would
+declare it twice. A name only the header declares (`hue_shader` in a warp,
+`progress`) is still dropped too, because there is no value here to give it, so
+it fails honestly rather than reading a silent zero. That includes a texture's
+`texsize_<name>`, which the preset declares itself. It now compiles and reads
+zero until step h loads textures.
+
+This is the one deliberate departure from the packs.
+- `processOptimizedShaderAsPacks` keeps the exact port, and the fixtures and the
+  corpus test still compare that against `pipeline.mjs`.
+- `TestButterchurnDeclaresMatchesTheVendoredWrappers` pins the list of
+  butterchurn's names to the vendored build.
+- Not re-measured on the corpus, which was not on disk when this was written.
