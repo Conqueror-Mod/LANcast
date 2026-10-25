@@ -180,6 +180,86 @@ func TestEXIFTimeIsReadAsLocal(t *testing.T) {
 	}
 }
 
+// heifWithEXIF builds the parts of a HEIF file the reader looks at: an ftyp
+// box, the container index's own mention of the Exif item type (which is not
+// the payload), then the item's payload — a four-byte offset, "Exif\0\0", the
+// TIFF block. As location_test.go's TestALocationIsReadFromAHEIF does.
+func heifWithEXIF(tiff []byte) []byte {
+	var raw bytes.Buffer
+	raw.Write([]byte{0, 0, 0, 24})
+	raw.WriteString("ftypheic")
+	raw.Write(make([]byte, 12))
+	raw.WriteString("infe....Exif\x00\x00\x00\x00")
+	raw.Write(make([]byte, 64))
+	raw.Write([]byte{0, 0, 0, 6})
+	raw.WriteString("Exif\x00\x00")
+	raw.Write(tiff)
+	return raw.Bytes()
+}
+
+// A HEIC's capture time is read from the Exif item inside the container. Its
+// EXIF orientation is not: the container's own rotation is what ffmpeg
+// applies, and turning the picture again for the EXIF copy of it would rotate
+// every portrait HEIC twice. Before this, every HEIC had no capture time and
+// sat outside the Timeline.
+func TestAHEICsCaptureTimeIsReadAndItsOrientationIsNot(t *testing.T) {
+	when := "2021:05:02 09:41:07"
+	off := uint32(8 + 2 + 2*12 + 4)
+	tiff := exifIFD(t, []ifdEntry{
+		{tag: tagOrientation, kind: 3, count: 1, value: 6},
+		{tag: tagDateTime, kind: 2, count: uint32(len(when) + 1), value: off, tail: append([]byte(when), 0)},
+	})
+	dir := t.TempDir()
+	path := filepath.Join(dir, "phone.heic")
+	if err := os.WriteFile(path, heifWithEXIF(tiff), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	// ffmpeg hands back a 1×1 picture, already upright as it would be.
+	d := &Decoder{FFmpeg: &fakeFFmpeg{png: onePixelPNG(t)}}
+	_, meta, err := d.Read(context.Background(), path)
+	if err != nil {
+		t.Fatalf("Read: %v", err)
+	}
+	want := time.Date(2021, 5, 2, 9, 41, 7, 0, time.Local).Unix()
+	if meta.TakenAt != want {
+		t.Errorf("TakenAt = %d, want %d", meta.TakenAt, want)
+	}
+	if meta.Orientation != 0 {
+		t.Errorf("Orientation = %d, want 0: ffmpeg already turned it", meta.Orientation)
+	}
+	// And so the stored size is the converted picture's, not swapped for a
+	// quarter turn nobody will apply.
+	if meta.Width != 1 || meta.Height != 1 {
+		t.Errorf("dimensions = %dx%d, want 1x1", meta.Width, meta.Height)
+	}
+}
+
+func TestReadHEIFCaptureTimeIsZeroWithoutOne(t *testing.T) {
+	cases := map[string][]byte{
+		"not a HEIF":             jpegWithDate(t, "2019:07:14 18:03:22"),
+		"a HEIF with no Exif":    append([]byte{0, 0, 0, 24}, []byte("ftypheic............")...),
+		"Exif with no date":      heifWithEXIF(exifIFD(t, []ifdEntry{{tag: tagOrientation, kind: 3, count: 1, value: 1}})),
+		"the index mention only": append([]byte{0, 0, 0, 24}, []byte("ftypheicinfe....Exif\x00\x00\x00\x00")...),
+	}
+	for name, raw := range cases {
+		if got := readHEIFCaptureTime(raw); got != 0 {
+			t.Errorf("%s: got %d, want 0", name, got)
+		}
+	}
+}
+
+// Every prefix of a HEIF with EXIF: the reader must run out, never panic.
+func TestTruncatedHEIFDoesNotPanic(t *testing.T) {
+	when := "2021:05:02 09:41:07"
+	raw := heifWithEXIF(exifIFD(t, []ifdEntry{
+		{tag: tagDateTime, kind: 2, count: uint32(len(when) + 1), value: 8 + 2 + 12 + 4, tail: append([]byte(when), 0)},
+	}))
+	for cut := 0; cut < len(raw); cut++ {
+		readHEIFCaptureTime(raw[:cut])
+	}
+}
+
 // EXIF is attacker-controlled data in a file the server was merely pointed at.
 // A malformed offset must end the walk rather than panic the worker.
 func TestMalformedEXIFDoesNotPanic(t *testing.T) {
