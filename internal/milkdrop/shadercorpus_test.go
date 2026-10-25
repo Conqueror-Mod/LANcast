@@ -127,7 +127,7 @@ func TestShaderCorpusAgainstPipelineMjs(t *testing.T) {
 				}
 				r := results[jid]
 				if g, ok := converted[id][k.kind]; ok && r.RC == 0 {
-					if processOptimizedShader(r.GLSL) == g {
+					if processOptimizedShaderAsPacks(r.GLSL) == g {
 						procSame++
 					} else {
 						procDiff++

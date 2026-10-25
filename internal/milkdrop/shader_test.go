@@ -8,6 +8,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"sync"
 	"testing"
@@ -342,10 +343,135 @@ func TestSplitShadersTakesTheTextAfterTheLastMarker(t *testing.T) {
 	}
 }
 
+const declarationsGLSL = "#version 300 es\n" +
+	"in vec2 xlv_TEXCOORD0;\n" +
+	"int xlat_mutablen;\n" +
+	"uniform int n;\n" +
+	"uniform float glow;\n" +
+	"uniform vec4 texsize_tiles;\n" +
+	"uniform vec4 weights[4];\n" +
+	"uniform sampler2D sampler_main;\n" +
+	"uniform sampler2D sampler_tiles;\n" +
+	"uniform float time;\n" +
+	"uniform vec2 resolution;\n" +
+	"uniform vec3 hue_shader;\n" +
+	"uniform float progress;\n" +
+	"float kept;\n" +
+	"void main ()\n{\n  _glesFragData[0] = vec4(glow);\n}\n"
+
+func TestProcessingKeepsThePresetsOwnDeclarations(t *testing.T) {
+	out := processOptimizedShader(declarationsGLSL)
+	before, _ := shaderParts(out)
+	for _, want := range []string{
+		"int xlat_mutablen;",          // an int is not an input
+		"uniform int n;",              // the preset's own global
+		"uniform float glow;",         // the preset's own global
+		"uniform vec4 texsize_tiles;", // butterchurn never declares a texture's size
+		"uniform vec4 weights[4];",    // an array of its own
+		"uniform sampler2D sampler_tiles;",
+		"float kept;",
+	} {
+		if !strings.Contains(before, want+"\n") && !strings.HasSuffix(before, want) {
+			t.Errorf("dropped %q:\n%s", want, before)
+		}
+	}
+	for _, gone := range []string{
+		"xlv_TEXCOORD0",            // the real input
+		"sampler_main",             // butterchurn declares it
+		"uniform float time;",      // butterchurn declares it
+		"uniform vec2 resolution;", // butterchurn declares it, though MilkDrop's header does not
+		"hue_shader",               // only the header declares it: no value here to give
+		"progress",                 // likewise
+	} {
+		if strings.Contains(before, gone) {
+			t.Errorf("kept %q, which would be declared twice or read a silent zero:\n%s", gone, before)
+		}
+	}
+}
+
+/*
+ * Through the real converter: a preset declaring globals of its own, one of
+ * them an int the body writes to. Every name the body uses must be declared
+ * either in what the server keeps or by butterchurn, or the browser refuses
+ * the shader (g5 watched it do so for `lancast_glow`).
+ */
+const ownGlobalsMilk = "[preset00]\r\nMILKDROP_PRESET_VERSION=201\r\nPSVERSION=2\r\n" +
+	"per_frame_1=zoom = 1.01;\r\n" +
+	"comp_1=`float lancast_glow;\r\n" +
+	"comp_2=`int steps;\r\n" +
+	"comp_3=`shader_body\r\n" +
+	"comp_4=`{\r\n" +
+	"comp_5=`    steps = steps + (int)(bass*4);\r\n" +
+	"comp_6=`    float3 c = tex2D(sampler_main, uv).xyz;\r\n" +
+	"comp_7=`    c *= 0.9 + 0.1*lancast_glow + 0.01*steps;\r\n" +
+	"comp_8=`    ret = c;\r\n" +
+	"comp_9=`}\r\n"
+
+func TestConvertedShadersDeclareEveryNameTheyUse(t *testing.T) {
+	u, err := Parse([]byte(ownGlobalsMilk), "own-globals.milk")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := ConvertShaders(context.Background(), moduleConverter(), &u); err != nil {
+		t.Fatal(err)
+	}
+	if u.Shaders != ShadersConverted {
+		t.Fatalf("shaders = %s (%s)", u.Shaders, u.ShadersReason)
+	}
+	before, body := shaderParts(u.Preset.Comp)
+	t.Logf("comp:\n%s", u.Preset.Comp)
+	if !strings.Contains(before, "lancast_glow") {
+		t.Errorf("the preset's own `lancast_glow` is not declared:\n%s", u.Preset.Comp)
+	}
+	// Whatever the converter named the int (`steps`, or its xlat_mutable copy),
+	// each identifier the body uses that is not GLSL's, butterchurn's or a
+	// local must be declared in what was kept.
+	for _, name := range regexp.MustCompile(`\b(xlat_mutable\w+|steps|lancast_glow)\b`).FindAllString(body, -1) {
+		if !strings.Contains(before, name) && !butterchurnDeclares[name] {
+			t.Errorf("the body uses %q and nothing declares it:\n%s", name, u.Preset.Comp)
+		}
+	}
+	// As the packs have it, the same shader names something undeclared: the
+	// failure this exists to fix.
+	if packs, _ := shaderParts(processOptimizedShaderAsPacks(rawGLSL(t, u.HLSL.Comp))); strings.Contains(packs, "lancast_glow") {
+		t.Errorf("the packs' port was expected to drop it; the fixture no longer shows the fault:\n%s", packs)
+	}
+}
+
+// rawGLSL is the converter's own output for one shader, before trimming.
+func rawGLSL(t *testing.T, hlsl string) string {
+	t.Helper()
+	g, err := moduleConverter().Convert(context.Background(), prepareShader(hlsl))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return g
+}
+
+func TestProcessingAsThePacksDropsThePresetsDeclarations(t *testing.T) {
+	// The exact port, kept for the fixtures and the corpus test: what
+	// butterchurn's own packs were made with.
+	before, _ := shaderParts(processOptimizedShaderAsPacks(declarationsGLSL))
+	if before != "uniform sampler2D sampler_tiles;\nfloat kept;\n " {
+		t.Fatalf("got %q", before)
+	}
+}
+
+func TestHeaderDeclaresIsReadFromTheHeader(t *testing.T) {
+	for _, n := range []string{"sampler_main", "texsize_noise_lq", "_qa", "q1", "q32", "hue_shader", "progress", "uv_orig"} {
+		if !headerDeclares[n] {
+			t.Errorf("headerDeclares is missing %q", n)
+		}
+	}
+	if headerDeclares["M_PI"] || headerDeclares["GetBlur1"] {
+		t.Error("a #define is not a declaration")
+	}
+}
+
 func TestProcessingDropsHeaderLinesStartingIn(t *testing.T) {
 	// milkdrop-preset-utils drops every declaration line that starts "in" —
-	// the inputs it meant, and an `int` it did not. Kept, as the packs have it.
-	out := processOptimizedShader("#version 300 es\nint k;\nfloat f;\nuniform sampler2D sampler_main;\nuniform sampler2D sampler_mine;\nvoid main ()\n{\n  xlat_mutableuv = uv;\n  _glesFragData[0] = vec4(1.0);\n}\n")
+	// the inputs it meant, and an `int` it did not. The packs' port keeps that.
+	out := processOptimizedShaderAsPacks("#version 300 es\nint k;\nfloat f;\nuniform sampler2D sampler_main;\nuniform sampler2D sampler_mine;\nvoid main ()\n{\n  xlat_mutableuv = uv;\n  _glesFragData[0] = vec4(1.0);\n}\n")
 	if out != "float f;\nuniform sampler2D sampler_mine;\n shader_body { \n  ret = vec4(1.0).xyz;\n }" {
 		t.Fatalf("got %q", out)
 	}
