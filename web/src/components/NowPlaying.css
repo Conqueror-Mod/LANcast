@@ -163,7 +163,8 @@
   gap: 6px;
 }
 
-.np__stage-row {
+.np__stage-row,
+.np__stage-choices {
   display: flex;
   justify-content: center;
   flex-wrap: wrap;
@@ -203,6 +204,34 @@
   text-transform: none;
   letter-spacing: 0;
   color: var(--text-muted);
+}
+
+/* MilkDrop would not load: said in words, not in small caps. */
+.np__step-name--failed {
+  min-width: 0;
+  text-transform: none;
+  letter-spacing: 0;
+  font-size: 13px;
+  padding-right: 8px;
+}
+
+/* The way back to the cover when MilkDrop would not load. */
+.np__step-cover {
+  appearance: none;
+  background: none;
+  border: 1px solid rgba(242, 245, 251, 0.22);
+  border-radius: 999px;
+  padding: 4px 12px;
+  font: inherit;
+  font-size: 13px;
+  color: var(--text-primary);
+  cursor: pointer;
+}
+
+.np__step-cover:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--gold-ring);
+  border-color: var(--gold);
 }
 
 .np__step-btn {
@@ -267,7 +296,10 @@
     left: 16px;
     right: 16px;
     width: auto;
-    top: calc(var(--np-top) + var(--np-art) + 18px);
+    /* Under the stage and under the switcher's rows (.np__stage below), which
+       are in another box: NowPlaying.tsx says which rows there are. */
+    --np-switch: 0px;
+    top: calc(var(--np-top) + var(--np-art) + 18px + var(--np-switch));
     /* Clears the phone's control bar (Player.css): scrubber, time, transport
        and the ⋯ row measured 153px at 375px, and 108px left the queue running
        45px under it. A measurement of today's bar, not a rule it enforces. */
@@ -288,39 +320,72 @@
     min-height: 40px;
   }
 
-  /* Over the stage's lower edge rather than under it: the column starts
-     18px below the stage, and every pixel taken from it is a queue row.
-     Anchored by its bottom and growing upward, so the trails' preset row
-     stacks above the choices, inside the stage, and never onto the title. */
+  /* The switcher's rows, measured: 12px under the stage, a 40px row of
+     choices, and 4px + 40px more for a preset's stepper. */
+  .np--switch {
+    --np-switch: 52px;
+  }
+
+  .np--switch.np--step {
+    --np-switch: 96px;
+  }
+
+  /* Under the stage, as on a wide screen, not over it: over it, the row and
+     the stepper covered the bottom third of whatever was drawing (v0.9.92).
+     The width of the screen's gutters rather than the stage's, which is 72%
+     of a phone and too narrow for five choices and the full-screen button. */
   .np__stage {
-    left: calc(50% - var(--np-art) / 2);
-    top: calc(var(--np-top) + var(--np-art) - 8px);
-    transform: translateY(-100%);
-    flex-direction: column-reverse;
+    left: 16px;
+    right: 16px;
+    width: auto;
+    top: calc(var(--np-top) + var(--np-art) + 12px);
     gap: 4px;
   }
 
+  /* One row of a fixed height (the column's top counts on it), never a wrap.
+     The choices give way and scroll sideways on a screen too narrow for them;
+     the full-screen button stays in reach beside them. */
   .np__stage-row {
+    width: 100%;
+    height: 40px;
     flex-wrap: nowrap;
+    align-items: center;
     gap: 2px;
   }
 
-  /* Five choices across a stage 72% of a phone wide: less tracking and
-     padding than the desktop's, or Trails wraps onto a line of its own. */
+  .np__stage-choices {
+    flex: 0 1 auto;
+    min-width: 0;
+    flex-wrap: nowrap;
+    gap: 2px;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  /* Touch targets (design.md, Phone). No tracking and a little less padding:
+     at 0.02em and 7px, five choices and the button came to exactly the 343px
+     between a 375px screen's gutters, which a 360px Android would scroll. */
   .np__stage-btn {
-    min-height: 32px;
-    padding: 4px 7px;
-    letter-spacing: 0.05em;
-    background: rgba(5, 7, 15, 0.55);
+    flex-shrink: 0;
+    min-height: 40px;
+    padding: 4px 6px;
+    letter-spacing: 0;
+  }
+
+  .np__stage-full {
+    min-width: 40px;
   }
 
   .np__step {
-    border-radius: 999px;
-    background: rgba(5, 7, 15, 0.55);
+    min-height: 40px;
   }
 
   .np__step-btn {
-    width: 32px;
-    height: 32px;
+    width: 40px;
+    height: 40px;
+  }
+
+  .np__step-cover {
+    min-height: 40px;
   }
 }

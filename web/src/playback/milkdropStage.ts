@@ -61,8 +61,10 @@ export function markMilkdropPicked() {
 export function resetMilkdropPickedForTests() {
   picked = false;
   broken = new Set();
+  status = "idle";
   for (const fn of pickedSubs) fn();
   for (const fn of brokenSubs) fn();
+  for (const fn of statusSubs) fn();
 }
 
 export function useMilkdropPicked(): boolean {
@@ -116,6 +118,50 @@ export function dropPreset(id: string, ids: string[]) {
   const p = getPrefs();
   if (p.stage !== "milkdrop" || resolveMilkdrop(p.milkdrop, ids) !== id) return;
   setPrefs(nextAfterBroken(id, ids, broken));
+}
+
+// ---- loading ---------------------------------------------------------------------
+
+/*
+ * What the MilkDrop stage is doing, for the words on it and under it. The
+ * engine is a 233 KB chunk, and over a phone's cellular link it took long
+ * enough that a stage with nothing on it read as broken (v0.9.92):
+ *
+ *   loading  the engine is downloading, or a preset is being fetched and
+ *            compiled with nothing yet drawn, or a switch is taking long
+ *   ready    a preset is drawing
+ *   failed   the engine would not load; the stage says so and offers the
+ *            cover back, rather than sitting blank
+ *
+ * One canvas sets it at a time (there is only ever one MilkDrop stage), and
+ * it goes back to idle when that canvas goes.
+ */
+export type MilkdropStatus = "idle" | "loading" | "ready" | "failed";
+
+let status: MilkdropStatus = "idle";
+const statusSubs = new Set<() => void>();
+
+export function setMilkdropStatus(next: MilkdropStatus) {
+  if (status === next) return;
+  status = next;
+  for (const fn of statusSubs) fn();
+}
+
+export function useMilkdropStatus(): MilkdropStatus {
+  return useSyncExternalStore(
+    (fn) => {
+      statusSubs.add(fn);
+      return () => statusSubs.delete(fn);
+    },
+    () => status,
+  );
+}
+
+/** The words the stage shows for a status, or "" for none. */
+export function milkdropStatusText(s: MilkdropStatus): string {
+  if (s === "loading") return "Loading MilkDrop…";
+  if (s === "failed") return "MilkDrop could not load";
+  return "";
 }
 
 /** The prefs that move off a broken preset; pure, for the tests. */

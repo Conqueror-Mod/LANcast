@@ -37,6 +37,9 @@ func (windowsManager) Install(c Config) error {
 		StartType:        mgr.StartAutomatic,
 		DelayedAutoStart: true,
 	}
+	if c.Manual {
+		cfg.StartType, cfg.DelayedAutoStart = mgr.StartManual, false
+	}
 	// The service invokes lancastd in its internal run mode, pinned to the
 	// explicit data dir — never the service account's per-user default.
 	s, err := m.CreateService(Name, c.ExePath, cfg, c.ServiceArgs()...)
@@ -182,4 +185,61 @@ func svcStateName(s svc.State) string {
 	default:
 		return "unknown"
 	}
+}
+
+/*
+ * SetAutomatic chooses whether Windows starts the service at boot: automatic
+ * with a delayed start, exactly as Install registers it, or manual.
+ *
+ * A mode switch turns it off before the library leaves and on only once the
+ * service has answered (ADR 0092 §6), so that no reboot in between can start a
+ * service over a folder with no library in it — which would make an empty one.
+ */
+func SetAutomatic(on bool) error {
+	return withService(func(s *mgr.Service) error {
+		cfg, err := s.Config()
+		if err != nil {
+			return fmt.Errorf("read the service configuration: %w", err)
+		}
+		if on {
+			cfg.StartType, cfg.DelayedAutoStart = mgr.StartAutomatic, true
+		} else {
+			cfg.StartType, cfg.DelayedAutoStart = mgr.StartManual, false
+		}
+		if err := s.UpdateConfig(cfg); err != nil {
+			return fmt.Errorf("change how the service starts: %w", err)
+		}
+		return nil
+	})
+}
+
+// StopAndWait stops the service and returns once it has stopped — the point
+// at which it no longer holds the database open. A service already stopped is
+// not an error.
+func StopAndWait(timeout time.Duration) error {
+	return withService(func(s *mgr.Service) error {
+		st, err := s.Query()
+		if err != nil {
+			return fmt.Errorf("query the service: %w", err)
+		}
+		if st.State != svc.Stopped && st.State != svc.StopPending {
+			if _, err := s.Control(svc.Stop); err != nil {
+				return fmt.Errorf("stop service: %w", err)
+			}
+		}
+		deadline := time.Now().Add(timeout)
+		for {
+			st, err := s.Query()
+			if err != nil {
+				return fmt.Errorf("waiting for the service to stop: %w", err)
+			}
+			if st.State == svc.Stopped {
+				return nil
+			}
+			if time.Now().After(deadline) {
+				return fmt.Errorf("service did not stop within %s (state %s)", timeout, svcStateName(st.State))
+			}
+			time.Sleep(250 * time.Millisecond)
+		}
+	})
 }

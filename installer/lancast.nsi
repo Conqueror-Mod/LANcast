@@ -1,6 +1,6 @@
 ; LANcast Windows installer (ADR 0022, ADR 0080). Lays down the one LANcast
-; executable, registers it as the server's service, and puts a Start-menu and
-; desktop shortcut to it.
+; executable, registers it as the server's service when asked to (ServicePage),
+; and puts a Start-menu and desktop shortcut to it.
 ;
 ; Built in the release pipeline with makensis; VERSION is passed in:
 ;   makensis -DVERSION=0.3.0 lancast.nsi
@@ -8,6 +8,9 @@
 ; the goreleaser output).
 
 !include "MUI2.nsh"
+!include "nsDialogs.nsh"
+!include "LogicLib.nsh"
+!include "FileFunc.nsh"
 
 !ifndef VERSION
   !define VERSION "0.0.0"
@@ -33,11 +36,12 @@ RequestExecutionLevel admin
 ; that wraps past two lines is clipped. The name goes there alone; the tagline
 ; leads the body text, which has room and a smaller font.
 !define MUI_WELCOMEPAGE_TITLE "Welcome to LANcast"
-!define MUI_WELCOMEPAGE_TEXT "Your gateway to everything on your LAN.$\r$\n$\r$\nSetup will install LANcast on your computer.$\r$\n$\r$\nLANcast runs as a background service and starts with Windows. When Setup finishes, open the LANcast shortcut to get to your library — no terminal required.$\r$\n$\r$\nClick Next to continue."
+!define MUI_WELCOMEPAGE_TEXT "Your gateway to everything on your LAN.$\r$\n$\r$\nSetup will install LANcast on your computer.$\r$\n$\r$\nLANcast can run as a background service that starts with Windows; Setup asks which you want. When Setup finishes, open the LANcast shortcut to get to your library — no terminal required.$\r$\n$\r$\nClick Next to continue."
 
 !insertmacro MUI_PAGE_WELCOME
 !insertmacro MUI_PAGE_LICENSE "..\LICENSE"
 !insertmacro MUI_PAGE_DIRECTORY
+Page custom ServicePage ServicePageLeave
 !insertmacro MUI_PAGE_INSTFILES
 ; $PLUGINSDIR is where OpenInBrowser writes its temporary shortcut, and NSIS
 ; only creates it on demand — for a page that uses a plugin, which none here
@@ -156,6 +160,97 @@ FunctionEnd
   Pop $0
 !macroend
 
+;; ---- the service, as a choice ------------------------------------------------
+;
+; Not everybody needs one. A service is what keeps libraries reachable from
+; other devices with nobody signed in; someone who only watches on this PC is
+; served just as well by the server the app starts for itself while it is open
+; (cmd/lancast, ensureServer), and spared a background process at every boot.
+;
+; The choice is not free once a library exists, and that is what this page is
+; mostly about. The two modes keep their database in different places: the
+; service is pinned to the machine-wide folder (service.DefaultDataDir), and
+; the app's own server takes the per-user one. So:
+;
+;   - A library already in the machine-wide folder stays a service. That
+;     folder belongs to the service account, and a server started as the
+;     person gets a read-only database there (serverwait.go).
+;   - A library already in the person's own folder stays without one. A
+;     service would open the machine-wide folder and show an empty library,
+;     which reads as everything having been deleted.
+;
+; Moving a library between the two is a real migration, not a checkbox, and
+; Setup does not attempt it. The box is shown greyed with the reason instead.
+;
+; Silent installs take /SERVICE or /NOSERVICE, subject to the same locks.
+; Remembered in the uninstall key so an upgrade asks with the last answer.
+Var ServiceChoice
+Var ServiceLocked
+Var ServiceBox
+
+Function .onInit
+  StrCpy $ServiceChoice "1"
+  StrCpy $ServiceLocked ""
+  ReadRegStr $0 HKLM "${UNINST_KEY}" "Service"
+  ${If} $0 == "0"
+    StrCpy $ServiceChoice "0"
+  ${EndIf}
+  ${GetParameters} $1
+  ClearErrors
+  ${GetOptions} $1 "/NOSERVICE" $0
+  ${IfNot} ${Errors}
+    StrCpy $ServiceChoice "0"
+  ${EndIf}
+  ClearErrors
+  ${GetOptions} $1 "/SERVICE" $0
+  ${IfNot} ${Errors}
+    StrCpy $ServiceChoice "1"
+  ${EndIf}
+  ReadEnvStr $0 "ProgramData"
+  ${If} ${FileExists} "$0\LANcast\lancast.db"
+    StrCpy $ServiceChoice "1"
+    StrCpy $ServiceLocked "service"
+  ${ElseIf} ${FileExists} "$APPDATA\LANcast\lancast.db"
+    StrCpy $ServiceChoice "0"
+    StrCpy $ServiceLocked "user"
+  ${EndIf}
+FunctionEnd
+
+Function ServicePage
+  !insertmacro MUI_HEADER_TEXT "How LANcast runs" "Choose whether the server runs as a Windows service."
+  nsDialogs::Create 1018
+  Pop $0
+  ${If} $0 == error
+    Abort
+  ${EndIf}
+  ${NSD_CreateLabel} 0 0 100% 52u "As a service, the LANcast server starts with Windows and keeps your libraries available to your other devices whether or not anybody is signed in.$\r$\n$\r$\nWithout one, the server runs only while the LANcast app is open, and your library is kept in your own user folder. Start LANcast at login, from its tray icon, if you want it there whenever you are."
+  Pop $0
+  ${NSD_CreateCheckbox} 0 60u 100% 12u "&Install LANcast as a Windows service"
+  Pop $ServiceBox
+  ${If} $ServiceChoice == "1"
+    ${NSD_Check} $ServiceBox
+  ${EndIf}
+  ${If} $ServiceLocked == "service"
+    EnableWindow $ServiceBox 0
+    ${NSD_CreateLabel} 0 80u 100% 40u "Your library is already kept by the LANcast service, in the machine-wide folder, so LANcast stays a service. Without one, the app could not write to that library."
+    Pop $0
+  ${ElseIf} $ServiceLocked == "user"
+    EnableWindow $ServiceBox 0
+    ${NSD_CreateLabel} 0 80u 100% 40u "Your library is kept in your own user folder. A service keeps its library in the machine-wide folder and would start with an empty one, so LANcast stays as it is."
+    Pop $0
+  ${EndIf}
+  nsDialogs::Show
+FunctionEnd
+
+Function ServicePageLeave
+  ${NSD_GetState} $ServiceBox $0
+  ${If} $0 == ${BST_CHECKED}
+    StrCpy $ServiceChoice "1"
+  ${Else}
+    StrCpy $ServiceChoice "0"
+  ${EndIf}
+FunctionEnd
+
 Section "LANcast"
   ; Upgrade path. An earlier install registered the service from differently
   ; named executables (lancastd.exe / lancast.exe); leaving that registration
@@ -251,9 +346,14 @@ Section "LANcast"
   File "..\LICENSE"
 
   ; Register the server as a service pinned to the machine-wide data dir, and
-  ; start it. `service install` refuses an unset --data, so the pin is enforced.
-  nsExec::ExecToLog '"$INSTDIR\LANcast.exe" service install'
-  nsExec::ExecToLog '"$INSTDIR\LANcast.exe" service start'
+  ; start it — when that was the choice (ServicePage). `service install`
+  ; refuses an unset --data, so the pin is enforced. Without it the app starts
+  ; its own server when it opens. Any earlier service was removed above, so
+  ; "no" really is no service.
+  ${If} $ServiceChoice == "1"
+    nsExec::ExecToLog '"$INSTDIR\LANcast.exe" service install'
+    nsExec::ExecToLog '"$INSTDIR\LANcast.exe" service start'
+  ${EndIf}
 
   ; One shortcut, because there is one program (ADR 0080). It opens the
   ; window and its tray; the server is the service, started above.
@@ -294,14 +394,16 @@ Section "LANcast"
   WriteRegStr HKLM "${UNINST_KEY}" "DisplayIcon" "$INSTDIR\LANcast.exe"
   WriteRegStr HKLM "${UNINST_KEY}" "UninstallString" '"$INSTDIR\uninstall.exe"'
   WriteRegStr HKLM "${UNINST_KEY}" "Publisher" "LANcast"
+  WriteRegStr HKLM "${UNINST_KEY}" "Service" $ServiceChoice
 SectionEnd
 
 Section "Uninstall"
   ; Stop and remove the service before deleting its binary, then stop anything
   ; still running interactively — a tray client holds its executable open, and
-  ; Delete silently fails on a file in use.
-  nsExec::ExecToLog '"$INSTDIR\LANcast.exe" service stop'
-  nsExec::ExecToLog '"$INSTDIR\LANcast.exe" service uninstall'
+  ; Delete silently fails on a file in use. Quietly, because an install that
+  ; chose no service (ServicePage) has none to stop, and that is not a failure.
+  !insertmacro Quietly '"$INSTDIR\LANcast.exe" service stop'
+  !insertmacro Quietly '"$INSTDIR\LANcast.exe" service uninstall'
   !insertmacro Quietly 'taskkill /F /IM LANcast.exe'
   !insertmacro Quietly 'taskkill /F /IM LANcast-Client.exe'
   !insertmacro Quietly 'taskkill /F /IM LANcast-Server.exe'

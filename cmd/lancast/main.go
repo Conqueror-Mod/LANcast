@@ -465,7 +465,8 @@ func runWindow(l *launcher, d *desk) {
 				 * anybody off the page they were on.
 				 */
 				if pane != "" {
-					c.Navigate(l.windowURL(l.addr) + "/settings?pane=" + pane)
+					base := l.windowURL(l.addr)
+					goInPage(c, base, base+"/settings?pane="+pane)
 				}
 				c.Show()
 			}, func() {
@@ -598,6 +599,11 @@ func (l *launcher) desktopBindings(native *nativePlayer) map[string]any {
 	// The window's own log, for the same reason: it is a file on this machine
 	// that the server has never seen.
 	for name, fn := range clientLogBindings(dir) {
+		b[name] = fn
+	}
+	// Switching between a service and a server that runs only while the app
+	// is open (ADR 0092), which only this process can do.
+	for name, fn := range l.serverModeBindings() {
 		b[name] = fn
 	}
 	// And the page's way in to that log (clientnote.go).

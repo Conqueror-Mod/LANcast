@@ -1,5 +1,7 @@
 import type { Item } from "@/api/types";
+import { AfterFilmView } from "@/components/AfterFilm";
 import "./DesignBench.css";
+import "./Player.css";
 
 /*
  * The design bench — a dev-only page for judging the look.
@@ -127,6 +129,37 @@ export function DesignBench() {
 
       <section className="bench__section">
         <TypeRamp />
+      </section>
+
+      {/* The page a film ends on, in a player-shaped box: it is absolutely
+          positioned over the player, so it needs a positioned parent. */}
+      <section className="bench__section">
+        <h2 className="bench__h">After a film</h2>
+        <div style={{ position: "relative", height: 520, background: "#000", borderRadius: 8, overflow: "hidden" }}>
+          <AfterFilmView
+            film={fixture}
+            items={[
+              {
+                ...fixture,
+                id: 2,
+                title: "The Long Way Back",
+                year: 2001,
+                continues_from: {
+                  collection_id: 9,
+                  collection_title: "The Long Way Collection",
+                  after_id: 1,
+                  after_title: fixture.title,
+                },
+              },
+              { ...fixture, id: 3, title: "Quiet Orbit", year: 1996, duration_ms: 6_300_000 },
+              { ...fixture, id: 4, title: "A Record of Nobody", year: 2004, duration_ms: 5_880_000 },
+            ]}
+            loading={false}
+            onPlay={() => {}}
+            onAgain={() => {}}
+            onClose={() => {}}
+          />
+        </div>
       </section>
 
       {/*

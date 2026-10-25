@@ -42,6 +42,7 @@ import { usePlayback, useFullSurface } from "@/playback/PlaybackProvider";
 import { AUTO_SKIP_IDLE, autoSkipStep, skipTarget, type AutoSkipState } from "@/lib/skip";
 import { usePlaybackPrefs } from "@/api/hooks";
 import { UpNextCard } from "@/components/UpNextCard";
+import { AfterFilm } from "@/components/AfterFilm";
 import { DEFAULTS, DIALOGUE_LEVELS } from "@/playback/prefs";
 import {
   canBoostDialogue,
@@ -567,6 +568,18 @@ export function Player() {
     item?.kind === "episode" &&
     pb.nextItemID != null &&
     upNextCancelled !== pb.itemID;
+  /*
+   * A film that played to its end with nothing queued after it ends on
+   * suggestions (AfterFilm). Not while anything plays — Watch again, or a
+   * press of play, takes it away — and never for an episode or a track, whose
+   * endings are Up Next's and Now Playing's.
+   */
+  const showAfter =
+    pb.endedID != null &&
+    pb.endedID === pb.itemID &&
+    !pb.playing &&
+    !pb.isAudio &&
+    item?.kind === "movie";
   const { rollOn } = pb;
   const rollOnUnattended = useCallback(() => rollOn(false), [rollOn]);
 
@@ -615,6 +628,23 @@ export function Player() {
           <span className="player__loading-mark" aria-hidden="true" />
           <span>{pb.note || "Starting…"}</span>
         </div>
+      )}
+
+      {showAfter && item && (
+        <AfterFilm
+          film={item}
+          // Replacing, so Back from the next film does not return to the end
+          // of this one.
+          onPlay={(next) => navigate(`/watch/${next}`, { replace: true })}
+          onAgain={() => {
+            pb.seekTo(0);
+            if (!pb.playing) pb.togglePlay();
+          }}
+          // Stop, not just leave: the film is over, and leaving alone docked
+          // it in the mini player with nothing left to play — seen on the
+          // installed build the first time this page was closed.
+          onClose={stopAndLeave}
+        />
       )}
 
       {showStats && (
