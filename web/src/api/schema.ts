@@ -6469,6 +6469,8 @@ export interface components {
             backup_every_days: number;
             /** @description How many scheduled backups to keep. A backup taken by hand is never counted or deleted. */
             backup_keep: number;
+            /** @description Reverse proxies whose X-Forwarded-For is believed, as addresses or CIDR networks, normalised (a bare address becomes /32 or /128). Empty by default. */
+            trusted_proxies: string[];
             /** @description DLNA, so TVs and consoles can browse and play the library (ADR 0086). Off by default. */
             dlna_enabled?: boolean;
             /** @description The account a TV browses as: it sees exactly what that account sees. DLNA does not run with none chosen. */
@@ -6577,6 +6579,8 @@ export interface components {
             audit_retention_days?: number;
             backup_every_days?: number;
             backup_keep?: number;
+            /** @description Replaces the list. Each entry an IP address or CIDR network no wider than an IPv4 /8 or IPv6 /16; anything else is a 400 and nothing is saved. [] clears it. */
+            trusted_proxies?: string[];
             dlna_enabled?: boolean;
             dlna_account?: string;
             dlna_name?: string;

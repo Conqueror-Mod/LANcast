@@ -4,8 +4,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"slices"
 	"strings"
 
+	"lancast/internal/auth"
 	"lancast/internal/config"
 	"lancast/internal/rating"
 )
@@ -88,6 +90,9 @@ func (s *Server) getSettings(w http.ResponseWriter, r *http.Request) {
 		"retro_artwork":  cur.RetroArtwork,
 		"photo_places":   cur.PhotoPlaces,
 		"login_picker":   cur.LoginPicker,
+
+		// Never null, so a client can render the list without a guard.
+		"trusted_proxies": nonNil(cur.TrustedProxies),
 		// Whether the server can actually inspect and convert media. Reported so
 		// the UI can say so plainly: without these, every file is direct-played
 		// and anything the browser cannot decode fails with no explanation — the
@@ -151,6 +156,7 @@ func (s *Server) putSettings(w http.ResponseWriter, r *http.Request) {
 		AuditRetentionDays *int            `json:"audit_retention_days"`
 		BackupEveryDays    *int            `json:"backup_every_days"`
 		BackupKeep         *int            `json:"backup_keep"`
+		TrustedProxies     *[]string       `json:"trusted_proxies"`
 		DLNAEnabled        *bool           `json:"dlna_enabled"`
 		DLNAAccount        *string         `json:"dlna_account"`
 		DLNAName           *string         `json:"dlna_name"`
@@ -352,6 +358,14 @@ func (s *Server) putSettings(w http.ResponseWriter, r *http.Request) {
 		}
 		next.BackupKeep = *req.BackupKeep
 	}
+	if req.TrustedProxies != nil {
+		_, normal, err := auth.ParseTrustedProxies(*req.TrustedProxies)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, "bad_request", "trusted_proxies: "+err.Error())
+			return
+		}
+		next.TrustedProxies = normal
+	}
 	if req.DLNAAccount != nil {
 		// An account that does not exist would leave DLNA answering as
 		// nobody — the one thing ADR 0086 rules out — so it is refused.
@@ -513,6 +527,9 @@ func changedSettings(prev, next config.Settings) []string {
 	// Audited because lowering the count deletes backups at the next run.
 	add("backup_every_days", prev.BackupEveryDays != next.BackupEveryDays)
 	add("backup_keep", prev.BackupKeep != next.BackupKeep)
+	// Audited: it decides whose word about a caller's address is believed,
+	// which is what the login throttle and the home-network checks rest on.
+	add("trusted_proxies", !slices.Equal(prev.TrustedProxies, next.TrustedProxies))
 	// Audited: DLNA opens a port and decides what every TV in the house sees.
 	add("dlna_enabled", prev.DLNAEnabled != next.DLNAEnabled)
 	add("dlna_account", prev.DLNAAccount != next.DLNAAccount)

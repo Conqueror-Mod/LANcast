@@ -3769,6 +3769,7 @@ export function Settings() {
                 </>
               )}
               {pane === "network" && <NetworkSection />}
+              {pane === "network" && <TrustedProxiesSection />}
               {pane === "network" && <CustomCertificateSection />}
               {pane === "remote" && <PublicCertificateSettings />}
               {/* Backup first: what cannot be rebuilt leads, storage follows. */}
@@ -4208,6 +4209,61 @@ function PortRow({ net }: { net: NetworkStatus }) {
       )}
       {!cameBack && last && !last.ok && <p className="set-error">{asSentence(last.error ?? "")}</p>}
     </>
+  );
+}
+
+/*
+ * Server › Network: trusted proxies.
+ *
+ * One address or network per line, saved as a whole. The server normalises
+ * and validates the list, so what is shown after saving is what it enforces,
+ * and a refusal is its sentence rather than one the client made up.
+ */
+export function TrustedProxiesSection() {
+  const { data: settings } = useSettings(true);
+  const update = useUpdateSettings();
+  const saved = settings?.trusted_proxies ?? [];
+  const [draft, setDraft] = useState<string | null>(null);
+  if (!settings) return null;
+  const text = draft ?? saved.join("\n");
+  const entries = text
+    .split(/[\n,]/)
+    .map((e) => e.trim())
+    .filter((e) => e !== "");
+  const changed = entries.join(",") !== saved.join(",");
+  return (
+    <section className="settings__section">
+      <span className="section-label">Trusted proxies</span>
+      <form
+        className="set-row"
+        onSubmit={(e) => {
+          e.preventDefault();
+          update.mutate({ trusted_proxies: entries }, { onSuccess: () => setDraft(null) });
+        }}
+      >
+        <div className="set-row__main">
+          <div className="set-row__title">Reverse proxies in front of LANcast</div>
+          <div className="set-row__sub">
+            Only if you run one, such as Caddy or nginx. LANcast believes the visitor&rsquo;s
+            address these send, so sign-in limits and the account picker apply to the visitor,
+            not to the proxy. One address or network per line, for example 127.0.0.1. Leave it
+            empty if nothing sits in front of LANcast.
+          </div>
+          <textarea
+            className="set-input"
+            rows={3}
+            spellCheck={false}
+            aria-label="Trusted proxies"
+            value={text}
+            onChange={(e) => setDraft(e.target.value)}
+          />
+        </div>
+        <button className="set-btn" disabled={!changed || update.isPending}>
+          Save
+        </button>
+      </form>
+      {update.isError && <p className="set-error">{errorMessage(update.error)}</p>}
+    </section>
   );
 }
 

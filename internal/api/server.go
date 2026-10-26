@@ -155,6 +155,8 @@ type Deps struct {
 
 // Server holds the API dependencies.
 type Server struct {
+	// proxies is the parsed trusted-proxy list (proxies.go).
+	proxies proxyCache
 	// opt is the optimized-copy worker's state (ADR 0087), made on first use.
 	opt     *optimizedState
 	optOnce sync.Once
@@ -939,8 +941,11 @@ func (s *Server) Handler() http.Handler {
 	// already in the log above.
 	// Version negotiation sits outside auth: a client asking for a contract this
 	// build cannot serve should be told so, not told to sign in first.
-	return logRequests(s.log,
-		s.recoverPanics(negotiateAPIVersion(s.requireAuth(mux))))
+	//
+	// Trusted proxies come first of all, so that everything inside — the log
+	// line included — sees the client a proxy forwarded rather than the proxy.
+	return auth.TrustProxies(s.trustedProxies, logRequests(s.log,
+		s.recoverPanics(negotiateAPIVersion(s.requireAuth(mux)))))
 }
 
 func logRequests(log *slog.Logger, next http.Handler) http.Handler {
