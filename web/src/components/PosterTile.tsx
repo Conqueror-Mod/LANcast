@@ -6,7 +6,7 @@ import { useFocusable } from "@/focus/FocusController";
 import { acknowledge, useCanReveal, useObscured } from "@/lib/sensitiveAck";
 import { containerCountLabel, isROM, isSquareArt } from "@/lib/kind";
 import { episodeLabel, rating } from "@/lib/format";
-import { isWatched, watchedLabel } from "@/lib/watchedMark";
+import { collectionStanding, isWatched, watchedLabel } from "@/lib/watchedMark";
 import type { Item } from "@/api/types";
 import "./PosterTile.css";
 
@@ -179,9 +179,15 @@ export function PosterTile({
           // wide is the "poster" variant, and plenty for a shelf tile.
           artworkURL(shown.artwork?.thumb ?? item.artwork?.fanart, "poster")
         : artworkURL(item.artwork?.poster, "poster");
-  const pct = progressPct(item);
+  /*
+   * A collection begun and not finished draws how far through its films this
+   * account is, on the same bar a half-watched film uses, and says it in
+   * words where the film count would be.
+   */
+  const standing = collectionStanding(item);
+  const pct = standing ? standing.pct : progressPct(item);
   // A container shows how much it holds ("3 seasons"); a leaf shows its year.
-  const count = containerCountLabel(item);
+  const count = standing ? standing.label : containerCountLabel(item);
   /*
    * An episode says which episode it is, in place of the year.
    *

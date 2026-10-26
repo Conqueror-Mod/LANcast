@@ -5,7 +5,7 @@ import {
   useHeroMode,
   usePinnedHero,
 } from "@/lib/heroMode";
-import { useNavigate, useParams } from "react-router-dom";
+import { useLocation, useNavigate, useParams } from "react-router-dom";
 import {
   useItem,
   useRefreshItem,
@@ -60,6 +60,7 @@ import { RemoveDialog } from "@/components/RemoveDialog";
 import { AddToPlaylist } from "@/components/AddToPlaylist";
 import { ChoosePoster } from "@/components/ChoosePoster";
 import { RenamePlaylist } from "@/components/RenamePlaylist";
+import { EditDescription } from "@/components/EditDescription";
 import { PosterTile } from "@/components/PosterTile";
 import { useItemActions, useMarkAll } from "@/components/itemActions";
 import { isWatched } from "@/lib/watchedMark";
@@ -546,6 +547,14 @@ export function Detail() {
   // in a frameless window and does not reliably give it back).
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [renaming, setRenaming] = useState(false);
+  const [describing, setDescribing] = useState(false);
+  /*
+   * The collection this page was opened from, when Continue Watching opened it
+   * as that collection's next film — so its Play carries on through the right
+   * franchise, for a film that is in two.
+   */
+  const fromCollection = (useLocation().state as { collectionID?: number } | null)
+    ?.collectionID;
 
   /*
    * A show's action state, declared here with the other hooks rather than beside
@@ -756,11 +765,20 @@ export function Detail() {
   /*
    * An episode's own page plays on through its show, as its season's list and
    * the home page already do. It handed the player one id, so the show
-   * stopped after it. A film plays alone here: pressing Play on one film is
-   * not a request for its box set, and the end of it offers the next one.
+   * stopped after it.
+   *
+   * A film pressed fresh plays alone: Play on one film is not a request for
+   * its box set, and the end of it offers the next one. But a film being
+   * *resumed*, or one opened from Continue Watching as a collection's next
+   * film, is part way through a franchise, and carries on through it — the
+   * rule the spotlight already follows (HomeHero). Reported: a collection
+   * resumed from Continue Watching played the one film and stopped.
    */
-  const continueLeaf = async (leaf: Item) => {
-    const queue = leaf.kind === "episode" ? await continueQueue(leaf) : undefined;
+  const continueLeaf = async (leaf: Item, resuming = false) => {
+    const carriesOn =
+      leaf.kind === "episode" ||
+      (leaf.kind === "movie" && (resuming || fromCollection !== undefined));
+    const queue = carriesOn ? await continueQueue(leaf, fromCollection) : undefined;
     navigate(`/watch/${leaf.id}`, queue ? { state: { queue } } : undefined);
   };
 
@@ -1086,7 +1104,7 @@ export function Detail() {
                   <>
                     <PlayButton
                       label={isMusic ? "Continue listening" : "Continue watching"}
-                      onPlay={() => void continueLeaf(item)}
+                      onPlay={() => void continueLeaf(item, true)}
                     />
                     <SecondaryButton
                       label="Play from start"
@@ -1283,6 +1301,18 @@ export function Detail() {
             {item.overview && (
               <p className="detail__overview">{item.overview}</p>
             )}
+            {/* A collection's description can be written by hand. A
+                keyword-defined grouping has no provider to supply one, so
+                without this it has no sentence under its title at all. */}
+            {isCollection && isAdmin && (
+              <button
+                type="button"
+                className="detail__describe"
+                onClick={() => setDescribing(true)}
+              >
+                {item.overview ? "Edit description" : "Add a description"}
+              </button>
+            )}
 
             <CastRow cast={cast} libraryID={item.library_id} />
           </div>
@@ -1410,6 +1440,9 @@ export function Detail() {
       )}
       {renaming && (
         <RenamePlaylist playlist={item} onClose={() => setRenaming(false)} />
+      )}
+      {describing && (
+        <EditDescription item={item} onClose={() => setDescribing(false)} />
       )}
       {/* The children grid's own dialogs. Separate from this page's Remove and
           Add-to-playlist above: those act on the item being *looked at*, these

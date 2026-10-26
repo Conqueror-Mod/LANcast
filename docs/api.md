@@ -1550,6 +1550,17 @@ position and never will — nobody plays a show, they play its episodes — and 
 `progress` whose `position_ms` were always zero would make `watched` mean one
 thing on a film and another on a series.
 
+`collection_progress` is the same question for a collection, in films:
+`{ "total": 5, "watched": 2, "in_progress": 1 }`. It is present **on
+collections only** — in listings and on `GET /api/items/{id}` — and absent on
+everything else and on a collection with no films on disk. `total` counts the
+same present members `child_count` does, so "2 of 5 watched" never disagrees
+with "5 films". `watched` counts finished members; `in_progress` counts members
+with a saved position that are not finished. A collection is finished when
+`watched` equals `total`, and begun when either count is above zero. A separate
+field rather than `unwatched_episodes` reused, because a collection's members
+are films.
+
 ### `GET /api/continue`
 
 The user's in-progress items, most recently played first — the home screen's

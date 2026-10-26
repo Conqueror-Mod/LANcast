@@ -94,6 +94,7 @@ type wireCredit struct {
 type wireCollection struct {
 	ExternalID string    `json:"external_id"`
 	Name       string    `json:"name"`
+	Overview   string    `json:"overview,omitempty"`
 	Artwork    []wireArt `json:"artwork,omitempty"`
 }
 
@@ -246,6 +247,7 @@ func (pr *provider) Fetch(ctx context.Context, ref meta.Ref) (*meta.Record, erro
 		rec.Collection = &meta.CollectionRef{
 			ExternalID: w.Collection.ExternalID,
 			Name:       w.Collection.Name,
+			Overview:   w.Collection.Overview,
 			Artwork:    pr.artwork(w.Collection.Artwork),
 		}
 	}

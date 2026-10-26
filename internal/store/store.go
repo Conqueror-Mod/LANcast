@@ -489,6 +489,19 @@ type Item struct {
 	UnwatchedEpisodes *int `json:"unwatched_episodes,omitempty"`
 
 	/*
+	 * CollectionProgress is how far this account is through a collection's
+	 * films. Set on collections only, and nil on everything else and on a
+	 * collection with no films on disk — for the same reason UnwatchedEpisodes
+	 * is a pointer: an empty box set is not a finished one.
+	 *
+	 * A separate field rather than UnwatchedEpisodes reused, because a
+	 * collection's members are films and its tile says so: "2 of 5 watched" is
+	 * a sentence about films, and a field named for episodes would be the
+	 * merged-concepts client type again.
+	 */
+	CollectionProgress *CollectionProgress `json:"collection_progress,omitempty"`
+
+	/*
 	 * Sensitive is the resolved answer: this row is marked, or something above
 	 * it is (ADR 0051). Every surface that draws a thumbnail reads this one
 	 * field, which is the whole reason it is a field rather than a rule the
@@ -2398,6 +2411,36 @@ func (s *Store) EnsureCollection(ctx context.Context, libraryID int64, provider,
 		return 0, false, fmt.Errorf("ensure collection %q: rename: %w", externalID, err)
 	}
 	return id, false, nil
+}
+
+/*
+ * SetCollectionOverview writes a provider's description of a collection.
+ *
+ * Kept apart from EnsureCollection because the two are answered at different
+ * times: the name is known the moment a collection is sighted, and the
+ * description is one more thing a provider may or may not have.
+ *
+ * Guarded by the overview lock like every provider write. Somebody who wrote
+ * their own description for a box set keeps it through every refresh, which is
+ * the locked-fields rule and has the same standing here as on a film. Only a
+ * collection row is touched, so a stray id cannot rewrite a film's overview.
+ */
+func (s *Store) SetCollectionOverview(ctx context.Context, collectionID int64, overview string) error {
+	if overview == "" {
+		return nil
+	}
+	if _, err := s.db.ExecContext(ctx, `
+		UPDATE media_item
+		   SET overview = ?, updated_at = ?
+		 WHERE id = ? AND kind = 'collection'
+		   AND COALESCE(overview, '') <> ?
+		   AND NOT EXISTS (
+			SELECT 1 FROM item_lock
+			 WHERE item_lock.item_id = media_item.id AND item_lock.field = 'overview')`,
+		overview, time.Now().Unix(), collectionID, overview); err != nil {
+		return fmt.Errorf("set collection overview %d: %w", collectionID, err)
+	}
+	return nil
 }
 
 // LibraryEpisodes returns every episode row in a library, for the scanner's

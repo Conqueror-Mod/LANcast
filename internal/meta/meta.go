@@ -168,7 +168,10 @@ func IsField(name string) bool {
 type CollectionRef struct {
 	ExternalID string
 	Name       string
-	Artwork    []ArtRef
+	// Overview is the collection's own description ("The Lord of the Rings
+	// trilogy follows…"), not any member's. Empty when the provider has none.
+	Overview string
+	Artwork  []ArtRef
 }
 
 // Record is the normalized payload every source produces. Normalizing at the

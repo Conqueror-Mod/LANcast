@@ -6083,6 +6083,7 @@ export interface components {
              *     Counted per account, `missing` episodes excluded, and only `watched` episodes count as seen — an episode with a saved position but unfinished is still outstanding, matching what `GET /api/continue` would offer. This is **not** folded into `progress`: a show has no playback position, and a Progress whose position is always zero would make `watched` mean one thing on a film and another on a series.
              */
             unwatched_episodes?: number;
+            collection_progress?: components["schemas"]["CollectionProgress"];
             overview: string | null;
             /** @description The single provider scalar, 0–10. Independent of `ratings`. */
             rating: number | null;
@@ -8400,6 +8401,12 @@ export interface components {
         ScanCancelled: {
             /** @description The libraries whose scans were stopped. Empty when nothing was running. */
             cancelled: number[];
+        };
+        /** @description How far this account is through a collection's films. **Present on collections only**, in listings and on `GET /api/items/{id}`, and absent everywhere else and on a collection with no films on disk — an empty box set is not a finished one. `total` counts the same present members `child_count` does. `watched` counts members finished (`watched`); `in_progress` counts members with a saved position that are not finished. A collection is finished when `watched` equals `total`, and begun when either count is above zero. */
+        CollectionProgress: {
+            total: number;
+            watched: number;
+            in_progress: number;
         };
         /** @description Set only on a Continue Watching row that is a collection's next film: which collection, and the film just finished in it. What lets a client say "Because you watched" about a franchise. */
         Continuation: {

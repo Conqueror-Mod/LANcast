@@ -235,9 +235,11 @@ func (c *Client) fetchMovie(ctx context.Context, id string) (*meta.Record, error
 		rec.Keywords = append(rec.Keywords, meta.Keyword{ID: k.ID, Name: k.Name})
 	}
 	if m.Collection != nil && m.Collection.ID != 0 {
+		name, overview := c.collectionDetail(ctx, m.Collection)
 		rec.Collection = &meta.CollectionRef{
 			ExternalID: strconv.Itoa(m.Collection.ID),
-			Name:       c.collectionName(ctx, m.Collection),
+			Name:       name,
+			Overview:   overview,
 			Artwork:    artRefs(m.Collection.PosterPath, m.Collection.BackdropPath),
 		}
 	}
@@ -245,7 +247,12 @@ func (c *Client) fetchMovie(ctx context.Context, id string) (*meta.Record, error
 }
 
 /*
- * collectionName resolves a collection's name, in English where TMDB has one.
+ * collectionDetail resolves a collection's name, in English where TMDB has one,
+ * and its overview.
+ *
+ * The overview rides on the same request the name already needed: the
+ * embedded block carries none, and the dedicated endpoint does. So a
+ * collection's description costs nothing that was not already being paid.
  *
  * `belongs_to_collection`, embedded in the movie response, does not reliably
  * honour the language parameter — it carries whatever name the collection was
@@ -263,13 +270,17 @@ func (c *Client) fetchMovie(ctx context.Context, id string) (*meta.Record, error
  * embedded one. A franchise grouping is worth a wrong-language name and is not
  * worth failing an enrichment over — the film is already matched by this point.
  */
-func (c *Client) collectionName(ctx context.Context, embedded *tmdbCollection) string {
+func (c *Client) collectionDetail(ctx context.Context, embedded *tmdbCollection) (name, overview string) {
 	var full tmdbCollection
 	err := c.get(ctx, "/collection/"+strconv.Itoa(embedded.ID), nil, &full)
-	if err != nil || strings.TrimSpace(full.Name) == "" {
-		return embedded.Name
+	if err != nil {
+		return embedded.Name, ""
 	}
-	return full.Name
+	name = full.Name
+	if strings.TrimSpace(name) == "" {
+		name = embedded.Name
+	}
+	return name, strings.TrimSpace(full.Overview)
 }
 
 func (c *Client) fetchShow(ctx context.Context, id string) (*meta.Record, error) {
@@ -635,8 +646,10 @@ type tmdbKeyword struct {
 // tmdbCollection is TMDB's belongs_to_collection block — the franchise or
 // series a movie is part of ("The Lord of the Rings Collection").
 type tmdbCollection struct {
-	ID           int    `json:"id"`
-	Name         string `json:"name"`
+	ID   int    `json:"id"`
+	Name string `json:"name"`
+	// Only on /collection/{id}; the block embedded in a movie has none.
+	Overview     string `json:"overview"`
 	PosterPath   string `json:"poster_path"`
 	BackdropPath string `json:"backdrop_path"`
 }

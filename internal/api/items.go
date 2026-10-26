@@ -745,6 +745,15 @@ func (s *Server) decorateAndWriteItems(w http.ResponseWriter, r *http.Request, i
 		s.writeInternal(w, err, "attach unwatched episodes")
 		return
 	}
+	/*
+	 * And how far through a collection's films this account is, so the
+	 * Collections page can mark a box set finished or begun. A collection had
+	 * no way to say either: no playback row of its own, and no aggregate.
+	 */
+	if err := s.st.AttachCollectionProgress(r.Context(), items, s.userID(r)); err != nil {
+		s.writeInternal(w, err, "attach collection progress")
+		return
+	}
 	n := len(items)
 	if len(total) > 0 {
 		// A supplied total counts the whole result, not this page, so anything

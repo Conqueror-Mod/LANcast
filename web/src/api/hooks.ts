@@ -3281,6 +3281,29 @@ export function useRenamePlaylist(id: number) {
 }
 
 /**
+ * Write an item's description.
+ *
+ * The ordinary metadata edit, so it locks `overview`: a description somebody
+ * wrote for a box set survives every provider refresh (the locked-fields rule).
+ * Built for collections, which a keyword-defined grouping reaches with no
+ * provider description at all.
+ *
+ * Invalidates the item and every listing: the description is drawn on the
+ * collection's own page, and the grids carry the item row it lives on.
+ */
+export function useSetOverview(id: number) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (overview: string) =>
+      apiSend(`/api/items/${id}`, "PATCH", { overview }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["item", id] });
+      void qc.invalidateQueries({ queryKey: ["items"] });
+    },
+  });
+}
+
+/**
  * Invalidate everything a playlist edit can be seen through.
  *
  * One helper rather than a list per mutation: a playlist appears in its own

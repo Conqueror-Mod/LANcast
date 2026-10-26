@@ -36,6 +36,7 @@ type Store interface {
 	PutArtwork(ctx context.Context, itemID int64, hash, kind, sourceURL string, w, h int, size int64) error
 	ArtworkExists(ctx context.Context, hash string) (bool, error)
 	EnsureCollection(ctx context.Context, libraryID int64, provider, externalID, name, sortTitle string) (int64, bool, error)
+	SetCollectionOverview(ctx context.Context, collectionID int64, overview string) error
 	AddToCollection(ctx context.Context, itemID, collectionID int64, ord int) error
 }
 
@@ -680,6 +681,14 @@ func (w *Worker) ingestCollection(ctx context.Context, item store.Item, remotes 
 		}
 		if err := w.st.AddToCollection(ctx, item.ID, collID, 0); err != nil {
 			w.log.Warn("add to collection failed", "item", item.ID, "collection", c.Name, "error", err)
+		}
+		// Its description, on every sighting rather than only the first, so a
+		// collection created before descriptions were fetched gets one at its
+		// members' next refresh. The store skips a locked or unchanged one.
+		if c.Overview != "" {
+			if err := w.st.SetCollectionOverview(ctx, collID, c.Overview); err != nil {
+				w.log.Warn("collection overview failed", "collection", c.Name, "error", err)
+			}
 		}
 		// Download the collection's poster and backdrop once, when it is first
 		// created — every other member would fetch the identical images.
