@@ -43,9 +43,13 @@ nothing bypasses it.
 
 ### The core path
 
-**`cmd/lancastd`** — the server `main`. Parses flags, resolves config, opens the
-store, constructs the workers and API, serves, and shuts down gracefully. It
-contains wiring and nothing else; no logic lives here.
+**`internal/serverapp`** — the server program. Parses flags and subcommands,
+resolves config, opens the store, constructs the workers and API, serves, and
+shuts down gracefully. Releases ship one executable built from `cmd/lancast`,
+which is the app and, by subcommand (`LANcast.exe serve`, `reset-auth`, …),
+this same server ([ADR 0080](adr/0080-one-executable-two-roles.md)).
+`cmd/lancastd` remains as a three-line server-only entrypoint for development;
+no logic lives in either `cmd`.
 
 **`internal/config`** — resolves the data directory (platform config dir, or
 `-data`), the listen address, and settings. Creates the data directory if
@@ -160,8 +164,9 @@ and could not be delivered to three devices over a LAN in any case.
 
 **`internal/identity`** — the server's own keypair and fingerprint
 ([ADR 0044](adr/0044-server-identity-and-peering.md)). Only the public half and
-the fingerprint are exported: this project ships crash reporting, and a private
-key that reaches a crash report is a key published to whoever reads it.
+the fingerprint are exported: LANcast writes crash reports to its own data
+directory (nothing is sent anywhere), and a private key that reaches a crash
+report is a key published to whoever later reads or shares that file.
 
 **`internal/peer`** — pairing between servers. Parsing an invite is not pairing;
 pairing exists when each side has added the other, because a relationship one
@@ -199,6 +204,12 @@ it cannot resolve.
 trust granted on first use survives a restart
 ([ADR 0014](adr/0014-transport-security.md)).
 
+**`internal/publiccert`** — the opt-in public certificate: one hostname an
+administrator names, issued over ACME TLS-ALPN-01 for the server's existing
+serving key, and served only to clients that ask for that name
+([ADR 0081](adr/0081-a-public-name-can-earn-a-public-certificate.md)). Off
+until turned on; with it off, nothing here makes a request.
+
 **`internal/service`**, **`internal/autostart`**, **`internal/singleton`**,
 **`internal/raise`**, **`internal/childproc`**, **`internal/desktop`**,
 **`internal/desktopprefs`** — the platform seams: service install and control,
@@ -217,7 +228,7 @@ trust domains.
 
 **`internal/applog`**, **`internal/crashlog`**, **`internal/branding`** — the
 log file a service writes because it has no console, the local crash record
-(nothing is sent anywhere), and the icon compiled into both executables.
+(nothing is sent anywhere), and the icon compiled into the executable.
 
 ## Request lifecycle
 
