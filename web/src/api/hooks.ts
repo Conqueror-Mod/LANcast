@@ -1,3 +1,4 @@
+import { useEffect, useRef } from "react";
 import {
   useQuery,
   useInfiniteQuery,
@@ -157,30 +158,66 @@ export function useLogin() {
   });
 }
 
-// Logout drops every cached query except auth status, so no per-user data
-// (watch progress, admin-only lists) bleeds into the next session — then
-// refetches auth status so the App gate flips to the login screen. Clearing the
-// auth-status query instead of refetching it would leave the gate with no data
-// to re-evaluate, which is the bug this replaced.
+/*
+ * forgetSession drops everything cached for the session that just ended, so no
+ * per-user data (watch progress, admin-only lists) bleeds into the next one.
+ *
+ * Kept: auth status, which the gate reads to decide what to show, and the
+ * sign-in page's own account list, which is on screen at that moment.
+ *
+ * Shared by signing out and by the gate noticing a session ended some other
+ * way (useForgetEndedSession). Before that second caller existed, a session the
+ * server ended — a restore, a password change, "sign out every other device",
+ * expiry — put the sign-in screen up over a full cache, and whoever signed in
+ * next was shown it: found as a library still wearing its old name after a
+ * restore had put the old one back (2026-10-26).
+ */
+export function forgetSession(qc: QueryClient) {
+  qc.removeQueries({
+    predicate: (q) => q.queryKey[0] !== "auth-status" && q.queryKey[0] !== "login-accounts",
+  });
+  /*
+   * And whatever this person agreed to look at (ADR 0051).
+   *
+   * The acknowledgement is theirs. A session store that survives one person
+   * signing out and another signing in is a store that shows the second
+   * person what the first agreed to look at, which is the failure the whole
+   * feature exists to prevent — arriving at the exact moment somebody else
+   * is at the keyboard.
+   */
+  forgetAcknowledgements();
+}
+
+/*
+ * useForgetEndedSession forgets the cache whenever the signed-in account goes
+ * away or changes, however that happened. Called once, by the gate in App.
+ *
+ * Keyed on the account, not on the session: a refetch that still says "dana is
+ * signed in" changes nothing, and the first answer after a cold start (from
+ * nobody to somebody) has nothing to forget.
+ */
+export function useForgetEndedSession(userID: string | undefined) {
+  const qc = useQueryClient();
+  const last = useRef<string | undefined>(userID);
+  useEffect(() => {
+    if (last.current !== undefined && last.current !== userID) {
+      forgetSession(qc);
+    }
+    last.current = userID;
+  }, [qc, userID]);
+}
+
+// Logout forgets the session's cache — then refetches auth status so the App
+// gate flips to the login screen. Clearing the auth-status query instead of
+// refetching it would leave the gate with no data to re-evaluate, which is the
+// bug this replaced.
 export function useLogout() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: () => apiSend("/api/auth/logout", "POST"),
     onSuccess: () => {
-      qc.removeQueries({
-        predicate: (q) => q.queryKey[0] !== "auth-status",
-      });
+      forgetSession(qc);
       qc.invalidateQueries({ queryKey: ["auth-status"] });
-      /*
-       * And whatever this person agreed to look at (ADR 0051).
-       *
-       * The acknowledgement is theirs. A session store that survives one person
-       * signing out and another signing in is a store that shows the second
-       * person what the first agreed to look at, which is the failure the whole
-       * feature exists to prevent — arriving at the exact moment somebody else
-       * is at the keyboard.
-       */
-      forgetAcknowledgements();
     },
   });
 }

@@ -11,7 +11,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BackupSettings, humanBytes, takenAt, waitForRestart } from "./BackupSettings";
+import { BackupSettings, humanBytes, takenAt, waitForRestart, type ServerState } from "./BackupSettings";
 import type { BackupsResponse } from "@/api/types";
 
 declare global {
@@ -304,8 +304,10 @@ describe("the backup pane", () => {
         );
       }
       if (String(input).includes("/api/health")) {
-        // Never answers, so the wait does not reload jsdom during the test.
-        throw new Error("down");
+        // Never answers at all, so the wait parks here rather than polling on
+        // into later tests, whose servers would look like the restart ending
+        // and make it reload jsdom.
+        return new Promise<Response>(() => {});
       }
       return new Response(JSON.stringify(body([RESTORABLE], { can_restore: true })), {
         status: 200,
@@ -425,7 +427,7 @@ describe("takenAt", () => {
 
 describe("waitForRestart", () => {
   it("reloads only after the server has gone away and come back", async () => {
-    const answers = [true, true, false, false, true];
+    const answers: ServerState[] = ["same", "same", "down", "down", "same"];
     let i = 0;
     let reloaded = -1;
     await waitForRestart(
@@ -439,10 +441,30 @@ describe("waitForRestart", () => {
     expect(reloaded).toBe(5);
   });
 
+  /*
+   * The case that failed on 2026-10-26: a restart quick enough that no poll
+   * ever saw the server down. The session being gone is the proof instead,
+   * and the reload comes at once rather than after the minute-and-a-half
+   * fallback, by which time somebody had signed in over the old cache.
+   */
+  it("reloads as soon as the server answers without this session, even if it never saw it go", async () => {
+    const answers: ServerState[] = ["same", "same", "restarted", "same"];
+    let i = 0;
+    let reloaded = -1;
+    await waitForRestart(
+      async () => answers[Math.min(i++, answers.length - 1)],
+      () => {
+        reloaded = i;
+      },
+      async () => {},
+    );
+    expect(reloaded).toBe(3);
+  });
+
   it("gives up and reloads anyway", async () => {
     let reloaded = false;
     await waitForRestart(
-      async () => false,
+      async () => "down",
       () => {
         reloaded = true;
       },
