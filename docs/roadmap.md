@@ -1,6 +1,6 @@
 # Roadmap
 
-Last updated: 2026-10-11 · **v0.9.78 released · M0–M4 built.** The React client executes the design
+Last updated: 2026-10-26 · **v0.9.95 released · M0–M4 built.** The React client executes the design
 system and the client-UX backlog is closed. Observability (match, review, scan
 diagnostics), an audit log and CI are in place. Transport security (TLS) and
 multi-user accounts (admin/member roles) are built, and branding & splash shipped.
@@ -13,50 +13,47 @@ way down. Details in the areas below; what the pass taught is at the end.
 
 ## Where it stands
 
-*Rewritten 2026-09-30, refreshed 2026-10-04, and refreshed again 2026-10-07
-after twelve releases in three days had left it at v0.9.54. The
-2026-09-30 note: the opening of this file had become a running commentary
-on v0.8.18–v0.8.22, and its claims had gone stale: Epic was listed as
-deferred six releases after it shipped, and ADR 0048 as unbuilt a month after
-v0.8.24. The release-by-release record is the [Releases](#releases) table.*
+*Rewritten 2026-09-30 and refreshed 2026-10-04, 2026-10-07 and 2026-10-26.
+The 2026-10-26 pass found this file fifteen days and seventeen releases
+behind: the Releases table stopped at v0.9.78, and three backlog entries still
+listed work that had shipped as open. The release-by-release record is the
+[Releases](#releases) table, and what remains is [What is left](#what-is-left).*
 
-**Nothing sits unreleased.** v0.9.78 is current. Since v0.9.54:
-- **v0.9.56:** an episode counts as watched at its credits, not at 90%.
-- **v0.9.60:** night mode for music, and faces found in HEIC and portrait photos.
-- **v0.9.63:** GOG and EA app games, games opening on the chosen screen, and
-  near copies on the Duplicates page.
-- **v0.9.64:** the film volume slider follows mpv's cubic curve, and Play /
-  Continue / Watch again say what they will do.
-- **v0.9.65:** Mark as watched on every detail page, media keys and Win+Arrow
-  in the desktop player.
-- **v0.9.66:** skip intro on seasons with two versions of their opening.
-- **v0.9.67:** night mode for films in a browser tab, a friend's converted film
-  resumes again, and the server half of Watch Together across servers.
-- **v0.9.68:** Watch Together across servers in the app (Ask to join, the
-  host's prompt), and Watch Together on one server joinable at last.
-- **v0.9.69:** retro games in the desktop app, a film in the corner while you
-  play, and the Game Hub.
-- **v0.9.70:** emulator cores download from inside the app, PlayStation games
-  ask for their BIOS, unrated titles can be rated by hand, the controller
-  drives the game menu, and the corner picture can be dragged and resized.
-- **v0.9.71:** paired servers reach each other past a dead address, an ask to
-  join can be cancelled and is seen, a guest's converted film starts once,
-  and every game is offered ESRB KA.
-- **v0.9.72:** a Watch Together guest lands within a few seconds of the host,
-  and a pause reaches them within about a second.
-- **v0.9.73:** gapless music, night mode included, and an album or a session
-  that fades in and out.
-- **v0.9.74:** crossfade between albums, an equaliser for music, photo places,
-  and a library of 40,000 items within its performance budgets.
-- **v0.9.75:** screens update themselves when the server changes something,
-  pairings become mutual on their own, LANcast fits a phone, and a Watch
-  Together guest has their own volume and fullscreen.
-- **v0.9.76:** retro games play in a browser (NES, Game Boy family, Master
-  System, Mega Drive), with their saves shared with the desktop app.
-- **v0.9.77:** an opt-in public certificate, so browsers trust a server at a
-  name you own, and password guessing slowed per account.
-- **v0.9.78:** passkeys, and the server answering on port 443 so its public
-  name works over IPv6.
+**Nothing sits unreleased.** v0.9.95 is current. Since v0.9.78:
+- **v0.9.79:** one program, `LANcast.exe`, with the tray always present
+  ([ADR 0080](adr/0080-one-executable-two-roles.md)), and a scan can be cancelled.
+- **v0.9.80–v0.9.81:** collections continue the way shows do, an About tab,
+  and the close button working while a film plays.
+- **v0.9.82:** Settings grouped four ways, with scheduled tasks; friends see
+  posters on a shared library.
+- **v0.9.83:** intros skip themselves
+  ([ADR 0083](adr/0083-an-intro-skips-itself.md)), authorised devices, and
+  backups on a schedule.
+- **v0.9.84:** a library kept from an account
+  ([ADR 0084](adr/0084-a-library-can-be-kept-from-an-account.md)), the
+  Watchlist ([ADR 0085](adr/0085-a-watchlist-is-a-list-of-promises.md)) and
+  DLNA ([ADR 0086](adr/0086-a-tv-browses-as-somebody.md)).
+- **v0.9.85:** optimized versions
+  ([ADR 0087](adr/0087-an-optimized-copy-is-converted-once.md)).
+- **v0.9.86:** a certificate you bring
+  ([ADR 0088](adr/0088-a-certificate-you-bring-is-followed.md)) and a port that
+  moves and comes back ([ADR 0089](adr/0089-the-port-moves-and-comes-back.md)).
+- **v0.9.87:** a shelf for rating what you watched, picking your account at
+  sign-in, and passkeys in the desktop window.
+- **v0.9.88:** RetroAchievements on the profile
+  ([ADR 0090](adr/0090-retroachievements-are-yours-to-connect.md)), and a paged
+  game menu with fast-forward, rewind, picture and controls.
+- **v0.9.89–v0.9.91:** Now Playing redesigned, and visualizers (Spectrum,
+  Scope, Trails).
+- **v0.9.92–v0.9.93:** MilkDrop presets
+  ([ADR 0091](adr/0091-milkdrop-presets.md)), and visualizers that fit a phone.
+- **v0.9.94:** a film ends on what to watch next, and running as a service is
+  a choice ([ADR 0092](adr/0092-the-library-moves-with-the-server.md)).
+- **v0.9.95:** collections show their missing films
+  ([ADR 0093](adr/0093-a-collection-knows-its-missing-films.md)), retro save
+  states and touch controls in a browser, readable invites, Report an issue,
+  and containment that follows links
+  ([ADR 0094](adr/0094-containment-follows-links.md)).
 
 v0.9.55, 57–59, 61 and 62 were tagged and never published; each one's changes
 went out in the next published release. Audio pass Phase 2 is built: night
@@ -64,9 +61,10 @@ mode for music and for films in a browser tab ([plan](audio-pass-plan.md)).
 
 **Watch Together across servers (federation Phase 5) is built end to end**
 ([plan](phase-5-room-crosses-the-boundary-plan.md)): the server half in v0.9.67,
-the client in v0.9.68. Tested with two real servers in one process and in jsdom;
-**not yet watched on two machines**. Step 6 is one session with Georgia, both
-servers on v0.9.68 as the installed service.
+the client in v0.9.68. It was **watched between two real machines** testing
+v0.9.71, which is what found the eight-second guest lag fixed in v0.9.72. Both
+machines were on one LAN, so the path across the internet (timeouts, path MTU)
+is still unwatched.
 
 **Watch Together on one server was never joinable from the app until v0.9.68.**
 The join endpoint and hook existed from the first build (9d342771) and nothing
@@ -74,9 +72,11 @@ called them; the panel promised a list of open sessions that did not exist.
 v0.9.68 adds it, on People and in the panel. The follower side of local Watch
 Together has therefore never been watched by a person either.
 
-**In progress:** finishing skip intro across the TV library, from the
-[ADR 0055](adr/0055-an-intro-is-what-every-episode-shares.md) coverage audit (#767). v0.9.65 and
-v0.9.66 are the first two results of it.
+**Skip intro across the TV library is finished.** The
+[ADR 0055](adr/0055-an-intro-is-what-every-episode-shares.md) coverage audit (#767)
+produced v0.9.65 and v0.9.66, and since v0.9.83 an intro skips itself
+([ADR 0083](adr/0083-an-intro-skips-itself.md)). The six gaps left in
+*Futurama* season 7 are known limits of the detector, not open work.
 
 **Shipped but never watched working.** Each one is something the suites
 cannot see: jsdom performs no layout and no media, and nothing in Go runs as
@@ -139,16 +139,83 @@ it works.
 **What exists, in one paragraph.** All four milestones are built, plus the
 native desktop client, which plays through libmpv. The media types are films,
 TV, music, pictures and live TV, with live TV parked. On top of that sit
-federation between servers, Watch Together, installed games, plugins and
-semantic photo search, and retro games. The schema is at **revision 69**. The [Areas](#areas)
+federation between servers, Watch Together, installed games, plugins,
+semantic photo search, retro games, DLNA, optimized versions and music
+visualizers. The schema is at **revision 79**. The [Areas](#areas)
 tables hold the status of each piece, and the [Releases](#releases) table records
 when each one landed. What is left is breadth, and it is listed in the
 [Feature backlog](#feature-backlog).
+
+## What is left
+
+*Everything on this list is unbuilt or unwatched. The detail behind each line
+is in the [Feature backlog](#feature-backlog) entry it names.*
+
+**Next, once decided.**
+- **A friend joins without being reachable** — [plan](lighter-join-plan.md)
+  merged (#836), waiting on a design session. Option A, the friend's server
+  pushing its roster to the host, is recommended first.
+- **In-play RetroAchievements** — unlocks while you play (rcheevos), which needs
+  its own ADR. The profile half shipped in v0.9.88.
+
+**Feature backlog, not yet planned.**
+- Libraries and media: **audiobooks**, **ebooks** (comics first),
+  **extras on the detail page**, **pre-roll**, photo **bursts and RAW**, and
+  **loudness normalisation across a music library** (ReplayGain-style).
+- Playback: **chapters and preview thumbnails** on the scrub bar,
+  **Chromecast and AirPlay**, and **offline downloads** (the client half).
+- Social: **Last.fm and Trakt scrobbling**.
+- Operations: **webhooks**, a **server dashboard** with history,
+  **bandwidth limits**, a **metrics endpoint**, a **snapshot before every
+  migration**, **restore from the interface**, and **granular sharing** by
+  label or on a friend's server (confirm somebody needs it first).
+- Security hardening: **trusted proxies** for the login throttle, **ffmpeg
+  under fewer privileges** than LocalSystem, an **update path for the pinned
+  ffmpeg** (check before building), and **TOTP or OIDC** with per-key API
+  rate limits.
+
+**Back burner.** **Theme music**, blocked on OST identification, and
+**artist images from TheAudioDB** (provider built, not wired, needs a key).
+A dedicated TV or phone client is not planned; Bigscreen mode covers the
+10-foot case.
+
+**Parked.** Live TV (2026-08-29): the guide grid (ADR 0039 step 4), ADR 0013
+step 6, which is now native HLS against MSE, and
+[ADR 0065](adr/0065-a-channel-nobody-is-watching-stops.md), a channel nobody
+is watching that keeps running.
+
+**Built, not yet watched working.**
+- Watch Together and live updates between two servers on **different
+  networks**, and the follower side of Watch Together on one server.
+- Retro: **Game Boy, Game Boy Color and Master System** on real dumps, a pad
+  on the TV, and the touch controls on a real phone.
+- Now Playing and the visualizers **in the desktop window** and on the TV with
+  a pad, synced lyrics on a real track, and the v0.9.93 MilkDrop fixes on the
+  phone that found them.
+- Skip credits on a film the server converts, in a browser; the denial reset
+  row's appearance; the remux path on a client that claims no Matroska.
 
 ## Releases
 
 | Version | Date | What shipped |
 |---|---|---|
+| **v0.9.95** | 2026-10-26 | **Collections that know what is missing, and retro games on a phone.** **Missing films ([ADR 0093](adr/0093-a-collection-knows-its-missing-films.md), #932):** a collection's page lists the films in the franchise that are not in the library, with posters, years and "Coming 2027"; owned is decided at read time from a `collection_film` table, backfilled at the end of an enrichment pass. TMDB descriptions, an administrator's own description that survives a refresh, "2 of 5 watched" or "Started" on the tiles, and Continue Watching carrying on through a collection. The TMDB plugin gained the same fields, held to the native provider by its equivalence test. **Retro in a browser:** three numbered save states, each saying which player made it (#928), and on-screen controls on a touch screen that step aside for a controller (#929). **Getting in touch:** Report an issue opens the person's own mail program; Settings › About names the developer. **Invites** show a check code, name, fingerprint and addresses (#932), and stop carrying WSL and Hyper-V adapter addresses (#935). **Fixes:** shuffling the whole music library plays (#924), HEIC capture time is read (#926), uploaded MilkDrop presets keep their shaders (#915, #925), and **containment follows links** ([ADR 0094](adr/0094-containment-follows-links.md), #934). Schema 77 → 79, one way. |
+| **v0.9.94** | 2026-10-19 | **What to watch when a film ends, and the service made optional.** A film ends on suggestions, the next film in its collection first; resuming a collection or an episode carries on through it. Setup asks whether to install the service, and Settings › This app switches later, copying the library across ([ADR 0092](adr/0092-the-library-moves-with-the-server.md)). Update libraries from the tray no longer reloads an open window. |
+| **v0.9.93** | 2026-10-19 | **Visualizers on phones.** The stage switcher fits under the stage at 360px, MilkDrop says it is loading, and neighbouring presets are fetched ahead (#914). |
+| **v0.9.92** | 2026-10-19 | **MilkDrop presets ([ADR 0091](adr/0091-milkdrop-presets.md)).** Administrators upload `.milk` or butterchurn JSON presets, played through vendored butterchurn in WASM-only mode (#906, #907, #909, #910). Every preset is validated at upload, equations never become JavaScript, and a luminance limiter holds strobing presets to at most three flashes a second. Shaders followed in v0.9.95. |
+| **v0.9.91** | 2026-10-18 | **Visualizer colours** opposite the album cover's, and brighter. |
+| **v0.9.90** | 2026-10-18 | **Visualizers.** Spectrum, Scope and five Trails presets (Tunnel, Spiral, Smoke, Bloom, Drift) under the cover, full screen with idle chrome, and Calm for reduced motion ([plan](now-playing-plan.md) steps 2–3). A crossfade no longer goes quiet after night mode is turned on mid-song. |
+| **v0.9.89** | 2026-10-18 | **Now Playing.** The cover on the left, the track in large type on the right, Queue and Lyrics as tabs, and a background tinted from the cover (#896, [plan](now-playing-plan.md) step 1). |
+| **v0.9.88** | 2026-10-18 | **RetroAchievements and a fuller game menu.** A person connects their own RetroAchievements account on the profile ([ADR 0090](adr/0090-retroachievements-are-yours-to-connect.md)): points, recent unlocks and progress, visible only to them, the key encrypted apart from the database. The game menu gains pages: Picture, Speed & rewind (fast-forward at 3×, rewind up to about 20 s) and Controls, remappable per console. View collection on a film's More Options. Media keys work beside keyboard software, and the arrows seek after a slider was touched. Schema 77. |
+| **v0.9.87** | 2026-10-17 | **Rate what you watched, pick your account, passkeys in the window.** A Home shelf of finished titles not yet rated; an account picker at sign-in, shown only on the home network; passkeys in the desktop window through Windows Hello. Next in a collection follows the film just finished; no white flash at startup. |
+| **v0.9.86** | 2026-10-17 | **Your own certificate and your own port.** A certificate you bring is checked before it is saved, followed through renewals without a restart, and abandoned for LANcast's own if it stops working ([ADR 0088](adr/0088-a-certificate-you-bring-is-followed.md), #876). The port moves from Server › Network and comes back by itself if nothing answers within 30 s ([ADR 0089](adr/0089-the-port-moves-and-comes-back.md), #877). Closes the [settings plan](settings-plan.md). |
+| **v0.9.85** | 2026-10-13 | **Optimized versions ([ADR 0087](adr/0087-an-optimized-copy-is-converted-once.md)).** An administrator chooses titles to convert ahead of time into 1080p H.264 with stereo sound; the copy is used only where the original would not play directly. Status › Conversions shows the queue; Server › Transcoding sets the folder and a space limit. |
+| **v0.9.84** | 2026-10-13 | **Libraries per person, the Watchlist, and DLNA.** A library kept from an account is hidden everywhere it could surface ([ADR 0084](adr/0084-a-library-can-be-kept-from-an-account.md)); the rating limit reaches Continue Watching. A Watchlist that tidies itself ([ADR 0085](adr/0085-a-watchlist-is-a-list-of-promises.md)). DLNA, off by default, browsing as a chosen account ([ADR 0086](adr/0086-a-tv-browses-as-somebody.md), #872). Server › Network says whether the LAN can reach the server. Debug logging works as the service. |
+| **v0.9.83** | 2026-10-13 | **Intros skip themselves ([ADR 0083](adr/0083-an-intro-skips-itself.md)), authorised devices, and scheduled backups.** Each signed-in device listed and sign-out-able; backups on a schedule that only ever deletes its own. "Keep for ever" stays for ever; expired sessions are cleared. |
+| **v0.9.82** | 2026-10-12 | **A new Settings**, grouped as Status, Server, Your account and This device, with Scheduled tasks; subtitle style follows the account. Friends see posters on a shared library. |
+| **v0.9.81** | 2026-10-12 | **Fixes:** the close button during a film, reopening from the tray, Play from start remembered, and the spotlight's menu matching the shelf's. About redesigned. |
+| **v0.9.80** | 2026-10-12 | **Collections continue like shows:** Up next on a collection, the next film on Continue Watching, and Because you watched following the collection. Music says Continue listening. Fixes to episodes finishing as they start, fullscreen on leaving the player, and a hidden window still playing. |
+| **v0.9.79** | 2026-10-12 | **One program, one icon ([ADR 0080](adr/0080-one-executable-two-roles.md), #844–#849).** `LANcast.exe` is the window, the tray and, as a service, the server. ✕ hides the window and Exit closes it without stopping the service. A scan can be cancelled. Installer-only release. |
 | **v0.9.78** | 2026-10-11 | **Passkeys.** **Sign in with a passkey ([ADR 0082](adr/0082-a-passkey-belongs-to-the-public-name.md), #842):** a phone, computer or security key instead of the password, which keeps working as the recovery path. A passkey is bound to a name, so it exists only at the server's public name over its trusted certificate (ADR 0081); by IP, on `localhost` or in the desktop app there is no button. Add, rename and remove in Settings → Account → Passkeys; adding asks for the current password. Verification is LANcast's own (attestation "none", user verification required, ES256/EdDSA/RS256) with one new module, `fxamacker/cbor`, chosen over go-webauthn's ten. Single-use challenges; a counter that stops rising is refused as a possible clone. New routes under `/api/auth/passkey/` and `/api/profile/passkeys`. Proven on the installed service: added from an Android phone, signed in on home Wi-Fi and on cellular. **Port 443 (#841, ADR 0081 §2 amended):** while the public certificate is on, the server also answers on 443, because IPv6 has no port translation; with an `AAAA` record a device at home reaches the server directly instead of through a router's unreliable loopback (measured 8 of 8 against 3 of 8). On an AT&T BGW320 an IPv6 port is opened in Packet Filter, not NAT/Gaming. **Schema revision 70** (the passkey table): one-way, so back up before installing if a rollback might be wanted |
 | **v0.9.77** | 2026-10-11 | **A public certificate, and password guessing slowed per account.** A server made publicly reachable needs both, and this release adds them. **Public certificate ([ADR 0081](adr/0081-a-public-name-can-earn-a-public-certificate.md), amending ADR 0014's "no ACME", #839):** an administrator enters a name that points at the server, chooses Let's Encrypt (or its staging service) and ticks its agreement in Settings → General → Public certificate. Until then nothing contacts any certificate authority. The name is proven over TLS-ALPN-01, on inbound port 443 forwarded to LANcast's port, through the same handshake routing that already separates peer servers. Only connections that ask for that name get the public certificate; by IP, `localhost` and peer servers keep what they had. It is issued for the server's existing key, so desktop clients that pinned it keep trusting the server across renewals. It renews at a third of its lifetime, keeps serving on a failed renewal, never serves an expired certificate, and turning it off deletes it and the ACME account key. New routes `GET/PUT /api/settings/public-certificate`; the ACME directory can only be changed in the settings file. Verified on the installed service: production issued first time, a phone on cellular opened the server with no warning, the key fingerprint is unchanged, and peer handshakes still get the identity certificate. Learned: Let's Encrypt **staging** failed secondary DNS validation for two free DNS providers that production handled first time. **Password guessing slowed per account (#838):** failed sign-ins from outside the local network now also count against the account name: five free, then a wait doubling from 30 s to 15 minutes. It is a wait, never a lockout: retrying during it does not lengthen it, home addresses are exempt, and names that do not exist wait too, so the answer reveals nothing. **Planned (#837):** one `LANcast` executable with the tray always present, and passkeys (which need the public name this release provides). No schema change: v0.9.76 can still open the database |
 | **v0.9.76** | 2026-10-11 | **Retro games play in a browser, with their saves.** [ADR 0077](adr/0077-a-browser-can-play-a-game.md), all three parts. **The cores (#832):** an administrator presses one button in Settings → Retro games and the server fetches libretro's stable 1.22.2 WebAssembly build (749 MB, pinned by SHA-256), keeps the four web cores (FCEUmm for NES, mGBA for the Game Boy family, Gearsystem for Master System, ClownMDEmu for Mega Drive; each file pinned), about 12 MB, and deletes the rest. Nothing non-commercial is extracted; LANcast never hosts or ships a core; they are served only to signed-in accounts. **The player (#833):** outside the desktop app a game whose console has its core gets Play. A web core is all of RetroArch, which already draws with WebGL, plays through Web Audio and reads keyboards and controllers, so the page boots it the way libretro's own player does and starts it from a Start press. Leaving reloads the page, because a running core has no off switch. A phone without a controller is told it needs one. **Saves (#834):** the game's own save is shared with the desktop player, loaded before Start and stored while playing and on leaving; leaving also stores a state for Continue in a browser. Measured: the browser's states are RZIP-compressed and the desktop's are raw, so states do not cross between players, and each offers Continue only from its own. Seen on the installed service: Bubble Bobble (NES, from a .zip), Fire Emblem (GBA, with the full save and Continue round trip) and Castle of Illusion (Mega Drive). SNES, N64 and PlayStation stay in the desktop app. No schema change: v0.9.75 can still open the database |
@@ -433,7 +500,7 @@ Status: **planned** · **next** · *unplanned*
 |---|---|---|
 | Server core architecture | **built** | Go, SQLite, scan → browse → play |
 | UI/UX design system | **built** | Nebula field, gold rule, keyboard model — executed by the React client, not just the tokens |
-| Data model evolution and migrations | **built** | Forward-only migrations (rev 1→58); collections, hierarchy, multi-part & serial works ([ADR 0017](adr/0017-collections-and-multi-part-works.md)) |
+| Data model evolution and migrations | **built** | Forward-only migrations (rev 1→79); collections, hierarchy, multi-part & serial works ([ADR 0017](adr/0017-collections-and-multi-part-works.md)) |
 | API contract and versioning | **built** | URL-path versioning, `/api` ≡ v1, additive-safe rule ([ADR 0018](adr/0018-api-contract-and-versioning.md)); `child_count`, `collection_id`, cross-type match |
 
 ### Metadata and artwork · M2
@@ -856,10 +923,10 @@ group is not priority.
   family, Master System and Mega Drive, with the game's own save shared with
   the desktop app. In a browser so far: NES, GBA and Mega Drive. SNES, N64 and
   PlayStation stay desktop-only, SNES because its only web core forbids
-  commercial use. **Still open:**
-  - numbered states in a browser;
-  - a save list that says which player made each state;
-  - on-screen controls for phones.
+  commercial use. **Built since, in v0.9.95:** numbered states in a browser,
+  each saying which player made it (#928), and on-screen controls for phones
+  (#929). **Still open:** in-play achievements (rcheevos, its own ADR), and
+  Game Boy, Game Boy Color and Master System played on real dumps.
 
   Original entry, kept for the reasoning: the request was to play old
   console games, N64 first, inside LANcast without keeping a separate emulator
@@ -885,7 +952,8 @@ group is not priority.
   whether a RetroArch launcher is wanted as a stop-gap); all five were answered
   in the ADR before stage 1.
 
-- **Lyrics** — **built**; the rest of music below is not.
+- ~~**Lyrics**~~ — **built**, and so is the rest of music below: gapless in
+  v0.9.73 and crossfade in v0.9.74.
   [internal/lyrics](../internal/lyrics/lyrics.go) parses LRC,
   `GET /api/items/{id}/lyrics` resolves **sidecar first then the embedded tag**,
   and the audio player grows a panel that follows the song. No provider and no
@@ -912,8 +980,8 @@ group is not priority.
   that decision rather than a reversal — a caller that wants exactly the blob
   asks for it, once, when somebody has opened the panel, and nothing is stored.
 
-  Still open from the entry below: **gapless and crossfade**, which is
-  decoder scheduling in the client and nothing the server can fix.
+  Gapless and crossfade, which the entry below also asked for, shipped in
+  v0.9.73 ([plan](gapless-plan.md)) and v0.9.74.
 
   Original entry: [probe](../internal/probe/probe.go) throws
   the `LYRICS` tag away on purpose — a multi-kilobyte blob has no business in a
@@ -1624,16 +1692,6 @@ group is not priority.
   `ClientKey` and `InsideNetwork` both reading through it. Now that ADR 0081
   makes the server publicly reachable without a proxy this matters less than it
   did, but the docs still recommend a proxy.
-- **Containment that resolves symlinks** — not built. `containedPath` in
-  `internal/api/stream.go` is `filepath.Abs` plus `filepath.Rel`, which is
-  lexical, and the scan imports a symlinked file by its extension like any
-  other. So `film.mkv` linking to any file on the machine passes containment and
-  is served, by a service running as LocalSystem. It needs write access to a
-  library folder and, on Windows, the right to create symlinks, so it is
-  hardening rather than an open door — but it is exactly what the CLAUDE.md rule
-  about re-verifying containment exists to stop. Fix: `filepath.EvalSymlinks` on
-  both the root and the target before comparing, with a test that makes a link
-  out of a temporary library.
 - **ffmpeg runs with the service's privileges** — not built. The service runs
   as LocalSystem, and ffmpeg and ffprobe parse whatever files are in a library,
   which is the largest attack surface LANcast has. ADR 0043 accepts the parser
@@ -1835,8 +1893,8 @@ group is not priority.
   the cookie is first-party and the `Origin`/`Host` check matches. No endpoint,
   no API change.
 
-- **The audio pass — loudness leveling, a dialogue-clarity knob, and an
-  equaliser** across music, shows and films. The most-felt gap on this page:
+- ~~**The audio pass — loudness leveling, a dialogue-clarity knob, and an
+  equaliser**~~ — **built**, across music, shows and films. The most-felt gap on this page:
   whispered dialogue and deafening explosions are the standing complaint about
   watching anything at home, and **no commercial service offers the control at
   all**.
@@ -1859,7 +1917,10 @@ group is not priority.
   control was tried and removed), and for films in a browser tab (v0.9.67,
   #775), offered only where what reaches the element is mono or stereo, so a
   directly played 5.1 soundtrack is never folded down without saying so.
-  Dialogue boost stays the desktop's. The equaliser is unbuilt.
+  Dialogue boost stays the desktop's. **Phase 3, the equaliser, is built for
+  music** (v0.9.74, #818): presets and five bands. Films keep night mode and
+  dialogue boost, by choice. Loudness normalisation across a library
+  (ReplayGain-style) is outside this entry and has no plan yet.
 
   The original entry follows.
 
