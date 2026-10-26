@@ -199,54 +199,22 @@ func writeFileSync(path string, data []byte) error {
 }
 
 /*
- * StableIPs is LocalIPs without the addresses that are going to disappear.
+ * StableIPs is LocalIPs without the addresses another machine should not be
+ * told about.
  *
- * For anything **recorded** rather than served: an invite is written once at
- * pairing and never re-learned (ADR 0044 §5), so a temporary IPv6 address in it
- * becomes an entry that no longer exists and is still tried — costing a connect
- * timeout on every peer operation before a working address is reached.
+ * For anything **recorded** or **handed out** rather than served: an invite is
+ * written once at pairing and never re-learned (ADR 0044 §5), the Network pane
+ * tells a person which address to type, and DLNA announces one. An address
+ * that expires, or that only this machine can reach, is wrong in all three.
  *
- * Windows generates a fresh temporary address regularly and deprecates the old
- * one within about a day. One household's peer record was found holding several
- * of them.
+ * Two kinds are dropped, both decided in stable.go from what the stack reports:
+ * temporary or deprecated IPv6 addresses (Windows rotates them within about a
+ * day; one household's peer record held several), and every address on a
+ * hypervisor's host-only adapter (the WSL switch put 172.23.96.1 into Aither's
+ * invites). Anything the stack cannot answer for is kept.
  *
- * There is no way to tell a temporary address from a stable one by inspection:
- * RFC 7217 stable-privacy addresses are equally random-looking and must be
- * kept. Only the stack that generated them knows, so it is asked — and anything
- * it cannot answer for is kept, because a stale entry costs a timeout while a
- * missing one can cost the pairing.
+ * The certificate is deliberately not narrowed: it uses LocalIPs.
  */
 func StableIPs() []string {
-	return withoutTemporary(LocalIPs(), temporaryAddresses())
-}
-
-/*
- * withoutTemporary is the decision, separated from the machine it is about.
- *
- * A function over two lists, so the rules can be asserted without depending on
- * whatever addresses the computer running the tests happens to hold — which is
- * both unknowable and different on CI.
- */
-func withoutTemporary(all []string, skip map[string]bool) []string {
-	if len(skip) == 0 {
-		return all
-	}
-	out := make([]string, 0, len(all))
-	for _, ip := range all {
-		if !skip[ip] {
-			out = append(out, ip)
-		}
-	}
-	/*
-	 * Never nothing.
-	 *
-	 * If every address this machine has is one the stack means to replace, a
-	 * server with no address at all cannot introduce itself — and ErrNoAddress
-	 * is a much worse answer than an address that expires. Keeping the lot is
-	 * the honest fallback for a machine whose whole answer is temporary.
-	 */
-	if len(out) == 0 {
-		return all
-	}
-	return out
+	return without(LocalIPs(), unrecordable(adapterFacts()))
 }
