@@ -974,6 +974,43 @@ group is not priority.
   207 are their own bucket. Marked folders are excluded from it entirely
   (ADR 0051, amended). Face grouping, the large piece when this was written,
   has since been built (ADR 0052).
+- **Audiobooks** — not built. Nothing in LANcast tells a book from an album:
+  an `.m4b` already streams as `audio/mp4` and probes like any other track, so a
+  book dropped into a music library today is one very long track, or a folder
+  of chapter files shuffled among the songs. What a book needs that music does
+  not: **resume by position**, which a ten-hour book cannot live without (check
+  what music's playback state records before assuming it does this);
+  **chapters**, read from the container, which `internal/probe` does not ask
+  ffprobe for yet; **playback speed**, which a book listener expects and a music
+  listener never touches; and **author, narrator and series** rather than artist
+  and album. The question to settle first is whether it is its own library kind,
+  as music, pictures and retro each became (ADR 0024, 0028, 0073), or a mode of
+  the music kind. Resume and the different model both argue for its own kind.
+- **Ebooks** — not built. A library kind for EPUB and a reader in the client.
+  Three things carry the weight. The **renderer**: a reflowable EPUB reader
+  would be the largest third-party library the client carries, so it gets the
+  hls.js treatment (vendored, pinned, its own chunk) and its own ADR. **Reading
+  position**: a location in reflowable text is not a millisecond, so it does not
+  fit `playback_state` as it stands. **Metadata**: the OPF inside the file names
+  title, author and series, and should be read before any provider is asked.
+  Comics (CBZ/CBR) are the cheap first step if this is wanted at all — an
+  archive of images, and the pictures viewer already displays images.
+- **Extras on the detail page** — trailers, featurettes, behind-the-scenes and
+  deleted scenes, played rather than skipped. The files are already recognised:
+  `media.IsExtra` finds them by the folder and suffix conventions Plex and Kodi
+  document, the scan leaves them out, and library settings reports how many
+  ([ADR 0038](adr/0038-extras-are-not-works.md)). That ADR calls exclusion the
+  honest first step, says it is reversible, and names what playing them needs —
+  a kind, a place on the detail page, and a decision about whether a trailer
+  plays through the same routes. This entry is that follow-up. It must not undo
+  the reason 0038 exists: an extra never appears as a film, in the grid or in a
+  count. The online Trailer button stays for films with no local trailer.
+- **Pre-roll (custom cinema intros)** — not built. A clip the owner chooses,
+  played before a film; Plex's version is a list of paths with one picked at
+  random. Four questions decide it: server-wide or per library; **never on a
+  resume**, since a pre-roll before minute 47 is only an obstacle; it must not
+  touch playback state or count as watching anything; and it plays in the
+  player, so both the browser and the desktop's mpv player need it (ADR 0067).
 
 ### Metadata, ratings and discovery
 
@@ -1500,6 +1537,50 @@ group is not priority.
   already targets the monitor the window is on, which is the correct behaviour
   and should stay — so this is one setting, and a second one would be a way for
   the two to disagree.
+- **Webhooks** — not built. A URL the owner sets, which receives a POST when
+  something happens: a film starts or stops, an item is added, a scan finishes.
+  Plex's are what Home Assistant automations and Discord bots are built on. One
+  thing makes this cheaper than it looks: the live-updates event stream
+  ([ADR 0079](adr/0079-the-server-says-when-something-changed.md)) already names the server's events, so a
+  webhook is another subscriber, not a second event system. Three things make it
+  careful. **It is outbound traffic** under a no-phone-home principle, and it is
+  consistent with that only because the owner types the destination and nothing
+  is configured by default — the ADR should say so in those words.
+  **Administrator-only**, because a URL the server fetches is a way to make the
+  server reach into the LAN. **Playback events name an account and a title**,
+  which ADR 0035 treats as that person's business, so whose viewing a webhook
+  may report is a consent question before it is an HTTP one.
+- **A server dashboard** (Plex Dash) — partly built. Settings → Activity
+  already shows what the server is doing *now*: its sessions, idle-first and
+  administrator-only (v0.9.22, `GET /api/transcodes`). What Plex Dash adds is
+  **history**, and a view that works on a phone: streams and bandwidth over
+  time, who watched what, server load. Who watched what already exists as the
+  `viewing` log ([ADR 0074](adr/0074-a-viewing-is-a-row.md)). The new weight is
+  sampling the server itself — bandwidth and CPU over time means a table of
+  samples with retention and size limits. Any per-account view stays
+  administrator-only, for the reason `/api/transcodes` is.
+- **Bandwidth limits** — not built as a server setting. What exists is per
+  device: the quality ceiling the client keeps in its own storage (v0.6.23),
+  plus the session cap. Neither lets the owner say *remote streams may use at
+  most N Mbps* or *the server may upload at most N in total*, which matters now
+  that remote reach is real (the public name, federation). Plex offers a cap per
+  remote stream, a total upload cap, and LAN addresses treated as unlimited. The
+  per-stream cap belongs **in the play decision** as one more input, so it
+  stays testable from fixtures like every other rule in `probe`. The total cap
+  is the heavier half: it is admission control across sessions, which decides
+  what happens to the stream that would cross the line.
+- **Granular sharing restrictions** — **mostly built**; recorded here so it is
+  not rebuilt from Plex's list. Every account can carry a rating ceiling
+  (schema 47) and a narrowed set of libraries
+  ([ADR 0084](adr/0084-a-library-can-be-kept-from-an-account.md)), both enforced
+  in the store at the `GetItem` chokepoint. Two things Plex has beyond that.
+  **Restricting by label** — allow or exclude titles carrying a tag. LANcast's
+  tags are private to the person who wrote them
+  ([ADR 0062](adr/0062-a-tag-is-a-note-to-yourself.md)), so they cannot serve;
+  this would need a household label, which is a new concept. **Limits on a
+  friend's server** rather than on a local account: a share is a whole-library
+  grant ([ADR 0071](adr/0071-a-shared-library-is-a-standing-grant.md)).
+  Confirm that somebody needs either before designing it.
 
 ### Input and control
 
