@@ -61,6 +61,10 @@ func normalizeRoot(p string) string {
 // a prefix of `/mnt/films2` while containing none of it, and a prefix test
 // would reject a perfectly good second location for sharing a name with the
 // first.
+//
+// Lexical, and not a containment boundary: it answers whether two configured
+// locations overlap. Serving a file is checked by internal/contain, which
+// follows links.
 func within(child, parent string) bool {
 	rel, err := filepath.Rel(parent, child)
 	if err != nil {
