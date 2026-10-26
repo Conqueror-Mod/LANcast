@@ -30,6 +30,7 @@ const RESTORABLE = {
   schema_version: 39,
   restorable: true,
   scheduled: false,
+  pre_migration: false,
 };
 
 const SCHEDULED = {
@@ -39,6 +40,17 @@ const SCHEDULED = {
   schema_version: 39,
   restorable: true,
   scheduled: true,
+  pre_migration: false,
+};
+
+const BEFORE_UPDATE = {
+  name: "lancast-backup-20261026-090500-schema78-premigrate.db",
+  bytes: 102834176,
+  taken_at: 1792998300,
+  schema_version: 78,
+  restorable: true,
+  scheduled: false,
+  pre_migration: true,
 };
 
 const FROM_THE_FUTURE = {
@@ -48,6 +60,7 @@ const FROM_THE_FUTURE = {
   schema_version: 40,
   restorable: false,
   scheduled: false,
+  pre_migration: false,
   problem: "taken by a newer LANcast — update before restoring it",
 };
 
@@ -145,6 +158,14 @@ describe("the backup pane", () => {
     const rows = [...host.querySelectorAll(".set-row")].map((r) => r.textContent ?? "");
     expect(rows.find((t) => t.includes(SCHEDULED.name))).toContain("Scheduled");
     expect(rows.find((t) => t.includes(RESTORABLE.name))).toContain("Taken by hand");
+  });
+
+  it("says which backup the server took before an update, and at which version", async () => {
+    await render([BEFORE_UPDATE, RESTORABLE]);
+    expect(host.textContent).toContain("Before an update (database version 78)");
+    // Not mistaken for one somebody took, or for the schedule's.
+    expect(host.textContent?.match(/Taken by hand/g)?.length).toBe(1);
+    expect(host.textContent).not.toContain("Scheduled ·");
   });
 
   it("lists a backup with its size and a download link to its own name", async () => {

@@ -17014,7 +17014,8 @@
           "taken_at",
           "schema_version",
           "restorable",
-          "scheduled"
+          "scheduled",
+          "pre_migration"
         ],
         "properties": {
           "name": {
@@ -17043,6 +17044,10 @@
           "scheduled": {
             "type": "boolean",
             "description": "Whether the backup schedule took it rather than a person. Only scheduled backups are deleted to keep the count at backup_keep."
+          },
+          "pre_migration": {
+            "type": "boolean",
+            "description": "Whether the server took it on its own, just before an update changed the database. Named with -schema<N>-premigrate before the extension, N being the revision it holds. The newest three are kept; older ones are deleted when the next is taken. Never counted toward backup_keep."
           }
         }
       },

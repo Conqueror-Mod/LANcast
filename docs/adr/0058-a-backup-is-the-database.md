@@ -153,3 +153,35 @@ them.
 
 Nothing else in the decision changes. Restoring is still offline, artwork is
 still excluded, and a backup from a newer build is still refused by name.
+
+## Amendment — a backup before every migration, 2026-10-26
+
+Migrations only go forward, so the file that would undo a bad one is the one
+taken just before it ran, and that is the backup nobody takes: an update
+arrives from the tray or the in-app updater, and the migration runs on the way
+back up with nobody watching. Now the server takes it.
+
+**When.** At startup, in `store.OpenWith`, when a migration is pending on a
+database that existed before the open. A new install also starts at revision 1
+and migrates all the way up, and a snapshot of an empty database protects
+nothing, so a missing or zero-byte file is skipped. A start that changes
+nothing takes nothing.
+
+**Where and what.** In the ordinary backups folder, by the ordinary snapshot,
+so it is listed, downloadable and restorable like any other, with sessions
+cleared. Named `lancast-backup-<time>-schema<N>-premigrate.db`, `N` being the
+revision it holds, and listed with `pre_migration: true`.
+
+**How many.** The newest three. Older ones are deleted only after the next one
+is written. They are never counted toward the schedule's `backup_keep`, and the
+schedule never deletes them; a backup taken by hand is still never deleted by
+anything.
+
+**When it fails, the server starts anyway.** Refusing to start would leave the
+service down after an update with nobody at the machine, for a migration that
+ran without a safety copy on every update before this one. The failure is
+logged as `backup before the database update failed`.
+
+**One thing it found.** Clearing sessions from the copy assumed a `session`
+table, and a database old enough to predate it made the snapshot fail. A
+database without the table has no sessions to remove, and is now treated so.

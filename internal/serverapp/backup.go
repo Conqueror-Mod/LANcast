@@ -2,12 +2,14 @@ package serverapp
 
 import (
 	"context"
+	"log/slog"
 	"sync"
 	"time"
 
 	"lancast/internal/api"
 	"lancast/internal/backup"
 	"lancast/internal/config"
+	"lancast/internal/store"
 	"lancast/internal/tasks"
 )
 
@@ -60,4 +62,32 @@ func trackedBackup(ctx context.Context, srv *api.Server, board *tasks.Board) {
 	backupMu.Lock()
 	defer backupMu.Unlock()
 	_ = board.Track("backup", func() error { return srv.RunScheduledBackup(ctx) })
+}
+
+/*
+ * preMigrationBackup is the hook store.OpenWith calls before an update changes
+ * the database: a backup at the old revision, in the ordinary backups folder,
+ * so Settings lists it and Restore can use it like any other.
+ *
+ * A failure is logged and does not stop the server. Refusing to start would
+ * leave the service down after an update with nobody at the machine, for a
+ * migration that has run without a safety copy on every update until now.
+ */
+func preMigrationBackup(dataDir string, log *slog.Logger) func(int, int, func(string) (store.Snapshot, error)) error {
+	return func(from, to int, snapshot func(string) (store.Snapshot, error)) error {
+		start := time.Now()
+		f, removed, err := backup.New(dataDir).PreMigrate(start, from, snapshot)
+		if err != nil {
+			log.Error("backup before the database update failed; updating without one",
+				"from", from, "to", to, "error", err)
+			return nil
+		}
+		log.Info("backup taken before the database update",
+			"name", f.Name, "from", from, "to", to, "bytes", f.Bytes,
+			"took", time.Since(start).Round(time.Millisecond))
+		for _, name := range removed {
+			log.Info("older pre-update backup rotated out", "name", name)
+		}
+		return nil
+	}
 }
