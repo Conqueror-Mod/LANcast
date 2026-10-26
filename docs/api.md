@@ -2001,6 +2001,15 @@ because it changes who can see something about a person.
 Turning it off is **retroactive**: past activity stops being visible along with
 future. A switch that cannot take back what it gave is not a switch.
 
+### `PUT /api/profile/webhooks`
+
+`{ "share": true }` — whether this server's webhooks may report what the caller
+watches ([ADR 0097](adr/0097-a-webhook-goes-where-the-owner-points-it.md)).
+Off for every account until that account turns it on, the administrator who
+made the webhook included. **No administrator variant**, for the reason the
+sharing switch has none. Audited. Read it back from `user.webhook_playback` on
+`GET /api/auth/status`.
+
 ### Passkeys
 
 Passkeys ([ADR 0082](adr/0082-a-passkey-belongs-to-the-public-name.md)) are an
@@ -5480,6 +5489,82 @@ yours — the ownership is part of the query rather than a check in the handler,
 so the database refuses it however the handler is later rewritten.
 
 The key stops authenticating immediately; there is no cache to wait out.
+
+## Webhooks
+
+A webhook is a URL an administrator sets, which receives a POST when something
+happens ([ADR 0097](adr/0097-a-webhook-goes-where-the-owner-points-it.md)).
+**None by default**, and the owner types every destination, which is what
+keeps them inside no phone home. **Administrators only** throughout. At most
+ten. Stored in `settings.json`, so a restored backup does not bring back a
+webhook somebody deleted.
+
+### A delivery
+
+```
+POST <url>
+Content-Type: application/json
+User-Agent: LANcast/0.9.96
+X-LANcast-Event: scan.finished
+X-LANcast-Delivery: dl_3f9a…
+X-LANcast-Signature: sha256=<hex HMAC-SHA256 of the body, keyed with the secret>
+
+{ "id": "dl_3f9a…", "type": "scan.finished", "at": 1793030000,
+  "data": { "library": { "id": 1, "name": "Movies", "kind": "movie" },
+            "outcome": "completed", "files_seen": 1226, "items_changed": 3,
+            "items_missing": 0, "duration_ms": 4120 } }
+```
+
+Ten seconds per attempt, three attempts (after two and ten seconds), and only a
+2xx counts. **Redirects are not followed.** Deliveries are queued off the
+request path; when the queue is full an event is dropped and counted in
+`dropped`, rather than slowing the server.
+
+| Event | `data` |
+|---|---|
+| `playback.started`, `playback.stopped` | `{ "account": { "id", "name" }, "title" }` — **only for accounts that turned it on** (`PUT /api/profile/webhooks`). `title` is the work: a show, never an episode, as People shows it. From presence, so a pause longer than about twenty seconds reads as a stop, and resuming as a start; a change of title is a stop then a start |
+| `scan.finished` | `{ "library": { "id", "name", "kind" }, "outcome": "completed" \| "failed" \| "cancelled", "files_seen", "items_changed", "items_missing", "duration_ms" }`, plus `error` when it failed |
+| `backup.taken` | `{ "name", "bytes", "schema_version", "taken_by": "person" \| "schedule" }` |
+| `ping` | `{ "message" }` — only from the test route |
+
+### `GET /api/webhooks`
+
+```json
+{ "webhooks": [ { "id": "wh_1a2b…", "url": "http://192.168.1.10:8123/api/webhook/lancast",
+                  "events": ["playback.started", "playback.stopped"], "enabled": true,
+                  "created_at": 1793030000,
+                  "last": { "at": 1793031000, "event": "playback.started", "ok": true,
+                            "status": 200, "tries": 1, "took_ms": 38 } } ],
+  "events": ["playback.started", "playback.stopped", "scan.finished", "backup.taken"],
+  "dropped": 0 }
+```
+
+`last` is since this server started, `null` before anything was sent. **The
+secret is never in this list.**
+
+### `POST /api/webhooks`
+
+`{ "url": "...", "events": ["scan.finished"], "enabled": true }` — `enabled` is
+optional and true when absent. Any http or https URL with a host, LAN addresses
+included. `400` for anything else, an unknown event or no events; `409
+too_many` past ten. Answers `201` with `{ "webhook": {…}, "secret": "whsec_…" }`.
+**The secret is in this answer and nowhere else.** Recorded as
+`webhook.create`, with the URL.
+
+### `PATCH /api/webhooks/{id}`
+
+Any of `url`, `events`, `enabled`. Answers the webhook as it now is. Recorded as
+`webhook.update`.
+
+### `DELETE /api/webhooks/{id}`
+
+`204`, or `404`. Recorded as `webhook.delete`.
+
+### `POST /api/webhooks/{id}/test`
+
+Sends `ping`, once and without retries, whatever the webhook subscribes to, and
+answers with what happened: `{ "at", "event", "ok", "status", "error",
+"tries", "took_ms" }`.
 
 ## Metrics
 

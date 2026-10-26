@@ -732,6 +732,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/profile/webhooks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Whether webhooks may report what you watch
+         * @description The caller's own decision, and only ever the caller's (ADR 0097). **There is deliberately no administrator variant**: a switch somebody else can flip on your behalf is not consent. Off for every account until that account turns it on, including the administrator who made the webhook. Audited.
+         *
+         *     Read the current value from `user.webhook_playback` on `GET /api/auth/status`.
+         */
+        put: operations["putPlaybackWebhooks"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/stream/{id}": {
         parameters: {
             query?: never;
@@ -5820,6 +5842,80 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/webhooks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The webhooks, and what happened last
+         * @description **Administrators only** (ADR 0097). Never returns a secret.
+         */
+        get: operations["listWebhooks"];
+        put?: never;
+        /**
+         * Add a webhook
+         * @description **Administrators only** (ADR 0097). Any http or https URL with a host, LAN addresses included. At most ten. **The secret is in this answer and nowhere else.** Recorded as `webhook.create`, with the URL.
+         */
+        post: operations["createWebhook"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/webhooks/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The webhook's id, `wh_…`. */
+                id: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Remove a webhook
+         * @description **Administrators only** (ADR 0097). Recorded as `webhook.delete`.
+         */
+        delete: operations["deleteWebhook"];
+        options?: never;
+        head?: never;
+        /**
+         * Change a webhook
+         * @description **Administrators only** (ADR 0097). Every field optional. Recorded as `webhook.update`.
+         */
+        patch: operations["patchWebhook"];
+        trace?: never;
+    };
+    "/webhooks/{id}/test": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The webhook's id, `wh_…`. */
+                id: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Send ping, once, and wait
+         * @description **Administrators only** (ADR 0097). Sends a `ping` event whatever the webhook subscribes to, once and without retries, and answers with what happened.
+         */
+        post: operations["testWebhook"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -5882,6 +5978,8 @@ export interface components {
             sharing?: boolean;
             /** @description Whether this account appears in the roster handed to paired servers. `/auth/status` only, and absent rather than false when unreadable. */
             visible_to_peers?: boolean;
+            /** @description Whether this account lets the server's webhooks report what it watches (ADR 0097). `/auth/status` only, and absent rather than false when unreadable. */
+            webhook_playback?: boolean;
             /** @description The content rating this account may not exceed (ADR 0015). **Present only on `GET /api/users`**, the administrator's account list, and omitted there when the account has no limit — a limit is a fact an administrator manages, and the object a session gets back about itself at login deliberately does not carry it. */
             max_content_rating?: string;
             /**
@@ -7427,6 +7525,58 @@ export interface components {
             token: string;
             /** Format: int64 */
             created_at: number;
+        };
+        /** @description The last time a webhook was sent something. */
+        WebhookStatus: {
+            /** Format: int64 */
+            at: number;
+            event: string;
+            /** @description Only a 2xx counts. Redirects are not followed. */
+            ok: boolean;
+            /** @description The receiver's HTTP status, absent when there was none. */
+            status?: number;
+            /** @description Why not, without the URL. */
+            error?: string;
+            /** @description Up to three for an event; one for a test. */
+            tries: number;
+            /** Format: int64 */
+            took_ms: number;
+        };
+        Webhook: {
+            id: string;
+            url: string;
+            events: ("playback.started" | "playback.stopped" | "scan.finished" | "backup.taken")[];
+            enabled: boolean;
+            /** Format: int64 */
+            created_at: number;
+            /** @description Since this server started; null before anything was sent. */
+            last: components["schemas"]["WebhookStatus"] | null;
+        };
+        WebhookList: {
+            webhooks: components["schemas"]["Webhook"][];
+            /** @description What can be subscribed to. */
+            events: string[];
+            /**
+             * Format: int64
+             * @description Deliveries dropped for a full queue since start.
+             */
+            dropped: number;
+        };
+        WebhookCreate: {
+            url: string;
+            events: ("playback.started" | "playback.stopped" | "scan.finished" | "backup.taken")[];
+            /** @description True when absent. */
+            enabled?: boolean;
+        };
+        WebhookPatch: {
+            url?: string;
+            events?: ("playback.started" | "playback.stopped" | "scan.finished" | "backup.taken")[];
+            enabled?: boolean;
+        };
+        WebhookCreated: {
+            webhook: components["schemas"]["Webhook"];
+            /** @description `whsec_…`. Signs every delivery: `X-LANcast-Signature: sha256=<hex HMAC-SHA256 of the body>`. Shown once. */
+            secret: string;
         };
         BackupFile: {
             name: string;
@@ -10335,6 +10485,33 @@ export interface operations {
             };
             401: components["responses"]["Unauthorized"];
             404: components["responses"]["NotFound"];
+        };
+    };
+    putPlaybackWebhooks: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SharingRequest"];
+            };
+        };
+        responses: {
+            /** @description Acknowledged. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Acknowledged"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
         };
     };
     streamItem: {
@@ -18253,6 +18430,185 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
+        };
+    };
+    listWebhooks: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The list. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WebhookList"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    createWebhook: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["WebhookCreate"];
+            };
+        };
+        responses: {
+            /** @description Made. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WebhookCreated"];
+                };
+            };
+            /** @description A URL that is not http or https with a host, an unknown event, or no events. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            /** @description `too_many` — there are already ten. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    deleteWebhook: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The webhook's id, `wh_…`. */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Removed. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            /** @description No such webhook. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    patchWebhook: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The webhook's id, `wh_…`. */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["WebhookPatch"];
+            };
+        };
+        responses: {
+            /** @description The webhook as it now is. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Webhook"];
+                };
+            };
+            /** @description A bad URL or event list. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            /** @description No such webhook. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    testWebhook: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The webhook's id, `wh_…`. */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description What happened. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WebhookStatus"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            /** @description No such webhook. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
         };
     };
 }

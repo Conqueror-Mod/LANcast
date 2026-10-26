@@ -1919,6 +1919,47 @@
         }
       }
     },
+    "/profile/webhooks": {
+      "put": {
+        "operationId": "putPlaybackWebhooks",
+        "tags": [
+          "profile"
+        ],
+        "summary": "Whether webhooks may report what you watch",
+        "description": "The caller's own decision, and only ever the caller's (ADR 0097). **There is deliberately no administrator variant**: a switch somebody else can flip on your behalf is not consent. Off for every account until that account turns it on, including the administrator who made the webhook. Audited.\n\nRead the current value from `user.webhook_playback` on `GET /api/auth/status`.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SharingRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Acknowledged.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Acknowledged"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          }
+        }
+      }
+    },
     "/stream/{id}": {
       "parameters": [
         {
@@ -13123,6 +13164,237 @@
           }
         }
       }
+    },
+    "/webhooks": {
+      "get": {
+        "operationId": "listWebhooks",
+        "tags": [
+          "operations"
+        ],
+        "summary": "The webhooks, and what happened last",
+        "description": "**Administrators only** (ADR 0097). Never returns a secret.",
+        "responses": {
+          "200": {
+            "description": "The list.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WebhookList"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          }
+        }
+      },
+      "post": {
+        "operationId": "createWebhook",
+        "tags": [
+          "operations"
+        ],
+        "summary": "Add a webhook",
+        "description": "**Administrators only** (ADR 0097). Any http or https URL with a host, LAN addresses included. At most ten. **The secret is in this answer and nowhere else.** Recorded as `webhook.create`, with the URL.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WebhookCreate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Made.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WebhookCreated"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "A URL that is not http or https with a host, an unknown event, or no events.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`too_many` — there are already ten.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          }
+        }
+      }
+    },
+    "/webhooks/{id}": {
+      "parameters": [
+        {
+          "name": "id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string"
+          },
+          "description": "The webhook's id, `wh_…`."
+        }
+      ],
+      "patch": {
+        "operationId": "patchWebhook",
+        "tags": [
+          "operations"
+        ],
+        "summary": "Change a webhook",
+        "description": "**Administrators only** (ADR 0097). Every field optional. Recorded as `webhook.update`.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WebhookPatch"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The webhook as it now is.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Webhook"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "A bad URL or event list.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such webhook.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          }
+        }
+      },
+      "delete": {
+        "operationId": "deleteWebhook",
+        "tags": [
+          "operations"
+        ],
+        "summary": "Remove a webhook",
+        "description": "**Administrators only** (ADR 0097). Recorded as `webhook.delete`.",
+        "responses": {
+          "204": {
+            "description": "Removed."
+          },
+          "404": {
+            "description": "No such webhook.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          }
+        }
+      }
+    },
+    "/webhooks/{id}/test": {
+      "parameters": [
+        {
+          "name": "id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string"
+          },
+          "description": "The webhook's id, `wh_…`."
+        }
+      ],
+      "post": {
+        "operationId": "testWebhook",
+        "tags": [
+          "operations"
+        ],
+        "summary": "Send ping, once, and wait",
+        "description": "**Administrators only** (ADR 0097). Sends a `ping` event whatever the webhook subscribes to, once and without retries, and answers with what happened.",
+        "responses": {
+          "200": {
+            "description": "What happened.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WebhookStatus"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such webhook.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          }
+        }
+      }
     }
   },
   "components": {
@@ -13511,6 +13783,10 @@
           "visible_to_peers": {
             "type": "boolean",
             "description": "Whether this account appears in the roster handed to paired servers. `/auth/status` only, and absent rather than false when unreadable."
+          },
+          "webhook_playback": {
+            "type": "boolean",
+            "description": "Whether this account lets the server's webhooks report what it watches (ADR 0097). `/auth/status` only, and absent rather than false when unreadable."
           },
           "max_content_rating": {
             "type": "string",
@@ -17216,6 +17492,192 @@
           "created_at": {
             "type": "integer",
             "format": "int64"
+          }
+        }
+      },
+      "WebhookStatus": {
+        "type": "object",
+        "description": "The last time a webhook was sent something.",
+        "required": [
+          "at",
+          "event",
+          "ok",
+          "tries",
+          "took_ms"
+        ],
+        "properties": {
+          "at": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "event": {
+            "type": "string"
+          },
+          "ok": {
+            "type": "boolean",
+            "description": "Only a 2xx counts. Redirects are not followed."
+          },
+          "status": {
+            "type": "integer",
+            "description": "The receiver's HTTP status, absent when there was none."
+          },
+          "error": {
+            "type": "string",
+            "description": "Why not, without the URL."
+          },
+          "tries": {
+            "type": "integer",
+            "description": "Up to three for an event; one for a test."
+          },
+          "took_ms": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
+      "Webhook": {
+        "type": "object",
+        "required": [
+          "id",
+          "url",
+          "events",
+          "enabled",
+          "created_at",
+          "last"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "url": {
+            "type": "string"
+          },
+          "events": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "playback.started",
+                "playback.stopped",
+                "scan.finished",
+                "backup.taken"
+              ]
+            }
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "created_at": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "last": {
+            "description": "Since this server started; null before anything was sent.",
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/WebhookStatus"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
+      "WebhookList": {
+        "type": "object",
+        "required": [
+          "webhooks",
+          "events",
+          "dropped"
+        ],
+        "properties": {
+          "webhooks": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Webhook"
+            }
+          },
+          "events": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "What can be subscribed to."
+          },
+          "dropped": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Deliveries dropped for a full queue since start."
+          }
+        }
+      },
+      "WebhookCreate": {
+        "type": "object",
+        "required": [
+          "url",
+          "events"
+        ],
+        "properties": {
+          "url": {
+            "type": "string"
+          },
+          "events": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "playback.started",
+                "playback.stopped",
+                "scan.finished",
+                "backup.taken"
+              ]
+            },
+            "minItems": 1
+          },
+          "enabled": {
+            "type": "boolean",
+            "description": "True when absent."
+          }
+        }
+      },
+      "WebhookPatch": {
+        "type": "object",
+        "properties": {
+          "url": {
+            "type": "string"
+          },
+          "events": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "playback.started",
+                "playback.stopped",
+                "scan.finished",
+                "backup.taken"
+              ]
+            },
+            "minItems": 1
+          },
+          "enabled": {
+            "type": "boolean"
+          }
+        }
+      },
+      "WebhookCreated": {
+        "type": "object",
+        "required": [
+          "webhook",
+          "secret"
+        ],
+        "properties": {
+          "webhook": {
+            "$ref": "#/components/schemas/Webhook"
+          },
+          "secret": {
+            "type": "string",
+            "description": "`whsec_…`. Signs every delivery: `X-LANcast-Signature: sha256=<hex HMAC-SHA256 of the body>`. Shown once."
           }
         }
       },

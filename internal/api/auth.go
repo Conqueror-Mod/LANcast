@@ -495,6 +495,13 @@ func (s *Server) authStatus(w http.ResponseWriter, r *http.Request) {
 		} else {
 			u["sharing"] = sharing
 		}
+		// The caller's own say over playback webhooks (ADR 0097), here for the
+		// reason sharing is: this is the only route that reports it back.
+		if hooks, err := s.st.SharesPlaybackWebhooks(r.Context(), sess.UserID); err != nil {
+			s.log.Error("read playback webhooks", "error", err)
+		} else {
+			u["webhook_playback"] = hooks
+		}
 		/*
 		 * And whether this account appears in the roster handed to peers
 		 * (ADR 0044). Here for exactly the reason `sharing` is, learned the

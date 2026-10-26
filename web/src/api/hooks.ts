@@ -11,6 +11,11 @@ import { addPasskey, signInWithPasskey } from "@/lib/webauthn";
 import type {
   BackupFile,
   RestoreStarted,
+  WebhookList,
+  WebhookCreate,
+  WebhookCreated,
+  WebhookPatch,
+  WebhookStatus,
   BackupsResponse,
   Duplicates,
   MilkdropPreset,
@@ -4036,6 +4041,67 @@ export function useResetHistory() {
         qc.invalidateQueries({ queryKey: [key] });
       }
     },
+  });
+}
+
+/*
+ * Whether this server's webhooks may report what the caller watches (ADR
+ * 0097). The caller's own switch, read back from auth status like sharing.
+ */
+export function useSetPlaybackWebhooks() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (share: boolean) => apiSend("/api/profile/webhooks", "PUT", { share }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["auth-status"] });
+    },
+  });
+}
+
+/*
+ * Webhooks (ADR 0097), administrators only. One query key, ["webhooks"], and
+ * every write invalidates it, the test included: a test changes what the list
+ * says happened last.
+ */
+export function useWebhooks(enabled = true) {
+  return useQuery({
+    queryKey: ["webhooks"],
+    queryFn: () => apiGet<WebhookList>("/api/webhooks"),
+    enabled,
+  });
+}
+
+export function useCreateWebhook() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: WebhookCreate) => apiPost<WebhookCreated>("/api/webhooks", body),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["webhooks"] }),
+  });
+}
+
+export function usePatchWebhook() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, patch }: { id: string; patch: WebhookPatch }) =>
+      apiSend(`/api/webhooks/${encodeURIComponent(id)}`, "PATCH", patch),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["webhooks"] }),
+  });
+}
+
+export function useDeleteWebhook() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => apiSend(`/api/webhooks/${encodeURIComponent(id)}`, "DELETE"),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["webhooks"] }),
+  });
+}
+
+export function useTestWebhook() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) =>
+      apiPost<WebhookStatus>(`/api/webhooks/${encodeURIComponent(id)}/test`, {}),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["webhooks"] }),
   });
 }
 

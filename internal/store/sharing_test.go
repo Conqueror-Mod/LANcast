@@ -181,3 +181,25 @@ func TestPeopleExcludesTheCaller(t *testing.T) {
 		t.Errorf("people = %+v, want empty on a server with one account", people)
 	}
 }
+
+func TestPlaybackWebhooksAreOffUntilTheAccountSaysSo(t *testing.T) {
+	st := openTestStore(t)
+	ctx := context.Background()
+	user, err := st.CreateUser(ctx, "", "dana", "hash", RoleMember)
+	if err != nil {
+		t.Fatal(err)
+	}
+	u := user.ID
+	if on, err := st.SharesPlaybackWebhooks(ctx, u); err != nil || on {
+		t.Fatalf("default = %v, %v; want off", on, err)
+	}
+	if err := st.SetSharePlaybackWebhooks(ctx, u, true); err != nil {
+		t.Fatal(err)
+	}
+	if on, _ := st.SharesPlaybackWebhooks(ctx, u); !on {
+		t.Fatal("did not turn on")
+	}
+	if err := st.SetSharePlaybackWebhooks(ctx, "nobody", true); err != ErrNotFound {
+		t.Fatalf("unknown account: %v", err)
+	}
+}

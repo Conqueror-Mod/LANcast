@@ -6,7 +6,7 @@ import (
 )
 
 // CurrentSchemaVersion is the revision this build expects.
-const CurrentSchemaVersion = 79
+const CurrentSchemaVersion = 80
 
 // migration is one forward step. There are deliberately no down migrations:
 // rolling a media library's schema backwards loses data that a rescan cannot
@@ -146,6 +146,9 @@ var migrations = []migration{
 	{version: 77, sql: schemaRevision77},
 	{version: 78, sql: schemaRevision78},
 	{version: 79, sql: schemaRevision79},
+	// Webhooks may report what this account watches (ADR 0097). Null is off:
+	// only the account itself turns it on, and nobody else can.
+	{version: 80, columns: []column{{"user", "share_playback_webhooks", "INTEGER"}}},
 }
 
 // migrate brings the database up to CurrentSchemaVersion.

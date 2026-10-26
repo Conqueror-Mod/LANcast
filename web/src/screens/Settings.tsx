@@ -20,6 +20,7 @@ import {
   useIsAdmin,
   useUsers,
   useSetSharing,
+  useSetPlaybackWebhooks,
   useChannelSources,
   useAddChannelSource,
   useRefreshChannelSource,
@@ -90,6 +91,7 @@ import { MetricsSettings } from "@/components/MetricsSettings";
 import { PeerSettings } from "@/components/PeerSettings";
 import { RetroCoreSettings } from "@/components/RetroCoreSettings";
 import { MilkdropSettings } from "@/components/MilkdropSettings";
+import { PlaybackWebhooksToggle, WebhookSettings } from "@/components/WebhookSettings";
 import { useSetPeerVisibility } from "@/api/hooks";
 import { asSentence, errorMessage } from "@/lib/errors";
 import { useBigscreen } from "@/lib/bigscreen";
@@ -574,6 +576,33 @@ function DisplayNameForm() {
  * The wording says what is shared and what is not, because "share activity" on
  * its own invites people to assume the worst — or, worse, the best.
  */
+/*
+ * The account's own say over playback webhooks (ADR 0097). Read back from auth
+ * status, as SharingToggle is, for the reason its comment gives.
+ */
+function WebhookConsent() {
+  const set = useSetPlaybackWebhooks();
+  const me = useCurrentUser();
+  const stored = me?.webhook_playback ?? false;
+  const [pending, setPending] = useState<boolean | null>(null);
+  useEffect(() => {
+    setPending(null);
+  }, [stored]);
+  return (
+    <section className="settings__section">
+      <span className="section-label">Webhooks</span>
+      <PlaybackWebhooksToggle
+        on={pending ?? stored}
+        onChange={(on) => {
+          setPending(on);
+          set.mutate(on);
+        }}
+      />
+      {set.isError && <p className="set-error">{errorMessage(set.error)}</p>}
+    </section>
+  );
+}
+
 function SharingToggle() {
   const set = useSetSharing();
   const me = useCurrentUser();
@@ -950,6 +979,7 @@ function PrivacySection() {
     <section className="settings__section">
       <span className="section-label">Privacy</span>
       <SharingToggle />
+      <WebhookConsent />
       <HistoryReset />
     </section>
   );
@@ -1147,6 +1177,7 @@ function AdminSections({ pane }: { pane: string }) {
     <>
       {pane === "peers" && <PeerSettings />}
       {pane === "dlna" && <DLNASection />}
+      {pane === "webhooks" && <WebhookSettings />}
       {pane === "libraries" && (
         <section className="settings__section">
           <span className="section-label">Libraries</span>
@@ -3624,6 +3655,8 @@ const SERVER_PANES: Pane[] = [
   { id: "peers", label: "Other servers", admin: true },
   // TVs and consoles on the network, with no LANcast app (ADR 0086).
   { id: "dlna", label: "DLNA", admin: true },
+  // Outbound messages to addresses an administrator chose (ADR 0097).
+  { id: "webhooks", label: "Webhooks", admin: true },
   /*
    * MilkDrop presets (ADR 0091): uploads every signed-in browser will run,
    * so an administrator's pane, and its own, because what is uploaded here

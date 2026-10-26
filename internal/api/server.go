@@ -45,6 +45,7 @@ import (
 	"lancast/internal/together"
 	"lancast/internal/transcode"
 	"lancast/internal/update"
+	"lancast/internal/webhook"
 )
 
 // Version is reported by GET /api/health. It is a var, not a const, so a release
@@ -103,6 +104,9 @@ type Deps struct {
 	// exactly when the update completes; it should say so.
 	Relaunch func() error
 
+	// Webhooks delivers events (ADR 0097). Nil means none are sent.
+	Webhooks *webhook.Dispatcher
+
 	Trans   *transcode.Manager
 	Updates *update.Checker
 	// Tasks is the board behind Status › Scheduled tasks. Nil means no
@@ -155,6 +159,10 @@ type Deps struct {
 
 // Server holds the API dependencies.
 type Server struct {
+	// webhooks delivers events to the URLs in settings (ADR 0097); nil
+	// where nothing runs it. webhookMu serialises edits to the list.
+	webhooks  *webhook.Dispatcher
+	webhookMu sync.Mutex
 	// proxies is the parsed trusted-proxy list (proxies.go).
 	proxies proxyCache
 	// counters and started feed GET /api/metrics (metrics.go).
@@ -364,6 +372,13 @@ func New(d Deps) *Server {
 		presenceSeen: map[string]string{},
 	}
 	s.started = time.Now()
+	if d.Webhooks != nil {
+		s.webhooks = d.Webhooks
+		s.presence.OnChange(s.playbackChanged)
+		if d.Scanner != nil {
+			d.Scanner.OnResult(s.scanFinished)
+		}
+	}
 	// The store announces what its writes change; every open window hears it
 	// (ADR 0079). Registered here so no caller can forget to wire it.
 	if d.Store != nil {
@@ -517,6 +532,12 @@ func (s *Server) Handler() http.Handler {
 	 * Restoring replaces the database this process is reading, so it is
 	 * `lancastd restore` on the machine, with the server stopped.
 	 */
+	// Webhooks (ADR 0097): administrators only, none by default.
+	mux.HandleFunc("GET /api/webhooks", s.adminOnly(s.listWebhooks))
+	mux.HandleFunc("POST /api/webhooks", s.adminOnly(s.createWebhook))
+	mux.HandleFunc("PATCH /api/webhooks/{id}", s.adminOnly(s.patchWebhook))
+	mux.HandleFunc("DELETE /api/webhooks/{id}", s.adminOnly(s.deleteWebhook))
+	mux.HandleFunc("POST /api/webhooks/{id}/test", s.adminOnly(s.testWebhook))
 	mux.HandleFunc("GET /api/backups", s.adminOnly(s.listBackups))
 	mux.HandleFunc("POST /api/backups", s.adminOnly(s.createBackup))
 	mux.HandleFunc("GET /api/backups/{name}", s.adminOnly(s.downloadBackup))
@@ -582,6 +603,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/retroachievements/media/{dir}/{file}", s.raMediaRoute)
 	mux.HandleFunc("GET /api/profile/ratings/pending", s.listToRate)
 	mux.HandleFunc("PUT /api/profile/sharing", s.putSharing)
+	// The account's own say over playback webhooks (ADR 0097). No admin route.
+	mux.HandleFunc("PUT /api/profile/webhooks", s.putPlaybackWebhooks)
 	mux.HandleFunc("PUT /api/profile/avatar", s.putAvatar)
 	// Forgetting what you watched. GET prices it, DELETE does it.
 	/*
