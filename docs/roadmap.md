@@ -1587,7 +1587,11 @@ group is not priority.
   friend's server** rather than on a local account: a share is a whole-library
   grant ([ADR 0071](adr/0071-a-shared-library-is-a-standing-grant.md)).
   Confirm that somebody needs either before designing it.
-- **Docs that contradict the code** — found by an outside review (2026-10-25)
+- ~~**Docs that contradict the code**~~ — **done** 2026-10-26: README,
+  `security.md` and `architecture.md` now describe what is built (status
+  v0.9.94, 92 ADRs, `LANcast.exe reset-auth`, ACME, passkeys, the custom
+  certificate, per-library visibility, session sign-out, crash reports stated
+  as local). The recurring check is still open. Found by an outside review (2026-10-25)
   that read the repository the way a stranger would, and was misled by it. The
   README's status line says v0.8.34 and "50 decision records" (there are 92);
   `security.md` gives the recovery command as `lancastd reset-auth`, which no
