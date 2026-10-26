@@ -11,7 +11,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BackupSettings, humanBytes, takenAt } from "./BackupSettings";
+import { BackupSettings, humanBytes, takenAt, waitForRestart } from "./BackupSettings";
 import type { BackupsResponse } from "@/api/types";
 
 declare global {
@@ -64,11 +64,18 @@ const FROM_THE_FUTURE = {
   problem: "taken by a newer LANcast — update before restoring it",
 };
 
-function body(backups: BackupsResponse["backups"]): BackupsResponse {
+function body(
+  backups: BackupsResponse["backups"],
+  extra: Partial<BackupsResponse> = {},
+): BackupsResponse {
   return {
     backups,
     folder: "C:\\ProgramData\\LANcast\\backups",
     restore_command: "LANcast-Server.exe restore -from <file> -yes",
+    can_restore: false,
+    staged: null,
+    last_restore: null,
+    ...extra,
   };
 }
 
@@ -256,13 +263,133 @@ describe("the backup pane", () => {
     expect(after).toBeGreaterThan(before);
   });
 
-  it("shows the restore command rather than a restore button", async () => {
+  it("offers no restore button where the server cannot restart itself, only the command", async () => {
     await render([RESTORABLE]);
-    // No control may offer to restore: it would have to lie, because
-    // restoring replaces the database the server is reading.
     const labels = buttons().map((b) => b.textContent?.toLowerCase() ?? "");
-    expect(labels.some((l) => l.includes("restore"))).toBe(false);
+    expect(labels.some((l) => l === "restore")).toBe(false);
     expect(host.textContent).toContain("restore -from");
+    expect(host.textContent).toContain("can't restart itself");
+  });
+
+  it("offers Restore only on backups this build can restore", async () => {
+    const stub = vi.fn(
+      async () =>
+        new Response(JSON.stringify(body([RESTORABLE, FROM_THE_FUTURE], { can_restore: true })), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        }),
+    ) as unknown as typeof fetch;
+    await render([], stub);
+    const rows = [...host.querySelectorAll(".set-row")];
+    const good = rows.find((r) => r.textContent?.includes(RESTORABLE.name))!;
+    const bad = rows.find((r) => r.textContent?.includes(FROM_THE_FUTURE.name))!;
+    expect([...good.querySelectorAll("button")].some((b) => b.textContent === "Restore")).toBe(true);
+    expect([...bad.querySelectorAll("button")].some((b) => b.textContent === "Restore")).toBe(false);
+    // The command stays, for when the server will not start.
+    expect(host.textContent).toContain("restore -from");
+  });
+
+  it("asks before restoring, then posts and waits for the restart", async () => {
+    const calls: string[] = [];
+    const stub = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const method = init?.method ?? "GET";
+      calls.push(`${method} ${String(input)}`);
+      if (method === "POST" && String(input).endsWith("/restore")) {
+        return new Response(
+          JSON.stringify({
+            staged: { name: RESTORABLE.name, requested_by: "dana", requested_at: 1 },
+            safety_backup: { ...RESTORABLE, name: "lancast-backup-20261026-120000.db" },
+          }),
+          { status: 202, headers: { "Content-Type": "application/json" } },
+        );
+      }
+      if (String(input).includes("/api/health")) {
+        // Never answers, so the wait does not reload jsdom during the test.
+        throw new Error("down");
+      }
+      return new Response(JSON.stringify(body([RESTORABLE], { can_restore: true })), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    }) as unknown as typeof fetch;
+    await render([], stub);
+
+    click(buttons().find((b) => b.textContent === "Restore")!);
+    // The first press only asks.
+    expect(calls.some((c) => c.startsWith("POST"))).toBe(false);
+    expect(host.textContent).toContain("signed out");
+    expect(host.textContent).toContain("backs up the database as it is now");
+
+    await act(async () => {
+      buttons()
+        .find((b) => b.textContent === "Restore and restart")!
+        .dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    await settle();
+    expect(calls).toContain(
+      `POST /api/backups/${encodeURIComponent(RESTORABLE.name)}/restore`,
+    );
+    expect(host.textContent).toContain(`Restarting to restore ${RESTORABLE.name}`);
+  });
+
+  it("cancel leaves everything as it was", async () => {
+    const calls: string[] = [];
+    const stub = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      calls.push(`${init?.method ?? "GET"} ${String(input)}`);
+      return new Response(JSON.stringify(body([RESTORABLE], { can_restore: true })), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    }) as unknown as typeof fetch;
+    await render([], stub);
+    click(buttons().find((b) => b.textContent === "Restore")!);
+    click(buttons().find((b) => b.textContent === "Cancel")!);
+    expect(host.textContent).not.toContain("Restore the backup from");
+    expect(calls.some((c) => c.startsWith("POST"))).toBe(false);
+  });
+
+  it("says when the last restore failed, after the restart", async () => {
+    const stub = vi.fn(
+      async () =>
+        new Response(
+          JSON.stringify(
+            body([RESTORABLE], {
+              can_restore: true,
+              last_restore: {
+                name: RESTORABLE.name,
+                requested_by: "dana",
+                requested_at: 1,
+                applied_at: 1789000000,
+                ok: false,
+                error: "this file is not a readable LANcast backup",
+              },
+            }),
+          ),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        ),
+    ) as unknown as typeof fetch;
+    await render([], stub);
+    const alert = host.querySelector('[role="alert"]');
+    expect(alert?.textContent).toContain("didn’t happen");
+    expect(alert?.textContent).toContain("not a readable LANcast backup");
+  });
+
+  it("hides Restore while one is already waiting for the restart", async () => {
+    const stub = vi.fn(
+      async () =>
+        new Response(
+          JSON.stringify(
+            body([RESTORABLE], {
+              can_restore: true,
+              staged: { name: RESTORABLE.name, requested_by: "dana", requested_at: 1 },
+            }),
+          ),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        ),
+    ) as unknown as typeof fetch;
+    await render([], stub);
+    expect(buttons().some((b) => b.textContent === "Restore")).toBe(false);
+    expect(host.textContent).toContain("is waiting for the server to restart");
   });
 
   it("shows where the files are kept", async () => {
@@ -293,5 +420,35 @@ describe("takenAt", () => {
     // The date part must match the *local* calendar day, which is the whole
     // point — an ISO slice would answer the UTC one.
     expect(takenAt(epoch)).toBe(local.toLocaleString());
+  });
+});
+
+describe("waitForRestart", () => {
+  it("reloads only after the server has gone away and come back", async () => {
+    const answers = [true, true, false, false, true];
+    let i = 0;
+    let reloaded = -1;
+    await waitForRestart(
+      async () => answers[Math.min(i++, answers.length - 1)],
+      () => {
+        reloaded = i;
+      },
+      async () => {},
+    );
+    // Not on the first two answers, which were the old server still up.
+    expect(reloaded).toBe(5);
+  });
+
+  it("gives up and reloads anyway", async () => {
+    let reloaded = false;
+    await waitForRestart(
+      async () => false,
+      () => {
+        reloaded = true;
+      },
+      async () => {},
+      0,
+    );
+    expect(reloaded).toBe(true);
   });
 });

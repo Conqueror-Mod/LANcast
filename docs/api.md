@@ -5488,10 +5488,12 @@ A backup is a snapshot of the database and nothing else
 backup is a complete copy of the library including every account row, so being
 able to fetch one is being able to read the database.
 
-**There is no restore endpoint, and that is the decision rather than a gap.**
-Restoring replaces the database the server is reading, so it is offline — the
-server stops, the file is replaced, the server starts. Clients must not offer a
-restore button; `GET /api/backups` returns the command to show instead.
+**Restoring is staged, never done in place.** A running server cannot swap out
+the database it holds open, so `POST /api/backups/{name}/restore` stages the
+backup and restarts the server, and the next start applies it before anything
+opens the database. `GET /api/backups` still returns the command for doing it by
+hand with the server stopped, which is the way back when the server will not
+start at all.
 
 **Artwork is not included.** The cache is roughly forty-six times the database's
 size and is re-fetchable, so after a restore posters arrive again over the
@@ -5512,9 +5514,24 @@ written, so a backup file cannot sign anyone in.
       "pre_migration": false }
   ],
   "folder": "C:\\ProgramData\\LANcast\\backups",
-  "restore_command": "LANcast-Server.exe restore -from <file> -yes"
+  "restore_command": "LANcast-Server.exe restore -from <file> -yes",
+  "can_restore": true,
+  "staged": null,
+  "last_restore": {
+    "name": "lancast-backup-20260903-144529.db",
+    "requested_by": "dana", "requested_at": 1788460000,
+    "safety_backup": "lancast-backup-20260903-164640.db",
+    "applied_at": 1788460004, "ok": true,
+    "schema_from": 39, "schema_to": 39 }
 }
 ```
+
+`can_restore` is whether this server can restart itself to apply a restore:
+true when it runs as a service, or as a process the relaunch helper can start
+again. `staged` is a restore waiting for that restart, or `null`.
+`last_restore` is what the most recent restore from Settings did, or `null`;
+when `ok` is `false`, `error` says why, and the server started with the
+database that was there.
 
 Newest first. A server that has never taken one answers `backups: []` — not an
 error.
@@ -5589,6 +5606,43 @@ absolute, or names the live database. A name that is well-formed but absent is
 
 Removes one. `204` on success, `400` for a name that is not a backup name,
 `404` when there is no such file. Recorded as `backup.delete`.
+
+### `POST /api/backups/{name}/restore`
+
+Puts a backup back. No body. In order:
+
+1. The backup is checked: `404` when the name is not a backup or there is no
+   such file, `409 not_restorable` when a newer LANcast took it or it is not a
+   readable backup, `409 already_staged` when a restore is already waiting.
+   `412 cannot_restart` when this server has no way to start itself again
+   (`can_restore` is `false`).
+2. **A backup of the database as it is now is taken**, by hand, so nothing
+   rotates it away and restoring the wrong backup is undone from the same list.
+   `507 no_space` when it cannot be written, and nothing is staged.
+3. The restore is staged, recorded as `backup.restore`, and the server
+   restarts. Answers `202`:
+
+```json
+{ "staged": { "name": "lancast-backup-20260903-144529.db",
+              "requested_by": "dana", "requested_at": 1788460000,
+              "safety_backup": "lancast-backup-20260903-164640.db" },
+  "safety_backup": { "name": "lancast-backup-20260903-164640.db", "bytes": 102834176,
+                     "taken_at": 1788460000, "schema_version": 39, "restorable": true,
+                     "scheduled": false, "pre_migration": false } }
+```
+
+The server stops answering within a few seconds. **Everyone is signed out**:
+the sessions belong to the database being replaced, and a backup holds none.
+The next start applies the restore with the same code as the `restore` command,
+which also keeps the replaced database beside the new one as
+`lancast.db.replaced-<time>`.
+
+**One attempt.** The staged marker is removed before the restore is tried, so a
+backup that fails to restore is never retried on every start: the server starts
+with the database that was there, logs `staged restore failed`, and
+`last_restore` says why. If the restart cannot be started at all, the restore is
+unstaged and the answer is `500`, so it cannot fire at some later, unrelated
+start.
 
 ## Retro games
 

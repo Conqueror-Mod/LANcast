@@ -185,3 +185,31 @@ logged as `backup before the database update failed`.
 **One thing it found.** Clearing sessions from the copy assumed a `session`
 table, and a database old enough to predate it made the snapshot fail. A
 database without the table has no sessions to remove, and is now treated so.
+
+## Amendment — restore from Settings, 2026-10-26
+
+The decision above made restoring an offline command because a server cannot
+replace the database it is reading. That stays true; what changes is who runs
+the offline step. **Restore** on a backup in Settings stages it, and the server
+restarts itself; the next start applies it before anything opens the database,
+with the same `RestoreSnapshot` the command uses.
+
+- **A backup of the database as it is now is taken first**, by hand, so it is
+  never rotated away. Restoring the wrong backup is undone from the same list,
+  not from the `.replaced-…` file beside the database that only somebody at the
+  machine can reach. The restore still leaves that file too.
+- **One attempt.** The staged marker is removed before the restore is tried, so
+  a backup that fails to restore cannot hold the server in a loop of failing
+  starts. The server starts with the database that was there, and the outcome
+  is written down for Settings to show after the restart.
+- **Only where the server can restart itself**: as a service, or as a process
+  the relaunch helper can start again. Anywhere else the button is not offered
+  and the command is shown, as before. The command is shown beside the button
+  in every case, because it is the way back when the server will not start.
+- Everyone is signed out, as with the command.
+
+**One thing it found.** The relaunch helper copied `os.Args`, from which `Main`
+had already stripped `serve` (ADR 0080), so a server the LANcast window started
+as `LANcast.exe serve …` came back as the window. Finishing an update on an
+install that is not a service had the same fault from v0.9.79; a service never
+takes that path. The relaunch now puts `serve` back.

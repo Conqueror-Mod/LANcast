@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"lancast/internal/backup"
+	"lancast/internal/store"
 )
 
 /*
@@ -36,9 +37,18 @@ type backupsResponse struct {
 	// against is not really a backup, and naming the folder is the cheapest
 	// way to say that without a lecture.
 	Folder string `json:"folder"`
-	// RestoreCommand is what to type to put one back. The client cannot
-	// perform a restore and should not pretend otherwise, so it shows this.
+	// RestoreCommand is what to type to put one back by hand, with the
+	// server stopped. Still shown beside the Restore button, because it is
+	// the way back when the server will not start at all.
 	RestoreCommand string `json:"restore_command"`
+	// CanRestore is whether this server can restart itself to apply a
+	// restore (POST /api/backups/{name}/restore). False where nothing would
+	// start it again, and then only the command works.
+	CanRestore bool `json:"can_restore"`
+	// Staged is a restore waiting for the next start, or null.
+	Staged *backup.Pending `json:"staged"`
+	// LastRestore is what the most recent restore from Settings did, or null.
+	LastRestore *backup.Outcome `json:"last_restore"`
 }
 
 func (s *Server) backupDir() *backup.Dir { return backup.New(s.dataDir) }
@@ -55,6 +65,9 @@ func (s *Server) listBackups(w http.ResponseWriter, r *http.Request) {
 		Backups:        files,
 		Folder:         dir.Path(),
 		RestoreCommand: restoreCommand(),
+		CanRestore:     s.canRestartSelf(),
+		Staged:         dir.Staged(),
+		LastRestore:    dir.LastRestore(),
 	})
 }
 
@@ -282,4 +295,91 @@ func isNoSpace(err error) bool {
 		}
 	}
 	return false
+}
+
+/*
+ * restoreBackup puts a backup back, from Settings. Admin only.
+ *
+ * It stages the restore and restarts the server; the next start applies it
+ * before it opens the database (backup.ApplyPending), because a server cannot
+ * swap out the database it is holding open. Answers 202 once the restart is
+ * under way.
+ *
+ * Before staging, a backup of the database as it is now is taken, by hand, so
+ * it is never rotated away. Restoring the wrong backup is then undone from the
+ * same list, rather than from the `.replaced-…` file the restore also leaves
+ * beside the database, which only somebody at the machine can reach.
+ *
+ * Everyone is signed out by it. The sessions belong to the database being
+ * replaced, and a backup holds none (ADR 0058).
+ */
+func (s *Server) restoreBackup(w http.ResponseWriter, r *http.Request) {
+	name := r.PathValue("name")
+	dir := s.backupDir()
+	path, err := dir.Resolve(name)
+	if err != nil {
+		writeError(w, http.StatusNotFound, "not_found", "no such backup")
+		return
+	}
+	if _, err := os.Stat(path); err != nil {
+		writeError(w, http.StatusNotFound, "not_found", "no such backup")
+		return
+	}
+	if _, err := store.InspectSnapshot(path); err != nil {
+		var tooNew *store.SnapshotTooNewError
+		if errors.As(err, &tooNew) {
+			writeError(w, http.StatusConflict, "not_restorable",
+				"this backup was taken by a newer LANcast — update before restoring it")
+			return
+		}
+		writeError(w, http.StatusConflict, "not_restorable", "this file is not a readable LANcast backup")
+		return
+	}
+	if !s.canRestartSelf() {
+		writeError(w, http.StatusPreconditionFailed, "cannot_restart",
+			"this server cannot restart itself here — stop it and use the restore command instead")
+		return
+	}
+	if dir.Staged() != nil {
+		writeError(w, http.StatusConflict, "already_staged",
+			"a restore is already waiting for the server to restart")
+		return
+	}
+
+	safety, err := s.takeBackup(r.Context(), false)
+	if err != nil {
+		if isNoSpace(err) {
+			writeError(w, http.StatusInsufficientStorage, "no_space",
+				"not enough free space to back up the current database first, so nothing was restored")
+			return
+		}
+		s.writeInternal(w, err, "back up before restoring")
+		return
+	}
+	pending := backup.Pending{
+		Name:         name,
+		RequestedBy:  s.actorName(r),
+		RequestedAt:  time.Now().Unix(),
+		SafetyBackup: safety.Name,
+	}
+	if err := dir.Stage(pending); err != nil {
+		s.writeInternal(w, err, "stage restore")
+		return
+	}
+	// Audited before the restart, into the database being replaced: that is
+	// the record of the decision, and it travels in the safety backup too.
+	s.audit(r, "backup.restore", "backup", name,
+		fmt.Sprintf("Restored the backup %s (the database before it was kept as %s)", name, safety.Name),
+		map[string]any{"safety_backup": safety.Name})
+	if err := s.restartSelf(); err != nil {
+		// Nothing will apply it, so it must not wait for some later restart
+		// nobody connects with this request.
+		dir.Unstage()
+		s.writeInternal(w, err, "restart to restore")
+		return
+	}
+	writeJSON(w, http.StatusAccepted, map[string]any{
+		"staged":        pending,
+		"safety_backup": safety,
+	})
 }

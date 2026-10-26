@@ -10,6 +10,7 @@ import { apiGet, apiPost, apiSend, apiUpload } from "./client";
 import { addPasskey, signInWithPasskey } from "@/lib/webauthn";
 import type {
   BackupFile,
+  RestoreStarted,
   BackupsResponse,
   Duplicates,
   MilkdropPreset,
@@ -4287,6 +4288,19 @@ export function useTakeBackup() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["backups"] });
     },
+  });
+}
+
+/*
+ * Restoring stages the backup and restarts the server (POST
+ * /api/backups/{name}/restore). Nothing is invalidated on success: the server
+ * is about to stop answering, and the screen waits for it to come back and
+ * then reloads, since every session is gone with the database it belonged to.
+ */
+export function useRestoreBackup() {
+  return useMutation({
+    mutationFn: (name: string) =>
+      apiPost<RestoreStarted>(`/api/backups/${encodeURIComponent(name)}/restore`, {}),
   });
 }
 

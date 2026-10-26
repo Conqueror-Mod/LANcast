@@ -6294,6 +6294,79 @@
         }
       }
     },
+    "/backups/{name}/restore": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/BackupName"
+        }
+      ],
+      "post": {
+        "operationId": "restoreBackup",
+        "tags": [
+          "backups"
+        ],
+        "summary": "Restore one",
+        "description": "**Administrators only.** Puts this backup back, by staging it and restarting the server: a running server cannot swap out the database it holds open, so the next start applies the restore before anything opens the database (ADR 0058, as amended).\n\nBefore staging, a backup of the database as it is now is taken by hand, so it is never rotated away and restoring the wrong backup is undone from the same list. The restore itself also keeps the replaced file beside the database, as the `restore` command does.\n\n**Everyone is signed out**: the sessions belong to the database being replaced, and a backup holds none. Artwork is not in a backup and is fetched again.\n\nThe staged restore is attempted **once**. Its marker is removed before the attempt, so a backup that fails to restore is not retried on every start; the server starts with the database that was there and `last_restore` on `GET /backups` says why.\n\nRecorded in the audit log as `backup.restore`, in the database being replaced.",
+        "responses": {
+          "202": {
+            "description": "Staged, and the restart is under way. The server stops answering within a few seconds and comes back with the backup in place.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RestoreStarted"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "description": "Not a backup filename, or there is no such file.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`not_restorable` — taken by a newer LANcast, or not a readable backup. `already_staged` — a restore is already waiting for the restart.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "412": {
+            "description": "`cannot_restart` — this server has no way to start itself again (`can_restore` is false). Use `restore_command` with the server stopped.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "507": {
+            "description": "`no_space` — the backup of the current database could not be written, so nothing was staged.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/plugins": {
       "get": {
         "operationId": "listPlugins",
@@ -17073,7 +17146,10 @@
         "required": [
           "backups",
           "folder",
-          "restore_command"
+          "restore_command",
+          "can_restore",
+          "staged",
+          "last_restore"
         ],
         "properties": {
           "backups": {
@@ -17089,7 +17165,119 @@
           },
           "restore_command": {
             "type": "string",
-            "description": "What to type to put one back.\n\n**There is no restore endpoint, and that is the decision rather than a gap.** Restoring replaces the database the server is reading, so it is offline: the server stops, the file is replaced, the server starts. **Clients must not offer a restore button** — they show this instead."
+            "description": "What to type to put one back by hand, with the server stopped. Shown beside the Restore button, because it is the way back when the server will not start at all."
+          },
+          "can_restore": {
+            "type": "boolean",
+            "description": "Whether this server can restart itself to apply a restore (`POST /backups/{name}/restore`). False where nothing would start it again; then only `restore_command` works."
+          },
+          "staged": {
+            "description": "A restore waiting for the next start, or null.",
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/RestorePending"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "last_restore": {
+            "description": "What the most recent restore from Settings did, or null when there has been none.",
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/RestoreOutcome"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
+      "RestorePending": {
+        "type": "object",
+        "description": "A restore staged from Settings, waiting for the next start.",
+        "required": [
+          "name",
+          "requested_by",
+          "requested_at"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "The backup to restore."
+          },
+          "requested_by": {
+            "type": "string"
+          },
+          "requested_at": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "safety_backup": {
+            "type": "string",
+            "description": "The backup taken of the database being replaced, just before staging."
+          }
+        }
+      },
+      "RestoreOutcome": {
+        "type": "object",
+        "description": "What the most recent restore from Settings did, read back after the restart.",
+        "required": [
+          "name",
+          "requested_by",
+          "requested_at",
+          "applied_at",
+          "ok"
+        ],
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "requested_by": {
+            "type": "string"
+          },
+          "requested_at": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "safety_backup": {
+            "type": "string"
+          },
+          "applied_at": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "ok": {
+            "type": "boolean"
+          },
+          "error": {
+            "type": "string",
+            "description": "Why not, when `ok` is false. The server then started with the database that was there."
+          },
+          "schema_from": {
+            "type": "integer",
+            "description": "The revision the backup held."
+          },
+          "schema_to": {
+            "type": "integer",
+            "description": "The revision after migrating forward; equal to schema_from when nothing was migrated."
+          }
+        }
+      },
+      "RestoreStarted": {
+        "type": "object",
+        "required": [
+          "staged",
+          "safety_backup"
+        ],
+        "properties": {
+          "staged": {
+            "$ref": "#/components/schemas/RestorePending"
+          },
+          "safety_backup": {
+            "$ref": "#/components/schemas/BackupFile"
           }
         }
       },

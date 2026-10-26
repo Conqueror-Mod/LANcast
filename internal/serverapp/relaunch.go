@@ -51,6 +51,34 @@ const relaunchArg = "relaunch"
 // port, which is worse than a slow update.
 const relaunchWait = 90 * time.Second
 
+/*
+ * startedAsServe records that this process was asked for as `serve`, which Main
+ * strips from os.Args before anything else reads them (ADR 0080).
+ *
+ * The relaunch has to put it back. Without it, a server the LANcast window
+ * started as `LANcast.exe serve -addr … -data …` was restarted as
+ * `LANcast.exe -addr … -data …` — the window, not the server — so finishing an
+ * update, or restoring a backup, on an install that is not a service brought
+ * back an app and no server. A service never takes this path, which is how it
+ * went unseen from v0.9.79.
+ */
+var startedAsServe bool
+
+/*
+ * relaunchArgs is the helper's command line: the arguments this server was
+ * started with, so the restart is the same server. A tray launch comes back as
+ * a tray, a `-data X -addr Y` launch on the same directory and port, and a
+ * `serve` launch as `serve`. Reconstructing them from config instead would
+ * silently "fix" a deliberately odd invocation.
+ */
+func relaunchArgs(pid int, args []string, serve bool) []string {
+	out := []string{relaunchArg, strconv.Itoa(pid)}
+	if serve {
+		out = append(out, "serve")
+	}
+	return append(out, args...)
+}
+
 // scheduleRelaunch spawns the helper that will restart this server.
 //
 // Called before the shutdown begins, so the helper is already waiting when the
@@ -62,11 +90,7 @@ func scheduleRelaunch(log *slog.Logger) error {
 		return fmt.Errorf("locate executable: %w", err)
 	}
 
-	// The arguments this server was started with, so the restart is the same
-	// server: a tray launch comes back as a tray, a `-data X -addr Y` launch
-	// comes back on the same directory and port. Reconstructing them from
-	// config instead would silently "fix" a deliberately odd invocation.
-	args := append([]string{relaunchArg, strconv.Itoa(os.Getpid())}, os.Args[1:]...)
+	args := relaunchArgs(os.Getpid(), os.Args[1:], startedAsServe)
 
 	cmd := exec.Command(exe, args...)
 	cmd.Dir = filepath.Dir(exe)

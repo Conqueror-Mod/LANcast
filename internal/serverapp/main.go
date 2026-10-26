@@ -27,6 +27,7 @@ import (
 
 	"lancast/internal/api"
 	"lancast/internal/artwork"
+	"lancast/internal/backup"
 	"lancast/internal/config"
 	"lancast/internal/coverart"
 	"lancast/internal/enrich"
@@ -95,6 +96,7 @@ func Main() {
 	 */
 	var serve bool
 	os.Args, serve = stripServe(os.Args)
+	startedAsServe = serve
 
 	// Subcommands come before flags: `lancastd service install -data …`. Routed
 	// here so flag.Parse never sees the subcommand token.
@@ -324,6 +326,18 @@ func run(ctx context.Context, addr, dataDir string, log *slog.Logger) error {
 	} else {
 		log.Warn("ffmpeg/ffprobe not found — files will be direct-played only",
 			"hint", "install ffmpeg, or set its directory in Settings; without it LANcast cannot inspect or convert media")
+	}
+
+	// A restore staged from Settings, applied before anything opens the
+	// database it replaces. Once: the marker is gone whatever happens.
+	if out := backup.New(cfg.DataDir).ApplyPending(ctx, cfg.DBPath(), time.Now()); out != nil {
+		if out.OK {
+			log.Info("backup restored", "name", out.Name, "requested_by", out.RequestedBy,
+				"schema_from", out.SchemaFrom, "schema_to", out.SchemaTo, "kept_first", out.SafetyBackup)
+		} else {
+			log.Error("staged restore failed; starting with the database that was there",
+				"name", out.Name, "error", out.Error)
+		}
 	}
 
 	st, err := store.OpenWith(cfg.DBPath(), store.OpenOptions{
