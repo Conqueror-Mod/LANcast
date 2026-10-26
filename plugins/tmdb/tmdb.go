@@ -31,6 +31,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/url"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -213,11 +214,10 @@ func fetchMovie(id string) (*sdk.Record, error) {
 		rec.Keywords = append(rec.Keywords, sdk.Keyword{ID: k.ID, Name: k.Name})
 	}
 	if m.Collection != nil && m.Collection.ID != 0 {
-		rec.Collection = &sdk.Collection{
-			ExternalID: strconv.Itoa(m.Collection.ID),
-			Name:       collectionName(m.Collection),
-			Artwork:    artRefs(m.Collection.PosterPath, m.Collection.BackdropPath),
-		}
+		c := collectionDetail(m.Collection)
+		c.ExternalID = strconv.Itoa(m.Collection.ID)
+		c.Artwork = artRefs(m.Collection.PosterPath, m.Collection.BackdropPath)
+		rec.Collection = &c
 	}
 	return rec, nil
 }
@@ -235,13 +235,49 @@ func fetchMovie(id string) (*sdk.Record, error) {
  * embedded one. A franchise grouping is worth a wrong-language name and is not
  * worth failing an enrichment over — the film is already matched by this point.
  */
-func collectionName(embedded *tmdbCollection) string {
+//
+// The same request carries the collection's overview and its whole film list
+// (ADR 0093), so those come with it. On failure Films stays nil: "did not
+// say", which the host never stores as "has no films". Mirrors the native
+// provider (internal/meta/tmdb), which a test holds this to.
+func collectionDetail(embedded *tmdbCollection) sdk.Collection {
 	var full tmdbCollection
-	err := get("/collection/"+strconv.Itoa(embedded.ID), nil, &full)
-	if err != nil || strings.TrimSpace(full.Name) == "" {
-		return embedded.Name
+	if err := get("/collection/"+strconv.Itoa(embedded.ID), nil, &full); err != nil {
+		return sdk.Collection{Name: embedded.Name}
 	}
-	return full.Name
+	c := sdk.Collection{
+		Name:     full.Name,
+		Overview: strings.TrimSpace(full.Overview),
+		Films:    []sdk.CollectionFilm{},
+	}
+	if strings.TrimSpace(c.Name) == "" {
+		c.Name = embedded.Name
+	}
+	for _, p := range full.Parts {
+		if p.ID == 0 || strings.TrimSpace(p.Title) == "" {
+			continue
+		}
+		f := sdk.CollectionFilm{
+			ExternalID: strconv.Itoa(p.ID),
+			Title:      p.Title,
+			Year:       yearOf(p.ReleaseDate),
+			Overview:   strings.TrimSpace(p.Overview),
+			Poster:     imageURL(p.PosterPath),
+		}
+		if ts, ok := parseDate(p.ReleaseDate); ok {
+			f.ReleasedAt = ts
+		}
+		c.Films = append(c.Films, f)
+	}
+	// Release order; an undated film last.
+	sort.SliceStable(c.Films, func(i, j int) bool {
+		a, b := c.Films[i].ReleasedAt, c.Films[j].ReleasedAt
+		if (a == 0) != (b == 0) {
+			return b == 0
+		}
+		return a < b
+	})
+	return c
 }
 
 func fetchShow(id string) (*sdk.Record, error) {
@@ -422,6 +458,17 @@ type tmdbCollection struct {
 	Name         string `json:"name"`
 	PosterPath   string `json:"poster_path"`
 	BackdropPath string `json:"backdrop_path"`
+	// Only on /collection/{id}.
+	Overview string               `json:"overview"`
+	Parts    []tmdbCollectionPart `json:"parts"`
+}
+
+type tmdbCollectionPart struct {
+	ID          int    `json:"id"`
+	Title       string `json:"title"`
+	Overview    string `json:"overview"`
+	ReleaseDate string `json:"release_date"`
+	PosterPath  string `json:"poster_path"`
 }
 
 type showDetail struct {

@@ -96,6 +96,18 @@ type wireCollection struct {
 	Name       string    `json:"name"`
 	Overview   string    `json:"overview,omitempty"`
 	Artwork    []wireArt `json:"artwork,omitempty"`
+	// Films is nil when the plugin did not say (absent or null), and
+	// non-nil — possibly empty — when it did. ADR 0093 keeps the two apart.
+	Films []wireCollectionFilm `json:"films"`
+}
+
+type wireCollectionFilm struct {
+	ExternalID string `json:"external_id"`
+	Title      string `json:"title"`
+	Year       int    `json:"year,omitempty"`
+	ReleasedAt int64  `json:"released_at,omitempty"`
+	Overview   string `json:"overview,omitempty"`
+	Poster     string `json:"poster,omitempty"`
 }
 
 type wireKeyword struct {
@@ -249,6 +261,21 @@ func (pr *provider) Fetch(ctx context.Context, ref meta.Ref) (*meta.Record, erro
 			Name:       w.Collection.Name,
 			Overview:   w.Collection.Overview,
 			Artwork:    pr.artwork(w.Collection.Artwork),
+		}
+		if w.Collection.Films != nil {
+			films := make([]meta.CollectionFilm, 0, len(w.Collection.Films))
+			for _, f := range w.Collection.Films {
+				if f.ExternalID == "" || f.Title == "" {
+					continue
+				}
+				films = append(films, meta.CollectionFilm{
+					ExternalID: f.ExternalID, Title: f.Title, Year: f.Year,
+					ReleasedAt: f.ReleasedAt, Overview: f.Overview,
+					// Only a URL the plugin was granted, like every other image.
+					PosterURL: pr.keepURL(f.Poster),
+				})
+			}
+			rec.Collection.Films = films
 		}
 	}
 	for _, k := range w.Keywords {

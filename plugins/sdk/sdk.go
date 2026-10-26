@@ -277,7 +277,23 @@ type Credit struct {
 type Collection struct {
 	ExternalID string `json:"external_id"`
 	Name       string `json:"name"`
-	Artwork    []Art  `json:"artwork,omitempty"`
+	// Overview is the collection's own description, not any member's.
+	Overview string `json:"overview,omitempty"`
+	Artwork  []Art  `json:"artwork,omitempty"`
+	// Films is every film in the collection, owned or not, in release order.
+	// Leave it nil when the source did not say: nil and empty mean different
+	// things to the host, which never stores "did not say" as "has none".
+	Films []CollectionFilm `json:"films"`
+}
+
+// CollectionFilm is one film a source lists in a collection.
+type CollectionFilm struct {
+	ExternalID string `json:"external_id"`
+	Title      string `json:"title"`
+	Year       int    `json:"year,omitempty"`
+	ReleasedAt int64  `json:"released_at,omitempty"` // unix seconds
+	Overview   string `json:"overview,omitempty"`
+	Poster     string `json:"poster,omitempty"` // an image URL
 }
 
 // Keyword is one of the source's free tags. The host uses them to find
