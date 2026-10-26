@@ -272,6 +272,11 @@ type Settings struct {
 	// the normalised form auth.ParseTrustedProxies returns. Empty by default,
 	// which reads only the connecting address, as LANcast always has.
 	TrustedProxies []string `json:"trusted_proxies,omitempty"`
+	// MetricsTokenHash is the hash of the token that may read GET
+	// /api/metrics (ADR 0096), empty when there is none. The token itself is
+	// shown once, when it is made, and never stored.
+	MetricsTokenHash    string `json:"metrics_token_hash,omitempty"`
+	MetricsTokenCreated int64  `json:"metrics_token_created,omitempty"`
 
 	// DLNA (ADR 0086): off by default, and it answers as DLNAAccount — a TV
 	// sees what that account sees. It does not run with no account chosen.

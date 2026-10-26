@@ -256,6 +256,52 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/metrics": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Server metrics, for Prometheus
+         * @description The Prometheus text exposition format (ADR 0096). **Readable by an administrator's session, or by the metrics token** presented as `Authorization: Bearer lcm_…`. The token is honoured on this route and nowhere else. An API key is refused here as everywhere an administrator is required (ADR 0061).
+         *
+         *     Every value is read when scraped. Families: `lancast_build_info`, `lancast_uptime_seconds`, `lancast_http_requests_total`, `lancast_http_server_errors_total`, `lancast_transcode_sessions{mode}`, `lancast_transcode_sessions_max`, `lancast_transcode_served_bytes`, `lancast_library_items{library_id,library,kind}`, `lancast_scan_last_finished_timestamp_seconds`, `lancast_scan_last_duration_seconds` and `lancast_scan_last_success` (each `{library_id,library}`), `lancast_accounts`, `lancast_sessions`, `lancast_backups`, `lancast_backup_last_timestamp_seconds`, `lancast_database_bytes`, `go_goroutines`, `go_memstats_heap_alloc_bytes`, `go_memstats_sys_bytes`. Nothing is per person.
+         */
+        get: operations["getMetrics"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/metrics/token": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Make the metrics token
+         * @description **Administrators only.** Makes a new metrics token, replacing any old one, which stops working at once. **The token is in this answer and nowhere else**: only its hash is kept, and `GET /settings` says only whether one exists. Recorded as `metrics.token`.
+         */
+        post: operations["createMetricsToken"];
+        /**
+         * Revoke the metrics token
+         * @description **Administrators only.** Idempotent: `204` whether or not there was one. Recorded as `metrics.token` when there was.
+         */
+        delete: operations["deleteMetricsToken"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/network": {
         parameters: {
             query?: never;
@@ -6500,6 +6546,15 @@ export interface components {
             backup_every_days: number;
             /** @description How many scheduled backups to keep. A backup taken by hand is never counted or deleted. */
             backup_keep: number;
+            /** @description Whether a metrics token exists, and when it was made (ADR 0096). Never the token itself. */
+            metrics_token: {
+                configured: boolean;
+                /**
+                 * Format: int64
+                 * @description 0 when there is none.
+                 */
+                created_at: number;
+            };
             /** @description Reverse proxies whose X-Forwarded-For is believed, as addresses or CIDR networks, normalised (a bare address becomes /32 or /128). Empty by default. */
             trusted_proxies: string[];
             /** @description DLNA, so TVs and consoles can browse and play the library (ADR 0086). Off by default. */
@@ -7366,6 +7421,12 @@ export interface components {
         /** @description **Repeats are kept** — sending the same id twice is a playlist that holds a track twice, not an error. */
         PlaylistEntriesRequest: {
             item_ids: number[];
+        };
+        MetricsToken: {
+            /** @description `lcm_` followed by the secret. Shown once. */
+            token: string;
+            /** Format: int64 */
+            created_at: number;
         };
         BackupFile: {
             name: string;
@@ -9344,6 +9405,70 @@ export interface operations {
                 };
             };
             401: components["responses"]["Unauthorized"];
+        };
+    };
+    getMetrics: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Metrics. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": string;
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    createMetricsToken: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The new token. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MetricsToken"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    deleteMetricsToken: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Revoked, or there was none. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
         };
     };
     getNetworkStatus: {

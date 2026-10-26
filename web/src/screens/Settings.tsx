@@ -86,6 +86,7 @@ import {
 import { forgetHLS, hlsRecord } from "@/playback/fileTransport";
 import { KeyBindings } from "@/components/KeyBindings";
 import { CrashReports } from "@/components/CrashReports";
+import { MetricsSettings } from "@/components/MetricsSettings";
 import { PeerSettings } from "@/components/PeerSettings";
 import { RetroCoreSettings } from "@/components/RetroCoreSettings";
 import { MilkdropSettings } from "@/components/MilkdropSettings";
@@ -3818,6 +3819,7 @@ export function Settings() {
                 <>
                   <ServerLogSection />
                   <CrashReports />
+                  <MetricsSettings />
                   <MaintenanceSection />
                 </>
               )}

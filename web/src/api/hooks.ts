@@ -4304,6 +4304,31 @@ export function useRestoreBackup() {
   });
 }
 
+/*
+ * The metrics token (ADR 0096). Making one replaces the old; the secret is in
+ * the mutation's answer and nowhere else, so the caller shows it from there.
+ * Both invalidate settings, which is where "is there one" is read.
+ */
+export function useCreateMetricsToken() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => apiPost<{ token: string; created_at: number }>("/api/metrics/token", {}),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["settings"] });
+    },
+  });
+}
+
+export function useRevokeMetricsToken() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => apiSend("/api/metrics/token", "DELETE"),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["settings"] });
+    },
+  });
+}
+
 export function useDeleteBackup() {
   const qc = useQueryClient();
   return useMutation({

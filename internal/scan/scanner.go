@@ -123,6 +123,11 @@ type Progress struct {
 	FinishedAt *int64  `json:"finished_at,omitempty"`
 	Error      string  `json:"error,omitempty"`
 
+	// ElapsedMS is how long a finished scan took, to the millisecond, for
+	// the metrics endpoint. Not on the wire: started_at and finished_at are
+	// the contract, and the API is unchanged.
+	ElapsedMS int64 `json:"-"`
+
 	/*
 	 * When the scan began, at a resolution worth measuring with.
 	 *
@@ -348,6 +353,7 @@ func (s *Scanner) run(walkCtx context.Context, lib store.Library, p *Progress) {
 	 * both.
 	 */
 	elapsed := end.Sub(p.started).Milliseconds()
+	p.ElapsedMS = elapsed
 	/*
 	 * The outcome is decided here and *published* at the end, after the trash.
 	 *
