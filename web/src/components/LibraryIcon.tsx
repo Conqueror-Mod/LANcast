@@ -138,6 +138,17 @@ export function SettingsIcon() {
   );
 }
 
+// Report an issue: a speech bubble with an exclamation mark. An envelope reads
+// as "messages", which is a place; this is something you say.
+export function ReportIcon() {
+  return (
+    <RailGlyph>
+      <path d="M4 4.2h12a1.4 1.4 0 0 1 1.4 1.4v7a1.4 1.4 0 0 1-1.4 1.4H9l-3.6 2.8V14H4a1.4 1.4 0 0 1-1.4-1.4v-7A1.4 1.4 0 0 1 4 4.2z" />
+      <path d="M10 6.9v3.2M10 12.1v.1" />
+    </RailGlyph>
+  );
+}
+
 // A magnifier, at the weight the top bar's other marks carry.
 export function SearchGlyph() {
   return (

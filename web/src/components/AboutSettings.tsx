@@ -3,6 +3,12 @@ import { useQuery } from "@tanstack/react-query";
 import { apiGet } from "@/api/client";
 import type { components } from "@/api/schema";
 import type { DesktopVersion } from "@/lib/clientVersion";
+import {
+  DEVELOPER_EMAIL,
+  DEVELOPER_NAME,
+  DONATE_URL,
+  reportIssueHref,
+} from "@/lib/contact";
 import "./AboutSettings.css";
 
 type About = components["schemas"]["About"];
@@ -89,6 +95,47 @@ export function AboutSettings() {
             </tr>
           </tbody>
         </table>
+      </section>
+
+      {/*
+        Who made it, and the two ways to reach them: a problem report, which
+        opens the mail program with the version already filled in, and a
+        donation page. Both are links the person follows; neither is a request
+        this program makes on its own (lib/contact.ts).
+      */}
+      <section className="about__panel">
+        <span className="section-label">Developer</span>
+        <table className="about__facts">
+          <tbody>
+            <tr>
+              <th scope="row">Made by</th>
+              <td>{DEVELOPER_NAME}</td>
+            </tr>
+            <tr>
+              <th scope="row">Contact</th>
+              <td>
+                <a href={`mailto:${DEVELOPER_EMAIL}`}>{DEVELOPER_EMAIL}</a>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+        <div className="about__contact-actions">
+          <a className="set-btn" href={reportIssueHref(about.version)}>
+            Report an issue
+          </a>
+          <a
+            className="set-btn"
+            href={DONATE_URL}
+            target="_blank"
+            rel="noreferrer noopener"
+          >
+            Support on Ko-fi
+          </a>
+        </div>
+        <p className="about__muted about__contact-note">
+          A report opens your own mail program with the version filled in.
+          Nothing is sent until you send it.
+        </p>
       </section>
 
       <section className="about__block">

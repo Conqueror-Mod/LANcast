@@ -38,8 +38,10 @@ import {
   GamesIcon,
   LiveIcon,
   PeopleIcon,
+  ReportIcon,
   SignOutIcon,
 } from "./LibraryIcon";
+import { reportIssueHref } from "@/lib/contact";
 import "./AppShell.css";
 
 // The shell: a vertical rail of places, and a top bar of state.
@@ -104,6 +106,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   const logout = useLogout();
   const location = useLocation();
   const isAdmin = useIsAdmin();
+  const { data: health } = useHealth();
 
   /*
    * The Review screen holds two queues, so its way in has to count both.
@@ -356,6 +359,20 @@ export function AppShell({ children }: { children: ReactNode }) {
               icons with everything else — the labels use the same class, so
               they appear and disappear on the same hover. */}
           <div className="app-shell__foot">
+            {/* Report an issue: a mail link to the developer, never a request
+                from this program (lib/contact.ts says why). An action, not a
+                place, so it is an <a> with no active state. */}
+            <a
+              href={reportIssueHref(health?.version)}
+              title="Report an issue"
+              className="app-shell__lib"
+              onClick={releaseRail}
+            >
+              <ReportIcon />
+              <span className="app-shell__lib-name app-shell__label">
+                Report an issue
+              </span>
+            </a>
             <NavLink
               to="/settings"
               title="Settings"

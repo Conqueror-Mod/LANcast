@@ -94,6 +94,19 @@ describe("the About pane", () => {
     expect(requested.every((u) => u.startsWith("/api/"))).toBe(true);
   });
 
+  it("names the developer, and reports by mail with the version filled in", async () => {
+    stub(base);
+    await render();
+    const links = [...host.querySelectorAll<HTMLAnchorElement>("a")];
+    const report = links.find((a) => a.textContent === "Report an issue");
+    expect(report?.href.startsWith("mailto:conqueror.conqueredtime@gmail.com?")).toBe(true);
+    expect(decodeURIComponent(report!.href)).toContain("LANcast version: 0.9.79");
+    const kofi = links.find((a) => a.textContent === "Support on Ko-fi");
+    expect(kofi?.getAttribute("href")).toBe("https://ko-fi.com/christheconqueror");
+    // Links the person follows; the pane itself still asks only this server.
+    expect(requested.every((u) => u.startsWith("/api/"))).toBe(true);
+  });
+
   it("says so when no notes were recorded for this version", async () => {
     stub({ ...base, version: "dev" });
     await render();

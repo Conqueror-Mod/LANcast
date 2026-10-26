@@ -7,7 +7,9 @@ import {
   useCurrentUser,
   useLogout,
   useIsAdmin,
+  useHealth,
 } from "@/api/hooks";
+import { reportIssueHref } from "@/lib/contact";
 import { gamesSupported } from "@/lib/games";
 import { railOrder } from "@/lib/railOrder";
 import { GAME_HUB_PATH, hubOffered, insideHub } from "@/lib/gameHub";
@@ -21,6 +23,7 @@ import {
   GamesIcon,
   LiveIcon,
   PeopleIcon,
+  ReportIcon,
   SignOutIcon,
 } from "./LibraryIcon";
 import "./MobileNav.css";
@@ -50,6 +53,7 @@ export function MobileNav() {
   const user = useCurrentUser();
   const logout = useLogout();
   const isAdmin = useIsAdmin();
+  const { data: health } = useHealth();
   const location = useLocation();
   const [sheet, setSheet] = useState<Sheet>(null);
   const opener = useRef<HTMLButtonElement | null>(null);
@@ -160,6 +164,11 @@ export function MobileNav() {
                 <DownloadIcon />
                 <span>Downloads</span>
               </NavLink>
+              {/* A mail link, as on the rail (lib/contact.ts). */}
+              <a href={reportIssueHref(health?.version)} className="mnav__row">
+                <ReportIcon />
+                <span>Report an issue</span>
+              </a>
               <NavLink to="/settings" className={({ isActive }) => row(isActive)}>
                 <SettingsIcon />
                 <span>Settings</span>

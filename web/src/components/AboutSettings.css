@@ -225,3 +225,18 @@
     columns: 1;
   }
 }
+
+/* The developer panel's two links, as buttons under the facts. */
+.about__contact-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 14px;
+}
+.about__contact-actions .set-btn {
+  text-decoration: none;
+}
+.about__contact-note {
+  margin: 10px 0 0;
+  font-size: 0.85rem;
+}
