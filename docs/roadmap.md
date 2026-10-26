@@ -1,6 +1,6 @@
 # Roadmap
 
-Last updated: 2026-10-26 · **v0.9.96 released · M0–M4 built.** The React client executes the design
+Last updated: 2026-10-26 · **v0.9.97 released · M0–M4 built.** The React client executes the design
 system and the client-UX backlog is closed. Observability (match, review, scan
 diagnostics), an audit log and CI are in place. Transport security (TLS) and
 multi-user accounts (admin/member roles) are built, and branding & splash shipped.
@@ -19,7 +19,7 @@ behind: the Releases table stopped at v0.9.78, and three backlog entries still
 listed work that had shipped as open. The release-by-release record is the
 [Releases](#releases) table, and what remains is [What is left](#what-is-left).*
 
-**Nothing sits unreleased.** v0.9.96 is current. Since v0.9.78:
+**Nothing sits unreleased.** v0.9.97 is current. Since v0.9.78:
 - **v0.9.79:** one program, `LANcast.exe`, with the tray always present
   ([ADR 0080](adr/0080-one-executable-two-roles.md)), and a scan can be cancelled.
 - **v0.9.80–v0.9.81:** collections continue the way shows do, an About tab,
@@ -49,6 +49,8 @@ listed work that had shipped as open. The release-by-release record is the
   ([ADR 0091](adr/0091-milkdrop-presets.md)), and visualizers that fit a phone.
 - **v0.9.94:** a film ends on what to watch next, and running as a service is
   a choice ([ADR 0092](adr/0092-the-library-moves-with-the-server.md)).
+- **v0.9.97:** a restore reloads at once, and any session that ends forgets
+  its cache.
 - **v0.9.96:** restore from Settings and a backup before every update (ADR
   0058 amended), webhooks
   ([ADR 0097](adr/0097-a-webhook-goes-where-the-owner-points-it.md)), metrics
@@ -204,14 +206,12 @@ is watching that keeps running.
   `service restart`, the pre-update backup on a real migration, the proxy
   header simulated with curl, metrics with curl, webhooks into a local
   receiver).
-- **After a restore, a renamed library showed its old name** until the screen
-  was left and reopened (found 2026-10-26 testing v0.9.96; where on screen not
-  yet pinned down). The server was right; the picture was stale.
 
 ## Releases
 
 | Version | Date | What shipped |
 |---|---|---|
+| **v0.9.97** | 2026-10-26 | **What a restore restored, and nobody else's cache.** Found testing v0.9.96 as the service: after a restore the rail showed a library under the name the restore had taken away. Two faults (#947). A restart quick enough that no poll saw the server down left the restore screen waiting for its 90 s fallback; the restore ends every session, so the server answering with this one gone now counts as restarted. Meanwhile the app, finding itself signed out, put the sign-in page up over its whole cache and showed it after sign-in. That was wider than restore: a password change, "sign out every other device" or expiry left the previous person's lists for whoever signed in next. Any session that ends now forgets the cache as signing out did. No schema change. |
 | **v0.9.96** | 2026-10-26 | **Restore from Settings, webhooks, metrics, and a backup before every update.** Built in one unattended day (#940–#944) and tested by the owner as the installed service before release. **Restore from Settings (#942):** stages the backup and the server restarts itself, after backing up what it had; the next start applies it before anything opens the database, once, and a failure is reported on the Backup page. **A backup before every migration (#940):** `…-schema<N>-premigrate.db`, newest three kept apart from the schedule (ADR 0058 amended twice). **Webhooks (#944, [ADR 0097](adr/0097-a-webhook-goes-where-the-owner-points-it.md)):** admin-only, none by default, HMAC-signed, three tries, no redirects; playback only for accounts that opted in, and only the work's title. **Metrics (#943, [ADR 0096](adr/0096-metrics-have-their-own-key.md)):** Prometheus text at `/api/metrics`, for an admin or a metrics token that opens that route only. **Trusted proxies (#941, [ADR 0095](adr/0095-a-proxy-is-believed-by-name.md)):** `X-Forwarded-For` from named proxies only, right to left; behind a same-machine proxy the sign-in account picker had been public. **Fix:** the relaunch helper dropped `serve`, so a non-service server finishing an update came back as the window (since v0.9.79). Schema 79 → 80, one way. |
 | **v0.9.95** | 2026-10-26 | **Collections that know what is missing, and retro games on a phone.** **Missing films ([ADR 0093](adr/0093-a-collection-knows-its-missing-films.md), #932):** a collection's page lists the films in the franchise that are not in the library, with posters, years and "Coming 2027"; owned is decided at read time from a `collection_film` table, backfilled at the end of an enrichment pass. TMDB descriptions, an administrator's own description that survives a refresh, "2 of 5 watched" or "Started" on the tiles, and Continue Watching carrying on through a collection. The TMDB plugin gained the same fields, held to the native provider by its equivalence test. **Retro in a browser:** three numbered save states, each saying which player made it (#928), and on-screen controls on a touch screen that step aside for a controller (#929). **Getting in touch:** Report an issue opens the person's own mail program; Settings › About names the developer. **Invites** show a check code, name, fingerprint and addresses (#932), and stop carrying WSL and Hyper-V adapter addresses (#935). **Fixes:** shuffling the whole music library plays (#924), HEIC capture time is read (#926), uploaded MilkDrop presets keep their shaders (#915, #925), and **containment follows links** ([ADR 0094](adr/0094-containment-follows-links.md), #934). Schema 77 → 79, one way. |
 | **v0.9.94** | 2026-10-19 | **What to watch when a film ends, and the service made optional.** A film ends on suggestions, the next film in its collection first; resuming a collection or an episode carries on through it. Setup asks whether to install the service, and Settings › This app switches later, copying the library across ([ADR 0092](adr/0092-the-library-moves-with-the-server.md)). Update libraries from the tray no longer reloads an open window. |
