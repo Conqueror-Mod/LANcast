@@ -249,8 +249,11 @@ describe("a collection's standing", () => {
     const begun = collectionStanding(coll({ total: 4, watched: 1, in_progress: 1 }));
     expect(begun?.label).toBe("1 of 4 watched");
     expect(begun?.pct).toBeCloseTo(37.5);
-    // Started with nothing finished still shows a bar, not an empty one.
-    expect(collectionStanding(coll({ total: 4, watched: 0, in_progress: 1 }))?.pct).toBeGreaterThan(0);
+    // Started with nothing finished still shows a bar, not an empty one, and
+    // says Started rather than "0 of 4 watched", which read as untouched.
+    const started = collectionStanding(coll({ total: 4, watched: 0, in_progress: 1 }));
+    expect(started?.pct).toBeGreaterThan(0);
+    expect(started?.label).toBe("Started");
   });
 
   it("puts it on the tile in place of the film count", () => {

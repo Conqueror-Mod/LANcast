@@ -30,7 +30,8 @@ describe("collectionSummary", () => {
   it("says one year, All watched, and nothing for an untouched box set", () => {
     expect(collectionSummary(coll(), [film(1, 1999, 90)], undefined).years).toBe("1999");
     expect(collectionSummary(coll({ total: 2, watched: 2, in_progress: 0 }), [], undefined).watched).toBe("All watched");
-    expect(collectionSummary(coll({ total: 2, watched: 0, in_progress: 1 }), [], undefined).watched).toBe("");
+    expect(collectionSummary(coll({ total: 2, watched: 0, in_progress: 1 }), [], undefined).watched).toBe("Started");
+    expect(collectionSummary(coll({ total: 2, watched: 0, in_progress: 0 }), [], undefined).watched).toBe("");
   });
 
   it("counts what you have of the released films only", () => {

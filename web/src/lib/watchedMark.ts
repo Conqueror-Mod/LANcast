@@ -94,7 +94,12 @@ export function collectionStanding(
    * untouched. Never full: full is the tick's job.
    */
   const pct = Math.min(95, ((p.watched + p.in_progress * 0.5) / p.total) * 100);
-  return { pct, label: `${p.watched} of ${p.total} watched` };
+  /*
+   * "Started" when nothing is finished yet. "0 of 4 watched" was true and read
+   * as untouched — the opposite of what the bar beside it says.
+   */
+  const label = p.watched === 0 ? "Started" : `${p.watched} of ${p.total} watched`;
+  return { pct, label };
 }
 
 /*

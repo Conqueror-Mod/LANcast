@@ -11,7 +11,8 @@ import { runtime } from "./format";
  *
  *   years    the span of the members' years: "2001–2003", or one year
  *   runtime  the members' running times added up: "9h 18m"
- *   watched  "2 of 5 watched", "All watched", or nothing when untouched
+ *   watched  "2 of 5 watched", "All watched", "Started" with only a film part
+ *            way, or nothing when untouched
  *   owned    "You have 3 of 5", only when the provider lists films not here
  */
 export function collectionSummary(
@@ -33,7 +34,9 @@ export function collectionSummary(
       ? "All watched"
       : p.watched > 0
         ? `${p.watched} of ${p.total} watched`
-        : "";
+        : p.in_progress > 0
+          ? "Started"
+          : "";
 
   /*
    * Released films only, on both sides of the count. An announced sequel is
