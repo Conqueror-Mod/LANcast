@@ -14810,7 +14810,8 @@
           "backup_every_days",
           "backup_keep",
           "optimized_limit_gb",
-          "login_picker"
+          "login_picker",
+          "trusted_proxies"
         ],
         "properties": {
           "tmdb": {
@@ -14963,6 +14964,13 @@
             "minimum": 1,
             "maximum": 52,
             "description": "How many scheduled backups to keep. A backup taken by hand is never counted or deleted."
+          },
+          "trusted_proxies": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Reverse proxies whose X-Forwarded-For is believed, as addresses or CIDR networks, normalised (a bare address becomes /32 or /128). Empty by default."
           },
           "dlna_enabled": {
             "type": "boolean",
@@ -15147,6 +15155,14 @@
           },
           "backup_keep": {
             "type": "integer"
+          },
+          "trusted_proxies": {
+            "type": "array",
+            "maxItems": 32,
+            "items": {
+              "type": "string"
+            },
+            "description": "Replaces the list. Each entry an IP address or CIDR network no wider than an IPv4 /8 or IPv6 /16; anything else is a 400 and nothing is saved. [] clears it."
           },
           "dlna_enabled": {
             "type": "boolean"

@@ -103,10 +103,14 @@ their own. A password is one guessable secret, so unlimited attempts against it
 is the entire attack. Passkey sign-in and changing a password share the same
 counter.
 
-The key is the remote address only. Forwarded headers are attacker-controlled
-unless a trusted proxy sets them, and honouring them here would let anyone
-reset their own counter. **If you deploy behind a reverse proxy, throttling
-will see the proxy as one client** — the proxy should rate-limit instead.
+The key is the remote address. Forwarded headers are attacker-controlled
+unless a trusted proxy sets them, and honouring them from anyone would let
+anyone reset their own counter. So `X-Forwarded-For` is read only from the
+proxies named in **Server › Network › Trusted proxies** (`trusted_proxies`),
+which is empty by default. It is read right to left, and the first address
+that is not one of those proxies is the caller; anything further left is the
+caller's own claim and is ignored. **If you deploy behind a reverse proxy, add
+it there**, or every request looks like the proxy.
 
 There is deliberately no lockout: an attacker who could lock the owner out of
 their own server has achieved denial of service for free.
@@ -128,8 +132,9 @@ right side of the no-lockout rule:
 - Names that match no account are counted too, so a `429` does not reveal
   which accounts exist.
 
-Behind a reverse proxy on the same machine every caller looks local, so the
-per-account wait does not apply there either; the proxy has to rate-limit.
+Behind a reverse proxy on the same machine that is not in the trusted list,
+every caller looks local, so the per-account wait does not apply and the
+sign-in page lists account names to anybody. Trusting the proxy fixes both.
 
 ## Losing the password
 
@@ -281,9 +286,6 @@ the host rather than by their own capability
 ## Still unprotected
 
 - **No API rate limiting** beyond sign-in and changing a password.
-- **No trusted-proxy setting.** The login throttle and the per-account wait read
-  only the connection's address, so behind a reverse proxy every caller looks
-  like the proxy (see *Brute force*).
 
 ## Standing risks that authentication does not remove
 
@@ -344,10 +346,11 @@ the internet reaching your sign-in page, so use strong passwords and add
 passkeys.
 
 **Alternative: a reverse proxy terminating TLS.** Caddy or nginx in front of
-LANcast, with a publicly trusted certificate. Forward the original client IP
-only if you also rate-limit at the proxy — LANcast's throttle will otherwise
-see every request as coming from one client, and the per-account wait will
-treat every caller as local. Point the proxy at LANcast over HTTPS, or run
+LANcast, with a publicly trusted certificate. Have the proxy set
+`X-Forwarded-For`, and add its address under **Trusted proxies** in Server ›
+Network — otherwise LANcast's throttle sees every request as coming from one
+client, the per-account wait treats every caller as local, and the sign-in
+page's account picker is shown to the internet. Point the proxy at LANcast over HTTPS, or run
 LANcast loopback-only behind it.
 
 Built-in TLS with a self-signed certificate

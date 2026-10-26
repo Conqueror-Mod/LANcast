@@ -267,6 +267,12 @@ type Settings struct {
 	BackupEveryDays int `json:"backup_every_days"`
 	BackupKeep      int `json:"backup_keep"`
 
+	// TrustedProxies are the reverse proxies whose X-Forwarded-For is
+	// believed (auth.TrustProxies), as addresses or CIDR networks, stored in
+	// the normalised form auth.ParseTrustedProxies returns. Empty by default,
+	// which reads only the connecting address, as LANcast always has.
+	TrustedProxies []string `json:"trusted_proxies,omitempty"`
+
 	// DLNA (ADR 0086): off by default, and it answers as DLNAAccount — a TV
 	// sees what that account sees. It does not run with no account chosen.
 	// DLNAName is what TVs list; empty means "LANcast".
