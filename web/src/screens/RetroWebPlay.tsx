@@ -3,7 +3,9 @@ import { useParams, useSearchParams } from "react-router-dom";
 import { apiGet } from "@/api/client";
 import { useItem, useWebCores } from "@/api/hooks";
 import { useBackHandler, useFocusScope, useSuspendFocus } from "@/focus/FocusController";
+import { RetroTouchControls, useGamepadConnected } from "./RetroTouchControls";
 import {
+  browserEnv,
   bootWebCore,
   installedCoreFor,
   statePlayer,
@@ -84,6 +86,12 @@ export function RetroWebPlay() {
   // The arrows and buttons are the game's while it is on screen, and the
   // panel's while the states panel is open over it.
   useSuspendFocus(!states);
+
+  // A touch screen plays with on-screen controls, which step aside while a
+  // controller is connected (ADR 0077 Decision 6).
+  const [touch] = useState(() => browserEnv().coarse);
+  const pad = useGamepadConnected();
+  const touchControls = touch && !pad;
 
   useEffect(() => {
     if (!notice) return;
@@ -267,12 +275,16 @@ export function RetroWebPlay() {
   };
 
   return (
-    <div className="rweb">
+    <div className={touchControls ? "rweb rweb--touch" : "rweb"}>
       <div className="rweb__stage">
         {/* RetroArch draws here through WebGL. Its id is the one the
             Emscripten glue looks for when it is not handed one. */}
         <canvas id="canvas" ref={canvas} className="rweb__canvas" tabIndex={0} aria-label="Game" />
       </div>
+
+      {touchControls && phase.kind === "playing" && !states && (
+        <RetroTouchControls platform={item?.platform} target={() => canvas.current} />
+      )}
 
       <div className="rweb__bar">
         <button className="rweb__btn" onClick={() => void leave()}>
@@ -319,9 +331,10 @@ export function RetroWebPlay() {
             ▶ Start
           </button>
           <p className="rweb__hint">
-            A controller works as soon as you press a button on it. On a keyboard:
-            arrows to move, X and Z for the main buttons, Enter for Start. The
-            game&apos;s own saves are kept on the server and shared with the
+            {touchControls
+              ? "Play with the buttons on screen, or connect a controller and they step aside. "
+              : "A controller works as soon as you press a button on it. On a keyboard: arrows to move, X and Z for the main buttons, Enter for Start. "}
+            The game&apos;s own saves are kept on the server and shared with the
             desktop app, and leaving keeps your place to continue in a browser.
           </p>
         </div>
