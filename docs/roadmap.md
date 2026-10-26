@@ -19,7 +19,20 @@ behind: the Releases table stopped at v0.9.78, and three backlog entries still
 listed work that had shipped as open. The release-by-release record is the
 [Releases](#releases) table, and what remains is [What is left](#what-is-left).*
 
-**Nothing sits unreleased.** v0.9.95 is current. Since v0.9.78:
+**Merged since v0.9.95, not yet released** (2026-10-26, built in one unattended
+day and checked on a separate dev server, not yet as the installed service):
+- **A backup before every migration** (#940, ADR 0058 amended).
+- **Trusted proxies** for the login throttle (#941,
+  [ADR 0095](adr/0095-a-proxy-is-believed-by-name.md)).
+- **Restore from Settings** (#942, ADR 0058 amended), which also fixed the
+  relaunch helper bringing a non-service server back as the window.
+- **A metrics endpoint** for Prometheus (#943,
+  [ADR 0096](adr/0096-metrics-have-their-own-key.md)).
+- **Webhooks** (#944,
+  [ADR 0097](adr/0097-a-webhook-goes-where-the-owner-points-it.md)). Schema
+  80, so the release that carries it is a one-way update.
+
+v0.9.95 is the current release. Since v0.9.78:
 - **v0.9.79:** one program, `LANcast.exe`, with the tray always present
   ([ADR 0080](adr/0080-one-executable-two-roles.md)), and a scan can be cancelled.
 - **v0.9.80–v0.9.81:** collections continue the way shows do, an About tab,
@@ -165,14 +178,12 @@ is in the [Feature backlog](#feature-backlog) entry it names.*
 - Playback: **chapters and preview thumbnails** on the scrub bar,
   **Chromecast and AirPlay**, and **offline downloads** (the client half).
 - Social: **Last.fm and Trakt scrobbling**.
-- Operations: **webhooks**, a **server dashboard** with history,
-  **bandwidth limits**, a **metrics endpoint**, a **snapshot before every
-  migration**, **restore from the interface**, and **granular sharing** by
-  label or on a friend's server (confirm somebody needs it first).
-- Security hardening: **trusted proxies** for the login throttle, **ffmpeg
-  under fewer privileges** than LocalSystem, an **update path for the pinned
-  ffmpeg** (check before building), and **TOTP or OIDC** with per-key API
-  rate limits.
+- Operations: a **server dashboard** with history (the metrics endpoint now
+  has the numbers), **bandwidth limits**, and **granular sharing** by label or
+  on a friend's server (confirm somebody needs it first).
+- Security hardening: **ffmpeg under fewer privileges** than LocalSystem, an
+  **update path for the pinned ffmpeg** (check before building), and **TOTP or
+  OIDC** with per-key API rate limits.
 
 **Back burner.** **Theme music**, blocked on OST identification, and
 **artist images from TheAudioDB** (provider built, not wired, needs a key).
@@ -194,6 +205,11 @@ is watching that keeps running.
   phone that found them.
 - Skip credits on a film the server converts, in a browser; the denial reset
   row's appearance; the remux path on a client that claims no Matroska.
+- The five merged on 2026-10-26, **as the installed service**: restore from
+  Settings through `service restart` (the dev server took the relaunch path),
+  the pre-migration backup on a real update, trusted proxies behind a real
+  Caddy or nginx, metrics in a real Prometheus, and webhooks into Home
+  Assistant.
 
 ## Releases
 
@@ -1623,7 +1639,14 @@ group is not priority.
   already targets the monitor the window is on, which is the correct behaviour
   and should stay — so this is one setting, and a second one would be a way for
   the two to disagree.
-- **Webhooks** — not built. A URL the owner sets, which receives a POST when
+- ~~**Webhooks**~~ — **built** (#944, [ADR 0097](adr/0097-a-webhook-goes-where-the-owner-points-it.md)):
+  Server › Webhooks, administrator-only and none by default. `playback.started`
+  and `playback.stopped` (only for accounts that turned it on themselves, in
+  Privacy, and carrying only the work's title), `scan.finished` and
+  `backup.taken`, each POST signed with HMAC-SHA256, three tries, no redirects
+  followed, the last outcome and a Test button on each. The live-updates stream
+  was not used as the source after all: its events are contentless topic names
+  made for a screen that refetches. Original entry: a URL the owner sets, which receives a POST when
   something happens: a film starts or stops, an item is added, a scan finishes.
   Plex's are what Home Assistant automations and Discord bots are built on. One
   thing makes this cheaper than it looks: the live-updates event stream
@@ -1682,7 +1705,12 @@ group is not priority.
   local record. The cost is not tidiness: a reviewer filed three missing
   features that exist because the docs said so. Worth a recurring check, the way
   `apidoc_test.go` guards the API contract.
-- **Trusted proxies for the login throttle** — not built. `InsideNetwork`
+- ~~**Trusted proxies for the login throttle**~~ — **built** (#941,
+  [ADR 0095](adr/0095-a-proxy-is-believed-by-name.md)): Server › Network ›
+  Trusted proxies, empty by default; `X-Forwarded-For` read right to left from
+  those addresses only, by rewriting `RemoteAddr` at the edge. It was worse than
+  this entry said: behind a same-machine proxy the sign-in page's account
+  picker was shown to the internet too. Original entry: `InsideNetwork`
   exempts loopback and private callers from the per-account backoff, and reads
   only the remote address, correctly refusing forwarded headers. The
   consequence, which `security.md` states, is that behind a reverse proxy on the
@@ -1706,17 +1734,26 @@ group is not priority.
   existing install takes the new build: the tools are located by whether the
   file exists, not by version. If a bump does not reach machines that already
   have the old one, a security fix to ffmpeg never arrives.
-- **A snapshot before every migration** — not built. Backups exist, by hand and
+- ~~**A snapshot before every migration**~~ — **built** (#940): at startup,
+  when a migration is pending on a database that existed, as
+  `…-schema<N>-premigrate.db`, the newest three kept apart from the schedule's
+  count. Original entry: Backups exist, by hand and
   on a schedule (`VACUUM INTO`, under a second on 100 MB), and migrations are
   forward-only by design — so the file that would undo a bad one is the one
   nobody takes automatically. Take one just before `migrate` changes the schema
   version, named so it is recognisable, and swept by the same retention.
-- **Restore from the interface** — not built. Backups can be listed, taken and
+- ~~**Restore from the interface**~~ — **built** (#942), as this entry
+  guessed: Restore stages the backup and the server restarts itself, after
+  backing up what it had; the next start applies it, once. Original entry:
+  Backups can be listed, taken and
   downloaded in Settings, but restoring is the `restore` subcommand on the
   machine. Some of that is right — a restore replaces the database the running
   server holds open — so the real shape is probably "stage this backup and
   restart", which the server can do to itself.
-- **A metrics endpoint** — not built. Prometheus-format counters (streams,
+- ~~**A metrics endpoint**~~ — **built** (#943,
+  [ADR 0096](adr/0096-metrics-have-their-own-key.md)): `GET /api/metrics`,
+  readable by an administrator or by a metrics token that opens that route and
+  nothing else, so API keys stay non-admin. Original entry: Prometheus-format counters (streams,
   transcodes, scan durations, request errors) for people who already run
   Grafana. Administrator- or loopback-only, and the same data the server
   dashboard entry above would draw on.
