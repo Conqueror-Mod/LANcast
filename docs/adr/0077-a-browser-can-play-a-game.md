@@ -272,8 +272,20 @@ the whole round trip:
 4. Continue restored both, and two seconds after Start the game was back
    mid-intro where it had been left.
 
-**Still to come:** numbered states in the browser, a save list that shows which
-player made each state, and phone on-screen controls (Decision 6).
+**Still to come:** phone on-screen controls (Decision 6).
+
+**Built 2026-10-25: numbered states in the browser.** The browser saves to the
+same three slots as the desktop menu (`state-1`–`state-3`), through a *Save
+states* panel that pauses the game while it is open.
+- **Loading** writes the slot's bytes to RetroArch's slot-0 file and calls
+  `_cmd_load_state`. All four web cores were checked for that export.
+- **Each slot says which player made its state.** The panel offers to load only
+  a state this browser's core made, and says so about the rest: "Made in the
+  desktop app, which a browser can't load".
+- **The desktop menu now does the same in reverse.** Before, it offered *Load*
+  for any filled slot, which would have offered a browser's state it cannot
+  read. It now names saving over one: *Save over Slot 1 (a browser's save)*.
+- The server keeps the state a save replaced, as for `auto`.
 
 ## Questions this does not answer
 

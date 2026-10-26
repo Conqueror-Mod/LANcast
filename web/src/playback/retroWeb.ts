@@ -79,6 +79,11 @@ export interface CoreModule {
   // 2026-10-11). Synchronous to call; a state is then written across frames.
   _cmd_savefiles?: () => void;
   _cmd_save_state?: () => void;
+  // Loading reads the same slot-0 file a save writes. Measured present in all
+  // four web cores (fceumm, gearsystem, mgba, clownmdemu) on 2026-10-25.
+  _cmd_load_state?: () => void;
+  _cmd_pause?: () => void;
+  _cmd_unpause?: () => void;
 }
 
 export interface ModuleOptions {
@@ -208,6 +213,21 @@ export function webStateCore(core: string): string {
   return `${WEB_STATE_PREFIX}${core}`;
 }
 
+/*
+ * Which player made a stored state, for saying so in a save list, or null for
+ * a slot that holds no state. The game's own save (`sram`) names no core,
+ * because every player reads it.
+ */
+export function statePlayer(core: string | null | undefined): "browser" | "desktop" | null {
+  if (!core) return null;
+  return core.startsWith(WEB_STATE_PREFIX) ? "browser" : "desktop";
+}
+
+/** How a state's player reads in a sentence: "the desktop app", "a browser". */
+export function statePlayerName(player: "browser" | "desktop"): string {
+  return player === "browser" ? "a browser" : "the desktop app";
+}
+
 export interface Booted {
   /** The running module, for reading what RetroArch wrote. */
   module: CoreModule;
@@ -226,6 +246,15 @@ export interface Booted {
    * saving runs across frames, so this waits for the file to change.
    */
   saveState(timeoutMs?: number): Promise<Uint8Array | null>;
+  /**
+   * Loads a state this browser made, from its bytes. False when the game is
+   * not running or the core cannot load one; it does not check the state is
+   * this core's, which is the caller's to decide (statePlayer).
+   */
+  loadState(state: Uint8Array): boolean;
+  /** Pauses the game, as RetroArch's own pause does: sound and all. */
+  pause(): void;
+  resume(): void;
 }
 
 /*
@@ -316,6 +345,21 @@ export async function bootWebCore(opts: {
         if (now && now.length > 0 && !sameBytes(now, before)) return now;
       }
       return null;
+    },
+    loadState(state) {
+      if (!started || !module._cmd_load_state || state.length === 0) return false;
+      // The slot-0 file is what RetroArch loads from with no slot chosen,
+      // and what saveState watches; a numbered slot is LANcast's, kept on
+      // the server, and passes through this one file both ways.
+      module.FS.writeFile(paths.state, state);
+      module._cmd_load_state();
+      return true;
+    },
+    pause() {
+      if (started) module._cmd_pause?.();
+    },
+    resume() {
+      if (started) module._cmd_unpause?.();
     },
   };
 }
