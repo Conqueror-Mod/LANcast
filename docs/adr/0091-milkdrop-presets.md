@@ -1003,4 +1003,37 @@ This is the one deliberate departure from the packs.
   corpus test still compare that against `pipeline.mjs`.
 - `TestButterchurnDeclaresMatchesTheVendoredWrappers` pins the list of
   butterchurn's names to the vendored build.
-- Not re-measured on the corpus, which was not on disk when this was written.
+- Re-measured on the corpus the same day, below.
+
+**Measured on the corpus, 2026-10-25.** The three projectM packs were cloned
+again at their pinned commits (`e03b83e`, `0180df2`, `14a6244`).
+- **What was converted.** The clones hold 14,536 `.milk` files, 12,669 of them
+  unique by content (the classic pack repeats 1,601). This counts files, which
+  is not how the 9,487 above was counted.
+  - 12,653 parse; 9,075 of those have shaders.
+  - That makes 17,478 shaders. The converter refused 590, under its real 3 s
+    and 32 MiB limits, and converted **16,888**.
+- **Where the two trims differ.** On **404 shaders in 398 presets**,
+  `processOptimizedShader` and `processOptimizedShaderAsPacks` give different
+  output. Elsewhere the change does nothing.
+- **Compiled both ways in a browser.** Each of the 404 was loaded into the
+  vendored butterchurn in Chromium (WebGL2, ANGLE on D3D11) and checked with
+  the client's own `shaderFaults`:
+
+| | shaders |
+|---|---|
+| failed with the packs' trim, compile with LANcast's | **43** |
+| compiled with the packs' trim, fail with LANcast's | **0** |
+| compile either way | 361 |
+| fail either way | 0 |
+
+So the change rescues 43 shaders (0.25% of what converts) and breaks none.
+- The 43 presets had been playing butterchurn's defaults behind the "shaders
+  could not run here" note (g4); they now draw their own.
+- In the 361, the declaration kept is one the shader never reads. The
+  optimizer leaves some unused uniforms behind, so keeping them changes the
+  text and nothing else.
+
+The throwaway measurement (a Go test over the corpus writing the differing
+pairs, and a page compiling each pair) was not committed. The corpus stays
+outside the repository, at the path LANCAST_MILKDROP_CORPUS names.

@@ -208,7 +208,7 @@ func (s *Server) deleteSubtitle(w http.ResponseWriter, r *http.Request) {
 	// Defense in depth: only ever unlink files under our own subtitles directory,
 	// however the stored path looks. This is the same containment boundary every
 	// row-to-path handler re-checks.
-	abs, err := containedPath(filepath.Join(s.dataDir, "subtitles"), ext.Path)
+	abs, err := containedEntry(filepath.Join(s.dataDir, "subtitles"), ext.Path)
 	if err != nil {
 		writeError(w, http.StatusConflict, "conflict",
 			"this subtitle's file is not one the server manages")
