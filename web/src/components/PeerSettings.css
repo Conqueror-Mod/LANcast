@@ -1,0 +1,63 @@
+/*
+ * An invite, readably. A two-column list rather than the raw string: the check
+ * code first and large, because it is the one thing two people compare.
+ * No gold — nothing here is a place.
+ */
+.peer-invite {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: 4px 14px;
+  margin: 10px 0 6px;
+  font-size: 13px;
+}
+.peer-invite dt {
+  color: var(--text-muted);
+}
+.peer-invite dd {
+  margin: 0;
+  color: var(--text-primary);
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.peer-invite__code {
+  font-family: Consolas, "Cascadia Mono", monospace;
+  font-size: 1.15rem;
+  letter-spacing: 0.12em;
+}
+.peer-invite__mono {
+  font-family: Consolas, "Cascadia Mono", monospace;
+  color: var(--text-secondary);
+}
+
+.peer-invite__note {
+  margin: 6px 0;
+  font-size: 13px;
+  color: var(--text-primary);
+}
+
+/* The raw string, folded away and contained when opened, so three hundred
+   characters never push the row's buttons off to the side. */
+.peer-invite__raw {
+  margin-top: 6px;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+.peer-invite__raw summary {
+  cursor: pointer;
+}
+.peer-invite__string {
+  margin-top: 6px;
+  max-height: 6.5em;
+  overflow-y: auto;
+  padding: 8px 10px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.03);
+  font-family: Consolas, "Cascadia Mono", monospace;
+  font-size: 12px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+  user-select: all;
+}
+.peer-invite__checked {
+  margin-top: 6px;
+}
