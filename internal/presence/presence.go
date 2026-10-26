@@ -126,6 +126,45 @@ type Tracker struct {
 	mu  sync.Mutex
 	now func() time.Time
 	by  map[string]*entry
+
+	// onChange hears every change of what an account is watching (webhooks,
+	// ADR 0097). Collected in pending while the lock is held and called after
+	// it is released, so a slow listener never holds up presence.
+	onChange func(Change)
+	pending  []Change
+}
+
+// Change is an account's watching title moving from one value to another. An
+// empty From is a start, an empty To a stop, and both set is a change of title.
+type Change struct {
+	UserID string
+	From   string
+	To     string
+}
+
+// OnChange sets the listener for watching changes. Set it once, at startup.
+func (t *Tracker) OnChange(fn func(Change)) {
+	t.mu.Lock()
+	t.onChange = fn
+	t.mu.Unlock()
+}
+
+// noteLocked records a change for the listener.
+func (t *Tracker) noteLocked(userID, from, to string) {
+	if from == to || t.onChange == nil {
+		return
+	}
+	t.pending = append(t.pending, Change{UserID: userID, From: from, To: to})
+}
+
+// unlock releases the lock and then tells the listener what changed.
+func (t *Tracker) unlock() {
+	fire, fn := t.pending, t.onChange
+	t.pending = nil
+	t.mu.Unlock()
+	for _, c := range fire {
+		fn(c)
+	}
 }
 
 // New returns an empty tracker.
@@ -151,7 +190,7 @@ func (t *Tracker) Seen(userID string) {
 		return
 	}
 	t.mu.Lock()
-	defer t.mu.Unlock()
+	defer t.unlock()
 	t.entryFor(userID).lastSeen = t.now()
 	t.sweepLocked()
 }
@@ -182,10 +221,11 @@ func (t *Tracker) watching(userID, title string, here bool) {
 		return
 	}
 	t.mu.Lock()
-	defer t.mu.Unlock()
+	defer t.unlock()
 	e := t.entryFor(userID)
 	now := t.now()
 	e.lastSeen = now
+	t.noteLocked(userID, e.title, title)
 	if title == "" {
 		e.title, e.here, e.lastBeat = "", false, time.Time{}
 	} else {
@@ -207,9 +247,10 @@ func (t *Tracker) Stopped(userID string) {
 		return
 	}
 	t.mu.Lock()
-	defer t.mu.Unlock()
+	defer t.unlock()
 	e := t.entryFor(userID)
 	e.lastSeen = t.now()
+	t.noteLocked(userID, e.title, "")
 	e.title, e.here, e.lastBeat = "", false, time.Time{}
 	t.sweepLocked()
 }
@@ -218,7 +259,10 @@ func (t *Tracker) Stopped(userID string) {
 // and when an account is deleted.
 func (t *Tracker) Forget(userID string) {
 	t.mu.Lock()
-	defer t.mu.Unlock()
+	defer t.unlock()
+	if e, ok := t.by[userID]; ok {
+		t.noteLocked(userID, e.title, "")
+	}
 	delete(t.by, userID)
 }
 
@@ -233,7 +277,7 @@ func (t *Tracker) Forget(userID string) {
  */
 func (t *Tracker) Snapshot(userID string) (State, bool) {
 	t.mu.Lock()
-	defer t.mu.Unlock()
+	defer t.unlock()
 	t.sweepLocked()
 	e, ok := t.by[userID]
 	if !ok {
@@ -246,7 +290,7 @@ func (t *Tracker) Snapshot(userID string) (State, bool) {
 // them twice gets the same order twice.
 func (t *Tracker) Online() []string {
 	t.mu.Lock()
-	defer t.mu.Unlock()
+	defer t.unlock()
 	t.sweepLocked()
 	out := make([]string, 0, len(t.by))
 	for id := range t.by {
@@ -277,9 +321,11 @@ func (t *Tracker) sweepLocked() {
 	now := t.now()
 	for id, e := range t.by {
 		if !e.lastBeat.IsZero() && now.Sub(e.lastBeat) > watchingTimeout {
+			t.noteLocked(id, e.title, "")
 			e.title, e.here, e.lastBeat = "", false, time.Time{}
 		}
 		if now.Sub(e.lastSeen) > onlineTimeout {
+			t.noteLocked(id, e.title, "")
 			delete(t.by, id)
 		}
 	}

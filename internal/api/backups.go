@@ -94,6 +94,7 @@ func (s *Server) createBackup(w http.ResponseWriter, r *http.Request) {
 		s.writeInternal(w, err, "take backup")
 		return
 	}
+	s.backupTaken(f.Name, f.Bytes, f.SchemaVersion, false)
 	s.audit(r, "backup.create", "backup", f.Name,
 		fmt.Sprintf("Took a backup (%s)", f.Name),
 		map[string]any{"bytes": f.Bytes, "schema_version": f.SchemaVersion})
@@ -154,6 +155,7 @@ func (s *Server) RunScheduledBackup(ctx context.Context) error {
 		return err
 	}
 	s.log.Info("scheduled backup taken", "name", f.Name, "bytes", f.Bytes)
+	s.backupTaken(f.Name, f.Bytes, f.SchemaVersion, true)
 
 	dir := s.backupDir()
 	files, err := dir.List()

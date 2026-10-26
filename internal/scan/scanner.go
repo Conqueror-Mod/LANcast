@@ -198,6 +198,7 @@ type Scanner struct {
 	running  map[int64]bool
 	last     map[int64]*Progress
 	onFinish func()
+	onResult func(store.Library, Progress)
 	tags     TagReader
 
 	/*
@@ -286,6 +287,14 @@ func (s *Scanner) OnFinish(fn func()) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.onFinish = fn
+}
+
+// OnResult sets a callback told which library finished and how, after the
+// finish hook (webhooks, ADR 0097). It gets a copy of the final progress.
+func (s *Scanner) OnResult(fn func(store.Library, Progress)) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.onResult = fn
 }
 
 // Status returns the most recent progress for a library.
@@ -490,12 +499,16 @@ func (s *Scanner) run(walkCtx context.Context, lib store.Library, p *Progress) {
 		delete(s.cancel, lib.ID)
 	}
 	done := s.onFinish
+	result, final := s.onResult, *p
 	s.mu.Unlock()
 
 	// Called outside the lock: the callback starts enrichment, which reads
 	// scan status, and holding the mutex here would deadlock.
 	if done != nil {
 		done()
+	}
+	if result != nil {
+		result(lib, final)
 	}
 }
 

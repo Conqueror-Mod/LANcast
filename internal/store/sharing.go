@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 )
 
@@ -148,4 +149,37 @@ func (s *Store) SharedActivity(ctx context.Context, userID string, limit int) ([
 		out = append(out, e)
 	}
 	return out, rows.Err()
+}
+
+/*
+ * SetSharePlaybackWebhooks records whether this account lets the server's
+ * webhooks report what it watches (ADR 0097). The account's own decision; as
+ * with SetShareActivity there is no administrator variant, because a switch
+ * somebody else can flip is not consent.
+ */
+func (s *Store) SetSharePlaybackWebhooks(ctx context.Context, userID string, on bool) error {
+	v := 0
+	if on {
+		v = 1
+	}
+	res, err := s.db.ExecContext(ctx,
+		`UPDATE user SET share_playback_webhooks = ? WHERE id = ?`, v, userID)
+	if err != nil {
+		return fmt.Errorf("set playback webhooks: %w", err)
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
+// SharesPlaybackWebhooks reports that decision. Null, the default, is off.
+func (s *Store) SharesPlaybackWebhooks(ctx context.Context, userID string) (bool, error) {
+	var v sql.NullInt64
+	err := s.db.QueryRowContext(ctx,
+		`SELECT share_playback_webhooks FROM user WHERE id = ?`, userID).Scan(&v)
+	if err != nil {
+		return false, fmt.Errorf("get playback webhooks: %w", err)
+	}
+	return v.Valid && v.Int64 != 0, nil
 }

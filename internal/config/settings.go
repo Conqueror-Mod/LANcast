@@ -267,6 +267,13 @@ type Settings struct {
 	BackupEveryDays int `json:"backup_every_days"`
 	BackupKeep      int `json:"backup_keep"`
 
+	// Webhooks are the URLs an administrator has asked to be told about
+	// events (ADR 0097). None by default, which is what keeps them inside the
+	// no-phone-home rule: the owner typed every destination. Here rather than
+	// in the database, so a restored backup does not bring back a webhook
+	// somebody deleted.
+	Webhooks []Webhook `json:"webhooks,omitempty"`
+
 	// TrustedProxies are the reverse proxies whose X-Forwarded-For is
 	// believed (auth.TrustProxies), as addresses or CIDR networks, stored in
 	// the normalised form auth.ParseTrustedProxies returns. Empty by default,
@@ -575,4 +582,15 @@ func (s Settings) BuiltinSecret(name string) string {
 		return s.OpenSubtitlesKey
 	}
 	return ""
+}
+
+// Webhook is one destination (ADR 0097). Secret signs every delivery and is
+// shown once, when the webhook is made.
+type Webhook struct {
+	ID        string   `json:"id"`
+	URL       string   `json:"url"`
+	Events    []string `json:"events"`
+	Secret    string   `json:"secret"`
+	Enabled   bool     `json:"enabled"`
+	CreatedAt int64    `json:"created_at"`
 }

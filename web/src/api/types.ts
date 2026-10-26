@@ -404,6 +404,12 @@ export type OptimizedVersion = components["schemas"]["OptimizedVersion"];
 export type BackupsResponse = components["schemas"]["BackupList"];
 export type RestoreStarted = components["schemas"]["RestoreStarted"];
 export type RestoreOutcome = components["schemas"]["RestoreOutcome"];
+export type Webhook = components["schemas"]["Webhook"];
+export type WebhookList = components["schemas"]["WebhookList"];
+export type WebhookCreate = components["schemas"]["WebhookCreate"];
+export type WebhookCreated = components["schemas"]["WebhookCreated"];
+export type WebhookPatch = components["schemas"]["WebhookPatch"];
+export type WebhookStatus = components["schemas"]["WebhookStatus"];
 
 // MilkDrop presets (ADR 0091): the server's uploads, as summaries and as
 // butterchurn-ready presets.

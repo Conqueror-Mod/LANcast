@@ -258,3 +258,49 @@ func TestHereFollowsTheTitle(t *testing.T) {
 		t.Error("here survived the watching sweep")
 	}
 }
+
+func TestOnChangeHearsStartsStopsAndTimeouts(t *testing.T) {
+	now := time.Unix(1000, 0)
+	tr := newAt(func() time.Time { return now })
+	var got []Change
+	tr.OnChange(func(c Change) {
+		// Called outside the lock: asking the tracker from here must not deadlock.
+		tr.Snapshot(c.UserID)
+		got = append(got, c)
+	})
+
+	tr.WatchingHere("u1", "Alien")
+	tr.WatchingHere("u1", "Alien") // a heartbeat, not a change
+	tr.WatchingHere("u1", "Aliens")
+	tr.Stopped("u1")
+	tr.Watching("u2", "Cowboy Bebop")
+	now = now.Add(watchingTimeout + time.Second)
+	tr.Seen("u3") // any call sweeps; u2 has gone quiet
+
+	want := []Change{
+		{"u1", "", "Alien"},
+		{"u1", "Alien", "Aliens"},
+		{"u1", "Aliens", ""},
+		{"u2", "", "Cowboy Bebop"},
+		{"u2", "Cowboy Bebop", ""},
+	}
+	if len(got) != len(want) {
+		t.Fatalf("got %+v, want %+v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("change %d = %+v, want %+v", i, got[i], want[i])
+		}
+	}
+}
+
+func TestForgetWhileWatchingIsAStop(t *testing.T) {
+	tr := New()
+	var got []Change
+	tr.OnChange(func(c Change) { got = append(got, c) })
+	tr.Watching("u1", "Alien")
+	tr.Forget("u1")
+	if len(got) != 2 || got[1] != (Change{"u1", "Alien", ""}) {
+		t.Fatalf("got %+v", got)
+	}
+}

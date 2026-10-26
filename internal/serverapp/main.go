@@ -59,6 +59,7 @@ import (
 	"lancast/internal/transcode"
 	"lancast/internal/update"
 	"lancast/internal/web"
+	"lancast/internal/webhook"
 )
 
 // IsCommand reports whether arg, the first argument on a command line,
@@ -858,7 +859,13 @@ func run(ctx context.Context, addr, dataDir string, log *slog.Logger) error {
 	quit := make(chan struct{})
 	var quitOnce sync.Once
 
+	// Webhooks (ADR 0097): reads its list from settings on every event, and
+	// sends nothing while that list is empty, which is the default.
+	hooks := webhook.New(func() []config.Webhook { return settings.Get().Webhooks }, api.Version, log)
+	go hooks.Run(ctx)
+
 	apiSrv := api.New(api.Deps{
+		Webhooks: hooks,
 		LANBound: lanBound, RestartWidens: restartWidens,
 		Store: st, Scanner: scanner, Registry: reg, Artwork: art,
 		Worker: worker, Probes: probes, Markers: markers, Covers: covers, Photos: photos,
