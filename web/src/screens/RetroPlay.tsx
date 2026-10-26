@@ -6,6 +6,7 @@ import { useGameSaves, useItem } from "@/api/hooks";
 import { useBackHandler, useFocusable, useFocusScope } from "@/focus/FocusController";
 import { holdNativeVideo, releaseNativeVideo } from "@/playback/mpvBackend";
 import { usePlayback } from "@/playback/PlaybackProvider";
+import { statePlayer } from "@/playback/retroWeb";
 import { CORNER_LABEL, SIZE_LABEL, nextCorner, nextSize, setDock, useDock } from "@/lib/dock";
 import {
   STATE_SLOTS,
@@ -230,7 +231,13 @@ export function RetroPlay() {
   }, [error, running, menu, page, quit, openMenu, closeMenu]);
   useBackHandler(back);
 
-  const filled = new Set((saves ?? []).map((s) => s.slot));
+  /*
+   * Which slots hold a state, and which player made each. The browser saves
+   * to the same three slots, in a format this player cannot load (ADR 0077),
+   * so a browser's state is not offered to load here, and saving over one
+   * says so.
+   */
+  const slotPlayer = new Map((saves ?? []).map((s) => [s.slot, statePlayer(s.core)]));
   // The menu and the error panel keep arrows and the pad to themselves: the
   // corner card's buttons are live behind them and otherwise one press away.
   const menuScope = useFocusScope();
@@ -268,13 +275,17 @@ export function RetroPlay() {
                 {STATE_SLOTS.map((slot) => (
                   <MenuButton
                     key={slot}
-                    label={`Save to ${slotLabel(slot)}`}
+                    label={
+                      slotPlayer.get(slot) === "browser"
+                        ? `Save over ${slotLabel(slot)} (a browser's save)`
+                        : `Save to ${slotLabel(slot)}`
+                    }
                     onSelect={() => void retroCommand("save-state", slot)}
                   />
                 ))}
               </div>
               <div className="retro-play__group" aria-label="Load">
-                {STATE_SLOTS.filter((slot) => filled.has(slot)).map((slot) => (
+                {STATE_SLOTS.filter((slot) => slotPlayer.get(slot) === "desktop").map((slot) => (
                   <MenuButton
                     key={slot}
                     label={`Load ${slotLabel(slot)}`}

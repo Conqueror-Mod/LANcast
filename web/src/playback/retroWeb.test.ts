@@ -5,6 +5,7 @@ import {
   retroarchConfig,
   savePaths,
   webStateCore,
+  statePlayer,
   bootWebCore,
   contentName,
   coreURL,
@@ -89,6 +90,7 @@ function fakeCore() {
   const dirs: string[] = [];
   const calls: string[][] = [];
   const sent: string[] = [];
+  const cmds: string[] = [];
   let opts: ModuleOptions | undefined;
   const module: CoreModule = {
     FS: {
@@ -109,6 +111,10 @@ function fakeCore() {
     _cmd_save_state: () => {
       setTimeout(() => files.set(statePath, new Uint8Array([9, (stateWrites += 1)])), 20);
     },
+    // What RetroArch was given to load, read at the moment it was asked.
+    _cmd_load_state: () => void cmds.push(`load:${Array.from(files.get(statePath) as Uint8Array).join(",")}`),
+    _cmd_pause: () => void cmds.push("pause"),
+    _cmd_unpause: () => void cmds.push("unpause"),
   };
   const imported: string[] = [];
   const importCore = vi.fn(async (url: string) => {
@@ -121,7 +127,7 @@ function fakeCore() {
       },
     };
   });
-  return { files, dirs, calls, sent, imported, importCore, module, opts: () => opts! };
+  return { files, dirs, calls, sent, cmds, imported, importCore, module, opts: () => opts! };
 }
 
 describe("booting a web core", () => {
@@ -260,5 +266,42 @@ describe("saves in the browser", () => {
   it("labels a browser state so no desktop core will take it", () => {
     expect(webStateCore("mgba")).toBe("retroarch-web/mgba");
     expect(webStateCore("mgba").startsWith(WEB_STATE_PREFIX)).toBe(true);
+  });
+
+  // Numbered states: a slot's bytes go through the slot-0 file RetroArch loads from.
+  it("loads a state by writing it where RetroArch reads one, then asking it to load", async () => {
+    const f = fakeCore();
+    const b = await bootWebCore({ core: "mgba", canvas: document.createElement("canvas"), rom, importCore: f.importCore });
+    b.start();
+    expect(b.loadState(new Uint8Array([4, 2]))).toBe(true);
+    expect(f.files.get(statePath)).toEqual(new Uint8Array([4, 2]));
+    expect(f.cmds).toEqual(["load:4,2"]);
+  });
+
+  it("loads nothing before the game runs, or from an empty state", async () => {
+    const f = fakeCore();
+    const b = await bootWebCore({ core: "mgba", canvas: document.createElement("canvas"), rom, importCore: f.importCore });
+    expect(b.loadState(new Uint8Array([4, 2]))).toBe(false);
+    b.start();
+    expect(b.loadState(new Uint8Array())).toBe(false);
+    expect(f.cmds).toEqual([]);
+  });
+
+  it("pauses and resumes the game, and only once it is running", async () => {
+    const f = fakeCore();
+    const b = await bootWebCore({ core: "mgba", canvas: document.createElement("canvas"), rom, importCore: f.importCore });
+    b.pause();
+    expect(f.cmds).toEqual([]);
+    b.start();
+    b.pause();
+    b.resume();
+    expect(f.cmds).toEqual(["pause", "unpause"]);
+  });
+
+  it("says which player made a state", () => {
+    expect(statePlayer("retroarch-web/fceumm")).toBe("browser");
+    expect(statePlayer("mgba")).toBe("desktop");
+    expect(statePlayer(undefined)).toBeNull();
+    expect(statePlayer("")).toBeNull();
   });
 });

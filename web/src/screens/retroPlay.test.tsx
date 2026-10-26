@@ -52,7 +52,7 @@ const FILM = {
 
 let host: HTMLDivElement;
 let root: Root;
-let saves: { slot: string; updated_at: number; size_bytes: number }[];
+let saves: { slot: string; updated_at: number; size_bytes: number; core?: string }[];
 let fetches: string[];
 
 beforeEach(() => {
@@ -199,13 +199,32 @@ describe("the game screen", () => {
   });
 
   it("offers to load only the slots that hold a save", async () => {
-    saves = [{ slot: "state-3", updated_at: 1, size_bytes: 4 }];
+    // A state always names the core that made it: the server refuses one that does not.
+    saves = [{ slot: "state-3", updated_at: 1, size_bytes: 4, core: "mgba" }];
     await render("/play/41");
     emit({ kind: "started" });
     emit({ kind: "menu" });
     const labels = buttons().map((b) => b.textContent?.trim());
     expect(labels).toContain("Load Slot 3");
     expect(labels).not.toContain("Load Slot 1");
+  });
+
+  // The browser saves to the same three slots in a format this player cannot
+  // load (ADR 0077). Offering one would fail; saving over one is said aloud.
+  it("does not offer a browser's state to load, and says when saving would replace one", async () => {
+    saves = [
+      { slot: "state-1", updated_at: 1, size_bytes: 4, core: "retroarch-web/mgba" },
+      { slot: "state-2", updated_at: 1, size_bytes: 4, core: "mgba" },
+    ];
+    await render("/play/41");
+    emit({ kind: "started" });
+    emit({ kind: "menu" });
+    const labels = buttons().map((b) => b.textContent?.trim());
+    expect(labels).not.toContain("Load Slot 1");
+    expect(labels).toContain("Load Slot 2");
+    expect(labels).toContain("Save over Slot 1 (a browser's save)");
+    expect(labels).toContain("Save to Slot 2");
+    expect(labels).toContain("Save to Slot 3");
   });
 
   it("shows an error that arrives before the game starts, with a way back", async () => {

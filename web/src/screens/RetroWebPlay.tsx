@@ -2,9 +2,16 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useParams, useSearchParams } from "react-router-dom";
 import { apiGet } from "@/api/client";
 import { useItem, useWebCores } from "@/api/hooks";
-import { useBackHandler, useSuspendFocus } from "@/focus/FocusController";
-import { bootWebCore, installedCoreFor, webStateCore, type Booted } from "@/playback/retroWeb";
-import { retroSupported } from "@/playback/retro";
+import { useBackHandler, useFocusScope, useSuspendFocus } from "@/focus/FocusController";
+import {
+  bootWebCore,
+  installedCoreFor,
+  statePlayer,
+  statePlayerName,
+  webStateCore,
+  type Booted,
+} from "@/playback/retroWeb";
+import { retroSupported, slotLabel, STATE_SLOTS } from "@/playback/retro";
 import { platformLabel } from "@/lib/platforms";
 import { RetroPlay } from "./RetroPlay";
 import "./RetroWebPlay.css";
@@ -31,6 +38,13 @@ interface RomFile {
   name: string;
   size_bytes?: number;
   present?: boolean;
+}
+
+/** One stored save, as the save list gives it. */
+interface StoredSave {
+  slot: string;
+  core?: string;
+  updated_at?: number;
 }
 
 /*
@@ -62,9 +76,20 @@ export function RetroWebPlay() {
   const booted = useRef<Booted | null>(null);
   const started = useRef(false);
   const [phase, setPhase] = useState<Phase>({ kind: "loading", what: "Getting the game ready…" });
+  // This person's saves for the game, for the states panel.
+  const [stored, setStored] = useState<StoredSave[]>([]);
+  const [states, setStates] = useState(false);
+  const [notice, setNotice] = useState<string | null>(null);
 
-  // The arrows and buttons are the game's while it is on screen.
-  useSuspendFocus();
+  // The arrows and buttons are the game's while it is on screen, and the
+  // panel's while the states panel is open over it.
+  useSuspendFocus(!states);
+
+  useEffect(() => {
+    if (!notice) return;
+    const t = window.setTimeout(() => setNotice(null), 3000);
+    return () => window.clearTimeout(t);
+  }, [notice]);
 
   const core = installedCoreFor(item?.platform, cores);
 
@@ -147,9 +172,8 @@ export function RetroWebPlay() {
 
         // The game's own save, from whichever player made it last, and a
         // browser state to continue from when asked for one that is ours.
-        const saves = await apiGet<{ saves: { slot: string; core?: string }[] }>(`/api/items/${itemID}/saves`)
-          .then((r) => r?.saves ?? [])
-          .catch(() => []);
+        const saves = await listSaves(itemID);
+        if (!cancelled) setStored(saves);
         const sram = saves.some((s) => s.slot === "sram") ? await getSave(itemID, "sram") : null;
         lastSRAM.current = sram;
         const auto = saves.find((s) => s.slot === "auto");
@@ -191,6 +215,49 @@ export function RetroWebPlay() {
     canvas.current?.focus();
   };
 
+  /*
+   * Numbered states (ADR 0077, part c's "still to come").
+   *
+   * The same three slots the desktop's game menu offers, kept on the server
+   * per person and game. A browser state and a desktop one cannot load in
+   * each other's player (they are different formats), so the panel loads only
+   * what this browser made, and says which player made the rest.
+   *
+   * The game pauses while the panel is open, and resumes before a save or a
+   * load runs: RetroArch writes and reads a state across frames, and a paused
+   * game runs none.
+   */
+  const openStates = () => {
+    booted.current?.pause();
+    setStates(true);
+  };
+  const closeStates = useCallback(() => {
+    setStates(false);
+    booted.current?.resume();
+    canvas.current?.focus();
+  }, []);
+
+  const saveTo = async (slot: string) => {
+    closeStates();
+    const b = booted.current;
+    if (!b || !core) return;
+    const state = await b.saveState();
+    if (state && (await putSave(itemID, slot, state, webStateCore(core), version))) {
+      setNotice(`Saved to ${slotLabel(slot)}.`);
+      setStored(await listSaves(itemID));
+    } else {
+      setNotice(`${slotLabel(slot)} could not be saved.`);
+    }
+  };
+
+  const loadFrom = async (slot: string) => {
+    closeStates();
+    const b = booted.current;
+    if (!b) return;
+    const state = await getSave(itemID, slot);
+    setNotice(state && b.loadState(state) ? `Loaded ${slotLabel(slot)}.` : `${slotLabel(slot)} could not be loaded.`);
+  };
+
   const fullscreen = () => {
     const el = canvas.current?.parentElement;
     if (!el) return;
@@ -213,11 +280,32 @@ export function RetroWebPlay() {
         </button>
         <span className="rweb__title">{item?.title ?? ""}</span>
         {phase.kind === "playing" && (
-          <button className="rweb__btn" onClick={fullscreen}>
-            Fullscreen
-          </button>
+          <>
+            <button className="rweb__btn" onClick={openStates}>
+              Save states
+            </button>
+            <button className="rweb__btn" onClick={fullscreen}>
+              Fullscreen
+            </button>
+          </>
         )}
       </div>
+
+      {states && core && (
+        <StatesPanel
+          stored={stored}
+          ours={webStateCore(core)}
+          onSave={(slot) => void saveTo(slot)}
+          onLoad={(slot) => void loadFrom(slot)}
+          onClose={closeStates}
+        />
+      )}
+
+      {notice && (
+        <div className="rweb__notice" role="status">
+          {notice}
+        </div>
+      )}
 
       {phase.kind === "loading" && (
         <div className="rweb__overlay" role="status">
@@ -249,6 +337,75 @@ export function RetroWebPlay() {
       )}
     </div>
   );
+}
+
+/*
+ * The states panel: each numbered slot, what is in it, and what this browser
+ * can do with it. Its own component so its Back closes it rather than leaving
+ * the game, and so the pad's arrows stay inside it while it is open.
+ */
+export function StatesPanel({
+  stored,
+  ours,
+  onSave,
+  onLoad,
+  onClose,
+}: {
+  stored: StoredSave[];
+  /** The label this browser's states carry (webStateCore). */
+  ours: string;
+  onSave(slot: string): void;
+  onLoad(slot: string): void;
+  onClose(): void;
+}) {
+  useBackHandler(onClose);
+  const scope = useFocusScope();
+  const bySlot = new Map(stored.map((s) => [s.slot, s]));
+  return (
+    <div className="rweb__overlay" role="dialog" aria-label="Save states" ref={scope}>
+      <div className="rweb__states">
+        <p className="rweb__states-title">Save states</p>
+        {STATE_SLOTS.map((slot, i) => {
+          const s = bySlot.get(slot);
+          const player = statePlayer(s?.core);
+          const mine = !!s && s.core === ours;
+          const status = !player
+            ? "Empty"
+            : mine
+              ? "Saved in a browser"
+              : player === "browser"
+                ? "Made by another emulator, which this one can't load"
+                : `Made in ${statePlayerName(player)}, which a browser can't load`;
+          return (
+            <div className="rweb__slot" key={slot} data-slot={slot}>
+              <div className="rweb__slot-text">
+                <span className="rweb__slot-name">{slotLabel(slot)}</span>
+                <span className="rweb__slot-status">{status}</span>
+              </div>
+              <button className="rweb__btn" onClick={() => onSave(slot)} autoFocus={i === 0}>
+                {player && !mine ? `Save over ${slotLabel(slot)}` : `Save to ${slotLabel(slot)}`}
+              </button>
+              {mine && (
+                <button className="rweb__btn" onClick={() => onLoad(slot)}>
+                  Load {slotLabel(slot)}
+                </button>
+              )}
+            </div>
+          );
+        })}
+        <button className="rweb__btn" onClick={onClose}>
+          Back to the game
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/** This person's saves for one game; empty when the server cannot say. */
+async function listSaves(itemID: number): Promise<StoredSave[]> {
+  return apiGet<{ saves: StoredSave[] }>(`/api/items/${itemID}/saves`)
+    .then((r) => r?.saves ?? [])
+    .catch(() => []);
 }
 
 /** One save's bytes, or null when the slot is empty or unreadable. */

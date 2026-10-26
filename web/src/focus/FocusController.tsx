@@ -392,11 +392,14 @@ export function useFocusScope(): (el: HTMLElement | null) => void {
 }
 
 // useSuspendFocus turns off spatial navigation while a modal transport surface
-// (the player) is mounted, and restores it on unmount.
-export function useSuspendFocus() {
+// (the player) is mounted, and restores it on unmount. `active` false gives it
+// back while the surface stays mounted: the browser's game player does that
+// while its states panel is open, so a pad can move through the panel.
+export function useSuspendFocus(active = true) {
   const api = useFocusController();
   useEffect(() => {
+    if (!active) return;
     api.setSuspended(true);
     return () => api.setSuspended(false);
-  }, [api]);
+  }, [api, active]);
 }
