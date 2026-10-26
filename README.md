@@ -4,12 +4,13 @@ A self-hosted media server and library service. Plex's streamlined
 functionality, Kodi's customizability and versatility, and neither one's
 compromises.
 
-> **Status: v0.8.34 · M0–M4 built and released.** Point it at a folder and it
+> **Status: v0.9.94 · M0–M4 built and released.** Point it at a folder and it
 > scans, identifies, and plays — direct play, remux, or transcode, with working
 > seek and resume and hardware encoding. Films, TV, **music**, and **pictures**
 > are all first-class. Real metadata, artwork, ratings, subtitles, playlists,
-> multi-user accounts, per-account profiles, HTTPS, a sandboxed plugin runtime,
-> a native desktop window, and a server that can update itself. Corrections you
+> multi-user accounts with per-account library and rating limits, HTTPS,
+> passkeys, a sandboxed plugin runtime, a native desktop window, servers that
+> pair with each other, and a server that can update itself. Corrections you
 > make are locked and survive rescans.
 >
 > [docs/roadmap.md](docs/roadmap.md) is the honest ledger — every release, what
@@ -45,7 +46,8 @@ stable interfaces. Kodi's real win was that TV shows weren't hardcoded.
 **No phone-home.** Local-first, LAN-first. Nothing is required to reach the
 internet for the server to work, and the server does not do network things you
 did not ask for. Remote access is opt-in and self-owned (WireGuard, Tailscale,
-your own reverse proxy) — never a relay you rent.
+your own reverse proxy, or a public name whose certificate LANcast requests only
+once you turn it on) — never a relay you rent.
 
 ## What it does
 
@@ -76,17 +78,20 @@ answer. Pictures added the case nobody predicted: the file *is* its own artwork.
 once a human edits the membership, no rescan may undo it
 ([ADR 0030](docs/adr/0030-playlists-and-m3u.md)).
 
-**Live TV** *(in progress)*. M3U channel sources with an EPG, for people who
+**Live TV** *(parked)*. M3U channel sources with an EPG, for people who
 already have a stream to point at. Media Source Extensions playback is built and
 **off by default**, and a browser without it falls back rather than failing
 ([ADR 0013](docs/adr/0013-transcode-pipeline.md),
 [ADR 0036](docs/adr/0036-epg.md)). Usable, and the one feature here not being
-called finished.
+called finished; further work on it is parked.
 
 **People.** Multi-user accounts with admin and member roles, per-user watch
 state, profile pages with real history and totals, and viewing that is private
 by default and shared only by an explicit opt-in
-([ADR 0035](docs/adr/0035-who-may-see-whose-viewing.md)).
+([ADR 0035](docs/adr/0035-who-may-see-whose-viewing.md)). An administrator can
+keep a library from a member and set the content rating a member may not exceed
+([ADR 0084](docs/adr/0084-a-library-can-be-kept-from-an-account.md)), and
+everybody can see and sign out the devices signed in as them.
 
 **Watch Together.** Synchronised rooms on one server, and paired servers that
 can see each other's presence and admit remote guests under a host-set cap
@@ -203,7 +208,7 @@ a change to the installer itself needs the installer.
 | [docs/metadata.md](docs/metadata.md) | Providers, matching, locking, artwork |
 | [docs/security.md](docs/security.md) | What is protected, what is not — **read before exposing it** |
 | [docs/roadmap.md](docs/roadmap.md) | Every release, every area's status, and what each pass taught |
-| [docs/adr/](docs/adr/) | 50 decision records — why things are the way they are |
+| [docs/adr/](docs/adr/) | 92 decision records — why things are the way they are |
 
 The `*-plan.md` files in `docs/` are the plans particular areas were built
 from. They are kept as written rather than revised, so they record what was
@@ -221,16 +226,21 @@ browsing and library creation at arbitrary paths, so an open port with no
 password is arbitrary read access. Create the account, restart, and it binds the
 network so other devices can reach it.
 
-**Once it binds the network, it serves HTTPS.** Supply your own certificate
-(`tls_cert_file` / `tls_key_file`) or let LANcast generate a self-signed one —
-either way the password and session cookie are encrypted on the LAN. A
+**Once it binds the network, it serves HTTPS.** Point it at a certificate you
+already have (Settings › Server › Network) or let LANcast generate a self-signed
+one — either way the password and session cookie are encrypted on the LAN. A
 self-signed cert shows a browser warning until you trust it; the LANcast window
 pins the key instead and does not.
 
-**Do not port-forward it anyway.** A self-signed cert cannot prove the server's
-identity to the public internet. For access away from home, use a VPN that puts
-your device on the LAN (Tailscale, WireGuard), or a reverse proxy terminating
-TLS with a real certificate. See [docs/security.md](docs/security.md).
+**Reaching it from outside is your decision, and off by default.** The simplest
+safe route is still a VPN that puts your device on the LAN (Tailscale,
+WireGuard). If you do expose it, give it a public name: LANcast can then request
+a publicly trusted certificate for that name — only when an administrator turns
+it on ([ADR 0081](docs/adr/0081-a-public-name-can-earn-a-public-certificate.md))
+— and accounts can add passkeys
+([ADR 0082](docs/adr/0082-a-passkey-belongs-to-the-public-name.md)). A bare
+self-signed certificate cannot prove the server's identity to the public
+internet, so do not port-forward one. See [docs/security.md](docs/security.md).
 
 ## License
 

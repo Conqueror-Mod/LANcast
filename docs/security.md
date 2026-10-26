@@ -1,10 +1,12 @@
 # Security posture
 
-> **Status: multi-user accounts, an audit log, and paired servers.** Each person
-> has an account with a role (admin or member); an unsecured server binds to
-> loopback only; authorised mutations are recorded; and a server can pair with
-> another and admit its people as guests. This document describes what is
-> protected, what is not, and what remains open.
+> **Status: multi-user accounts, an audit log, paired servers, and an opt-in
+> public name.** Each person has an account with a role (admin or member), and
+> an administrator can narrow what a member sees; an unsecured server binds to
+> loopback only; authorised mutations are recorded; a server can pair with
+> another and admit its people as guests; and a server with a public name can
+> earn a publicly trusted certificate and offer passkeys. This document
+> describes what is protected, what is not, and what remains open.
 
 ## Current model
 
@@ -32,9 +34,29 @@ user's, so one person cannot log everyone else out.)
 walk off with: it is one file, and backups of it exist by design. A stolen
 copy yields no usable sessions.
 
+**Signed-in devices can be seen and signed out.** Everybody can list the
+devices signed in as them and sign out one, or all but the one they are using;
+an administrator can do the same for every account, and that is audited
+(`/api/profile/sessions` and `/api/sessions` in [api.md](api.md)).
+
+**A member can be kept from a library, and held under a rating.** An
+administrator can hide a library from a member and set the content rating a
+member may not exceed ([ADR 0084](adr/0084-a-library-can-be-kept-from-an-account.md)).
+Both are one access rule enforced in the store: an item it refuses answers
+exactly as a missing one does, and the rule also reaches the lists that gather
+items from across libraries (Continue Watching, history, people, photo
+timelines). It applies to members only; an administrator could lift it in a
+click, so it would protect nothing there. A new library is visible to everyone
+until somebody narrows it.
+
+**API keys are not sessions.** A third-party client can authenticate with a
+long-lived key sent as `Authorization: Bearer`, stored as a hash like a session
+token ([ADR 0061](adr/0061-an-api-key-is-not-a-session.md)). A key never reaches
+an administrator route, whoever owns it, and cannot mint, list or revoke keys.
+
 ## What requires a session
 
-Everything under `/api/` except four endpoints:
+Everything under `/api/` except these:
 
 | Public | Why |
 |---|---|
@@ -42,7 +64,15 @@ Everything under `/api/` except four endpoints:
 | `GET /api/auth/status` | The client must know whether to show setup or login |
 | `POST /api/auth/setup` | Only works while unconfigured, which is loopback-only |
 | `POST /api/auth/login` | Obviously |
+| `POST /api/auth/passkey/login/options`, `POST /api/auth/passkey/login` | Passkey sign-in: whoever is signing in has no session yet. Throttled with the password login |
+| `GET /api/auth/accounts` | The sign-in page's account picker. Names only, and only to the home network; anybody else gets an empty list. An administrator can turn it off |
 | The web assets | The login form lives in them — gating the page behind a session nobody can obtain yet is a locked door with the key inside |
+
+The `/api/federation/` routes skip the session gate too, but are not public:
+they are for paired servers, authenticated by the peer's pinned certificate
+instead, and each one refuses a caller that did not present one. They are a
+fixed list rather than a prefix, so a new route under that path is gated until
+somebody adds it deliberately.
 
 **Streaming is gated.** `GET /api/stream/{id}` requires a session. A public
 stream URL would make the password decorative.
@@ -69,8 +99,9 @@ nothing to gain.
 ## Brute force
 
 Login attempts are throttled per client IP — 10 per 5 minutes, decaying on
-their own. A single shared password is one guessable secret, so unlimited
-attempts against it is the entire attack.
+their own. A password is one guessable secret, so unlimited attempts against it
+is the entire attack. Passkey sign-in and changing a password share the same
+counter.
 
 The key is the remote address only. Forwarded headers are attacker-controlled
 unless a trusted proxy sets them, and honouring them here would let anyone
@@ -109,9 +140,12 @@ endpoint reachable by an unauthenticated caller *is* the authentication bypass
 Recovery is local instead. Stop the server and run:
 
 ```
-lancastd reset-auth            # reports what it would remove
-lancastd reset-auth -yes       # removes every account and session
+LANcast.exe reset-auth         # reports what it would remove
+LANcast.exe reset-auth -yes    # removes every account and session
 ```
+
+(`lancast reset-auth` on Linux. Since [ADR 0080](adr/0080-one-executable-two-roles.md)
+the server is the same executable as the app; see [install.md](install.md).)
 
 The authority this requires is "can run a program on the server", which is the
 same authority that could read the database file directly — so it grants an
@@ -140,14 +174,21 @@ binds `127.0.0.1` only; nothing on that wire is worth protecting, and a
 certificate warning on `localhost` is pure setup friction. TLS turns on at the
 same boundary that enables LAN binding.
 
-**The certificate is either supplied or self-signed.** Set `tls_cert_file` and
-`tls_key_file` to serve a certificate you trust — from an internal CA, `mkcert`,
-or copied in — and clients connect with no warning. This is the recommended
-configuration. With neither set, LANcast generates a self-signed certificate on
-first LAN-bound run, persists it `0600` under `<data>/tls/`, and reuses it
-across restarts. A self-signed cert **encrypts the wire but does not
-authenticate the server**: the first HTTPS visit shows a browser warning until
-the cert is trusted or replaced.
+**The certificate is self-signed unless you give it another.** With nothing
+configured, LANcast generates a self-signed certificate on first LAN-bound run,
+persists it `0600` under `<data>/tls/`, and reuses it across restarts. A
+self-signed cert **encrypts the wire but does not authenticate the server**:
+the first HTTPS visit shows a browser warning until the cert is trusted or
+replaced.
+
+**A certificate you bring is named by path** in Settings › Server › Network —
+from an internal CA, `mkcert`, or a renewal tool
+([ADR 0088](adr/0088-a-certificate-you-bring-is-followed.md)). The pair is
+checked before it is saved, applied without a restart, and re-read when the
+files change, so a renewal tool rewriting them in place keeps working. No
+private key crosses the connection: the setting is a path on the server, not an
+upload. A pair that will not load never stops the server; LANcast serves the
+generated certificate instead and says why.
 
 **Enabling TLS does not break `http://` bookmarks.** The listening port answers
 a plaintext request with a permanent redirect to the same address over HTTPS,
@@ -161,10 +202,36 @@ desktop client reads the server's own `cert.pem` from local disk and pins that
 security property the native window was built for
 ([ADR 0023](adr/0023-native-desktop-client.md)).
 
-**No ACME / Let's Encrypt.** Automatic public certificates require the server to
-be internet-reachable and to contact an external CA — public exposure and
-phone-home, both of which LANcast rejects. For a publicly trusted certificate,
-terminate TLS at a reverse proxy.
+**A public name can earn a public certificate, only if an administrator asks**
+([ADR 0081](adr/0081-a-public-name-can-earn-a-public-certificate.md), amending
+the "no ACME" of ADR 0014). It is off by default, and off on every upgraded
+install: until an administrator turns it on in Settings, giving a hostname,
+choosing Let's Encrypt (or its staging CA) and ticking the CA's subscriber
+agreement, LANcast makes no ACME request of any kind. A certificate request is
+a network thing the owner asked for by name, which is what the no-phone-home
+rule permits. No contact address is sent unless one is entered, and the CA
+directory is not settable through the API, so an admin session cannot point
+the server's outbound requests at an arbitrary URL.
+
+The CA proves the name with TLS-ALPN-01 on port 443, answered by LANcast's own
+TLS listener; there is no plaintext challenge listener. While the certificate
+is on, LANcast also listens on 443 itself, because IPv6 has no port
+translation; that listener closes when the certificate is turned off. The
+public certificate is served **only to a client that asks for that name**: by
+IP address, on `localhost` or with no name, clients get the self-signed
+certificate as before, and paired servers keep their identity certificate. It
+uses the serving key LANcast already has, so the desktop window's pin survives
+renewals.
+
+**Passkeys exist only at the public name**
+([ADR 0082](adr/0082-a-passkey-belongs-to-the-public-name.md)). Two platform
+rules decide that: a passkey is bound to a domain name, and browsers refuse
+them on a certificate error. Over TLS, for that name, while its certificate is
+valid, an account can add passkeys and sign in with one; everywhere else the
+sign-in page offers no passkey and the routes answer `409`. A passkey is **in
+addition to the password**, never instead of it: the password stays the
+recovery path and the way to sign in by address. Changing the password does not
+remove passkeys, and still ends every session.
 
 ## The audit log
 
@@ -187,8 +254,9 @@ document was first written, so the properties are stated rather than implied.
 ([ADR 0044](adr/0044-server-identity-and-peering.md)), which closes the half of
 ADR 0014 that ADR 0014 named itself: TLS encrypts the wire, it does not
 authenticate the server. Only the public half and the fingerprint are ever
-exported — this project ships crash reporting, and a private key that reaches a
-crash report is a key published to whoever reads it.
+exported — LANcast writes crash reports to its own data directory (nothing is
+sent anywhere), and a private key that reaches a crash report is a key
+published to whoever later reads or shares that file.
 
 **Pairing takes both sides.** Parsing an invite is not pairing; it exists when
 each side has added the other. A relationship one party can create alone is one
@@ -212,9 +280,10 @@ the host rather than by their own capability
 
 ## Still unprotected
 
-- **No API rate limiting** beyond login.
-- **No per-library visibility.** Every member sees every library; a member
-  cannot be scoped to a subset. Roles gate *management*, not *visibility*.
+- **No API rate limiting** beyond sign-in and changing a password.
+- **No trusted-proxy setting.** The login throttle and the per-account wait read
+  only the connection's address, so behind a reverse proxy every caller looks
+  like the proxy (see *Brute force*).
 
 ## Standing risks that authentication does not remove
 
@@ -256,26 +325,34 @@ system directories are omitted.
 
 ## Deployment guidance
 
-**Do not port-forward LANcast directly.** There is a password and TLS now, but a
+**Do not port-forward a server that only has its self-signed certificate.** A
 self-signed certificate cannot prove the server's identity to a client that has
-never seen it, and exposing the login endpoint to the whole internet invites
-credential-guessing that per-IP throttling only blunts. A VPN keeps the server
-off the public internet entirely.
+never seen it. A VPN keeps the server off the public internet entirely, and is
+still the simplest safe choice.
 
 **Recommended: a VPN that puts your device on the LAN.** Tailscale and
 WireGuard both do this well. Nothing is exposed publicly, traffic is encrypted
 by the VPN, and LANcast needs no configuration at all. This keeps the
 no-phone-home principle intact and avoids reimplementing solved problems badly.
 
+**Alternative: a public name, directly.** Give the server a hostname, forward
+port 443 to it, and turn on the public certificate (above). Clients then get a
+certificate their browser trusts, accounts can add passkeys, and failed
+sign-ins from outside the home network are slowed per account however many
+addresses they come from. Nothing is relayed through anybody else. It is also
+the internet reaching your sign-in page, so use strong passwords and add
+passkeys.
+
 **Alternative: a reverse proxy terminating TLS.** Caddy or nginx in front of
-LANcast, with a publicly trusted certificate — the way to get a real certificate
-without LANcast contacting a CA itself. Forward the original client IP only if
-you also rate-limit at the proxy — LANcast's throttle will otherwise see every
-request as coming from one client. Point the proxy at LANcast over HTTPS, or run
+LANcast, with a publicly trusted certificate. Forward the original client IP
+only if you also rate-limit at the proxy — LANcast's throttle will otherwise
+see every request as coming from one client, and the per-account wait will
+treat every caller as local. Point the proxy at LANcast over HTTPS, or run
 LANcast loopback-only behind it.
 
-Built-in TLS ([ADR 0014](adr/0014-transport-security.md)) closes the plaintext
-hole on the LAN; it is not a substitute for either of the above when reaching
+Built-in TLS with a self-signed certificate
+([ADR 0014](adr/0014-transport-security.md)) closes the plaintext hole on the
+LAN; on its own it is not a substitute for any of the above when reaching
 LANcast from outside the network.
 
 Treat the LAN itself as semi-trusted. A compromised phone, TV, or IoT device on
@@ -301,17 +378,17 @@ relies on.
 Tracked in [roadmap.md](roadmap.md):
 
 1. ~~**Transport security.**~~ **Resolved** — built-in TLS with bring-your-own or
-   self-signed certificates ([ADR 0014](adr/0014-transport-security.md)). A VPN
-   or reverse proxy remains the path for reaching LANcast from outside the LAN.
+   self-signed certificates ([ADR 0014](adr/0014-transport-security.md)), plus
+   an opt-in public certificate for a public name
+   ([ADR 0081](adr/0081-a-public-name-can-earn-a-public-certificate.md)).
 2. ~~**Multi-user accounts.**~~ **Resolved** — accounts with an admin/member
    role split ([ADR 0015](adr/0015-multi-user-accounts.md)); per-user watch
-   state. Per-library visibility (scoping a member to a subset of libraries)
-   remains open.
-3. **Session management UI.** Listing and revoking individual sessions, rather
-   than revoking a whole user's on a password change.
+   state.
+3. ~~**Session management UI.**~~ **Resolved** — each account lists and signs
+   out its own devices; administrators can do the same for every account.
 4. ~~**ffmpeg and untrusted input.**~~ **Decided, not resolved** — see *Threats
    explicitly out of scope*. Parsing library media is now routine and the
    exposure is accepted knowingly.
-5. **Per-library visibility.** Roles gate management, not visibility. Scoping a
-   member to a subset of libraries is still unbuilt and is the oldest open item
-   here.
+5. ~~**Per-library visibility.**~~ **Resolved** — an administrator can hide a
+   library from a member, alongside the content-rating ceiling
+   ([ADR 0084](adr/0084-a-library-can-be-kept-from-an-account.md)).
