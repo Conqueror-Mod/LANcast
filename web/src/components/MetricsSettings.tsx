@@ -22,7 +22,9 @@ export function MetricsSettings() {
   const [shown, setShown] = useState<string | null>(null);
   const [armed, setArmed] = useState<"replace" | "revoke" | null>(null);
   if (!settings) return null;
-  const token = settings.metrics_token;
+  // Absent from a server older than this pane. Treated as no token, so the
+  // pane still renders rather than taking Troubleshooting down with it.
+  const token = settings.metrics_token ?? { configured: false, created_at: 0 };
   const origin = typeof window === "undefined" ? "" : window.location.origin;
 
   const make = () =>
