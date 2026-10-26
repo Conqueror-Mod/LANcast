@@ -1,6 +1,6 @@
-import { useState } from "react";
-import { useBackups, useTakeBackup, useDeleteBackup } from "@/api/hooks";
-import type { BackupFile } from "@/api/types";
+import { useEffect, useState } from "react";
+import { useBackups, useTakeBackup, useDeleteBackup, useRestoreBackup } from "@/api/hooks";
+import type { BackupFile, RestoreOutcome } from "@/api/types";
 
 /*
  * Backups, in Settings (ADR 0058).
@@ -11,10 +11,11 @@ import type { BackupFile } from "@/api/types";
  * artwork or the media. Somebody who believes this file contains their films
  * has not been given a backup, they have been given a false sense of one.
  *
- * There is no restore button, and that is the design rather than a gap.
- * Restoring replaces the database the server is reading, so it happens with
- * the server stopped. The command is shown instead of a control that would
- * have to lie about what it can do.
+ * Restore is staged, not done in place. Restoring replaces the database the
+ * server is reading, so the button asks the server to take a backup of what is
+ * there now, stage the one chosen, and restart; the next start swaps the file
+ * while nothing holds it. The command is still shown, because it is the way
+ * back when the server will not start at all.
  *
  * No gold anywhere here. Gold means *where you are* and nothing else
  * (docs/design.md); the moment it also meant "this backup is good", the focus
@@ -46,20 +47,92 @@ export function takenAt(epochSeconds: number): string {
   return new Date(epochSeconds * 1000).toLocaleString();
 }
 
+/*
+ * waitForRestart polls until the server has gone and come back, then reloads.
+ *
+ * "Come back" alone is not enough: the first poll can land before the server
+ * has stopped, and reloading then would show the old database for a moment
+ * and sign the person out of nothing. So it waits to see the server not
+ * answer, then answer. After a minute and a half it reloads anyway, which
+ * lands on the sign-in page or on the browser's own error, either of which
+ * says more than a spinner that never stops.
+ */
+export async function waitForRestart(
+  answers: () => Promise<boolean>,
+  reload: () => void,
+  wait: (ms: number) => Promise<void> = (ms) => new Promise((r) => setTimeout(r, ms)),
+  limitMs = 90_000,
+) {
+  const started = Date.now();
+  let wentAway = false;
+  while (Date.now() - started < limitMs) {
+    const up = await answers();
+    if (!up) wentAway = true;
+    else if (wentAway) break;
+    await wait(1000);
+  }
+  reload();
+}
+
+async function healthAnswers(): Promise<boolean> {
+  try {
+    const r = await fetch("/api/health", { cache: "no-store" });
+    return r.ok;
+  } catch {
+    return false;
+  }
+}
+
 export function BackupSettings() {
   const { data, isLoading, error } = useBackups(true);
   const take = useTakeBackup();
   const remove = useDeleteBackup();
+  const restore = useRestoreBackup();
   // Which backup is one click from being deleted. A name rather than a
   // boolean, so arming one row cannot arm every row — the same list can hold a
   // dozen of these and they are all called nearly the same thing.
   const [confirming, setConfirming] = useState<string | null>(null);
+  // Which backup is asking "restore this one?", the same way.
+  const [restoreArmed, setRestoreArmed] = useState<string | null>(null);
+  // The backup being restored, once the server has said yes.
+  const [restoring, setRestoring] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!restoring) return;
+    void waitForRestart(healthAnswers, () => window.location.reload());
+  }, [restoring]);
 
   const backups = data?.backups ?? [];
+
+  if (restoring) {
+    return (
+      <section className="settings__section">
+        <span className="section-label">Backup</span>
+        <div className="set-row">
+          <div className="set-row__main">
+            <div className="set-row__title" role="status">
+              Restarting to restore {restoring}&hellip;
+            </div>
+            <div className="set-row__sub">
+              The page reloads when the server is back. Everyone is signed out, so
+              you&rsquo;ll sign in again.
+            </div>
+          </div>
+        </div>
+      </section>
+    );
+  }
 
   return (
     <section className="settings__section">
       <span className="section-label">Backup</span>
+
+      {data?.last_restore && <LastRestore outcome={data.last_restore} />}
+      {data?.staged && (
+        <div className="set-row__sub set-row__sub--standalone" role="status">
+          A restore of {data.staged.name} is waiting for the server to restart.
+        </div>
+      )}
 
       <div className="set-row">
         <div className="set-row__main">
@@ -107,16 +180,59 @@ export function BackupSettings() {
       )}
 
       {backups.map((b) => (
-        <BackupRow
-          key={b.name}
-          backup={b}
-          armed={confirming === b.name}
-          busy={remove.isPending}
-          onArm={() => setConfirming(b.name)}
-          onDelete={() =>
-            remove.mutate(b.name, { onSuccess: () => setConfirming(null) })
-          }
-        />
+        <div key={b.name}>
+          <BackupRow
+            backup={b}
+            armed={confirming === b.name}
+            busy={remove.isPending || restore.isPending}
+            canRestore={!!data?.can_restore && b.restorable && !data?.staged}
+            onArm={() => setConfirming(b.name)}
+            onDelete={() =>
+              remove.mutate(b.name, { onSuccess: () => setConfirming(null) })
+            }
+            onRestore={() => {
+              setConfirming(null);
+              setRestoreArmed(b.name);
+            }}
+          />
+          {restoreArmed === b.name && (
+            // In the page rather than confirm(): a native dialog in the LANcast
+            // window loses keyboard focus when it closes.
+            <div className="set-row" role="alertdialog" aria-label="Restore this backup">
+              <div className="set-row__main">
+                <div className="set-row__title">Restore the backup from {takenAt(b.taken_at)}?</div>
+                <div className="set-row__sub">
+                  LANcast first backs up the database as it is now, so this can be
+                  undone from this list. Then the server restarts and puts this
+                  backup in its place. Anyone watching is interrupted, everyone is
+                  signed out, and anything changed since this backup was taken is
+                  replaced. Posters download again over the next while.
+                </div>
+                <div className="set-row">
+                  <button
+                    className="set-btn"
+                    type="button"
+                    disabled={restore.isPending}
+                    onClick={() =>
+                      restore.mutate(b.name, {
+                        onSuccess: () => {
+                          setRestoreArmed(null);
+                          setRestoring(b.name);
+                        },
+                      })
+                    }
+                  >
+                    {restore.isPending ? "Backing up first…" : "Restore and restart"}
+                  </button>
+                  <button className="set-btn" type="button" onClick={() => setRestoreArmed(null)}>
+                    Cancel
+                  </button>
+                </div>
+                {restore.error && <p className="set-error">{restore.error.message}</p>}
+              </div>
+            </div>
+          )}
+        </div>
       ))}
 
       {data && (
@@ -138,15 +254,15 @@ export function BackupSettings() {
             <div className="set-row__main">
               <div className="set-row__title">Restoring</div>
               <div className="set-row__sub">
-                Restoring happens with the server stopped, so it is done on the
-                machine rather than from here — swapping the database out from
-                under a running server is how a restore becomes the thing it was
-                meant to prevent.
+                {data.can_restore
+                  ? "Restore on a backup above puts it back: the server backs up what you have now, restarts, and swaps the database while nothing is using it. "
+                  : "This server can't restart itself, so restoring is done on the machine with the server stopped. "}
+                If the server won&rsquo;t start at all, the same thing can be done by
+                hand with the server stopped:
                 <br />
                 <code>{data.restore_command}</code>
                 <br />
-                The database it replaces is kept beside it, so restoring the
-                wrong one can be undone.
+                Either way, the database it replaces is also kept beside it.
               </div>
             </div>
           </div>
@@ -156,18 +272,48 @@ export function BackupSettings() {
   );
 }
 
+/*
+ * LastRestore says what the last restore from here did, after the restart that
+ * carried it out, when the request that asked for it is long gone. A failure
+ * is the important case: the server started anyway, with the database it had,
+ * and without this nobody would know the restore never happened.
+ */
+function LastRestore({ outcome }: { outcome: RestoreOutcome }) {
+  const when = takenAt(outcome.applied_at);
+  if (!outcome.ok) {
+    return (
+      <p className="set-error" role="alert">
+        The restore of {outcome.name} on {when} didn&rsquo;t happen: {outcome.error}. The
+        server started with the database it already had.
+      </p>
+    );
+  }
+  return (
+    <div className="set-row__sub set-row__sub--standalone">
+      Restored {outcome.name} on {when}
+      {outcome.requested_by ? `, at ${outcome.requested_by}'s request` : ""}.
+      {outcome.safety_backup &&
+        ` The database from before it is the backup ${outcome.safety_backup}.`}
+    </div>
+  );
+}
+
 function BackupRow({
   backup,
   armed,
   busy,
+  canRestore,
   onArm,
   onDelete,
+  onRestore,
 }: {
   backup: BackupFile;
   armed: boolean;
   busy: boolean;
+  canRestore: boolean;
   onArm: () => void;
   onDelete: () => void;
+  onRestore: () => void;
 }) {
   return (
     <div className="set-row">
@@ -201,6 +347,11 @@ function BackupRow({
         >
           Download
         </a>
+        {canRestore && (
+          <button className="set-btn" disabled={busy} onClick={onRestore}>
+            Restore
+          </button>
+        )}
         <button
           className="set-btn"
           disabled={busy}

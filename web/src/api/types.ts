@@ -402,6 +402,8 @@ export type OptimizedList = components["schemas"]["OptimizedList"];
 export type OptimizedVersion = components["schemas"]["OptimizedVersion"];
 
 export type BackupsResponse = components["schemas"]["BackupList"];
+export type RestoreStarted = components["schemas"]["RestoreStarted"];
+export type RestoreOutcome = components["schemas"]["RestoreOutcome"];
 
 // MilkDrop presets (ADR 0091): the server's uploads, as summaries and as
 // butterchurn-ready presets.

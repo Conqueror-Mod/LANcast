@@ -1,6 +1,8 @@
 package api
 
 import (
+	"errors"
+	"fmt"
 	"net/http"
 	"os"
 	"os/exec"
@@ -36,6 +38,33 @@ func (s *Server) restartForUpdate(w http.ResponseWriter, r *http.Request) {
 			"no update is staged, so there is nothing to restart for")
 		return
 	}
+	if !s.canRestartSelf() {
+		writeError(w, http.StatusPreconditionFailed, "not_a_service",
+			"this server cannot restart itself here — close LANcast and open it again to finish the update")
+		return
+	}
+	if err := s.restartSelf(); err != nil {
+		s.writeInternal(w, err, "restart")
+		return
+	}
+	s.audit(r, "update.restart", "", m.Version, "Restarted to finish updating to "+m.Version, nil)
+	w.WriteHeader(http.StatusAccepted)
+}
+
+// canRestartSelf is whether restartSelf has a way to bring this server back.
+func (s *Server) canRestartSelf() bool { return s.serviceManaged || s.relaunch != nil }
+
+/*
+ * restartSelf stops this server in a way that starts it again: through the
+ * service manager when it is a service, or by the relaunch helper when it is
+ * not. Shared by finishing an update and by restoring a backup, which both
+ * need the next start rather than this process.
+ *
+ * Returns once the restart is under way. The caller answers its request
+ * after: the helper's first act is to stop this process, and a graceful
+ * shutdown lets the answer go out first.
+ */
+func (s *Server) restartSelf() error {
 	if !s.serviceManaged {
 		// Not a service. This used to be a dead end — a 412 telling the user to
 		// close LANcast and open it again, with nothing afterwards to say
@@ -44,24 +73,17 @@ func (s *Server) restartForUpdate(w http.ResponseWriter, r *http.Request) {
 		// process to exit (which is when the staged files are applied, on the
 		// way down) and starts it again with the arguments it had.
 		if s.relaunch == nil {
-			writeError(w, http.StatusPreconditionFailed, "not_a_service",
-				"this server cannot restart itself here — close LANcast and open it again to finish the update")
-			return
+			return errors.New("this server cannot restart itself here")
 		}
 		if err := s.relaunch(); err != nil {
-			s.writeInternal(w, err, "schedule the relaunch")
-			return
+			return fmt.Errorf("schedule the relaunch: %w", err)
 		}
-		s.audit(r, "update.restart", "", m.Version,
-			"Restarted to finish updating to "+m.Version, nil)
-		w.WriteHeader(http.StatusAccepted)
-		return
+		return nil
 	}
 
 	exe, err := os.Executable()
 	if err != nil {
-		s.writeInternal(w, err, "locate executable")
-		return
+		return fmt.Errorf("locate executable: %w", err)
 	}
 
 	cmd := exec.Command(exe, "service", "restart")
@@ -69,13 +91,11 @@ func (s *Server) restartForUpdate(w http.ResponseWriter, r *http.Request) {
 	childproc.Hide(cmd)
 	childproc.Detach(cmd)
 	if err := cmd.Start(); err != nil {
-		s.writeInternal(w, err, "start the restart helper")
-		return
+		return fmt.Errorf("start the restart helper: %w", err)
 	}
 	// Not waited on, deliberately: its first act is to stop this process. A
 	// server that waited for its own killer would hold the request open until
 	// the connection died, and the caller would read a dropped connection as a
 	// failure rather than as the restart it asked for.
-	s.audit(r, "update.restart", "", m.Version, "Restarted to finish updating to "+m.Version, nil)
-	w.WriteHeader(http.StatusAccepted)
+	return nil
 }

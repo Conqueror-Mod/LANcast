@@ -2668,6 +2668,37 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/backups/{name}/restore": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description A **bare** backup filename, resolved inside the backup folder and re-verified to be there after path resolution. Anything else is `400`, including a name that traverses, is absolute, or names the live database. */
+                name: components["parameters"]["BackupName"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Restore one
+         * @description **Administrators only.** Puts this backup back, by staging it and restarting the server: a running server cannot swap out the database it holds open, so the next start applies the restore before anything opens the database (ADR 0058, as amended).
+         *
+         *     Before staging, a backup of the database as it is now is taken by hand, so it is never rotated away and restoring the wrong backup is undone from the same list. The restore itself also keeps the replaced file beside the database, as the `restore` command does.
+         *
+         *     **Everyone is signed out**: the sessions belong to the database being replaced, and a backup holds none. Artwork is not in a backup and is fetched again.
+         *
+         *     The staged restore is attempted **once**. Its marker is removed before the attempt, so a backup that fails to restore is not retried on every start; the server starts with the database that was there and `last_restore` on `GET /backups` says why.
+         *
+         *     Recorded in the audit log as `backup.restore`, in the database being replaced.
+         */
+        post: operations["restoreBackup"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/plugins": {
         parameters: {
             query?: never;
@@ -7365,12 +7396,45 @@ export interface components {
             backups: components["schemas"]["BackupFile"][];
             /** @description Where the files are, so a person can copy one somewhere that is not this disk. **A backup that only exists on the drive it protects against is not really a backup**, and naming the folder is the cheapest way to say that without a lecture. */
             folder: string;
-            /**
-             * @description What to type to put one back.
-             *
-             *     **There is no restore endpoint, and that is the decision rather than a gap.** Restoring replaces the database the server is reading, so it is offline: the server stops, the file is replaced, the server starts. **Clients must not offer a restore button** — they show this instead.
-             */
+            /** @description What to type to put one back by hand, with the server stopped. Shown beside the Restore button, because it is the way back when the server will not start at all. */
             restore_command: string;
+            /** @description Whether this server can restart itself to apply a restore (`POST /backups/{name}/restore`). False where nothing would start it again; then only `restore_command` works. */
+            can_restore: boolean;
+            /** @description A restore waiting for the next start, or null. */
+            staged: components["schemas"]["RestorePending"] | null;
+            /** @description What the most recent restore from Settings did, or null when there has been none. */
+            last_restore: components["schemas"]["RestoreOutcome"] | null;
+        };
+        /** @description A restore staged from Settings, waiting for the next start. */
+        RestorePending: {
+            /** @description The backup to restore. */
+            name: string;
+            requested_by: string;
+            /** Format: int64 */
+            requested_at: number;
+            /** @description The backup taken of the database being replaced, just before staging. */
+            safety_backup?: string;
+        };
+        /** @description What the most recent restore from Settings did, read back after the restart. */
+        RestoreOutcome: {
+            name: string;
+            requested_by: string;
+            /** Format: int64 */
+            requested_at: number;
+            safety_backup?: string;
+            /** Format: int64 */
+            applied_at: number;
+            ok: boolean;
+            /** @description Why not, when `ok` is false. The server then started with the database that was there. */
+            error?: string;
+            /** @description The revision the backup held. */
+            schema_from?: number;
+            /** @description The revision after migrating forward; equal to schema_from when nothing was migrated. */
+            schema_to?: number;
+        };
+        RestoreStarted: {
+            staged: components["schemas"]["RestorePending"];
+            safety_backup: components["schemas"]["BackupFile"];
         };
         /** @description What a plugin may reach. **Deny by default** (ADR 0020): an empty capability set is a plugin that can compute and nothing else. */
         PluginCapabilities: {
@@ -13532,6 +13596,67 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             /** @description There is no such file. */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    restoreBackup: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description A **bare** backup filename, resolved inside the backup folder and re-verified to be there after path resolution. Anything else is `400`, including a name that traverses, is absolute, or names the live database. */
+                name: components["parameters"]["BackupName"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Staged, and the restart is under way. The server stops answering within a few seconds and comes back with the backup in place. */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RestoreStarted"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            /** @description Not a backup filename, or there is no such file. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description `not_restorable` — taken by a newer LANcast, or not a readable backup. `already_staged` — a restore is already waiting for the restart. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description `cannot_restart` — this server has no way to start itself again (`can_restore` is false). Use `restore_command` with the server stopped. */
+            412: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description `no_space` — the backup of the current database could not be written, so nothing was staged. */
+            507: {
                 headers: {
                     [name: string]: unknown;
                 };

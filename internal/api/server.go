@@ -512,6 +512,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/backups", s.adminOnly(s.createBackup))
 	mux.HandleFunc("GET /api/backups/{name}", s.adminOnly(s.downloadBackup))
 	mux.HandleFunc("DELETE /api/backups/{name}", s.adminOnly(s.deleteBackup))
+	// Restoring stages the backup and restarts; the next start applies it.
+	mux.HandleFunc("POST /api/backups/{name}/restore", s.adminOnly(s.restoreBackup))
 
 	// Media tools. Admin-only: this makes the server download a binary and then
 	// execute it (ADR 0043). The URL is pinned in mediatools, never a parameter.

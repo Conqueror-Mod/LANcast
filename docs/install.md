@@ -94,8 +94,16 @@ above. See [security.md](security.md#losing-the-password).
 ### Restoring a backup
 
 A backup is the database and nothing else ([ADR 0058](adr/0058-a-backup-is-the-database.md)).
-Restoring is offline, because swapping the database out from under a running
-server is how a restore becomes the incident:
+
+**From Settings:** Backup & storage › **Restore** on the backup you want. LANcast
+backs up the database as it is now, restarts, and swaps the file in before
+anything opens it. The backup it took first is in the same list, so restoring
+the wrong one is undone the same way. If the restore fails, the server starts
+with the database it had and the Backup page says why.
+
+**By hand**, when the server will not start, or on a server that cannot restart
+itself (Restore is then not offered). Swapping the database out from under a
+running server is how a restore becomes the incident, so stop it first:
 
 ```
 Stop-Service lancastd

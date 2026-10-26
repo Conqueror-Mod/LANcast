@@ -3,6 +3,7 @@ package serverapp
 import (
 	"os/exec"
 	"runtime"
+	"strings"
 	"testing"
 	"time"
 )
@@ -108,4 +109,18 @@ func sleeper(t *testing.T, seconds int) *exec.Cmd {
 		_, _ = cmd.Process.Wait()
 	})
 	return cmd
+}
+
+// A server started as `serve` must come back as `serve`, or the helper starts
+// the window instead of the server (found restoring a backup, 2026-10-26).
+func TestRelaunchKeepsServe(t *testing.T) {
+	got := relaunchArgs(42, []string{"-data", "D:/x", "-addr", "127.0.0.1:8091"}, true)
+	want := []string{relaunchArg, "42", "serve", "-data", "D:/x", "-addr", "127.0.0.1:8091"}
+	if strings.Join(got, " ") != strings.Join(want, " ") {
+		t.Fatalf("got %v, want %v", got, want)
+	}
+	got = relaunchArgs(42, []string{"tray"}, false)
+	if strings.Join(got, " ") != relaunchArg+" 42 tray" {
+		t.Fatalf("tray launch: got %v", got)
+	}
 }
