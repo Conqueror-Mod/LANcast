@@ -162,6 +162,16 @@ func clearSnapshotSessions(path string) error {
 	if err != nil {
 		return fmt.Errorf("snapshot %s: clear sessions: %w", path, err)
 	}
+	// A database from before sessions existed has none to remove. The backup
+	// taken just before a migration can be one, on an install old enough.
+	var tables int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'session'`).Scan(&tables); err != nil {
+		db.Close()
+		return fmt.Errorf("snapshot %s: clear sessions: %w", path, err)
+	}
+	if tables == 0 {
+		return db.Close()
+	}
 	if _, err := db.Exec(`DELETE FROM session`); err != nil {
 		db.Close()
 		return fmt.Errorf("snapshot %s: clear sessions: %w", path, err)

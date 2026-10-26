@@ -326,7 +326,9 @@ func run(ctx context.Context, addr, dataDir string, log *slog.Logger) error {
 			"hint", "install ffmpeg, or set its directory in Settings; without it LANcast cannot inspect or convert media")
 	}
 
-	st, err := store.Open(cfg.DBPath())
+	st, err := store.OpenWith(cfg.DBPath(), store.OpenOptions{
+		BeforeMigrate: preMigrationBackup(cfg.DataDir, log),
+	})
 	if err != nil {
 		return err
 	}

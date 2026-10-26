@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
 	"path/filepath"
 	"reflect"
 	"slices"
@@ -36,7 +37,37 @@ type Store struct {
 
 // Open connects to the database at path and applies the schema. Schema
 // application is idempotent, so this is safe on every start.
-func Open(path string) (*Store, error) {
+func Open(path string) (*Store, error) { return OpenWith(path, OpenOptions{}) }
+
+/*
+ * OpenOptions are the hooks a server wants that a test or a tool does not.
+ *
+ * BeforeMigrate is called once, before the first migration runs, and only on
+ * a database that existed before this open: a new install also starts at
+ * revision 1 and migrates all the way up, and a snapshot of an empty file
+ * protects nothing. It is not called when the database is already current.
+ *
+ * snapshot writes a backup of the database as it stands, which is the
+ * revision `from`. Returning an error stops the open, with the migration not
+ * run; a hook that would rather carry on says so by returning nil.
+ *
+ * The hook is here rather than the naming and the sweeping because the
+ * backup package already imports this one. This package knows when a
+ * migration is about to happen; it does not know what a backup is called.
+ */
+type OpenOptions struct {
+	BeforeMigrate func(from, to int, snapshot func(path string) (Snapshot, error)) error
+}
+
+// OpenWith is Open with hooks.
+func OpenWith(path string, opts OpenOptions) (*Store, error) {
+	// Read before sql.Open, which creates the file. Zero bytes counts as new:
+	// that is what an interrupted first start leaves behind.
+	existed := false
+	if fi, err := os.Stat(path); err == nil && fi.Size() > 0 {
+		existed = true
+	}
+
 	// _txlock=immediate takes the write lock when a transaction begins rather
 	// than when it first writes.
 	//
@@ -85,6 +116,12 @@ func Open(path string) (*Store, error) {
 		db.Close()
 		return nil, fmt.Errorf("apply schema: %w", err)
 	}
+	if opts.BeforeMigrate != nil && existed {
+		if err := beforeMigrate(db, opts.BeforeMigrate); err != nil {
+			db.Close()
+			return nil, err
+		}
+	}
 	if err := migrate(db); err != nil {
 		db.Close()
 		return nil, err
@@ -93,6 +130,22 @@ func Open(path string) (*Store, error) {
 }
 
 func (s *Store) Close() error { return s.db.Close() }
+
+// beforeMigrate runs the hook when a migration is pending. A database newer
+// than this build is left to migrate, which refuses it with the reason.
+func beforeMigrate(db *sql.DB, hook func(from, to int, snapshot func(string) (Snapshot, error)) error) error {
+	var current int
+	if err := db.QueryRow(`SELECT value FROM meta WHERE key = 'schema_version'`).Scan(&current); err != nil {
+		return fmt.Errorf("read schema_version: %w", err)
+	}
+	if current >= CurrentSchemaVersion {
+		return nil
+	}
+	st := &Store{db: db}
+	return hook(current, CurrentSchemaVersion, func(path string) (Snapshot, error) {
+		return st.Snapshot(context.Background(), path)
+	})
+}
 
 // ---------------------------------------------------------------- libraries
 

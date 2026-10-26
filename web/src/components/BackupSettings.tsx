@@ -174,7 +174,11 @@ function BackupRow({
       <div className="set-row__main">
         <div className="set-row__title">{takenAt(backup.taken_at)}</div>
         <div className="set-row__sub">
-          {backup.scheduled ? "Scheduled · " : "Taken by hand · "}
+          {backup.pre_migration
+            ? `Before an update (database version ${backup.schema_version}) · `
+            : backup.scheduled
+              ? "Scheduled · "
+              : "Taken by hand · "}
           {humanBytes(backup.bytes)} · {backup.name}
           {/* A backup this build cannot restore is the single most important
               thing this list can say, so it is said on the row rather than

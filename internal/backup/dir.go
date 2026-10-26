@@ -68,6 +68,9 @@ type File struct {
 	// these are ever deleted to keep the count down: a backup somebody took on
 	// purpose is theirs to remove.
 	Scheduled bool `json:"scheduled"`
+	// PreMigration is whether the server took it on its own, just before an
+	// update changed the database. Only these count toward PreMigrationKeep.
+	PreMigration bool `json:"pre_migration"`
 }
 
 /*
@@ -94,6 +97,33 @@ func NewScheduledName(now time.Time) string {
 // IsScheduled reports whether a name is one the schedule wrote.
 func IsScheduled(name string) bool {
 	return strings.HasSuffix(name, ScheduledTag+Ext)
+}
+
+/*
+ * A pre-migration backup is the one the server takes for itself, just before an
+ * update changes the database's shape.
+ *
+ * Migrations only go forward (ADR 0058), so the file that would undo a bad one
+ * is the one from just before it ran, and that is exactly the backup nobody
+ * thinks to take: an update arrives from the tray or the in-app updater and
+ * the migration runs on the way back up. The name carries the revision it was
+ * taken at, so a list can say which update it came before.
+ */
+const PreMigrationTag = "-premigrate"
+
+// PreMigrationKeep is how many of them are kept. Three updates back is enough
+// to undo the last few changes of shape; a schema-changing update every week
+// would otherwise add a database's worth of disk each time, for ever.
+const PreMigrationKeep = 3
+
+// NewPreMigrationName is what a pre-migration backup is called.
+func NewPreMigrationName(now time.Time, from int) string {
+	return fmt.Sprintf("%s%s-schema%d%s%s", Prefix, now.Format("20060102-150405"), from, PreMigrationTag, Ext)
+}
+
+// IsPreMigration reports whether a name is one the server took before a migration.
+func IsPreMigration(name string) bool {
+	return strings.HasSuffix(name, PreMigrationTag+Ext)
 }
 
 // LastScheduled is when the schedule last took a backup, from the files
@@ -132,13 +162,23 @@ func Due(last, now time.Time, every time.Duration) bool {
  * as one: the schedule never deletes the backup it has just taken.
  */
 func Expired(files []File, keep int) []string {
+	return expired(files, keep, func(f File) bool { return f.Scheduled })
+}
+
+// ExpiredPreMigration names the pre-migration backups past the newest keep,
+// by the same rule as Expired: only their own kind is counted or named.
+func ExpiredPreMigration(files []File, keep int) []string {
+	return expired(files, keep, func(f File) bool { return f.PreMigration })
+}
+
+func expired(files []File, keep int, counts func(File) bool) []string {
 	if keep < 1 {
 		keep = 1
 	}
 	var out []string
 	seen := 0
 	for _, f := range files {
-		if !f.Scheduled {
+		if !counts(f) {
 			continue
 		}
 		seen++
@@ -232,7 +272,7 @@ func (d *Dir) List() ([]File, error) {
 		}
 
 		f := File{Name: name, Bytes: info.Size(), TakenAt: info.ModTime().Unix(),
-			Scheduled: IsScheduled(name)}
+			Scheduled: IsScheduled(name), PreMigration: IsPreMigration(name)}
 		snap, err := store.InspectSnapshot(filepath.Join(d.path, name))
 		switch {
 		case err == nil:
@@ -274,4 +314,51 @@ func (d *Dir) Remove(name string) error {
 		return fmt.Errorf("delete backup %s: %w", name, err)
 	}
 	return nil
+}
+
+/*
+ * PreMigrate takes the backup before a migration, then sweeps the older ones.
+ *
+ * snapshot is the store's, handed over by store.OpenWith while the database is
+ * still at revision from. The sweep runs only after the new file is written,
+ * for the reason the schedule's does: a failure on a full disk must not then
+ * delete the copies that already exist. A sweep that cannot remove a file is
+ * reported and is not a failure, because the backup it was making room after
+ * has been taken.
+ */
+func (d *Dir) PreMigrate(now time.Time, from int, snapshot func(path string) (store.Snapshot, error)) (taken File, removed []string, err error) {
+	if err := d.Create(); err != nil {
+		return File{}, nil, err
+	}
+	var path, name string
+	for n := 0; n < 60; n++ {
+		name = NewPreMigrationName(now.Add(time.Duration(n)*time.Second), from)
+		if path, err = d.Resolve(name); err != nil {
+			return File{}, nil, err
+		}
+		if _, statErr := os.Stat(path); os.IsNotExist(statErr) {
+			break
+		}
+		path = ""
+	}
+	if path == "" {
+		return File{}, nil, fmt.Errorf("no free backup name near %s", now.Format(time.RFC3339))
+	}
+	snap, err := snapshot(path)
+	if err != nil {
+		return File{}, nil, err
+	}
+	taken = File{Name: name, Bytes: snap.Bytes, TakenAt: snap.TakenAt,
+		SchemaVersion: snap.SchemaVersion, Restorable: true, PreMigration: true}
+
+	files, err := d.List()
+	if err != nil {
+		return taken, nil, nil
+	}
+	for _, old := range ExpiredPreMigration(files, PreMigrationKeep) {
+		if d.Remove(old) == nil {
+			removed = append(removed, old)
+		}
+	}
+	return taken, removed, nil
 }

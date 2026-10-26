@@ -339,3 +339,101 @@ func TestLastScheduledIgnoresManualBackups(t *testing.T) {
 		t.Error("a manual backup counted as the schedule's last run")
 	}
 }
+
+func TestPreMigrationNamesAreRecognisedAndResolvable(t *testing.T) {
+	name := NewPreMigrationName(time.Date(2026, 10, 26, 9, 5, 0, 0, time.Local), 78)
+	if name != "lancast-backup-20261026-090500-schema78-premigrate.db" {
+		t.Fatalf("name = %q", name)
+	}
+	if !IsPreMigration(name) || IsScheduled(name) {
+		t.Fatalf("%q: pre-migration %v, scheduled %v", name, IsPreMigration(name), IsScheduled(name))
+	}
+	if _, err := New(t.TempDir()).Resolve(name); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// The schedule's rotation and this one each count only their own kind: a
+// pre-update backup never pushes a scheduled one out, or the other way round,
+// and one taken by hand is never touched by either.
+func TestExpiryKeepsEachKindToItself(t *testing.T) {
+	files := []File{
+		{Name: "a", PreMigration: true},
+		{Name: "b", Scheduled: true},
+		{Name: "c", PreMigration: true},
+		{Name: "d"},
+		{Name: "e", PreMigration: true},
+		{Name: "f", PreMigration: true},
+		{Name: "g", Scheduled: true},
+	}
+	if got := ExpiredPreMigration(files, 3); len(got) != 1 || got[0] != "f" {
+		t.Fatalf("pre-migration expired = %v, want [f]", got)
+	}
+	if got := Expired(files, 1); len(got) != 1 || got[0] != "g" {
+		t.Fatalf("scheduled expired = %v, want [g]", got)
+	}
+}
+
+func TestPreMigrateTakesTheOldRevisionAndKeepsThree(t *testing.T) {
+	dataDir := t.TempDir()
+	d := New(dataDir)
+	path := filepath.Join(dataDir, "lancast.db")
+	db, err := sql.Open("sqlite", path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	db.Exec(`CREATE TABLE leftover (x INTEGER)`)
+	db.Close()
+
+	// Four updates' worth, each a second apart, plus a manual backup that must survive.
+	manual := writeBackup(t, d, NewName(time.Now().Add(-time.Hour)))
+	base := time.Now().Add(-10 * time.Minute)
+	var last File
+	var removed []string
+	for i := 0; i < 4; i++ {
+		ts := base.Add(time.Duration(i) * time.Minute)
+		os.Remove(path)
+		db, _ := sql.Open("sqlite", path)
+		db.Exec(`CREATE TABLE leftover (x INTEGER)`)
+		db.Close()
+		st, err := store.OpenWith(path, store.OpenOptions{BeforeMigrate: func(from, _ int, snapshot func(string) (store.Snapshot, error)) error {
+			var err error
+			last, removed, err = d.PreMigrate(ts, from, snapshot)
+			if err == nil {
+				// Give each file its own time, so newest-first is the order taken.
+				os.Chtimes(filepath.Join(d.Path(), last.Name), ts, ts)
+			}
+			return err
+		}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		st.Close()
+	}
+
+	if !last.PreMigration || last.SchemaVersion != 1 {
+		t.Fatalf("last taken = %+v", last)
+	}
+	if len(removed) != 1 {
+		t.Fatalf("removed %v on the fourth, want the oldest one", removed)
+	}
+	files, err := d.List()
+	if err != nil {
+		t.Fatal(err)
+	}
+	pre := 0
+	for _, f := range files {
+		if f.PreMigration {
+			pre++
+			if !f.Restorable {
+				t.Errorf("%s is not restorable: %s", f.Name, f.Problem)
+			}
+		}
+	}
+	if pre != PreMigrationKeep {
+		t.Fatalf("%d pre-migration backups kept, want %d", pre, PreMigrationKeep)
+	}
+	if _, err := os.Stat(manual); err != nil {
+		t.Fatalf("a backup taken by hand was removed: %v", err)
+	}
+}

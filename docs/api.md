@@ -5507,7 +5507,8 @@ written, so a backup file cannot sign anyone in.
       "taken_at": 1788452729,
       "schema_version": 39,
       "restorable": true,
-      "scheduled": false }
+      "scheduled": false,
+      "pre_migration": false }
   ],
   "folder": "C:\\ProgramData\\LANcast\\backups",
   "restore_command": "LANcast-Server.exe restore -from <file> -yes"
@@ -5532,6 +5533,17 @@ not a readable backup.
 Settings) rather than a person. Only scheduled backups are ever deleted to keep
 the count at `backup_keep`; one taken by hand stays until somebody deletes it.
 
+`pre_migration` is whether the server took it on its own, at startup, just
+before an update changed the shape of the database. Migrations only go forward,
+so this is the file that undoes one. It is named
+`lancast-backup-<time>-schema<N>-premigrate.db`, `N` being the revision it
+holds, and is taken only when a migration is pending on a database that already
+existed — never on a new install, and never on a start that changes nothing.
+The newest three are kept and older ones deleted when the next is taken; they
+are never counted toward `backup_keep`, and the schedule never deletes them. A
+failure to take one is logged as `backup before the database update failed`
+and does not stop the server starting.
+
 **An unreadable backup is listed and marked, never omitted.** A backup that has
 gone bad is the single most important thing this endpoint can report, and a list
 that quietly dropped it would say the opposite of the truth.
@@ -5544,7 +5556,7 @@ list element:
 ```json
 { "name": "lancast-backup-20260903-144529.db", "bytes": 102834176,
   "taken_at": 1788452729, "schema_version": 39, "restorable": true,
-  "scheduled": false }
+  "scheduled": false, "pre_migration": false }
 ```
 
 **Synchronous**, and deliberately not a background job with progress: it is

@@ -7346,6 +7346,8 @@ export interface components {
             problem?: string;
             /** @description Whether the backup schedule took it rather than a person. Only scheduled backups are deleted to keep the count at backup_keep. */
             scheduled: boolean;
+            /** @description Whether the server took it on its own, just before an update changed the database. Named with -schema<N>-premigrate before the extension, N being the revision it holds. The newest three are kept; older ones are deleted when the next is taken. Never counted toward backup_keep. */
+            pre_migration: boolean;
         };
         /**
          * @description A backup is a snapshot of the database and nothing else (ADR 0058).
