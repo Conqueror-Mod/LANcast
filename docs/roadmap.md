@@ -1603,7 +1603,7 @@ group is not priority.
   `security.md` and `architecture.md` now describe what is built (status
   v0.9.94, 92 ADRs, `LANcast.exe reset-auth`, ACME, passkeys, the custom
   certificate, per-library visibility, session sign-out, crash reports stated
-  as local). The recurring check is still open. Found by an outside review (2026-10-25)
+  as local). The recurring check is `internal/projectdocs/readme_test.go`: the status line and ADR count must match the repo. Found by an outside review (2026-10-25)
   that read the repository the way a stranger would, and was misled by it. The
   README's status line says v0.8.34 and "50 decision records" (there are 92);
   `security.md` gives the recovery command as `lancastd reset-auth`, which no

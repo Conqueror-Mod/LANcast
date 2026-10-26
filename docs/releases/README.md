@@ -8,3 +8,8 @@ anybody's server.
 
 A version with no file here shows no notes in About. Nothing breaks; the pane
 says there are none.
+
+Bump the status line at the top of the repository README to the same version
+in the same commit. `internal/projectdocs/readme_test.go` fails until it
+matches the newest file here, because a stale version is the first thing a
+stranger reads.
