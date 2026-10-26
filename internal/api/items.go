@@ -860,6 +860,40 @@ func (s *Server) itemCollections(w http.ResponseWriter, r *http.Request) {
 	s.decorateAndWriteItems(w, r, cols)
 }
 
+/*
+ * collectionFilms is a collection's whole film list (ADR 0093): every film the
+ * provider puts in it, in release order, each carrying the library's copy as
+ * item_id where there is one. What lets the collection's page say "you have
+ * 3 of 5" and show the two that are not here.
+ *
+ * Anything but a collection answers an empty list, as does a collection whose
+ * list has not been fetched yet. The account's limits shape it — see
+ * store.CollectionFilmsFor.
+ */
+func (s *Server) collectionFilms(w http.ResponseWriter, r *http.Request) {
+	id, ok := pathID(r)
+	if !ok {
+		writeError(w, http.StatusBadRequest, "bad_request", "invalid item id")
+		return
+	}
+	it, err := s.st.GetItem(r.Context(), id, s.userID(r))
+	if s.notFoundOr(w, err, "get item", "no such item") {
+		return
+	}
+	films := []store.ListedFilm{}
+	if it.Kind == "collection" {
+		got, err := s.st.CollectionFilmsFor(r.Context(), id, s.userID(r))
+		if err != nil {
+			s.writeInternal(w, err, "list collection films")
+			return
+		}
+		if got != nil {
+			films = got
+		}
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"films": films})
+}
+
 func (s *Server) putProgress(w http.ResponseWriter, r *http.Request) {
 	id, ok := pathID(r)
 	if !ok {

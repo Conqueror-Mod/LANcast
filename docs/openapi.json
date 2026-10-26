@@ -1510,6 +1510,50 @@
         }
       }
     },
+    "/items/{id}/films": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/ItemId"
+        }
+      ],
+      "get": {
+        "operationId": "listCollectionFilms",
+        "tags": [
+          "items"
+        ],
+        "summary": "A collection's whole film list, owned or not",
+        "description": "Every film the provider puts in this collection, in release order, each carrying the library's copy as `item_id` where there is one (ADR 0093). Anything but a collection, or a collection whose list has not been fetched, answers an empty list. An owned film the account may not open is left out, and an account with a rating ceiling is shown no missing films. An item the account cannot open is 404.",
+        "responses": {
+          "200": {
+            "description": "The films, or an empty list.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "films"
+                  ],
+                  "properties": {
+                    "films": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/CollectionFilm"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
     "/items/{id}/afterwards": {
       "parameters": [
         {
@@ -19814,6 +19858,42 @@
               "format": "int64"
             },
             "description": "The libraries whose scans were stopped. Empty when nothing was running."
+          }
+        }
+      },
+      "CollectionFilm": {
+        "type": "object",
+        "description": "One film a provider lists in a collection.",
+        "required": [
+          "external_id",
+          "title"
+        ],
+        "properties": {
+          "external_id": {
+            "type": "string",
+            "description": "The provider's id for the film."
+          },
+          "title": {
+            "type": "string"
+          },
+          "year": {
+            "type": "integer"
+          },
+          "overview": {
+            "type": "string"
+          },
+          "poster": {
+            "type": "string",
+            "description": "An artwork hash for /api/artwork/{hash}: the owned film's own poster, else one fetched for the listing. Absent when there is neither."
+          },
+          "item_id": {
+            "type": "integer",
+            "format": "int64",
+            "description": "The film in this library. Absent when it is not here."
+          },
+          "upcoming": {
+            "type": "boolean",
+            "description": "Not released yet: undated, or dated in the future."
           }
         }
       },

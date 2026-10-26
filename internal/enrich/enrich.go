@@ -37,6 +37,10 @@ type Store interface {
 	ArtworkExists(ctx context.Context, hash string) (bool, error)
 	EnsureCollection(ctx context.Context, libraryID int64, provider, externalID, name, sortTitle string) (int64, bool, error)
 	SetCollectionOverview(ctx context.Context, collectionID int64, overview string) error
+	ReplaceCollectionFilms(ctx context.Context, collectionID int64, provider string, films []store.CollectionFilm) error
+	CollectionFilmsNeedingPosters(ctx context.Context, collectionID int64, provider string) ([]string, error)
+	SetCollectionFilmPoster(ctx context.Context, collectionID int64, provider, externalID, hash string) error
+	CollectionsNeedingFilms(ctx context.Context, limit int) ([]store.CollectionNeedingFilms, error)
 	AddToCollection(ctx context.Context, itemID, collectionID int64, ord int) error
 }
 
@@ -185,6 +189,7 @@ func (w *Worker) Run(ctx context.Context) error {
 		// Nothing left to look at. With a non-zero offset this is the real
 		// terminating condition: the run has walked the whole queue.
 		if len(items) == 0 {
+			w.backfillCollections(ctx)
 			return nil
 		}
 
@@ -690,6 +695,7 @@ func (w *Worker) ingestCollection(ctx context.Context, item store.Item, remotes 
 				w.log.Warn("collection overview failed", "collection", c.Name, "error", err)
 			}
 		}
+		w.saveCollectionFilms(ctx, collID, rec.Source, c.Films)
 		// Download the collection's poster and backdrop once, when it is first
 		// created — every other member would fetch the identical images.
 		if created {
@@ -865,5 +871,94 @@ func (w *Worker) storeFaces(ctx context.Context, itemID int64, provider string, 
 		if err := w.st.SetPersonThumb(ctx, provider, c.Name, hash); err != nil {
 			w.log.Debug("cast picture record failed", "person", c.Name, "error", err)
 		}
+	}
+}
+
+/*
+ * saveCollectionFilms stores a collection's whole film list (ADR 0093) and
+ * fetches posters for the films not in the library, once each.
+ *
+ * Nil films means the provider did not say, and leaves the stored list alone:
+ * a failed lookup must never empty a list that was right yesterday.
+ *
+ * Posters only for missing films, because an owned film is drawn with its own,
+ * and only for those with none yet, so a refresh costs no image fetches.
+ * Best-effort throughout, like the rest of collection handling.
+ */
+func (w *Worker) saveCollectionFilms(ctx context.Context, collID int64, provider string, films []meta.CollectionFilm) {
+	if films == nil {
+		return
+	}
+	rows := make([]store.CollectionFilm, 0, len(films))
+	posterOf := make(map[string]string, len(films))
+	for _, f := range films {
+		rows = append(rows, store.CollectionFilm{
+			ExternalID: f.ExternalID, Title: f.Title, Year: f.Year,
+			ReleasedAt: f.ReleasedAt, Overview: f.Overview,
+		})
+		posterOf[f.ExternalID] = f.PosterURL
+	}
+	if err := w.st.ReplaceCollectionFilms(ctx, collID, provider, rows); err != nil {
+		w.log.Warn("save collection films failed", "collection", collID, "error", err)
+		return
+	}
+	need, err := w.st.CollectionFilmsNeedingPosters(ctx, collID, provider)
+	if err != nil {
+		w.log.Warn("collection film posters failed", "collection", collID, "error", err)
+		return
+	}
+	for _, ext := range need {
+		url := posterOf[ext]
+		if url == "" {
+			continue
+		}
+		hash, _, _, _, err := w.art.Download(ctx, url)
+		if err != nil {
+			w.log.Debug("collection film poster download failed", "collection", collID, "film", ext, "error", err)
+			continue
+		}
+		if err := w.st.SetCollectionFilmPoster(ctx, collID, provider, ext, hash); err != nil {
+			w.log.Warn("collection film poster record failed", "collection", collID, "error", err)
+		}
+	}
+}
+
+/*
+ * backfillCollections gives collections created before film lists existed
+ * their list and description, by asking the provider about the collection
+ * itself rather than re-enriching every member film.
+ *
+ * Runs at the end of an enrichment pass, which the server starts at boot, so
+ * an upgraded library fills in without anybody pressing Refresh. Once every
+ * collection has a list this is one query that finds nothing.
+ *
+ * One pass over what needs it, not a loop until done: a collection the
+ * provider cannot answer for stays in the list, and retrying it at once would
+ * be the same failure again.
+ */
+func (w *Worker) backfillCollections(ctx context.Context) {
+	need, err := w.st.CollectionsNeedingFilms(ctx, 500)
+	if err != nil {
+		w.log.Warn("collection backfill failed", "error", err)
+		return
+	}
+	for _, c := range need {
+		if ctx.Err() != nil {
+			return
+		}
+		ref, err := w.reg.Collection(ctx, c.Provider, c.ExternalID)
+		if err != nil {
+			w.log.Debug("collection lookup failed", "collection", c.ID, "error", err)
+			continue
+		}
+		if ref == nil {
+			continue
+		}
+		if ref.Overview != "" {
+			if err := w.st.SetCollectionOverview(ctx, c.ID, ref.Overview); err != nil {
+				w.log.Warn("collection overview failed", "collection", c.ID, "error", err)
+			}
+		}
+		w.saveCollectionFilms(ctx, c.ID, c.Provider, ref.Films)
 	}
 }

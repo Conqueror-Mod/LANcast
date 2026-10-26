@@ -73,7 +73,9 @@ func (s *Store) ReferencedArtworkHashes(ctx context.Context) (map[string]bool, e
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT hash FROM artwork WHERE hash IS NOT NULL AND hash <> ''
 		UNION
-		SELECT thumb_hash FROM person WHERE thumb_hash IS NOT NULL AND thumb_hash <> ''`)
+		SELECT thumb_hash FROM person WHERE thumb_hash IS NOT NULL AND thumb_hash <> ''
+		UNION
+		SELECT poster_hash FROM collection_film WHERE poster_hash IS NOT NULL AND poster_hash <> ''`)
 	if err != nil {
 		return nil, fmt.Errorf("referenced artwork: %w", err)
 	}

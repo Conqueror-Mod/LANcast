@@ -501,6 +501,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/items/{id}/films": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The item's id. */
+                id: components["parameters"]["ItemId"];
+            };
+            cookie?: never;
+        };
+        /**
+         * A collection's whole film list, owned or not
+         * @description Every film the provider puts in this collection, in release order, each carrying the library's copy as `item_id` where there is one (ADR 0093). Anything but a collection, or a collection whose list has not been fetched, answers an empty list. An owned film the account may not open is left out, and an account with a rating ceiling is shown no missing films. An item the account cannot open is 404.
+         */
+        get: operations["listCollectionFilms"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/items/{id}/afterwards": {
         parameters: {
             query?: never;
@@ -8402,6 +8425,23 @@ export interface components {
             /** @description The libraries whose scans were stopped. Empty when nothing was running. */
             cancelled: number[];
         };
+        /** @description One film a provider lists in a collection. */
+        CollectionFilm: {
+            /** @description The provider's id for the film. */
+            external_id: string;
+            title: string;
+            year?: number;
+            overview?: string;
+            /** @description An artwork hash for /api/artwork/{hash}: the owned film's own poster, else one fetched for the listing. Absent when there is neither. */
+            poster?: string;
+            /**
+             * Format: int64
+             * @description The film in this library. Absent when it is not here.
+             */
+            item_id?: number;
+            /** @description Not released yet: undated, or dated in the future. */
+            upcoming?: boolean;
+        };
         /** @description How far this account is through a collection's films. **Present on collections only**, in listings and on `GET /api/items/{id}`, and absent everywhere else and on a collection with no films on disk — an empty box set is not a finished one. `total` counts the same present members `child_count` does. `watched` counts members finished (`watched`); `in_progress` counts members with a saved position that are not finished. A collection is finished when `watched` equals `total`, and begun when either count is above zero. */
         CollectionProgress: {
             total: number;
@@ -9816,6 +9856,33 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ItemsPage"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    listCollectionFilms: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The item's id. */
+                id: components["parameters"]["ItemId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The films, or an empty list. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        films: components["schemas"]["CollectionFilm"][];
+                    };
                 };
             };
             401: components["responses"]["Unauthorized"];

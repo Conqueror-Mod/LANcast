@@ -6,7 +6,7 @@ import (
 )
 
 // CurrentSchemaVersion is the revision this build expects.
-const CurrentSchemaVersion = 78
+const CurrentSchemaVersion = 79
 
 // migration is one forward step. There are deliberately no down migrations:
 // rolling a media library's schema backwards loses data that a rescan cannot
@@ -145,6 +145,7 @@ var migrations = []migration{
 	{version: 76, sql: schemaRevision76},
 	{version: 77, sql: schemaRevision77},
 	{version: 78, sql: schemaRevision78},
+	{version: 79, sql: schemaRevision79},
 }
 
 // migrate brings the database up to CurrentSchemaVersion.
@@ -2426,4 +2427,33 @@ CREATE TABLE IF NOT EXISTS retro_account (
 const schemaRevision78 = `
 UPDATE media_item SET cover_checked_at = NULL
  WHERE kind = 'photo' AND missing = 0 AND taken_at IS NULL;
+`
+
+/*
+ * Revision 79 -- every film a collection holds, owned or not (ADR 0093).
+ *
+ * A provider's list of a collection's films, so the collection's page can say
+ * "you have 3 of 5" and show the two that are missing. Rows are the provider's
+ * statement, replaced whole on each refresh; whether a film is in the library
+ * is decided at read time against media_item, never stored here, so a film
+ * added later is owned the moment it is scanned and matched.
+ *
+ * poster_hash is a file in the artwork cache, downloaded only for films not in
+ * the library (an owned film has its own). The prune counts it as referenced.
+ *
+ * Cascades with the collection: a collection removed takes its list with it.
+ */
+const schemaRevision79 = `
+CREATE TABLE IF NOT EXISTS collection_film (
+    collection_id INTEGER NOT NULL REFERENCES media_item(id) ON DELETE CASCADE,
+    provider      TEXT    NOT NULL,
+    external_id   TEXT    NOT NULL,
+    ord           INTEGER NOT NULL,
+    title         TEXT    NOT NULL,
+    year          INTEGER,
+    released_at   INTEGER,
+    overview      TEXT,
+    poster_hash   TEXT,
+    PRIMARY KEY (collection_id, provider, external_id)
+);
 `
