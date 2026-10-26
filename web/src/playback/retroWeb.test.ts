@@ -60,12 +60,13 @@ describe("which consoles play here", () => {
     expect(webAvailability(null, cores(true), desk).available).toBe(false);
   });
 
-  // ADR 0077 Decision 6: no play on a phone until on-screen controls exist,
-  // unless a controller is connected.
-  it("needs a controller on a touch screen", () => {
-    expect(webAvailability("nes", cores(true), { coarse: true, gamepads: 0 }).reason).toBe(
-      "Plays with a controller, or in the LANcast desktop app.",
-    );
+  // ADR 0077 Decision 6: a phone plays with on-screen controls now, so a touch
+  // screen with no controller is offered play like any other.
+  it("offers a touch screen play, controller or not", () => {
+    expect(webAvailability("nes", cores(true), { coarse: true, gamepads: 0 })).toMatchObject({
+      available: true,
+      core: "fceumm",
+    });
     expect(webAvailability("nes", cores(true), { coarse: true, gamepads: 1 }).available).toBe(true);
   });
 });

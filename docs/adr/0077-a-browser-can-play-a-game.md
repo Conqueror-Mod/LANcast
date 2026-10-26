@@ -169,7 +169,7 @@ module the way libretro's own web player does.
    - how they hand over to a real pad when one connects.
 
    Until then a phone shows the game's page and *"Plays with a controller, or
-   in the desktop app."*
+   in the desktop app."* (Built 2026-10-25; see the note at the end of "As built: part c".)
 7. **The desktop client keeps its native player.** The browser player is for
    clients that have no other, and the desktop app never falls back to it: the
    native player is faster, has OpenGL for N64, uses the more accurate cores,
@@ -272,7 +272,42 @@ the whole round trip:
 4. Continue restored both, and two seconds after Start the game was back
    mid-intro where it had been left.
 
-**Still to come:** phone on-screen controls (Decision 6).
+**Built 2026-10-25: on-screen controls for phones (Decision 6).** Phones are
+now offered play; `webAvailability` no longer refuses a touch screen without
+a controller. Decision 6's three questions:
+- **Which controls each console gets** (`padLayout` in `touchPad.ts`):
+  - NES, Game Boy and Game Boy Color get a d-pad, B, A, Select and Start.
+  - GBA adds L and R.
+  - Master System gets 1 and 2 (Gearsystem reads them from B and A) and Start.
+  - Mega Drive gets A, B and C (from Y, B and A, by the libretro convention)
+    and Start; the three-button pad, not the six.
+  - The two non-Nintendo mappings follow convention and have not been checked
+    in a game.
+- **Where they sit** (`RetroTouchControls.css`):
+  - Portrait puts the d-pad and face buttons in one row under the game, with
+    Start and Select below them. All three side by side need about 500px;
+    measured at 390, the face buttons ran off the screen.
+  - Landscape lays them translucent over the black bars, a step smaller on a
+    short screen. On an 844×390 phone, a GBA picture's bars are 130px.
+  - Checked by eye and by measurement at 360 and 390 portrait and 844×390
+    landscape, for GBA and Mega Drive (the widest).
+- **Handing over to a pad.** The controls show only on a touch screen with no
+  controller, hide when `gamepadconnected` fires, and return on disconnect.
+
+**How a touch reaches the game.** Each control dispatches the KeyboardEvent
+RetroArch's default bindings give its RetroPad button: the arrows, x and z
+for A and B, s and a for X and Y, q and w for L and R, Enter, and the right
+Shift. Emscripten's listeners don't check `isTrusted`; checked on the
+installed service, a dispatched F1 opened RetroArch's quick menu.
+- RetroArch reads keys once a frame, so a key is held from touch-down to
+  touch-up, never tapped for a fixed time.
+- A cancelled touch, a hidden page or a lost window focus releases every held
+  key.
+
+**Not yet seen:** a real phone in hand.
+
+**Still to come:** nothing in this ADR beyond a pad, a television and a real
+phone in hand.
 
 **Built 2026-10-25: numbered states in the browser.** The browser saves to the
 same three slots as the desktop menu (`state-1`–`state-3`), through a *Save

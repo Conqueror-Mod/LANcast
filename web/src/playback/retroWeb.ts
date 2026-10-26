@@ -118,9 +118,10 @@ export function installedCoreFor(platform: string | null | undefined, cores: Web
 /*
  * Whether this browser can play a console now, and if not, why not.
  *
- * Phones are not offered play until there are on-screen controls (ADR 0077
- * Decision 6); one with a controller connected is, because then it is just a
- * small screen.
+ * Phones are offered play: the game screen gives a touch screen on-screen
+ * controls (ADR 0077 Decision 6, RetroTouchControls.tsx), and steps them aside
+ * for a controller. `env` stays in the signature for the reason it was added:
+ * this is where a device that cannot play would be told so.
  */
 export function webAvailability(
   platform: string | null | undefined,
@@ -146,9 +147,7 @@ export function webAvailability(
         "Plays in a browser once an administrator downloads the browser cores, in Settings → Retro games. Or play it in the LANcast desktop app.",
     };
   }
-  if (env.coarse && env.gamepads === 0) {
-    return { available: false, reason: "Plays with a controller, or in the LANcast desktop app." };
-  }
+  void env;
   return { available: true, core: c.name, licence: c.licence };
 }
 
