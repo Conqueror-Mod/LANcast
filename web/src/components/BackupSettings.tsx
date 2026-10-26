@@ -48,17 +48,28 @@ export function takenAt(epochSeconds: number): string {
 }
 
 /*
- * waitForRestart polls until the server has gone and come back, then reloads.
+ * What one look at the server says about the restart: not answering, still the
+ * session that asked for the restore, or answering with that session gone.
+ */
+export type ServerState = "down" | "same" | "restarted";
+
+/*
+ * waitForRestart polls until the server is back with the restored database,
+ * then reloads.
  *
- * "Come back" alone is not enough: the first poll can land before the server
- * has stopped, and reloading then would show the old database for a moment
- * and sign the person out of nothing. So it waits to see the server not
- * answer, then answer. After a minute and a half it reloads anyway, which
- * lands on the sign-in page or on the browser's own error, either of which
- * says more than a spinner that never stops.
+ * "Answers" alone is not enough: the first poll can land before the server has
+ * stopped, and reloading then would show the old database for a moment. Two
+ * things count as back. Seeing the server not answer and then answer again;
+ * and the server answering with this session gone, which only the restore
+ * does — the backup holds no sessions. The second exists because the first
+ * can be missed: a restart quick enough that every poll got an answer left
+ * this waiting for its whole fallback while the app, finding itself signed
+ * out, put the sign-in page up over the old cache (2026-10-26, a library still
+ * wearing the name the restore had taken away). After a minute and a half it
+ * reloads anyway.
  */
 export async function waitForRestart(
-  answers: () => Promise<boolean>,
+  look: () => Promise<ServerState>,
   reload: () => void,
   wait: (ms: number) => Promise<void> = (ms) => new Promise((r) => setTimeout(r, ms)),
   limitMs = 90_000,
@@ -66,20 +77,27 @@ export async function waitForRestart(
   const started = Date.now();
   let wentAway = false;
   while (Date.now() - started < limitMs) {
-    const up = await answers();
-    if (!up) wentAway = true;
+    const state = await look();
+    if (state === "restarted") break;
+    if (state === "down") wentAway = true;
     else if (wentAway) break;
     await wait(1000);
   }
   reload();
 }
 
-async function healthAnswers(): Promise<boolean> {
+async function lookAtServer(): Promise<ServerState> {
   try {
-    const r = await fetch("/api/health", { cache: "no-store" });
-    return r.ok;
+    const health = await fetch("/api/health", { cache: "no-store" });
+    if (!health.ok) return "down";
+    const status = await fetch("/api/auth/status", { cache: "no-store" });
+    if (!status.ok) return "down";
+    const body = (await status.json()) as { authenticated?: boolean };
+    // Only an explicit "not signed in" counts. An answer without the field is
+    // not this server's auth status and proves nothing either way.
+    return body.authenticated === false ? "restarted" : "same";
   } catch {
-    return false;
+    return "down";
   }
 }
 
@@ -99,7 +117,7 @@ export function BackupSettings() {
 
   useEffect(() => {
     if (!restoring) return;
-    void waitForRestart(healthAnswers, () => window.location.reload());
+    void waitForRestart(lookAtServer, () => window.location.reload());
   }, [restoring]);
 
   const backups = data?.backups ?? [];

@@ -34,13 +34,16 @@ import { MiniPlayer } from "@/components/MiniPlayer";
 import { PlaybackProvider } from "@/playback/PlaybackProvider";
 import { TogetherProvider } from "@/playback/TogetherProvider";
 import { JoinRequestPrompt } from "@/components/JoinRequestPrompt";
-import { useAuthStatus } from "@/api/hooks";
+import { useAuthStatus, useForgetEndedSession } from "@/api/hooks";
 import { ServerEvents } from "@/api/serverEvents";
 import { DesignBench } from "@/screens/DesignBench";
 import "@/playback/playback.css";
 
 export function App() {
   const { data: auth, isLoading } = useAuthStatus();
+  // A session that ends any way but signing out (a restore, a password
+  // change, "sign out every other device") leaves nothing cached behind.
+  useForgetEndedSession(auth?.authenticated ? auth.user?.id : undefined);
 
   /*
    * The design bench sits in front of the gate, in dev builds only.
