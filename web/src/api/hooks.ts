@@ -70,6 +70,7 @@ import type {
   Trailer,
   Peer,
   PeerInvite,
+  CollectionFilm,
   PeerPresence,
   SharedLibrary,
   PeerLibrary,
@@ -951,6 +952,24 @@ export function useCollectionMembers(collectionID: number, enabled: boolean) {
         `/api/items?collection_id=${collectionID}`,
         signal,
       ).then((r) => r.items),
+    enabled: enabled && collectionID > 0,
+  });
+}
+
+/*
+ * A collection's whole film list, owned or not (ADR 0093).
+ *
+ * Keyed under ["items"] — a child, not a sibling — because what it answers
+ * changes with the library: a film scanned and matched becomes owned, and every
+ * write that changes a library already invalidates ["items"].
+ */
+export function useCollectionFilms(collectionID: number, enabled: boolean) {
+  return useQuery({
+    queryKey: ["items", "collection-films", collectionID],
+    queryFn: ({ signal }) =>
+      apiGet<{ films: CollectionFilm[] }>(`/api/items/${collectionID}/films`, signal).then(
+        (r) => r.films ?? [],
+      ),
     enabled: enabled && collectionID > 0,
   });
 }

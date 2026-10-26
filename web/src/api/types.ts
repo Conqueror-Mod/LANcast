@@ -321,6 +321,7 @@ export type PeerPresence = components["schemas"]["PeerPresence"];
 export type Peer = components["schemas"]["Peer"];
 
 export type PeerInvite = components["schemas"]["PeerInvite"];
+export type CollectionFilm = components["schemas"]["CollectionFilm"];
 
 /*
  * One library and what a paired server may see of it (ADR 0071 §1).

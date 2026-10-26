@@ -48,7 +48,7 @@ import {
 import { platformLabel } from "@/lib/platforms";
 import { retroAvailability } from "@/playback/retro";
 import { WEB_STATE_PREFIX, webStateCore } from "@/playback/retroWeb";
-import { useGameSaves, useItemCollections, useOnWatchlist, useSetWatchlist, useOptimized, useSetOptimized, optimizedOf } from "@/api/hooks";
+import { useCollectionFilms, useGameSaves, useItemCollections, useOnWatchlist, useSetWatchlist, useOptimized, useSetOptimized, optimizedOf } from "@/api/hooks";
 import type { OptimizedList } from "@/api/types";
 import { useQuery } from "@tanstack/react-query";
 import type { Item } from "@/api/types";
@@ -61,6 +61,8 @@ import { AddToPlaylist } from "@/components/AddToPlaylist";
 import { ChoosePoster } from "@/components/ChoosePoster";
 import { RenamePlaylist } from "@/components/RenamePlaylist";
 import { EditDescription } from "@/components/EditDescription";
+import { MissingFilms } from "@/components/MissingFilms";
+import { collectionSummary, missingFilms } from "@/lib/collectionSummary";
 import { PosterTile } from "@/components/PosterTile";
 import { useItemActions, useMarkAll } from "@/components/itemActions";
 import { isWatched } from "@/lib/watchedMark";
@@ -477,6 +479,8 @@ export function Detail() {
     itemID,
     container && isCollection,
   );
+  // Every film the provider lists in it, owned or not (ADR 0093).
+  const { data: collectionFilms } = useCollectionFilms(itemID, isCollection);
   // A playlist's entries come from playlist_entry, not parent_id — and unlike
   // every other container they may repeat (ADR 0030).
   const isPlaylist = item?.kind === "playlist";
@@ -832,6 +836,17 @@ export function Detail() {
     container && children && children.length > 0
       ? childCountLabel(children.length, children[0].kind)
       : "",
+    /*
+     * A collection has no year, runtime or certificate of its own, so its
+     * line said only "5 films". It now says the span, the time it would take,
+     * how far through it you are, and how much of it you have.
+     */
+    ...(isCollection
+      ? (() => {
+          const s = collectionSummary(item, members ?? [], collectionFilms);
+          return [s.years, s.runtime, s.watched, s.owned];
+        })()
+      : []),
   ].filter(Boolean);
 
   return (
@@ -1412,6 +1427,7 @@ export function Detail() {
             )}
           </section>
         )}
+        {isCollection && <MissingFilms films={missingFilms(collectionFilms)} />}
       </div>
 
       {viewerOpen && children && (
