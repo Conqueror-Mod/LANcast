@@ -157,6 +157,9 @@ type Deps struct {
 type Server struct {
 	// proxies is the parsed trusted-proxy list (proxies.go).
 	proxies proxyCache
+	// counters and started feed GET /api/metrics (metrics.go).
+	counters metricsCounters
+	started  time.Time
 	// opt is the optimized-copy worker's state (ADR 0087), made on first use.
 	opt     *optimizedState
 	optOnce sync.Once
@@ -360,6 +363,7 @@ func New(d Deps) *Server {
 		peerKick:     make(chan string, 16),
 		presenceSeen: map[string]string{},
 	}
+	s.started = time.Now()
 	// The store announces what its writes change; every open window hears it
 	// (ADR 0079). Registered here so no caller can forget to wire it.
 	if d.Store != nil {
@@ -387,6 +391,11 @@ func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 
 	mux.HandleFunc("GET /api/health", s.health)
+	// Metrics (ADR 0096): an administrator, or the metrics token on this
+	// one route. Text, in the Prometheus exposition format.
+	mux.HandleFunc("GET /api/metrics", s.metricsRoute)
+	mux.HandleFunc("POST /api/metrics/token", s.adminOnly(s.createMetricsToken))
+	mux.HandleFunc("DELETE /api/metrics/token", s.adminOnly(s.deleteMetricsToken))
 	mux.HandleFunc("GET /api/about", s.about)
 
 	// The event stream (ADR 0079): names of things that changed, so an open
@@ -946,8 +955,20 @@ func (s *Server) Handler() http.Handler {
 	//
 	// Trusted proxies come first of all, so that everything inside — the log
 	// line included — sees the client a proxy forwarded rather than the proxy.
-	return auth.TrustProxies(s.trustedProxies, logRequests(s.log,
-		s.recoverPanics(negotiateAPIVersion(s.requireAuth(mux)))))
+	//
+	// The request count is outermost of all, so a request refused anywhere
+	// inside still counts.
+	return s.countRequests(auth.TrustProxies(s.trustedProxies, logRequests(s.log,
+		s.recoverPanics(negotiateAPIVersion(s.requireAuth(mux))))))
+}
+
+// countRequests counts every request, for lancast_http_requests_total.
+// Outermost, so a request refused at any gate still counts.
+func (s *Server) countRequests(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		s.counters.requests.Add(1)
+		next.ServeHTTP(w, r)
+	})
 }
 
 func logRequests(log *slog.Logger, next http.Handler) http.Handler {
@@ -1014,6 +1035,7 @@ func (s *Server) writeInternal(w http.ResponseWriter, err error, op string) {
 		writeError(w, statusClientClosed, "canceled", "request canceled")
 		return
 	}
+	s.counters.serverErrors.Add(1)
 	s.log.Error(op, "error", err)
 	writeError(w, http.StatusInternalServerError, "internal", "unexpected server error")
 }

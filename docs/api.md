@@ -5481,6 +5481,68 @@ so the database refuses it however the handler is later rewritten.
 
 The key stops authenticating immediately; there is no cache to wait out.
 
+## Metrics
+
+### `GET /api/metrics`
+
+Server metrics in the Prometheus text exposition format
+([ADR 0096](adr/0096-metrics-have-their-own-key.md)), `Content-Type:
+text/plain; version=0.0.4`.
+
+**Who may read them:** an administrator's session, or the **metrics token**
+presented as `Authorization: Bearer lcm_…`. The token is honoured on this one
+route and nowhere else; anywhere else it is an unknown key. An API key is
+refused here, as everywhere an administrator is required (ADR 0061). With no
+token made, only an administrator's session reads metrics.
+
+```
+# HELP lancast_library_items Items present in a library (missing files excluded), by kind.
+# TYPE lancast_library_items gauge
+lancast_library_items{library_id="1",library="Movies",kind="movie"} 1226
+```
+
+Every value is read at scrape time. The families:
+
+| Metric | Type | What |
+|---|---|---|
+| `lancast_build_info{version,api_version}` | gauge | Always 1 |
+| `lancast_uptime_seconds` | gauge | Since this server started |
+| `lancast_http_requests_total` | counter | Requests received |
+| `lancast_http_server_errors_total` | counter | Answered with an unexpected server error; a caller that went away is not counted |
+| `lancast_transcode_sessions{mode}` | gauge | Conversions running; `mode` is `encode` or `copy` |
+| `lancast_transcode_sessions_max` | gauge | `max_transcodes` |
+| `lancast_transcode_served_bytes` | gauge | Bytes the running conversions have handed over |
+| `lancast_library_items{library_id,library,kind}` | gauge | Present items, by kind |
+| `lancast_scan_last_finished_timestamp_seconds{library_id,library}` | gauge | When the last scan finished |
+| `lancast_scan_last_duration_seconds{library_id,library}` | gauge | How long it took, to the millisecond |
+| `lancast_scan_last_success{library_id,library}` | gauge | 1 completed, 0 failed or cancelled |
+| `lancast_accounts` | gauge | Accounts |
+| `lancast_sessions` | gauge | Unexpired sign-ins |
+| `lancast_backups` | gauge | Files in the backups folder |
+| `lancast_backup_last_timestamp_seconds` | gauge | The newest backup |
+| `lancast_database_bytes` | gauge | Database plus its write-ahead log |
+| `go_goroutines`, `go_memstats_heap_alloc_bytes`, `go_memstats_sys_bytes` | gauge | The Go runtime |
+
+Scan metrics appear for a library once it has been scanned since the server
+started. Nothing is per person.
+
+### `POST /api/metrics/token`
+
+Administrators only. Makes a new token, replacing any old one, which stops
+working at once. Answers `201`:
+
+```json
+{ "token": "lcm_q2V…", "created_at": 1793030000 }
+```
+
+**The token is in this answer and nowhere else.** Only its hash is kept;
+`GET /api/settings` reports `metrics_token: { configured, created_at }`.
+Recorded as `metrics.token`.
+
+### `DELETE /api/metrics/token`
+
+Administrators only. Revokes it. `204`, whether or not there was one.
+
 ## Backups
 
 A backup is a snapshot of the database and nothing else

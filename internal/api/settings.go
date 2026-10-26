@@ -93,6 +93,12 @@ func (s *Server) getSettings(w http.ResponseWriter, r *http.Request) {
 
 		// Never null, so a client can render the list without a guard.
 		"trusted_proxies": nonNil(cur.TrustedProxies),
+		// Whether a metrics token exists, and since when (ADR 0096). Never the
+		// token, which exists only in the answer that created it.
+		"metrics_token": map[string]any{
+			"configured": cur.MetricsTokenHash != "",
+			"created_at": cur.MetricsTokenCreated,
+		},
 		// Whether the server can actually inspect and convert media. Reported so
 		// the UI can say so plainly: without these, every file is direct-played
 		// and anything the browser cannot decode fails with no explanation — the

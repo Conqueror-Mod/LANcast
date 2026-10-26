@@ -554,6 +554,89 @@
         }
       }
     },
+    "/metrics": {
+      "get": {
+        "operationId": "getMetrics",
+        "tags": [
+          "operations"
+        ],
+        "summary": "Server metrics, for Prometheus",
+        "description": "The Prometheus text exposition format (ADR 0096). **Readable by an administrator's session, or by the metrics token** presented as `Authorization: Bearer lcm_…`. The token is honoured on this route and nowhere else. An API key is refused here as everywhere an administrator is required (ADR 0061).\n\nEvery value is read when scraped. Families: `lancast_build_info`, `lancast_uptime_seconds`, `lancast_http_requests_total`, `lancast_http_server_errors_total`, `lancast_transcode_sessions{mode}`, `lancast_transcode_sessions_max`, `lancast_transcode_served_bytes`, `lancast_library_items{library_id,library,kind}`, `lancast_scan_last_finished_timestamp_seconds`, `lancast_scan_last_duration_seconds` and `lancast_scan_last_success` (each `{library_id,library}`), `lancast_accounts`, `lancast_sessions`, `lancast_backups`, `lancast_backup_last_timestamp_seconds`, `lancast_database_bytes`, `go_goroutines`, `go_memstats_heap_alloc_bytes`, `go_memstats_sys_bytes`. Nothing is per person.",
+        "security": [
+          {
+            "sessionCookie": []
+          },
+          {
+            "metricsToken": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Metrics.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          }
+        }
+      }
+    },
+    "/metrics/token": {
+      "post": {
+        "operationId": "createMetricsToken",
+        "tags": [
+          "operations"
+        ],
+        "summary": "Make the metrics token",
+        "description": "**Administrators only.** Makes a new metrics token, replacing any old one, which stops working at once. **The token is in this answer and nowhere else**: only its hash is kept, and `GET /settings` says only whether one exists. Recorded as `metrics.token`.",
+        "responses": {
+          "201": {
+            "description": "The new token.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MetricsToken"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          }
+        }
+      },
+      "delete": {
+        "operationId": "deleteMetricsToken",
+        "tags": [
+          "operations"
+        ],
+        "summary": "Revoke the metrics token",
+        "description": "**Administrators only.** Idempotent: `204` whether or not there was one. Recorded as `metrics.token` when there was.",
+        "responses": {
+          "204": {
+            "description": "Revoked, or there was none."
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          }
+        }
+      }
+    },
     "/network": {
       "get": {
         "operationId": "getNetworkStatus",
@@ -13055,6 +13138,11 @@
         "scheme": "bearer",
         "description": "An API key (ADR 0061). Presented as `Authorization: Bearer <key>`, never in a query parameter — a credential in a URL is a credential in the server log, the browser history and the next request's Referer.\n\nA key authenticates as the account that made it, and may **never** perform administration or manage keys, whoever owns it. Cross-origin requests authenticated this way are allowed: the CSRF check exists because a browser attaches cookies by itself, and nothing attaches this header by itself."
       },
+      "metricsToken": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "The metrics token (ADR 0096): `lcm_` and a secret, made by an administrator with POST /metrics/token. Honoured on GET /metrics and nowhere else."
+      },
       "streamTicket": {
         "type": "http",
         "scheme": "ticket",
@@ -14884,7 +14972,8 @@
           "backup_keep",
           "optimized_limit_gb",
           "login_picker",
-          "trusted_proxies"
+          "trusted_proxies",
+          "metrics_token"
         ],
         "properties": {
           "tmdb": {
@@ -15037,6 +15126,24 @@
             "minimum": 1,
             "maximum": 52,
             "description": "How many scheduled backups to keep. A backup taken by hand is never counted or deleted."
+          },
+          "metrics_token": {
+            "type": "object",
+            "description": "Whether a metrics token exists, and when it was made (ADR 0096). Never the token itself.",
+            "required": [
+              "configured",
+              "created_at"
+            ],
+            "properties": {
+              "configured": {
+                "type": "boolean"
+              },
+              "created_at": {
+                "type": "integer",
+                "format": "int64",
+                "description": "0 when there is none."
+              }
+            }
           },
           "trusted_proxies": {
             "type": "array",
@@ -17092,6 +17199,23 @@
               "type": "integer",
               "format": "int64"
             }
+          }
+        }
+      },
+      "MetricsToken": {
+        "type": "object",
+        "required": [
+          "token",
+          "created_at"
+        ],
+        "properties": {
+          "token": {
+            "type": "string",
+            "description": "`lcm_` followed by the secret. Shown once."
+          },
+          "created_at": {
+            "type": "integer",
+            "format": "int64"
           }
         }
       },

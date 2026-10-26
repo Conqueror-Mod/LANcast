@@ -172,6 +172,14 @@ func (s *Server) requireAuth(next http.Handler) http.Handler {
 		 * authenticating. This skips only when the key actually resolved, so
 		 * the cookie path keeps both of its defences exactly as they were.
 		 */
+		// The metrics token reads GET /api/metrics and nothing else (ADR
+		// 0096). Checked by exact method and path, before the API key, so a
+		// metrics token presented anywhere else is just an unknown key.
+		if r.Method == http.MethodGet && r.URL.Path == "/api/metrics" && s.metricsToken(r) {
+			next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), metricsCtxKey, true)))
+			return
+		}
+
 		keySess, keyID, keyed := s.apiKey(r)
 
 		// A stream ticket (streamticket.go) stands in for the session that
