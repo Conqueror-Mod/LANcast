@@ -1356,6 +1356,12 @@ group is not priority.
   settle is whether the ask is a *log* (every sitting, for its own sake) or an
   *exporter* (get my data out, in a format something else reads). Those are very
   different jobs and only one of them is heavy.
+- **Last.fm and Trakt scrobbling** — not built. The Watch history page already
+  exports a Trakt-shaped file (ADR 0074) and sends it nowhere. Scrobbling is the
+  live version: each finished film or episode to Trakt, each track to Last.fm.
+  Outbound to a service the person signs in to, per account, off by default —
+  the same no-phone-home test as webhooks. Music would need a listening log,
+  since ADR 0074 deliberately does not record tracks.
 
 ### System, operations and diagnostics
 
@@ -1581,6 +1587,71 @@ group is not priority.
   friend's server** rather than on a local account: a share is a whole-library
   grant ([ADR 0071](adr/0071-a-shared-library-is-a-standing-grant.md)).
   Confirm that somebody needs either before designing it.
+- **Docs that contradict the code** — found by an outside review (2026-10-25)
+  that read the repository the way a stranger would, and was misled by it. The
+  README's status line says v0.8.34 and "50 decision records" (there are 92);
+  `security.md` gives the recovery command as `lancastd reset-auth`, which no
+  longer exists as a binary since ADR 0080, says there is **no ACME** although
+  ADR 0081 shipped it, and lists per-library visibility as the oldest open item
+  although ADR 0084 built it; `security.md` and `architecture.md` both say the
+  project "ships crash reporting", which reads as telemetry when `crashlog` is a
+  local record. The cost is not tidiness: a reviewer filed three missing
+  features that exist because the docs said so. Worth a recurring check, the way
+  `apidoc_test.go` guards the API contract.
+- **Trusted proxies for the login throttle** — not built. `InsideNetwork`
+  exempts loopback and private callers from the per-account backoff, and reads
+  only the remote address, correctly refusing forwarded headers. The
+  consequence, which `security.md` states, is that behind a reverse proxy on the
+  same machine **every caller is inside** and the per-account wait never
+  applies. The fix the review suggests is the standard one: an explicit list of
+  proxy addresses whose `X-Forwarded-For` is honoured, empty by default, with
+  `ClientKey` and `InsideNetwork` both reading through it. Now that ADR 0081
+  makes the server publicly reachable without a proxy this matters less than it
+  did, but the docs still recommend a proxy.
+- **Containment that resolves symlinks** — not built. `containedPath` in
+  `internal/api/stream.go` is `filepath.Abs` plus `filepath.Rel`, which is
+  lexical, and the scan imports a symlinked file by its extension like any
+  other. So `film.mkv` linking to any file on the machine passes containment and
+  is served, by a service running as LocalSystem. It needs write access to a
+  library folder and, on Windows, the right to create symlinks, so it is
+  hardening rather than an open door — but it is exactly what the CLAUDE.md rule
+  about re-verifying containment exists to stop. Fix: `filepath.EvalSymlinks` on
+  both the root and the target before comparing, with a test that makes a link
+  out of a temporary library.
+- **ffmpeg runs with the service's privileges** — not built. The service runs
+  as LocalSystem, and ffmpeg and ffprobe parse whatever files are in a library,
+  which is the largest attack surface LANcast has. ADR 0043 accepts the parser
+  risk; it does not discuss the account. Options, cheapest first: launch the
+  media tools with a restricted token, or run the whole service as a virtual
+  account (`NT SERVICE\lancastd`). The second is larger than it sounds — several
+  comments and the certificate and port-change code assume LocalSystem — and
+  must be verified as the service, per CLAUDE.md.
+- **An update path for the pinned ffmpeg** — needs checking before it needs
+  building. A bump is a code change and ships with a release (ADR 0043), which
+  is the right model for a CVE. What is not obvious from the code is whether an
+  existing install takes the new build: the tools are located by whether the
+  file exists, not by version. If a bump does not reach machines that already
+  have the old one, a security fix to ffmpeg never arrives.
+- **A snapshot before every migration** — not built. Backups exist, by hand and
+  on a schedule (`VACUUM INTO`, under a second on 100 MB), and migrations are
+  forward-only by design — so the file that would undo a bad one is the one
+  nobody takes automatically. Take one just before `migrate` changes the schema
+  version, named so it is recognisable, and swept by the same retention.
+- **Restore from the interface** — not built. Backups can be listed, taken and
+  downloaded in Settings, but restoring is the `restore` subcommand on the
+  machine. Some of that is right — a restore replaces the database the running
+  server holds open — so the real shape is probably "stage this backup and
+  restart", which the server can do to itself.
+- **A metrics endpoint** — not built. Prometheus-format counters (streams,
+  transcodes, scan durations, request errors) for people who already run
+  Grafana. Administrator- or loopback-only, and the same data the server
+  dashboard entry above would draw on.
+- **Sign-in beyond passwords and passkeys** — not built. The review asked for
+  2FA or OIDC. Passkeys (ADR 0082) already give phishing-resistant sign-in, so
+  TOTP is the smaller remaining gap; OIDC (Authelia, Authentik, Keycloak) is for
+  households that already run an identity provider, and is outbound only to the
+  one the owner names. Rate limits beyond login — per-key limits on the API —
+  belong with this.
 
 ### Input and control
 
@@ -1824,6 +1895,25 @@ group is not priority.
   defaults whatever anyone had chosen, with nothing failing anywhere — the third
   time this project has shipped a feature whose halves were each correct and
   never joined.
+- **Chapters and preview thumbnails on the scrub bar** — not built. Two halves
+  of one control. **Chapters** are already in most MKVs and MP4s; `probe` does
+  not ask ffprobe for them, and once it does the scrub bar can mark them and
+  skip to them. That half is cheap. **Preview thumbnails** (trickplay) are the
+  large one, already on the "genuinely large" list from the Plex settings
+  triage: a frame every few seconds for every title is an enrichment pass with
+  real CPU and disk cost, and it needs the cost shown first, as *Refresh
+  metadata* does.
+- **Chromecast and AirPlay** — not built. DLNA is (#872), so a TV that speaks
+  DLNA can already pull from LANcast. Chromecast needs a sender in the client
+  and a receiver on the device; Google's default receiver is loaded by the
+  Chromecast itself, so LANcast contacts nothing, but a custom receiver would
+  need registering with Google. AirPlay has no official server-side
+  specification and is the heavier of the two. Each is its own ADR.
+- **Offline downloads** — partly built. `GET /api/items/{id}/download` already
+  hands over the original file. What is missing is the client half: keeping a
+  copy on a device, playing it with no server, and reporting the progress when
+  the device is back. That needs a client with its own storage, so it waits on
+  a phone or TV client rather than on the server.
 
 ### Resolved modeling question — multi-part and serial works
 
