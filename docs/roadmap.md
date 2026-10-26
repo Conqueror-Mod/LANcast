@@ -1322,6 +1322,18 @@ group is not priority.
 
 ### System, operations and diagnostics
 
+- ~~**Containment that resolves symlinks**~~ — **built**
+  ([ADR 0094](adr/0094-containment-follows-links.md)). The check every
+  row-to-path handler makes was lexical, and the scanner imported a symlinked
+  file like any other, so `film.mkv` linking to any file on the machine was
+  served by a service running as LocalSystem (outside review, confirmed
+  2026-10-25). `internal/contain` now resolves root and target before
+  comparing, and walks the path itself because `EvalSymlinks` fails beneath a
+  Windows junction. The scanner skips links that leave their location and says
+  so in the scan's issues. The survey found two handlers with worse gaps —
+  external subtitles had no check at all, lyrics sidecars a lexical one — and
+  both are held to it now.
+
 - ~~**Developer tools in the desktop window**~~ — **built** in v0.8.18, and
   **it did not work until v0.9.6.** The switch is on Settings, off by default,
   honest that it takes effect at the next launch — the browser arguments are

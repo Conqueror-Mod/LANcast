@@ -23,6 +23,7 @@ internal/meta/     provider contract, matching, merge  (+ nfo/, tmdb/)
 internal/enrich/   metadata enrichment worker
 internal/artwork/  content-addressed image cache
 internal/auth/     password hashing, server-side sessions
+internal/contain/  is this path inside that folder, links followed (ADR 0094)
 internal/probe/    ffprobe wrapper + direct-play/remux/transcode decision
 internal/transcode/ ffmpeg pipeline: segmented file output and the live path
 internal/mpv/      libmpv via syscall: the desktop's own player (ADR 0067)
@@ -62,9 +63,11 @@ overwrite those fields; nothing else may develop its own opinion about what a
 filename means.
 
 **Every handler that turns a DB row into a filesystem path must re-verify
-containment** within the owning library root after `filepath.Abs`. The database
-is trusted, but this is the boundary where a bad row becomes arbitrary file
-access.
+containment** within the owning library root, through `internal/contain`
+(`containedPath` in the API). The database is trusted, but this is the boundary
+where a bad row becomes arbitrary file access. It follows links: a lexical
+`filepath.Abs` + `filepath.Rel` passed `film.mkv` linking anywhere on the
+machine (ADR 0094), so do not hand-roll one.
 
 **Scanning marks missing, never deletes.** An unmounted drive must not destroy
 library data.

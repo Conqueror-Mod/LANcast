@@ -13,6 +13,7 @@ import (
 	"sync"
 	"time"
 
+	"lancast/internal/contain"
 	"lancast/internal/media"
 	"lancast/internal/retro/romhash"
 	"lancast/internal/store"
@@ -571,6 +572,44 @@ func checkRoot(root string) error {
  * unseen and mark every one of them missing, which is the bug fixed in #228
  * arriving on a healthy server every time a drive slept.
  */
+/*
+ * linkRefusal reports whether a symbolic link found by the walk is skipped, and
+ * why — a reason worth showing in the scan's issues, or "" for a skip that is
+ * not news.
+ *
+ * A link is imported only when it resolves to a file inside the location being
+ * walked. Every row-to-path handler re-checks this anyway (internal/contain),
+ * so this is not the boundary — it is what keeps a link that the boundary
+ * would refuse from becoming a tile that cannot play, and keeps the server
+ * from probing, fingerprinting and reading tags out of a file that is not in
+ * the library. Not seen, so an item a link used to import is marked missing,
+ * never deleted.
+ *
+ * A link to a file elsewhere in the library is a normal thing to have — the
+ * same film filed under two collections — and is imported like the file. A
+ * link to a folder is skipped quietly, as it always was: WalkDir does not
+ * follow them, and this does not start.
+ */
+func linkRefusal(realRoot, path string) (skip bool, reason string) {
+	if realRoot == "" {
+		return true, "a link, and the library location could not be resolved to judge it"
+	}
+	real, err := contain.Resolve(path)
+	if errors.Is(err, contain.ErrDanglingLink) {
+		return true, "a link to nothing"
+	}
+	if err != nil {
+		return true, "a link that could not be followed"
+	}
+	if !contain.Inside(realRoot, real) {
+		return true, "a link to a file outside this library"
+	}
+	if st, err := os.Stat(real); err != nil || st.IsDir() {
+		return true, ""
+	}
+	return false, ""
+}
+
 func (s *Scanner) walk(ctx context.Context, lib store.Library, p *Progress) error {
 	roots, err := s.st.ListRoots(ctx, lib.ID)
 	if err != nil {
@@ -636,6 +675,15 @@ func (s *Scanner) walkRoot(ctx context.Context, lib store.Library, root store.Li
 	}
 
 	seen := make(map[string]bool, len(known))
+
+	// The root as it is on disk, for judging links (linkRefusal). Resolved
+	// once per walk rather than per link. checkRoot has just seen it, so a
+	// failure here is a race with the drive going away; "" then refuses
+	// every link, which is the safe way to be wrong.
+	realRoot, rerr := contain.Resolve(root.Path)
+	if rerr != nil {
+		realRoot = ""
+	}
 
 	/*
 	 * One directory read per directory, not per file.
@@ -734,6 +782,15 @@ func (s *Scanner) walkRoot(ctx context.Context, lib store.Library, root store.Li
 		if d.IsDir() {
 			return nil
 		}
+		if d.Type()&fs.ModeSymlink != 0 {
+			if skip, reason := linkRefusal(realRoot, path); skip {
+				if reason != "" {
+					s.log.Warn("skipping link", "path", path, "reason", reason)
+					s.recordIssue(p, root.Path, path, reason)
+				}
+				return nil
+			}
+		}
 		if s.afterFile != nil {
 			defer s.afterFile(lib.ID)
 		}
@@ -822,6 +879,11 @@ func (s *Scanner) walkRoot(ctx context.Context, lib store.Library, root store.Li
 		s.mu.Unlock()
 
 		info, err := d.Info()
+		if err == nil && d.Type()&fs.ModeSymlink != 0 {
+			// The file's size and time, not the link's: d.Info is Lstat, and a
+			// link's own mtime does not move when the file it names changes.
+			info, err = os.Stat(path)
+		}
 		if err != nil {
 			s.log.Warn("stat failed", "path", path, "error", err)
 			s.recordIssue(p, root.Path, path, "could not read file info")

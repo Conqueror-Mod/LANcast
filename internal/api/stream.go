@@ -5,8 +5,8 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"strings"
 
+	"lancast/internal/contain"
 	"lancast/internal/store"
 )
 
@@ -112,29 +112,21 @@ func (s *Server) serveItemFile(w http.ResponseWriter, r *http.Request, it *store
 	http.ServeContent(w, r, filepath.Base(path), info.ModTime(), f)
 }
 
-// containedPath resolves target and confirms it lies inside root.
+/*
+ * containedPath confirms target lies inside root and returns it as an absolute
+ * path, ready to open.
+ *
+ * Inside on disk, not only by name: links on both sides are followed before
+ * comparing (internal/contain). The lexical check alone passed `film.mkv`
+ * linking to any file on the machine, and this server runs as LocalSystem.
+ */
 func containedPath(root, target string) (string, error) {
-	absRoot, err := filepath.Abs(root)
-	if err != nil {
-		return "", err
-	}
-	absTarget, err := filepath.Abs(target)
-	if err != nil {
-		return "", err
-	}
-
-	rel, err := filepath.Rel(absRoot, absTarget)
-	if err != nil {
-		return "", err
-	}
-	if rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
-		return "", errOutsideLibrary
-	}
-	return absTarget, nil
+	return contain.Within(root, target)
 }
 
-type containmentError string
-
-func (e containmentError) Error() string { return string(e) }
-
-const errOutsideLibrary = containmentError("resolved path escapes the library root")
+// containedEntry is containedPath for removing target itself: a link is judged
+// by the folder it sits in, not by where it points, because os.Remove removes
+// the link.
+func containedEntry(root, target string) (string, error) {
+	return contain.EntryWithin(root, target)
+}

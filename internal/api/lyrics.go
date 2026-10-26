@@ -120,6 +120,11 @@ func (s *Server) sidecarLyrics(trackPath string) (lyrics.Lyrics, bool) {
 	if filepath.Dir(sidecar) != filepath.Dir(trackPath) {
 		return lyrics.Lyrics{}, false
 	}
+	// And on disk, not only by name: an `.lrc` that is a link is judged by
+	// where it points, which must still be the track's own folder.
+	if _, err := containedPath(filepath.Dir(trackPath), sidecar); err != nil {
+		return lyrics.Lyrics{}, false
+	}
 
 	f, err := os.Open(sidecar)
 	if err != nil {

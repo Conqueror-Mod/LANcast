@@ -100,6 +100,9 @@ func BattleNetLaunchTarget(installPath string) (string, error) {
 // withinDir reports whether target is inside root, comparing cleaned absolute
 // paths. Case-insensitively, because this is Windows and `C:\Games` and
 // `c:\games` are one directory.
+//
+// Lexical on purpose, for the reason given on contained in steam.go: the
+// desktop app runs this as the user, so following links buys nothing.
 func withinDir(root, target string) bool {
 	rel, err := filepath.Rel(root, target)
 	if err != nil {
