@@ -169,6 +169,11 @@ func installPath(library, installDir string) (string, bool) {
 // contained reports whether path is base or lies beneath it, comparing
 // case-insensitively because this is Windows and "D:\\Games" and "d:\\games"
 // are the same folder.
+//
+// Lexical on purpose, unlike internal/contain: this runs in the desktop app as
+// the signed-in user, so a link reaches nothing they could not already open,
+// and game folders moved to another drive behind a link or junction are a
+// common, legitimate setup. It guards against ".." in a manifest, not links.
 func contained(base, path string) bool {
 	rel, err := filepath.Rel(base, path)
 	if err != nil {

@@ -339,7 +339,15 @@ an invite becomes an entry that no longer exists and is still tried, costing a
 connect timeout on every peer operation. They cannot be told apart by
 inspection, because RFC 7217 stable-privacy addresses look identical and must
 be kept, so the operating system is asked. Anything it cannot classify is kept:
-a stale entry costs a timeout, a missing one can cost the pairing. **The TLS
+a stale entry costs a timeout, a missing one can cost the pairing.
+
+**…and only addresses another machine can reach.** A hypervisor's host-only
+adapter — the WSL switch, Hyper-V's Default Switch, VMware's VMnet1/8,
+VirtualBox host-only — gives this machine an address no other computer can
+route to, and WSL moves its subnet when it rebuilds the network. Such an
+adapter is recognised by the hypervisor's registered MAC prefix *and* having no
+default gateway, so a Hyper-V external switch carrying the house's own address
+is kept, and so is a VPN overlay such as ZeroTier or WireGuard. **The TLS
 certificate still covers everything**, because it has to cover whatever
 somebody might type.
 

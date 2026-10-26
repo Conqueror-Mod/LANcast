@@ -210,7 +210,7 @@ func (s *Server) deleteItem(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			for _, f := range append([]string{ft.path}, associatedSidecars(ft.path)...) {
-				a, err := containedPath(root.Path, f)
+				a, err := containedEntry(root.Path, f)
 				if err != nil {
 					s.log.Error("delete containment check failed", "item", ft.itemID, "path", f, "error", err)
 					writeError(w, http.StatusInternalServerError, "internal", "a file path escaped its library; nothing was deleted")

@@ -974,6 +974,43 @@ group is not priority.
   207 are their own bucket. Marked folders are excluded from it entirely
   (ADR 0051, amended). Face grouping, the large piece when this was written,
   has since been built (ADR 0052).
+- **Audiobooks** — not built. Nothing in LANcast tells a book from an album:
+  an `.m4b` already streams as `audio/mp4` and probes like any other track, so a
+  book dropped into a music library today is one very long track, or a folder
+  of chapter files shuffled among the songs. What a book needs that music does
+  not: **resume by position**, which a ten-hour book cannot live without (check
+  what music's playback state records before assuming it does this);
+  **chapters**, read from the container, which `internal/probe` does not ask
+  ffprobe for yet; **playback speed**, which a book listener expects and a music
+  listener never touches; and **author, narrator and series** rather than artist
+  and album. The question to settle first is whether it is its own library kind,
+  as music, pictures and retro each became (ADR 0024, 0028, 0073), or a mode of
+  the music kind. Resume and the different model both argue for its own kind.
+- **Ebooks** — not built. A library kind for EPUB and a reader in the client.
+  Three things carry the weight. The **renderer**: a reflowable EPUB reader
+  would be the largest third-party library the client carries, so it gets the
+  hls.js treatment (vendored, pinned, its own chunk) and its own ADR. **Reading
+  position**: a location in reflowable text is not a millisecond, so it does not
+  fit `playback_state` as it stands. **Metadata**: the OPF inside the file names
+  title, author and series, and should be read before any provider is asked.
+  Comics (CBZ/CBR) are the cheap first step if this is wanted at all — an
+  archive of images, and the pictures viewer already displays images.
+- **Extras on the detail page** — trailers, featurettes, behind-the-scenes and
+  deleted scenes, played rather than skipped. The files are already recognised:
+  `media.IsExtra` finds them by the folder and suffix conventions Plex and Kodi
+  document, the scan leaves them out, and library settings reports how many
+  ([ADR 0038](adr/0038-extras-are-not-works.md)). That ADR calls exclusion the
+  honest first step, says it is reversible, and names what playing them needs —
+  a kind, a place on the detail page, and a decision about whether a trailer
+  plays through the same routes. This entry is that follow-up. It must not undo
+  the reason 0038 exists: an extra never appears as a film, in the grid or in a
+  count. The online Trailer button stays for films with no local trailer.
+- **Pre-roll (custom cinema intros)** — not built. A clip the owner chooses,
+  played before a film; Plex's version is a list of paths with one picked at
+  random. Four questions decide it: server-wide or per library; **never on a
+  resume**, since a pre-roll before minute 47 is only an obstacle; it must not
+  touch playback state or count as watching anything; and it plays in the
+  player, so both the browser and the desktop's mpv player need it (ADR 0067).
 
 ### Metadata, ratings and discovery
 
@@ -1319,8 +1356,26 @@ group is not priority.
   settle is whether the ask is a *log* (every sitting, for its own sake) or an
   *exporter* (get my data out, in a format something else reads). Those are very
   different jobs and only one of them is heavy.
+- **Last.fm and Trakt scrobbling** — not built. The Watch history page already
+  exports a Trakt-shaped file (ADR 0074) and sends it nowhere. Scrobbling is the
+  live version: each finished film or episode to Trakt, each track to Last.fm.
+  Outbound to a service the person signs in to, per account, off by default —
+  the same no-phone-home test as webhooks. Music would need a listening log,
+  since ADR 0074 deliberately does not record tracks.
 
 ### System, operations and diagnostics
+
+- ~~**Containment that resolves symlinks**~~ — **built**
+  ([ADR 0094](adr/0094-containment-follows-links.md)). The check every
+  row-to-path handler makes was lexical, and the scanner imported a symlinked
+  file like any other, so `film.mkv` linking to any file on the machine was
+  served by a service running as LocalSystem (outside review, confirmed
+  2026-10-25). `internal/contain` now resolves root and target before
+  comparing, and walks the path itself because `EvalSymlinks` fails beneath a
+  Windows junction. The scanner skips links that leave their location and says
+  so in the scan's issues. The survey found two handlers with worse gaps —
+  external subtitles had no check at all, lyrics sidecars a lexical one — and
+  both are held to it now.
 
 - ~~**Developer tools in the desktop window**~~ — **built** in v0.8.18, and
   **it did not work until v0.9.6.** The switch is on Settings, off by default,
@@ -1500,6 +1555,115 @@ group is not priority.
   already targets the monitor the window is on, which is the correct behaviour
   and should stay — so this is one setting, and a second one would be a way for
   the two to disagree.
+- **Webhooks** — not built. A URL the owner sets, which receives a POST when
+  something happens: a film starts or stops, an item is added, a scan finishes.
+  Plex's are what Home Assistant automations and Discord bots are built on. One
+  thing makes this cheaper than it looks: the live-updates event stream
+  ([ADR 0079](adr/0079-the-server-says-when-something-changed.md)) already names the server's events, so a
+  webhook is another subscriber, not a second event system. Three things make it
+  careful. **It is outbound traffic** under a no-phone-home principle, and it is
+  consistent with that only because the owner types the destination and nothing
+  is configured by default — the ADR should say so in those words.
+  **Administrator-only**, because a URL the server fetches is a way to make the
+  server reach into the LAN. **Playback events name an account and a title**,
+  which ADR 0035 treats as that person's business, so whose viewing a webhook
+  may report is a consent question before it is an HTTP one.
+- **A server dashboard** (Plex Dash) — partly built. Settings → Activity
+  already shows what the server is doing *now*: its sessions, idle-first and
+  administrator-only (v0.9.22, `GET /api/transcodes`). What Plex Dash adds is
+  **history**, and a view that works on a phone: streams and bandwidth over
+  time, who watched what, server load. Who watched what already exists as the
+  `viewing` log ([ADR 0074](adr/0074-a-viewing-is-a-row.md)). The new weight is
+  sampling the server itself — bandwidth and CPU over time means a table of
+  samples with retention and size limits. Any per-account view stays
+  administrator-only, for the reason `/api/transcodes` is.
+- **Bandwidth limits** — not built as a server setting. What exists is per
+  device: the quality ceiling the client keeps in its own storage (v0.6.23),
+  plus the session cap. Neither lets the owner say *remote streams may use at
+  most N Mbps* or *the server may upload at most N in total*, which matters now
+  that remote reach is real (the public name, federation). Plex offers a cap per
+  remote stream, a total upload cap, and LAN addresses treated as unlimited. The
+  per-stream cap belongs **in the play decision** as one more input, so it
+  stays testable from fixtures like every other rule in `probe`. The total cap
+  is the heavier half: it is admission control across sessions, which decides
+  what happens to the stream that would cross the line.
+- **Granular sharing restrictions** — **mostly built**; recorded here so it is
+  not rebuilt from Plex's list. Every account can carry a rating ceiling
+  (schema 47) and a narrowed set of libraries
+  ([ADR 0084](adr/0084-a-library-can-be-kept-from-an-account.md)), both enforced
+  in the store at the `GetItem` chokepoint. Two things Plex has beyond that.
+  **Restricting by label** — allow or exclude titles carrying a tag. LANcast's
+  tags are private to the person who wrote them
+  ([ADR 0062](adr/0062-a-tag-is-a-note-to-yourself.md)), so they cannot serve;
+  this would need a household label, which is a new concept. **Limits on a
+  friend's server** rather than on a local account: a share is a whole-library
+  grant ([ADR 0071](adr/0071-a-shared-library-is-a-standing-grant.md)).
+  Confirm that somebody needs either before designing it.
+- **Docs that contradict the code** — found by an outside review (2026-10-25)
+  that read the repository the way a stranger would, and was misled by it. The
+  README's status line says v0.8.34 and "50 decision records" (there are 92);
+  `security.md` gives the recovery command as `lancastd reset-auth`, which no
+  longer exists as a binary since ADR 0080, says there is **no ACME** although
+  ADR 0081 shipped it, and lists per-library visibility as the oldest open item
+  although ADR 0084 built it; `security.md` and `architecture.md` both say the
+  project "ships crash reporting", which reads as telemetry when `crashlog` is a
+  local record. The cost is not tidiness: a reviewer filed three missing
+  features that exist because the docs said so. Worth a recurring check, the way
+  `apidoc_test.go` guards the API contract.
+- **Trusted proxies for the login throttle** — not built. `InsideNetwork`
+  exempts loopback and private callers from the per-account backoff, and reads
+  only the remote address, correctly refusing forwarded headers. The
+  consequence, which `security.md` states, is that behind a reverse proxy on the
+  same machine **every caller is inside** and the per-account wait never
+  applies. The fix the review suggests is the standard one: an explicit list of
+  proxy addresses whose `X-Forwarded-For` is honoured, empty by default, with
+  `ClientKey` and `InsideNetwork` both reading through it. Now that ADR 0081
+  makes the server publicly reachable without a proxy this matters less than it
+  did, but the docs still recommend a proxy.
+- **Containment that resolves symlinks** — not built. `containedPath` in
+  `internal/api/stream.go` is `filepath.Abs` plus `filepath.Rel`, which is
+  lexical, and the scan imports a symlinked file by its extension like any
+  other. So `film.mkv` linking to any file on the machine passes containment and
+  is served, by a service running as LocalSystem. It needs write access to a
+  library folder and, on Windows, the right to create symlinks, so it is
+  hardening rather than an open door — but it is exactly what the CLAUDE.md rule
+  about re-verifying containment exists to stop. Fix: `filepath.EvalSymlinks` on
+  both the root and the target before comparing, with a test that makes a link
+  out of a temporary library.
+- **ffmpeg runs with the service's privileges** — not built. The service runs
+  as LocalSystem, and ffmpeg and ffprobe parse whatever files are in a library,
+  which is the largest attack surface LANcast has. ADR 0043 accepts the parser
+  risk; it does not discuss the account. Options, cheapest first: launch the
+  media tools with a restricted token, or run the whole service as a virtual
+  account (`NT SERVICE\lancastd`). The second is larger than it sounds — several
+  comments and the certificate and port-change code assume LocalSystem — and
+  must be verified as the service, per CLAUDE.md.
+- **An update path for the pinned ffmpeg** — needs checking before it needs
+  building. A bump is a code change and ships with a release (ADR 0043), which
+  is the right model for a CVE. What is not obvious from the code is whether an
+  existing install takes the new build: the tools are located by whether the
+  file exists, not by version. If a bump does not reach machines that already
+  have the old one, a security fix to ffmpeg never arrives.
+- **A snapshot before every migration** — not built. Backups exist, by hand and
+  on a schedule (`VACUUM INTO`, under a second on 100 MB), and migrations are
+  forward-only by design — so the file that would undo a bad one is the one
+  nobody takes automatically. Take one just before `migrate` changes the schema
+  version, named so it is recognisable, and swept by the same retention.
+- **Restore from the interface** — not built. Backups can be listed, taken and
+  downloaded in Settings, but restoring is the `restore` subcommand on the
+  machine. Some of that is right — a restore replaces the database the running
+  server holds open — so the real shape is probably "stage this backup and
+  restart", which the server can do to itself.
+- **A metrics endpoint** — not built. Prometheus-format counters (streams,
+  transcodes, scan durations, request errors) for people who already run
+  Grafana. Administrator- or loopback-only, and the same data the server
+  dashboard entry above would draw on.
+- **Sign-in beyond passwords and passkeys** — not built. The review asked for
+  2FA or OIDC. Passkeys (ADR 0082) already give phishing-resistant sign-in, so
+  TOTP is the smaller remaining gap; OIDC (Authelia, Authentik, Keycloak) is for
+  households that already run an identity provider, and is outbound only to the
+  one the owner names. Rate limits beyond login — per-key limits on the API —
+  belong with this.
 
 ### Input and control
 
@@ -1743,6 +1907,25 @@ group is not priority.
   defaults whatever anyone had chosen, with nothing failing anywhere — the third
   time this project has shipped a feature whose halves were each correct and
   never joined.
+- **Chapters and preview thumbnails on the scrub bar** — not built. Two halves
+  of one control. **Chapters** are already in most MKVs and MP4s; `probe` does
+  not ask ffprobe for them, and once it does the scrub bar can mark them and
+  skip to them. That half is cheap. **Preview thumbnails** (trickplay) are the
+  large one, already on the "genuinely large" list from the Plex settings
+  triage: a frame every few seconds for every title is an enrichment pass with
+  real CPU and disk cost, and it needs the cost shown first, as *Refresh
+  metadata* does.
+- **Chromecast and AirPlay** — not built. DLNA is (#872), so a TV that speaks
+  DLNA can already pull from LANcast. Chromecast needs a sender in the client
+  and a receiver on the device; Google's default receiver is loaded by the
+  Chromecast itself, so LANcast contacts nothing, but a custom receiver would
+  need registering with Google. AirPlay has no official server-side
+  specification and is the heavier of the two. Each is its own ADR.
+- **Offline downloads** — partly built. `GET /api/items/{id}/download` already
+  hands over the original file. What is missing is the client half: keeping a
+  copy on a device, playing it with no server, and reporting the progress when
+  the device is back. That needs a client with its own storage, so it waits on
+  a phone or TV client rather than on the server.
 
 ### Resolved modeling question — multi-part and serial works
 

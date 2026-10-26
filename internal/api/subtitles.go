@@ -3,6 +3,7 @@ package api
 import (
 	"errors"
 	"net/http"
+	"path/filepath"
 	"strconv"
 	"strings"
 
@@ -192,7 +193,31 @@ func (s *Server) externalSubtitle(r *http.Request, id int64, rest string) ([]byt
 	if err != nil {
 		return nil, err
 	}
-	return s.subs.Sidecar(r.Context(), ext.Path, ext.Format)
+	path, err := s.subtitleFilePath(r, id, ext)
+	if err != nil {
+		s.log.Error("subtitle containment check failed", "item", id, "path", ext.Path, "error", err)
+		return nil, store.ErrNotFound
+	}
+	return s.subs.Sidecar(r.Context(), path, ext.Format)
+}
+
+/*
+ * subtitleFilePath is the containment check for a subtitle row, which had
+ * none: the path went from the database straight to a file read.
+ *
+ * A downloaded subtitle lives in the server's own subtitles folder and is held
+ * to that; a sidecar was found beside the video by a scan and is held to the
+ * location the video was scanned under, like the video itself.
+ */
+func (s *Server) subtitleFilePath(r *http.Request, itemID int64, ext *store.ExternalSubtitle) (string, error) {
+	if ext.Source == "downloaded" {
+		return containedPath(filepath.Join(s.dataDir, "subtitles"), ext.Path)
+	}
+	root, err := s.st.RootForItem(r.Context(), itemID)
+	if err != nil {
+		return "", err
+	}
+	return containedPath(root.Path, ext.Path)
 }
 
 /*
