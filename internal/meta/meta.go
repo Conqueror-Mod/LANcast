@@ -168,7 +168,47 @@ func IsField(name string) bool {
 type CollectionRef struct {
 	ExternalID string
 	Name       string
-	Artwork    []ArtRef
+	// Overview is the collection's own description ("The Lord of the Rings
+	// trilogy follows…"), not any member's. Empty when the provider has none.
+	Overview string
+	Artwork  []ArtRef
+	// Films is every film the provider puts in the collection, owned or not,
+	// in release order (ADR 0093). Nil when the provider did not say — which
+	// is not the same as a collection with no films, and is never stored as
+	// one.
+	Films []CollectionFilm
+}
+
+// CollectionFilm is one film a provider lists in a collection. It may or may
+// not be in the library; that is decided against the library, not here.
+type CollectionFilm struct {
+	ExternalID string
+	Title      string
+	Year       int
+	ReleasedAt int64 // unix seconds, 0 when unknown or unannounced
+	Overview   string
+	PosterURL  string
+}
+
+// CollectionProvider is an optional capability: looking a collection up by its
+// own id, without a member film to start from. What lets a collection created
+// before film lists existed be given one without re-enriching every member.
+type CollectionProvider interface {
+	Collection(ctx context.Context, externalID string) (*CollectionRef, error)
+}
+
+// Collection asks the named provider for a collection, if it can say.
+// Nil with no error when no provider of that id has the capability.
+func (r *Registry) Collection(ctx context.Context, providerID, externalID string) (*CollectionRef, error) {
+	for _, p := range r.providers {
+		if p.ID() != providerID {
+			continue
+		}
+		if cp, ok := p.(CollectionProvider); ok {
+			return cp.Collection(ctx, externalID)
+		}
+	}
+	return nil, nil
 }
 
 // Record is the normalized payload every source produces. Normalizing at the

@@ -70,6 +70,7 @@ import type {
   Trailer,
   Peer,
   PeerInvite,
+  CollectionFilm,
   PeerPresence,
   SharedLibrary,
   PeerLibrary,
@@ -951,6 +952,24 @@ export function useCollectionMembers(collectionID: number, enabled: boolean) {
         `/api/items?collection_id=${collectionID}`,
         signal,
       ).then((r) => r.items),
+    enabled: enabled && collectionID > 0,
+  });
+}
+
+/*
+ * A collection's whole film list, owned or not (ADR 0093).
+ *
+ * Keyed under ["items"] — a child, not a sibling — because what it answers
+ * changes with the library: a film scanned and matched becomes owned, and every
+ * write that changes a library already invalidates ["items"].
+ */
+export function useCollectionFilms(collectionID: number, enabled: boolean) {
+  return useQuery({
+    queryKey: ["items", "collection-films", collectionID],
+    queryFn: ({ signal }) =>
+      apiGet<{ films: CollectionFilm[] }>(`/api/items/${collectionID}/films`, signal).then(
+        (r) => r.films ?? [],
+      ),
     enabled: enabled && collectionID > 0,
   });
 }
@@ -3277,6 +3296,29 @@ export function useRenamePlaylist(id: number) {
     mutationFn: (title: string) =>
       apiSend(`/api/items/${id}`, "PATCH", { title }),
     onSuccess: () => invalidatePlaylists(qc, id),
+  });
+}
+
+/**
+ * Write an item's description.
+ *
+ * The ordinary metadata edit, so it locks `overview`: a description somebody
+ * wrote for a box set survives every provider refresh (the locked-fields rule).
+ * Built for collections, which a keyword-defined grouping reaches with no
+ * provider description at all.
+ *
+ * Invalidates the item and every listing: the description is drawn on the
+ * collection's own page, and the grids carry the item row it lives on.
+ */
+export function useSetOverview(id: number) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (overview: string) =>
+      apiSend(`/api/items/${id}`, "PATCH", { overview }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["item", id] });
+      void qc.invalidateQueries({ queryKey: ["items"] });
+    },
   });
 }
 

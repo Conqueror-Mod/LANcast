@@ -292,6 +292,15 @@ export function Home() {
    * explain itself and offer Play.
    */
   const continueOpen = (item: Item) => {
+    /*
+     * A collection's next film opens its page knowing which collection it
+     * continues, so Play there carries on through the franchise rather than
+     * stopping after the one film (Detail's continueLeaf).
+     */
+    if (item.kind === "movie" && item.continues_from) {
+      const collectionID = item.continues_from.collection_id;
+      return () => navigate(`/item/${item.id}`, { state: { collectionID } });
+    }
     if (item.kind !== "show") return undefined;
     return () => {
       void (async () => {

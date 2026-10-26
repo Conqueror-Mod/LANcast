@@ -1197,6 +1197,22 @@ are listed, two or more present films, so a provider's collection of one (a
 duplicate tile of the film itself) is not. The rating limit and hidden
 libraries apply, and an item the caller cannot open is `404`.
 
+### `GET /api/items/{id}/films`
+
+A collection's whole film list ([ADR 0093](adr/0093-a-collection-knows-its-missing-films.md)):
+`{films: [{external_id, title, year?, overview?, poster?, item_id?, upcoming?}]}`,
+every film the provider puts in the collection, in release order. `item_id` is
+the library's copy when there is one; a film without it is not in the library.
+`poster` is an artwork hash for `/api/artwork/{hash}` — the owned film's own
+poster, else one the server fetched for the listing. `upcoming` marks a film
+not released yet, undated or dated in the future.
+
+Anything but a collection answers an empty list, and so does a collection whose
+list has not been fetched yet (keyword groupings never have one). The account's
+limits apply: an owned film it may not open is left out, and an account with a
+rating ceiling is shown **no** missing films, since a film that is not here has
+no certificate to test. An item the caller cannot open is `404`.
+
 ### `GET /api/items/{id}/afterwards`
 
 What to watch after a film, for the page it ends on: `{items, total}`, decorated
@@ -1557,6 +1573,17 @@ It is deliberately **not** folded into `progress`. A show has no playback
 position and never will — nobody plays a show, they play its episodes — and a
 `progress` whose `position_ms` were always zero would make `watched` mean one
 thing on a film and another on a series.
+
+`collection_progress` is the same question for a collection, in films:
+`{ "total": 5, "watched": 2, "in_progress": 1 }`. It is present **on
+collections only** — in listings and on `GET /api/items/{id}` — and absent on
+everything else and on a collection with no films on disk. `total` counts the
+same present members `child_count` does, so "2 of 5 watched" never disagrees
+with "5 films". `watched` counts finished members; `in_progress` counts members
+with a saved position that are not finished. A collection is finished when
+`watched` equals `total`, and begun when either count is above zero. A separate
+field rather than `unwatched_episodes` reused, because a collection's members
+are films.
 
 ### `GET /api/continue`
 

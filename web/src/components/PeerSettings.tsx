@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   useAddPeer,
   usePeerInvite,
@@ -6,7 +6,9 @@ import {
   useRemovePeer,
 } from "@/api/hooks";
 import { errorMessage } from "@/lib/errors";
+import { decodeInvite, groupFingerprint, inviteCode, type InviteContents } from "@/lib/invite";
 import type { Peer } from "@/api/types";
+import "./PeerSettings.css";
 
 /*
  * Introducing this server to another one (ADR 0044).
@@ -71,8 +73,24 @@ export function PeerSettings() {
  */
 function MyInvite() {
   const [asked, setAsked] = useState(false);
-  const { data, isLoading, error } = usePeerInvite(asked);
-  const [copied, setCopied] = useState(false);
+  const { data, isLoading, isFetching, error, refetch, dataUpdatedAt } = usePeerInvite(asked);
+  /*
+   * The code of the invite last copied, and of the one shown before a refresh.
+   *
+   * An invite changes when this server's addresses do, and two invites
+   * differing by one address differ in a few characters mid-string — reported
+   * as impossible to tell apart. The check code changes completely, and these
+   * two say so in words: "this is not the one you copied".
+   */
+  const [copiedCode, setCopiedCode] = useState<string | null>(null);
+  const shownCode = useRef<string | null>(null);
+  const [changed, setChanged] = useState(false);
+  const code = data ? inviteCode(data.invite) : null;
+  useEffect(() => {
+    if (!code) return;
+    if (shownCode.current && shownCode.current !== code) setChanged(true);
+    shownCode.current = code;
+  }, [code]);
 
   return (
     <div className="set-row">
@@ -88,11 +106,29 @@ function MyInvite() {
           <div className="set-row__sub">…</div>
         ) : error ? (
           <div className="set-error">{errorMessage(error)}</div>
-        ) : data ? (
+        ) : data && code ? (
           <>
-            <div className="set-row__sub set-row__sub--mono">{data.invite}</div>
-            <div className="set-row__sub">
-              {data.name} · {data.fingerprint_display}
+            <InviteSummary
+              code={code}
+              contents={{ name: data.name, fingerprint: data.fingerprint, addrs: data.addrs ?? [] }}
+            />
+            {changed && (
+              <div className="peer-invite__note" role="status">
+                Your invite changed since this page opened — this server&rsquo;s
+                addresses changed. Send the new one.
+              </div>
+            )}
+            {copiedCode && copiedCode !== code && !changed && (
+              <div className="peer-invite__note" role="status">
+                This is not the invite you copied earlier. Copy it again.
+              </div>
+            )}
+            <details className="peer-invite__raw">
+              <summary>Show the full invite</summary>
+              <div className="peer-invite__string">{data.invite}</div>
+            </details>
+            <div className="set-row__sub peer-invite__checked">
+              {isFetching ? "Checking…" : `Checked ${clock(dataUpdatedAt)}`}
             </div>
           </>
         ) : null}
@@ -103,25 +139,65 @@ function MyInvite() {
             Show invite
           </button>
         ) : (
-          <button
-            className="set-btn"
-            disabled={!data}
-            onClick={() => {
-              if (!data) return;
-              // Best effort: a clipboard that refuses is not worth an error
-              // beside a value already on screen to be read or selected.
-              void navigator.clipboard?.writeText(data.invite).then(
-                () => setCopied(true),
-                () => setCopied(false),
-              );
-            }}
-          >
-            {copied ? "Copied" : "Copy"}
-          </button>
+          <>
+            <button
+              className="set-btn"
+              disabled={!data}
+              onClick={() => {
+                if (!data || !code) return;
+                // Best effort: a clipboard that refuses is not worth an error
+                // beside a value already on screen to be read or selected.
+                void navigator.clipboard?.writeText(data.invite).then(
+                  () => {
+                    setCopiedCode(code);
+                    setChanged(false);
+                  },
+                  () => setCopiedCode(null),
+                );
+              }}
+            >
+              {copiedCode && copiedCode === code ? "Copied" : "Copy"}
+            </button>
+            <button
+              className="set-btn"
+              disabled={isFetching}
+              onClick={() => void refetch()}
+            >
+              Refresh
+            </button>
+          </>
         )}
       </div>
     </div>
   );
+}
+
+/*
+ * What an invite says, readably: its check code, whose it is, and where it
+ * points. Used for this server's own invite and for one pasted in, so the two
+ * people pairing are looking at the same layout and can read the codes to each
+ * other.
+ */
+function InviteSummary({ code, contents }: { code: string; contents: InviteContents }) {
+  return (
+    <dl className="peer-invite">
+      <dt>Check code</dt>
+      <dd className="peer-invite__code">{code}</dd>
+      <dt>Server</dt>
+      <dd>{contents.name || "Unnamed"}</dd>
+      <dt>Fingerprint</dt>
+      <dd className="peer-invite__mono">{groupFingerprint(contents.fingerprint)}</dd>
+      <dt>Reached at</dt>
+      <dd className="peer-invite__mono">
+        {contents.addrs.length > 0 ? contents.addrs.join(", ") : "No address"}
+      </dd>
+    </dl>
+  );
+}
+
+function clock(ms: number): string {
+  if (!ms) return "";
+  return `at ${new Date(ms).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}`;
 }
 
 /*
@@ -159,6 +235,7 @@ function AddPeer() {
           spellCheck={false}
           onChange={(e) => setInvite(e.target.value)}
         />
+        <PastedInvite invite={invite} />
         {add.isError && (
           <div className="set-error">{errorMessage(add.error)}</div>
         )}
@@ -175,6 +252,36 @@ function AddPeer() {
         </button>
       </div>
     </div>
+  );
+}
+
+/*
+ * What a pasted invite says, before Add is pressed.
+ *
+ * A long opaque string gives somebody no way to know they pasted the right
+ * one, or all of it. Decoded here for display only — the server still parses
+ * and judges it — so a reader can check the name and the check code against
+ * what the sender sees on their own screen.
+ */
+function PastedInvite({ invite }: { invite: string }) {
+  const trimmed = invite.trim();
+  if (!trimmed) return null;
+  const contents = decodeInvite(trimmed);
+  if (!contents) {
+    return (
+      <div className="peer-invite__note">
+        That does not look like a whole LANcast invite. It starts with
+        &ldquo;lancast-invite-v1:&rdquo;.
+      </div>
+    );
+  }
+  return (
+    <>
+      <InviteSummary code={inviteCode(trimmed)} contents={contents} />
+      <div className="set-row__sub">
+        The check code should match the one on their screen.
+      </div>
+    </>
   );
 }
 

@@ -642,6 +642,12 @@ func (s *Server) respondItem(w http.ResponseWriter, r *http.Request, id int64) {
 		return
 	}
 	it.UnwatchedEpisodes = counted[0].UnwatchedEpisodes
+	// The same for a collection, in films.
+	if err := s.st.AttachCollectionProgress(r.Context(), counted, s.userID(r)); err != nil {
+		s.writeInternal(w, err, "attach collection progress")
+		return
+	}
+	it.CollectionProgress = counted[0].CollectionProgress
 
 	/*
 	 * Markers ride along, so the player can draw a skip button without asking a

@@ -47,6 +47,15 @@ export function isWatched(item: Item): boolean {
    */
   if (isSeries(item)) return item.unwatched_episodes === 0;
 
+  /*
+   * A collection is finished when every film in it is. Absent progress (no
+   * films on disk) is not finished, for the reason an empty series is not.
+   */
+  if (item.kind === "collection") {
+    const p = item.collection_progress;
+    return !!p && p.total > 0 && p.watched >= p.total;
+  }
+
   // Everything else — a film, an episode, a part — carries its own flag.
   return item.progress?.watched === true;
 }
@@ -59,7 +68,38 @@ export function isWatched(item: Item): boolean {
  * on the tile that answers, so the accessible name is where the answer goes.
  */
 export function watchedLabel(item: Item): string {
+  if (item.kind === "collection") return "Every film watched";
   return isSeries(item) ? "Every episode watched" : "Watched";
+}
+
+/*
+ * A collection somebody has begun and not finished.
+ *
+ * The two numbers the tile draws from: how much of the bar to fill, and the
+ * "2 of 5 watched" that replaces "5 films" under the title. Null for anything
+ * else, and for a collection untouched or finished — an untouched one keeps
+ * its film count, and a finished one has the tick.
+ */
+export function collectionStanding(
+  item: Item,
+): { pct: number; label: string } | null {
+  if (item.kind !== "collection") return null;
+  const p = item.collection_progress;
+  if (!p || p.total <= 0) return null;
+  if (p.watched >= p.total) return null;
+  if (p.watched === 0 && p.in_progress === 0) return null;
+  /*
+   * A film part way counts as half of one, so a box set begun with nothing
+   * finished still shows a bar rather than an empty one that reads as
+   * untouched. Never full: full is the tick's job.
+   */
+  const pct = Math.min(95, ((p.watched + p.in_progress * 0.5) / p.total) * 100);
+  /*
+   * "Started" when nothing is finished yet. "0 of 4 watched" was true and read
+   * as untouched — the opposite of what the bar beside it says.
+   */
+  const label = p.watched === 0 ? "Started" : `${p.watched} of ${p.total} watched`;
+  return { pct, label };
 }
 
 /*

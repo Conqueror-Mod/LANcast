@@ -11,6 +11,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -235,9 +236,12 @@ func (c *Client) fetchMovie(ctx context.Context, id string) (*meta.Record, error
 		rec.Keywords = append(rec.Keywords, meta.Keyword{ID: k.ID, Name: k.Name})
 	}
 	if m.Collection != nil && m.Collection.ID != 0 {
+		full := c.collectionDetail(ctx, m.Collection)
 		rec.Collection = &meta.CollectionRef{
 			ExternalID: strconv.Itoa(m.Collection.ID),
-			Name:       c.collectionName(ctx, m.Collection),
+			Name:       full.Name,
+			Overview:   full.Overview,
+			Films:      full.Films,
 			Artwork:    artRefs(m.Collection.PosterPath, m.Collection.BackdropPath),
 		}
 	}
@@ -245,7 +249,13 @@ func (c *Client) fetchMovie(ctx context.Context, id string) (*meta.Record, error
 }
 
 /*
- * collectionName resolves a collection's name, in English where TMDB has one.
+ * collectionDetail resolves a collection's name, in English where TMDB has one,
+ * and its overview.
+ *
+ * The overview and the film list ride on the same request the name already
+ * needed: the embedded block carries neither, and the dedicated endpoint
+ * does. So a collection's description and its missing films cost nothing that
+ * was not already being paid.
  *
  * `belongs_to_collection`, embedded in the movie response, does not reliably
  * honour the language parameter — it carries whatever name the collection was
@@ -263,13 +273,78 @@ func (c *Client) fetchMovie(ctx context.Context, id string) (*meta.Record, error
  * embedded one. A franchise grouping is worth a wrong-language name and is not
  * worth failing an enrichment over — the film is already matched by this point.
  */
-func (c *Client) collectionName(ctx context.Context, embedded *tmdbCollection) string {
+func (c *Client) collectionDetail(ctx context.Context, embedded *tmdbCollection) meta.CollectionRef {
 	var full tmdbCollection
 	err := c.get(ctx, "/collection/"+strconv.Itoa(embedded.ID), nil, &full)
-	if err != nil || strings.TrimSpace(full.Name) == "" {
-		return embedded.Name
+	if err != nil {
+		// Films stays nil: "the provider did not say", never "it has none".
+		return meta.CollectionRef{Name: embedded.Name}
 	}
-	return full.Name
+	ref := convertCollection(full)
+	if strings.TrimSpace(ref.Name) == "" {
+		ref.Name = embedded.Name
+	}
+	return ref
+}
+
+/*
+ * Collection looks a collection up by its own id (meta.CollectionProvider).
+ *
+ * The enricher asks this for collections that existed before film lists were
+ * stored, so they get one without every member film being enriched again.
+ */
+func (c *Client) Collection(ctx context.Context, externalID string) (*meta.CollectionRef, error) {
+	if _, err := strconv.Atoi(externalID); err != nil {
+		// A keyword grouping ("keyword:180547") is not a TMDB collection.
+		return nil, nil
+	}
+	var full tmdbCollection
+	if err := c.get(ctx, "/collection/"+externalID, nil, &full); err != nil {
+		return nil, err
+	}
+	ref := convertCollection(full)
+	ref.ExternalID = externalID
+	ref.Artwork = artRefs(full.PosterPath, full.BackdropPath)
+	return &ref, nil
+}
+
+// convertCollection turns /collection/{id} into a CollectionRef: its name,
+// its overview, and its films in release order.
+func convertCollection(full tmdbCollection) meta.CollectionRef {
+	ref := meta.CollectionRef{
+		Name:     full.Name,
+		Overview: strings.TrimSpace(full.Overview),
+		Films:    []meta.CollectionFilm{},
+	}
+	for _, p := range full.Parts {
+		if p.ID == 0 || strings.TrimSpace(p.Title) == "" {
+			continue
+		}
+		f := meta.CollectionFilm{
+			ExternalID: strconv.Itoa(p.ID),
+			Title:      p.Title,
+			Year:       yearOf(p.ReleaseDate),
+			Overview:   strings.TrimSpace(p.Overview),
+			PosterURL:  imageURL(p.PosterPath),
+		}
+		if ts, ok := parseDate(p.ReleaseDate); ok {
+			f.ReleasedAt = ts
+		}
+		ref.Films = append(ref.Films, f)
+	}
+	/*
+	 * Release order, which TMDB's own order is not reliably. A film with no
+	 * date yet (announced, untitled sequel) goes last: it comes after
+	 * everything that has been released, whatever it turns out to be.
+	 */
+	sort.SliceStable(ref.Films, func(i, j int) bool {
+		a, b := ref.Films[i].ReleasedAt, ref.Films[j].ReleasedAt
+		if (a == 0) != (b == 0) {
+			return b == 0
+		}
+		return a < b
+	})
+	return ref
 }
 
 func (c *Client) fetchShow(ctx context.Context, id string) (*meta.Record, error) {
@@ -635,10 +710,22 @@ type tmdbKeyword struct {
 // tmdbCollection is TMDB's belongs_to_collection block — the franchise or
 // series a movie is part of ("The Lord of the Rings Collection").
 type tmdbCollection struct {
-	ID           int    `json:"id"`
-	Name         string `json:"name"`
-	PosterPath   string `json:"poster_path"`
-	BackdropPath string `json:"backdrop_path"`
+	ID   int    `json:"id"`
+	Name string `json:"name"`
+	// Only on /collection/{id}; the block embedded in a movie has neither.
+	Overview     string               `json:"overview"`
+	Parts        []tmdbCollectionPart `json:"parts"`
+	PosterPath   string               `json:"poster_path"`
+	BackdropPath string               `json:"backdrop_path"`
+}
+
+// tmdbCollectionPart is one film in /collection/{id}'s `parts`.
+type tmdbCollectionPart struct {
+	ID          int    `json:"id"`
+	Title       string `json:"title"`
+	Overview    string `json:"overview"`
+	ReleaseDate string `json:"release_date"`
+	PosterPath  string `json:"poster_path"`
 }
 
 type showDetail struct {

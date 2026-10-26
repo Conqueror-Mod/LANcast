@@ -18,7 +18,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter } from "react-router-dom";
 import { FocusProvider } from "@/focus/FocusController";
 import { PosterTile } from "./PosterTile";
-import { isWatched, watchedLabel } from "@/lib/watchedMark";
+import { collectionStanding, isWatched, watchedLabel } from "@/lib/watchedMark";
 import type { Item } from "@/api/types";
 
 declare global {
@@ -224,5 +224,53 @@ describe("the tile that draws it", () => {
     render(item({ progress: { position_ms: 0, watched: true } }));
     expect(mark()?.tagName.toLowerCase()).toBe("span");
     expect(mark()?.hasAttribute("tabindex")).toBe(false);
+  });
+});
+
+/*
+ * A collection, which had no way to say it was finished or begun. Reported:
+ * the Collections page showed nothing about either.
+ */
+describe("a collection's standing", () => {
+  const coll = (p?: { total: number; watched: number; in_progress: number }) =>
+    item({ kind: "collection", title: "A Franchise", child_count: p?.total ?? 3, collection_progress: p });
+
+  it("is finished only when every film is", () => {
+    expect(isWatched(coll({ total: 3, watched: 3, in_progress: 0 }))).toBe(true);
+    expect(isWatched(coll({ total: 3, watched: 2, in_progress: 1 }))).toBe(false);
+    // Absent progress is a collection with no films on disk: not finished.
+    expect(isWatched(coll(undefined))).toBe(false);
+    expect(watchedLabel(coll({ total: 3, watched: 3, in_progress: 0 }))).toBe("Every film watched");
+  });
+
+  it("draws a bar and says how far, once begun and not finished", () => {
+    expect(collectionStanding(coll({ total: 3, watched: 0, in_progress: 0 }))).toBeNull();
+    expect(collectionStanding(coll({ total: 3, watched: 3, in_progress: 0 }))).toBeNull();
+    const begun = collectionStanding(coll({ total: 4, watched: 1, in_progress: 1 }));
+    expect(begun?.label).toBe("1 of 4 watched");
+    expect(begun?.pct).toBeCloseTo(37.5);
+    // Started with nothing finished still shows a bar, not an empty one, and
+    // says Started rather than "0 of 4 watched", which read as untouched.
+    const started = collectionStanding(coll({ total: 4, watched: 0, in_progress: 1 }));
+    expect(started?.pct).toBeGreaterThan(0);
+    expect(started?.label).toBe("Started");
+  });
+
+  it("puts it on the tile in place of the film count", () => {
+    render(coll({ total: 5, watched: 2, in_progress: 0 }));
+    expect(host.querySelector(".poster-tile__year")?.textContent).toBe("2 of 5 watched");
+    expect(host.querySelector(".poster-tile__progress")).toBeTruthy();
+    expect(mark()).toBeNull();
+  });
+
+  it("keeps the film count, and no bar, on one nobody has begun", () => {
+    render(coll({ total: 5, watched: 0, in_progress: 0 }));
+    expect(host.querySelector(".poster-tile__year")?.textContent).toBe("5 films");
+    expect(host.querySelector(".poster-tile__progress")).toBeNull();
+  });
+
+  it("ticks a finished one", () => {
+    render(coll({ total: 5, watched: 5, in_progress: 0 }));
+    expect(mark()?.getAttribute("aria-label")).toBe("Every film watched");
   });
 });

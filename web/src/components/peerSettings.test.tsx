@@ -207,6 +207,36 @@ describe("pairing with another server", () => {
   });
 
   /*
+   * A pasted invite says whose it is before Add is pressed, with a check code
+   * to compare against the sender's screen. Reported: a long string that
+   * differs in a few characters cannot be checked by reading it.
+   */
+  it("says what a pasted invite carries before it is added", async () => {
+    await render();
+    const input = host.querySelector<HTMLInputElement>("input.set-input")!;
+    const paste = async (v: string) =>
+      act(async () => {
+        const setter = Object.getOwnPropertyDescriptor(
+          window.HTMLInputElement.prototype,
+          "value",
+        )!.set!;
+        setter.call(input, v);
+        input.dispatchEvent(new Event("input", { bubbles: true }));
+      });
+    const wire = { v: 1, fp: "A".repeat(52), name: "Utopia", addrs: ["192.168.1.20:8443"] };
+    const inv =
+      "lancast-invite-v1:" +
+      btoa(JSON.stringify(wire)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+    await paste(inv);
+    expect(host.textContent).toContain("Utopia");
+    expect(host.textContent).toContain("192.168.1.20:8443");
+    expect(host.querySelector(".peer-invite__code")?.textContent).toMatch(/^[2-9A-Z]{4}-[2-9A-Z]{4}$/);
+
+    await paste("not an invite");
+    expect(host.textContent).toContain("does not look like a whole LANcast invite");
+  });
+
+  /*
    * `added` is not `paired`. Only the transport can move a peer to paired, by
    * reaching the far side and finding it holds us too (ADR 0044 §3), so
    * rendering `added` as connected would claim the other person agreed to
