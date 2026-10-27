@@ -36,6 +36,7 @@ import type {
   AuditPage,
   AuthStatus,
   AuthUser,
+  ComicPages,
   LoginResult,
   ManagedUser,
   RecoveryCodes,
@@ -998,6 +999,33 @@ export function useLibraries() {
     queryKey: ["libraries"],
     queryFn: ({ signal }) => apiGet<Library[]>("/api/libraries", signal),
     staleTime: 30_000,
+  });
+}
+
+/*
+ * A comic's page count and the caller's place in it (ADR 0101). Keeping the
+ * place refreshes this, so the detail page's Continue reading follows; reaching
+ * the last page marks the comic read, which changes everything a watched tick
+ * is drawn on.
+ */
+export function useComicPages(id: number) {
+  return useQuery({
+    queryKey: ["comic-pages", id],
+    queryFn: ({ signal }) => apiGet<ComicPages>(`/api/items/${id}/pages`, signal),
+    enabled: id > 0,
+    retry: false,
+  });
+}
+
+export function useSetComicPlace(id: number) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (page: number) => apiSend(`/api/items/${id}/place`, "PUT", { page }).then(() => page),
+    onSuccess: (page) => {
+      qc.invalidateQueries({ queryKey: ["comic-pages", id], refetchType: "none" });
+      const pages = qc.getQueryData<ComicPages>(["comic-pages", id])?.pages;
+      if (pages !== undefined && page === pages - 1) invalidateWatchState(qc);
+    },
   });
 }
 
@@ -3096,6 +3124,7 @@ export function playableKindFor(
       return "episode";
     case "picture":
     case "retro":
+    case "comics":
     case "other":
       return null;
     default:

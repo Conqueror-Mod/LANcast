@@ -175,6 +175,13 @@ func (s *Server) putShare(w http.ResponseWriter, r *http.Request) {
 			"game libraries cannot be shared with another server")
 		return
 	}
+	// Nor comics (ADR 0101): a friend's server would need a reader for them,
+	// and the federation routes stream video and audio, not pages.
+	if l.Kind == media.LibraryComics {
+		writeError(w, http.StatusBadRequest, "not_shareable",
+			"comics libraries cannot be shared with another server")
+		return
+	}
 	if body.Ceiling != "" && !ceilingApplies(l.Kind) {
 		writeError(w, http.StatusBadRequest, "bad_request",
 			"nothing in this library carries a certificate, so a limit would do nothing")

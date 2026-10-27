@@ -129,6 +129,7 @@ export function isMusic(item: Item): boolean {
  * is a second place to decide it differently.
  */
 export function watchedVerb(item: Item): { past: string; negated: string } {
+  if (isComic(item)) return { past: "read", negated: "unread" };
   return isMusic(item)
     ? { past: "played", negated: "unplayed" }
     : { past: "watched", negated: "unwatched" };
@@ -151,6 +152,11 @@ export function isPicture(item: Item): boolean {
  */
 export function isROM(item: Item): boolean {
   return item.kind === "rom";
+}
+
+// A comic (ADR 0101): read in LANcast's own reader, never handed to a player.
+export function isComic(item: Item): boolean {
+  return item.kind === "comic";
 }
 
 // Kinds whose artwork is square rather than a 2:3 poster. A record sleeve is

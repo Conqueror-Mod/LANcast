@@ -240,6 +240,7 @@ export type TogetherAskAnswer = components["schemas"]["TogetherAskAnswer"];
 // PATCH /api/users/{id} — an account as the manager sees it. `sessions` is live
 // sessions, not a login history: it answers "is this person here right now".
 export type ManagedUser = components["schemas"]["ManagedUser"];
+export type ComicPages = components["schemas"]["ComicPages"];
 export type LoginResult = components["schemas"]["LoginResponse"];
 export type TwoFactorState = components["schemas"]["TwoFactorState"];
 export type TwoFactorSetup = components["schemas"]["TwoFactorSetup"];

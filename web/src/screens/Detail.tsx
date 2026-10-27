@@ -42,6 +42,7 @@ import {
   isContainer,
   childLabel,
   childCountLabel,
+  isComic,
   isPicture,
   isROM,
   watchedVerb,
@@ -49,7 +50,7 @@ import {
 import { platformLabel } from "@/lib/platforms";
 import { retroAvailability } from "@/playback/retro";
 import { WEB_STATE_PREFIX, webStateCore } from "@/playback/retroWeb";
-import { useCollectionFilms, useGameSaves, useItemCollections, useOnWatchlist, useSetWatchlist, useOptimized, useSetOptimized, optimizedOf } from "@/api/hooks";
+import { useComicPages, useCollectionFilms, useGameSaves, useItemCollections, useOnWatchlist, useSetWatchlist, useOptimized, useSetOptimized, optimizedOf } from "@/api/hooks";
 import type { OptimizedList } from "@/api/types";
 import { useQuery } from "@tanstack/react-query";
 import type { Item } from "@/api/types";
@@ -403,7 +404,7 @@ function detailActions(o: {
   out.push(...o.collections);
   // Anything that plays on its own can go in a playlist; a container cannot,
   // since a playlist holds entries, not albums. Pictures do not play at all.
-  if (!o.container && !isPicture(item) && !isROM(item)) {
+  if (!o.container && !isPicture(item) && !isROM(item) && !isComic(item)) {
     out.push({ label: "Add to playlist", onSelect: o.addToPlaylist });
   }
   // Anything with a file of its own can be taken away; a container has none,
@@ -652,6 +653,8 @@ export function Detail() {
     // A ROM is identified by its hash against a DAT (ADR 0073); Fix match
     // searches film and TV providers that have never heard of it.
     !isROM(item) &&
+    // Nor has any provider heard of a comic (ADR 0101).
+    !isComic(item) &&
     // A playlist has no provider identity to correct. It is a list somebody
     // named, and the only thing a search could do with "Road Trip" is offer the
     // film — the same reason a collection and a season are excluded, arrived at
@@ -1122,7 +1125,8 @@ export function Detail() {
                   would hand a ROM to the video player (ADR 0073). A neutral
                   note, not a control: nothing here can be pressed yet. */}
               {isROM(item) && !item.missing && <RetroActions item={item} />}
-              {!container && !isPicture(item) && !isROM(item) && !item.missing &&
+              {isComic(item) && !item.missing && <ComicActions item={item} />}
+              {!container && !isPicture(item) && !isROM(item) && !isComic(item) && !item.missing &&
                 (resumeSeconds({
                   positionMs: item.progress?.position_ms,
                   watched: item.progress?.watched,
@@ -1517,6 +1521,33 @@ export function Detail() {
  * desktop client has no bindings, a console waits on a later stage or a core
  * nobody has installed — rather than a button that cannot work.
  */
+/*
+ * A comic's Read button (ADR 0101): Continue reading from the page it was
+ * left on, with Start over beside it, or Read from the start. A finished comic
+ * reads from the start, which is what the reader does with it too.
+ */
+function ComicActions({ item }: { item: Item }) {
+  const navigate = useNavigate();
+  const { data } = useComicPages(item.id);
+  const place = data?.place;
+  const midway = !!place && place.page > 0 && place.page < data!.pages - 1;
+  return midway ? (
+    <>
+      <PlayButton
+        label={`Continue reading · page ${place!.page + 1} of ${data!.pages}`}
+        onPlay={() => navigate(`/read/${item.id}`)}
+      />
+      <SecondaryButton
+        label="Start over"
+        className="detail__play detail__play--secondary"
+        onPress={() => navigate(`/read/${item.id}?start=1`)}
+      />
+    </>
+  ) : (
+    <PlayButton label="Read" onPlay={() => navigate(`/read/${item.id}`)} />
+  );
+}
+
 function RetroActions({ item }: { item: Item }) {
   const navigate = useNavigate();
   const { data: can } = useQuery({

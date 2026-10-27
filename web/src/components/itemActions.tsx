@@ -18,7 +18,7 @@ import {
 } from "@/api/hooks";
 import { usePlayback } from "@/playback/PlaybackProvider";
 import { apiGet } from "@/api/client";
-import { isContainer, isMusic, isPicture, isROM, watchedVerb } from "@/lib/kind";
+import { isComic, isContainer, isMusic, isPicture, isROM, watchedVerb } from "@/lib/kind";
 import { startOf } from "@/playback/queueOrder";
 import { AddToPlaylist } from "./AddToPlaylist";
 import { RemoveDialog } from "./RemoveDialog";
@@ -389,6 +389,19 @@ export function useItemActions(): ItemActions {
        * exist yet (ADR 0073). Play, queue and playlist would each hand a ROM
        * to the video player, so the menu offers what is true of it now.
        */
+      // A comic opens in the reader (ADR 0101); play, queue and playlist
+      // would hand it to a player.
+      if (isComic(item)) {
+        return [
+          { label: "Read", onSelect: () => navigate(`/read/${item.id}`) },
+          {
+            label: "Go to details",
+            onSelect: () => navigate(`/item/${item.id}`),
+          },
+          ...remove,
+        ];
+      }
+
       if (isROM(item)) {
         return [
           {

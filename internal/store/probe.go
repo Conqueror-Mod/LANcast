@@ -130,7 +130,8 @@ func (s *Store) SaveProbe(ctx context.Context, itemID int64, r ProbeResult) erro
  * and logged "Invalid data found when processing input". ROMs are read by
  * their own worker (internal/retro/identify).
  */
-const notProbed = `kind != 'rom'`
+// A comic is a zip of pictures (ADR 0101), which ffprobe has nothing to say about.
+const notProbed = `kind NOT IN ('rom', 'comic')`
 
 // PendingProbe returns items that have never been probed, or whose file
 // changed since they were.

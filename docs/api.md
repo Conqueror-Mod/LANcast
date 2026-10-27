@@ -848,7 +848,7 @@ should be able to show them side by side without explaining the gap.
 
 ### `POST /api/libraries`
 
-`kind` is one of `movie`, `show`, `music`, `picture`, `retro`, `other`. Every path must
+`kind` is one of `movie`, `show`, `music`, `picture`, `retro`, `comics`, `other`. Every path must
 exist and be a directory; all are validated **before** anything is inserted, so
 a typo in the third location does not leave a half-made library behind.
 
@@ -1040,7 +1040,7 @@ the body. Scans are never queued.
 
 **`kind` is permanent.** It decides which files are scanned at all — a `music`
 library indexes audio, a `picture` library images, a `retro` library ROMs and
-disc images, everything else video — and
+disc images, a `comics` library `.cbz` archives, everything else video — and
 it biases matching between films and TV. There is no endpoint to change it:
 altering it would mean a rescan re-litigating identity for an entire library,
 which is what field locking exists to prevent. Remove the library and add it
@@ -1319,6 +1319,38 @@ The whole history as a file to save. `?format=csv` (the default) or
 
 LANcast sends the file nowhere. Importing it into another service is something a
 person does with the download, which is how *no phone-home* survives an export.
+
+### Comics
+
+A `comics` library ([ADR 0101](adr/0101-a-comic-is-read-out-of-its-archive.md))
+indexes `.cbz` files, each a `comic` item. Its title and year come from the
+filename (`Saga 012 (2014) (Digital).cbz` is *Saga 012*, 2014), its `series` is
+the folder it sits in when that is not the library's root, and its poster is its
+first page. No metadata provider and no ffprobe ever see one. `.cbr` (RAR) and
+`.cb7` are not read. A comics library cannot be shared with a paired server and
+is not offered over DLNA.
+
+| Route | Purpose |
+|---|---|
+| `GET /api/items/{id}/pages` | `{pages, place}`: how many, and the caller's own `{page, pages, updated_at}` or `null` |
+| `GET /api/items/{id}/pages/{n}` | Page `n`, from 0, as the image it is in the archive |
+| `PUT /api/items/{id}/place` | `{page}` → `204`. Keeps the caller's place; **the last page marks it read** (`watched`) |
+
+**Pages are the archive's images in natural name order** — `p2` before `p10` —
+compared folder by folder. `ComicInfo.xml`, `__MACOSX/` and hidden files are not
+pages. A page is named by its number, never by its name inside the archive, so
+nothing a client sends is a path, and nothing is unpacked to disk: each page is
+read out of the zip when asked for. A page over 64 MB, or an archive over 5,000
+pages, is refused.
+
+A place is not progress. A comic does not join Continue Watching, and its place
+is not a position in milliseconds; finishing one is `watched`, so the tick,
+Mark as unwatched and the watched filter work as they do for a film. A broken
+or missing archive is `503` on all three.
+
+**An account with a content limit sees no comics** until an administrator rates
+one by hand on its page. Nothing rates them otherwise, and an unrated title is
+hidden from a limited account, as an unrated film is.
 
 ### `GET /api/items/{id}/photo`
 

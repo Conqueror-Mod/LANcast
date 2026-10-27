@@ -28,6 +28,7 @@ import { Addons } from "@/screens/Addons";
 import { LiveTV } from "@/screens/LiveTV";
 import { People } from "@/screens/People";
 import { RetroPlayRoute } from "@/screens/RetroWebPlay";
+import { Reader } from "@/screens/Reader";
 import { Stub } from "@/screens/Stub";
 import { Setup, Login } from "@/screens/Auth";
 import { MiniPlayer } from "@/components/MiniPlayer";
@@ -126,6 +127,8 @@ export function App() {
           <Route path="/watch/:id" element={<Player />} />
           {/* A retro game, in the desktop client's own player (ADR 0073). */}
           <Route path="/play/:id" element={<RetroPlayRoute />} />
+          {/* A comic, in LANcast's own reader (ADR 0101). */}
+          <Route path="/read/:id" element={<Reader />} />
           <Route path="/review" element={<Review />} />
           <Route path="/profile" element={<Profile />} />
           <Route path="/profile/favourites" element={<Favourites />} />

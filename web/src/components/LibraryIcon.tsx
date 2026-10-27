@@ -67,6 +67,15 @@ function glyph(kind: string) {
           <path d="M3 14l4.5-4 3.5 3 2.5-2 3.5 3" />
         </>
       );
+    case "comics":
+      // An open book with a speech bubble over it: "book" alone reads as
+      // documents, and the bubble is what says comics at 18px.
+      return (
+        <>
+          <path d="M10 8.5v8M10 8.5C8.5 7.5 6 7.2 3 7.5v8.5c3-.3 5.5 0 7 1 1.5-1 4-1.3 7-1V7.5c-3-.3-5.5 0-7 1z" />
+          <path d="M11.5 2.5h5a1 1 0 0 1 1 1V6a1 1 0 0 1-1 1h-2.5l-1.8 1.4V7h-.7a1 1 0 0 1-1-1V3.5a1 1 0 0 1 1-1z" />
+        </>
+      );
     case "retro":
       // A gamepad: a rounded body, a cross on the left, two buttons on the
       // right. Reads as "games" at 18px where a cartridge reads as a box.

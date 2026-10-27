@@ -223,7 +223,9 @@ func (s *Store) ItemRatings(ctx context.Context, itemID int64) ([]ItemRating, er
 //
 // A ROM is the third case (ADR 0073). It is identified by hash against a DAT
 // file, by its own worker, and no provider in the registry can search for one.
-const enrichableKinds = `kind NOT IN ('track', 'album', 'artist', 'photo', 'gallery', 'rom')`
+//
+// A comic is the fourth (ADR 0101): no provider in the registry knows comics.
+const enrichableKinds = `kind NOT IN ('track', 'album', 'artist', 'photo', 'gallery', 'rom', 'comic')`
 
 // PendingEnrichment returns items awaiting metadata. The queue is a query
 // rather than a table, which makes it restart-safe by construction.

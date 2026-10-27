@@ -32,7 +32,10 @@ const (
 	// A retro game's ROM or disc image (ADR 0073). Not "game": ADR 0066 uses
 	// that word for installed PC games, which are never server rows, and two
 	// opposite concepts sharing one word would be a trap.
-	KindROM   Kind = "rom"
+	KindROM Kind = "rom"
+	// A comic book archive (ADR 0101). The library kind is "comics"; the two
+	// are spelled differently for the reason picture and photo are.
+	KindComic Kind = "comic"
 	KindOther Kind = "other"
 )
 
@@ -49,7 +52,9 @@ const (
 	// Retro games (ADR 0073): ROMs of every console in one library, filtered
 	// by platform rather than split into a library per console.
 	LibraryRetro = "retro"
-	LibraryOther = "other"
+	// Comic book archives, read in LANcast's own reader (ADR 0101).
+	LibraryComics = "comics"
+	LibraryOther  = "other"
 )
 
 // Info is what we could infer from a path alone.
@@ -149,6 +154,8 @@ func IsScannable(path, libKind string) bool {
 		return IsImage(path)
 	case LibraryRetro:
 		return IsROM(path)
+	case LibraryComics:
+		return IsComic(path)
 	default:
 		return IsVideo(path)
 	}
@@ -345,6 +352,13 @@ func Parse(root, path, libKind string) Info {
 	// lookup replaces it with the DAT's canonical name when one matches.
 	if libKind == LibraryRetro {
 		return Info{Kind: KindROM, Title: ROMTitle(path), Platform: Platform(root, path)}
+	}
+
+	// A comic's name is its series, issue and release tags (ADR 0101), none of
+	// which the video heuristics below understand.
+	if libKind == LibraryComics {
+		title, year := ComicTitle(path)
+		return Info{Kind: KindComic, Title: title, Year: year, Series: ComicSeries(root, path)}
 	}
 
 	if m := reSeasonEp.FindStringSubmatch(base); m != nil {

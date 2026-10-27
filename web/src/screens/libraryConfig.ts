@@ -131,6 +131,17 @@ const RETRO: LibraryKindConfig = {
   ],
 };
 
+// A comics library's top level is comics (ADR 0101), sorted under their
+// series. No rating source covers them; the year is the filename's.
+const COMICS: LibraryKindConfig = {
+  searchPlaceholder: "Search comics",
+  sorts: [
+    { value: "title", label: "Title" },
+    { value: "year", label: "Year" },
+    { value: "added", label: "Recently added" },
+  ],
+};
+
 export function configForKind(kind: string | undefined): LibraryKindConfig {
   switch (kind) {
     case "show":
@@ -141,6 +152,8 @@ export function configForKind(kind: string | undefined): LibraryKindConfig {
       return PICTURE;
     case "retro":
       return RETRO;
+    case "comics":
+      return COMICS;
     default:
       return MOVIE;
   }
@@ -161,6 +174,7 @@ export const LIBRARY_KINDS: { value: string; label: string }[] = [
   // (ADR 0066), which are never a library, and one word for both would send
   // somebody looking for their Steam list into the add-library form.
   { value: "retro", label: "Retro games" },
+  { value: "comics", label: "Comics" },
   { value: "other", label: "Other" },
 ];
 
