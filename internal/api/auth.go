@@ -45,7 +45,11 @@ func isPublicPath(p string) bool {
 		"/api/auth/passkey/login/options", "/api/auth/passkey/login",
 		// The sign-in page's account picker: home network only, enforced in
 		// the handler (loginpicker.go).
-		"/api/auth/accounts":
+		"/api/auth/accounts",
+		// Joining with an invite (ADR 0104): whoever holds the link has no
+		// account yet. The secret is checked, and failures throttled, in the
+		// handler.
+		"/api/invites/check", "/api/invites/redeem":
 		return true
 	}
 	if isFederationPath(p) {

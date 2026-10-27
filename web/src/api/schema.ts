@@ -4,6 +4,92 @@
  */
 
 export interface paths {
+    "/invites": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Outstanding invites (ADR 0104)
+         * @description Administrators only. Every invite that can still be used, newest first. Expired invites are deleted on the way, so what is listed is what still works. **Never the secret**, which exists only in the answer that made it; the database holds only its SHA-256.
+         */
+        get: operations["listInvites"];
+        put?: never;
+        /**
+         * Make a link that creates one member account, once (ADR 0104)
+         * @description Administrators only. Returns the secret **once**: the link is `https://<public_name>/join#<token>` when `public_name` is set, otherwise the address the administrator is using (which a friend outside the house cannot reach). The secret goes in the fragment so that a browser never sends it in a request line, a log or a Referer.
+         *
+         *     Works once, for 7 days. Always a **member**: no route invites an administrator. The content ceiling and hidden libraries apply in the same transaction that creates the account, so nobody sees anything before the limits are in force.
+         */
+        post: operations["createInvite"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/invites/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Withdraw an invite
+         * @description Administrators only. The link stops working at once.
+         */
+        delete: operations["deleteInvite"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/invites/check": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Whether an invite link still works
+         * @description **Public**: whoever holds the link has no account. The secret is sent in the body, never the path or query. An unknown, spent, withdrawn or expired secret all get the same `404`, and failed lookups are counted per address: a run of them is `429`.
+         */
+        post: operations["checkInvite"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/invites/redeem": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Make your account with an invite, and sign in
+         * @description **Public.** Creates a **member** account with the chosen name and password (the same rules as any account), applies the invite's limits, spends the invite, and starts a session: the session cookie is set on this answer, as on sign-in. A taken name (`409`) or a weak password (`400`) leaves the invite untouched, so it can be tried again. Two redemptions racing the same link make one account.
+         */
+        post: operations["redeemInvite"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/auth/login/two-factor": {
         parameters: {
             query?: never;
@@ -6212,6 +6298,17 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        Invite: {
+            id: string;
+            note: string;
+            max_content_rating?: string;
+            hidden_libraries: number[];
+            created_by: string;
+            /** Format: int64 */
+            created_at: number;
+            /** Format: int64 */
+            expires_at: number;
+        };
         /** @description The single error shape. Handlers never surface raw SQL errors. */
         ErrorEnvelope: {
             error: components["schemas"]["Error"];
@@ -9610,6 +9707,212 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    listInvites: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The invites. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        invites: components["schemas"]["Invite"][];
+                    };
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    createInvite: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @description Who it is for, in the administrator's words. Shown to administrators only, never to the person holding the link. */
+                    note?: string;
+                    /** @description A content ceiling for the account, as `PATCH /api/users/{id}` takes it. Empty for none. */
+                    max_content_rating?: string;
+                    /** @description Libraries kept from the account (ADR 0084). */
+                    hidden_libraries?: number[];
+                };
+            };
+        };
+        responses: {
+            /** @description Made. `token` is the secret and is not shown again. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        invite: components["schemas"]["Invite"];
+                        token: string;
+                        /** @description The public certificate's name while it is valid, otherwise empty. */
+                        public_name: string;
+                    };
+                };
+            };
+            /** @description A note over 200 characters, a rating this server cannot place, or a library that does not exist. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    deleteInvite: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Withdrawn. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    checkInvite: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    token: string;
+                };
+            };
+        };
+        responses: {
+            /** @description It works. Who made it and when it stops; never the administrator's note. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        from: string;
+                        /** Format: int64 */
+                        expires_at: number;
+                    };
+                };
+            };
+            /** @description Used, withdrawn, expired or never made: one answer for all four. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Too many failed lookups from this address. */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    redeemInvite: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    token: string;
+                    username: string;
+                    password: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Made and signed in. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["User"];
+                };
+            };
+            /** @description No name, a name over 64 characters, or a password that is too short. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Used, withdrawn, expired or never made. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description That name is taken. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Too many failed lookups from this address. */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
     postAuthLoginTwoFactor: {
         parameters: {
             query?: never;

@@ -5,6 +5,7 @@ import { AboutSettings } from "@/components/AboutSettings";
 import { useEffect, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { RATING_RUNGS } from "@/lib/ratings";
+import { InviteFriend } from "@/components/InviteFriend";
 import { formatBytes } from "@/lib/format";
 import {
   useItem,
@@ -952,6 +953,7 @@ function UsersSection() {
         <UserRow key={u.id} user={u} isSelf={u.id === me?.id} />
       ))}
       <AddUser />
+      <InviteFriend />
       {settings && (
         <>
           <label className="set-toggle">

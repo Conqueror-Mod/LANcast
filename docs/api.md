@@ -606,6 +606,20 @@ delete, `match`, item `refresh`); `GET`/`PUT /api/settings`; and all of
 | `GET /api/users/{id}/libraries` | `{hidden: [libraryID], applies}` — which libraries this account cannot see ([ADR 0084](adr/0084-a-library-can-be-kept-from-an-account.md)). Empty is the default: every library. `applies` is `false` for an administrator, who is never restricted; the rows are kept, so a demotion puts them back |
 | `PUT /api/users/{id}/libraries` | `{hidden: [libraryID]}` → replaces the set and answers as `GET`. `hidden` is required (`400` without it, rather than lifting everything), and an id that is not a library is `400`. Audited as `user.libraries` |
 
+### Invites
+
+A link that makes one **member** account, once ([ADR 0104](adr/0104-a-friend-is-invited-by-a-link-that-works-once.md)). Whoever opens it chooses their own name and password and is signed in. Nobody has to send anybody a password.
+
+| Route | Purpose |
+|---|---|
+| `POST /api/invites` | Admin. `{note?, max_content_rating?, hidden_libraries?}` → `201 {invite, token, public_name}`. **`token` is the secret, returned this once.** The link is `https://<public_name>/join#<token>`. Without a public name it uses whatever address the administrator is on, which a friend outside the house cannot reach. Works once, for 7 days. The limits apply when the account is made. `400` for a note over 200 characters, an unknown rating or an unknown library. Audited as `invite.create` |
+| `GET /api/invites` | Admin. `{invites: [Invite]}`, the ones that still work, newest first. Expired ones are deleted on the way. Never the secret |
+| `DELETE /api/invites/{id}` | Admin. Withdraw: the link stops working at once → `204`. Audited as `invite.delete` |
+| `POST /api/invites/check` | **Public.** `{token}` → `{from, expires_at}`, who made it and when it ends. Never the note, which is the administrator's words about the person |
+| `POST /api/invites/redeem` | **Public.** `{token, username, password}` → `201 {id, name, role}`, with the session cookie set as at sign-in. `409` for a taken name and `400` for a weak password, both of which leave the invite to be tried again. Audited as `invite.redeem` |
+
+**The secret travels in the fragment** (`#…`), which a browser never sends, and then in a POST body, never a path or query, so it is in no request log and no Referer. Only its SHA-256 is stored. An unknown, spent, withdrawn or expired secret gets **one** answer, `404`, so the answer does not say which. Failed lookups are counted per address and a run of them is `429`. A taken name or a short password is not counted, because that is not guessing.
+
 ---
 
 ## Errors

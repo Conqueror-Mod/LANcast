@@ -123,6 +123,106 @@
     }
   ],
   "paths": {
+    "/invites": {
+      "get": {
+        "operationId": "listInvites",
+        "tags": ["users"],
+        "summary": "Outstanding invites (ADR 0104)",
+        "description": "Administrators only. Every invite that can still be used, newest first. Expired invites are deleted on the way, so what is listed is what still works. **Never the secret**, which exists only in the answer that made it; the database holds only its SHA-256.",
+        "responses": {
+          "200": {
+            "description": "The invites.",
+            "content": { "application/json": { "schema": { "type": "object", "required": ["invites"], "properties": { "invites": { "type": "array", "items": { "$ref": "#/components/schemas/Invite" } } } } } }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" }
+        }
+      },
+      "post": {
+        "operationId": "createInvite",
+        "tags": ["users"],
+        "summary": "Make a link that creates one member account, once (ADR 0104)",
+        "description": "Administrators only. Returns the secret **once**: the link is `https://<public_name>/join#<token>` when `public_name` is set, otherwise the address the administrator is using (which a friend outside the house cannot reach). The secret goes in the fragment so that a browser never sends it in a request line, a log or a Referer.\n\nWorks once, for 7 days. Always a **member**: no route invites an administrator. The content ceiling and hidden libraries apply in the same transaction that creates the account, so nobody sees anything before the limits are in force.",
+        "requestBody": {
+          "required": true,
+          "content": { "application/json": { "schema": {
+            "type": "object",
+            "properties": {
+              "note": { "type": "string", "maxLength": 200, "description": "Who it is for, in the administrator's words. Shown to administrators only, never to the person holding the link." },
+              "max_content_rating": { "type": "string", "description": "A content ceiling for the account, as `PATCH /api/users/{id}` takes it. Empty for none." },
+              "hidden_libraries": { "type": "array", "items": { "type": "integer", "format": "int64" }, "description": "Libraries kept from the account (ADR 0084)." }
+            }
+          } } }
+        },
+        "responses": {
+          "201": {
+            "description": "Made. `token` is the secret and is not shown again.",
+            "content": { "application/json": { "schema": {
+              "type": "object",
+              "required": ["invite", "token", "public_name"],
+              "properties": {
+                "invite": { "$ref": "#/components/schemas/Invite" },
+                "token": { "type": "string" },
+                "public_name": { "type": "string", "description": "The public certificate's name while it is valid, otherwise empty." }
+              }
+            } } }
+          },
+          "400": { "description": "A note over 200 characters, a rating this server cannot place, or a library that does not exist.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorEnvelope" } } } },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" }
+        }
+      }
+    },
+    "/invites/{id}": {
+      "delete": {
+        "operationId": "deleteInvite",
+        "tags": ["users"],
+        "summary": "Withdraw an invite",
+        "description": "Administrators only. The link stops working at once.",
+        "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }],
+        "responses": {
+          "204": { "description": "Withdrawn." },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "$ref": "#/components/responses/NotFound" }
+        }
+      }
+    },
+    "/invites/check": {
+      "post": {
+        "operationId": "checkInvite",
+        "tags": ["users"],
+        "summary": "Whether an invite link still works",
+        "description": "**Public**: whoever holds the link has no account. The secret is sent in the body, never the path or query. An unknown, spent, withdrawn or expired secret all get the same `404`, and failed lookups are counted per address: a run of them is `429`.",
+        "security": [],
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object", "required": ["token"], "properties": { "token": { "type": "string" } } } } } },
+        "responses": {
+          "200": {
+            "description": "It works. Who made it and when it stops; never the administrator's note.",
+            "content": { "application/json": { "schema": { "type": "object", "required": ["from", "expires_at"], "properties": { "from": { "type": "string" }, "expires_at": { "type": "integer", "format": "int64" } } } } }
+          },
+          "404": { "description": "Used, withdrawn, expired or never made: one answer for all four.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorEnvelope" } } } },
+          "429": { "description": "Too many failed lookups from this address.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorEnvelope" } } } }
+        }
+      }
+    },
+    "/invites/redeem": {
+      "post": {
+        "operationId": "redeemInvite",
+        "tags": ["users"],
+        "summary": "Make your account with an invite, and sign in",
+        "description": "**Public.** Creates a **member** account with the chosen name and password (the same rules as any account), applies the invite's limits, spends the invite, and starts a session: the session cookie is set on this answer, as on sign-in. A taken name (`409`) or a weak password (`400`) leaves the invite untouched, so it can be tried again. Two redemptions racing the same link make one account.",
+        "security": [],
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object", "required": ["token", "username", "password"], "properties": { "token": { "type": "string" }, "username": { "type": "string", "maxLength": 64 }, "password": { "type": "string" } } } } } },
+        "responses": {
+          "201": { "description": "Made and signed in.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/User" } } } },
+          "400": { "description": "No name, a name over 64 characters, or a password that is too short.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorEnvelope" } } } },
+          "404": { "description": "Used, withdrawn, expired or never made.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorEnvelope" } } } },
+          "409": { "description": "That name is taken.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorEnvelope" } } } },
+          "429": { "description": "Too many failed lookups from this address.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorEnvelope" } } } }
+        }
+      }
+    },
     "/auth/login/two-factor": {
       "post": {
         "operationId": "postAuthLoginTwoFactor",
@@ -14454,6 +14554,19 @@
       }
     },
     "schemas": {
+      "Invite": {
+        "type": "object",
+        "required": ["id", "note", "hidden_libraries", "created_by", "created_at", "expires_at"],
+        "properties": {
+          "id": { "type": "string" },
+          "note": { "type": "string" },
+          "max_content_rating": { "type": "string" },
+          "hidden_libraries": { "type": "array", "items": { "type": "integer", "format": "int64" } },
+          "created_by": { "type": "string" },
+          "created_at": { "type": "integer", "format": "int64" },
+          "expires_at": { "type": "integer", "format": "int64" }
+        }
+      },
       "ErrorEnvelope": {
         "type": "object",
         "description": "The single error shape. Handlers never surface raw SQL errors.",
