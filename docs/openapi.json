@@ -554,6 +554,49 @@
         }
       }
     },
+    "/items/{id}/chapters": {
+      "get": {
+        "operationId": "itemChapters",
+        "summary": "The chapters a film's file carries",
+        "description": "Read from the file with `ffprobe -show_chapters` on first ask and kept in memory while the file's size and modification time are unchanged; nothing is stored. Sorted, with duplicates at the same instant dropped, untitled chapters named `Chapter N`, and a single chapter spanning the whole file treated as none. **Every failure is an empty list**, not an error: a file without chapters, no ffprobe, a container with no file, or a read that failed all answer `{\"chapters\": []}`.",
+        "tags": [
+          "Items"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The chapters, or none",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChapterList"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such item",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/metrics": {
       "get": {
         "operationId": "getMetrics",
@@ -17678,6 +17721,42 @@
           "secret": {
             "type": "string",
             "description": "`whsec_…`. Signs every delivery: `X-LANcast-Signature: sha256=<hex HMAC-SHA256 of the body>`. Shown once."
+          }
+        }
+      },
+      "Chapter": {
+        "type": "object",
+        "required": [
+          "start_ms",
+          "end_ms",
+          "title"
+        ],
+        "properties": {
+          "start_ms": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "end_ms": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Where the next chapter starts, or the end of the file."
+          },
+          "title": {
+            "type": "string"
+          }
+        }
+      },
+      "ChapterList": {
+        "type": "object",
+        "required": [
+          "chapters"
+        ],
+        "properties": {
+          "chapters": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Chapter"
+            }
           }
         }
       },

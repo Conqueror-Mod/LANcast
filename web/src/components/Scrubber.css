@@ -44,3 +44,34 @@
 .scrubber.is-dragging .scrubber__knob {
   opacity: 1;
 }
+
+/*
+ * Chapter ticks: a thin neutral notch where each chapter starts. Above the
+ * fill so a played chapter's start still shows, below the knob.
+ */
+.scrubber__mark {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  margin-left: -1px;
+  background: rgba(255, 255, 255, 0.55);
+  pointer-events: none;
+}
+
+/* The chapter under the pointer, named above the bar while hovering or dragging. */
+.scrubber__label {
+  position: absolute;
+  bottom: 100%;
+  transform: translateX(-50%);
+  max-width: 40ch;
+  padding: 3px 8px;
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.75);
+  color: #fff;
+  font-size: 12px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  pointer-events: none;
+}

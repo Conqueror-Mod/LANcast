@@ -11,6 +11,7 @@ import { apiGet, apiPost, apiSend, apiUpload } from "./client";
 import { addPasskey, signInWithPasskey } from "@/lib/webauthn";
 import type {
   BackupFile,
+  ChapterList,
   RestoreStarted,
   WebhookList,
   WebhookCreate,
@@ -3498,6 +3499,20 @@ export function useYearInReview(year?: number) {
  * Long staleTime for the same reason. This answer changes when somebody drops
  * an .lrc next to a track, which is not something a player needs to poll for.
  */
+/*
+ * The chapters a film's file carries (GET /api/items/{id}/chapters). Read by
+ * the player for the scrub bar and the chapter keys. Long-lived: a file's
+ * chapters change only when the file does, and the server checks that.
+ */
+export function useChapters(itemID: number, enabled = true) {
+  return useQuery({
+    queryKey: ["chapters", itemID],
+    queryFn: ({ signal }) => apiGet<ChapterList>(`/api/items/${itemID}/chapters`, signal),
+    enabled: enabled && itemID > 0,
+    staleTime: 30 * 60_000,
+  });
+}
+
 export function useLyrics(itemID: number) {
   return useQuery({
     queryKey: ["lyrics", itemID],

@@ -70,6 +70,12 @@ export const DEFAULT_BINDINGS: Binding[] = [
   { id: "mute", meaning: "Mute", scope: "player", keys: ["m"] },
   { id: "subtitles", meaning: "Cycle subtitle track", scope: "player", keys: ["[", "]"] },
   /*
+   * Chapters, back and forward. Page Up and Page Down because they are mpv's,
+   * and what anyone who has used a desktop player already presses. A pair, like
+   * the subtitles: the first back, the second forward.
+   */
+  { id: "chapter", meaning: "Previous · next chapter", scope: "player", keys: ["PageUp", "PageDown"] },
+  /*
    * Music's visualizers (docs/now-playing-plan.md). Not `[`/`]`, which are the
    * subtitles above: a key that means two things depending on what is playing
    * is the gold rule's problem in another form. The preset pair is one binding

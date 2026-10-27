@@ -402,6 +402,7 @@ export type OptimizedList = components["schemas"]["OptimizedList"];
 export type OptimizedVersion = components["schemas"]["OptimizedVersion"];
 
 export type BackupsResponse = components["schemas"]["BackupList"];
+export type ChapterList = components["schemas"]["ChapterList"];
 export type RestoreStarted = components["schemas"]["RestoreStarted"];
 export type RestoreOutcome = components["schemas"]["RestoreOutcome"];
 export type Webhook = components["schemas"]["Webhook"];
