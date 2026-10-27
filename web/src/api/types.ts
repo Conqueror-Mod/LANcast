@@ -402,6 +402,7 @@ export type OptimizedList = components["schemas"]["OptimizedList"];
 export type OptimizedVersion = components["schemas"]["OptimizedVersion"];
 
 export type BackupsResponse = components["schemas"]["BackupList"];
+export type PrerollAnswer = components["schemas"]["PrerollAnswer"];
 export type ChapterList = components["schemas"]["ChapterList"];
 export type Extra = components["schemas"]["Extra"];
 export type ExtraList = components["schemas"]["ExtraList"];

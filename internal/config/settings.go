@@ -267,6 +267,10 @@ type Settings struct {
 	BackupEveryDays int `json:"backup_every_days"`
 	BackupKeep      int `json:"backup_keep"`
 
+	// PrerollDir is the folder of clips played before a film (ADR 0099), one
+	// at random. Empty, the default, is off.
+	PrerollDir string `json:"preroll_dir,omitempty"`
+
 	// Webhooks are the URLs an administrator has asked to be told about
 	// events (ADR 0097). None by default, which is what keeps them inside the
 	// no-phone-home rule: the owner typed every destination. Here rather than

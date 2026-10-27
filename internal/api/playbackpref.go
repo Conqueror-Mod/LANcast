@@ -41,16 +41,32 @@ func (s *Server) setPlaybackPreferences(w http.ResponseWriter, r *http.Request) 
 			"this server has no accounts yet; create one first")
 		return
 	}
-	// A pointer, so a body without the field is refused rather than read as
-	// "off" — a client that sent nothing has not chosen anything.
+	// Pointers, so a field left out is left alone rather than read as "off":
+	// a client that sent nothing about it has not chosen anything. At least
+	// one is required.
 	var req struct {
-		SkipIntros *bool `json:"skip_intros"`
+		SkipIntros  *bool `json:"skip_intros"`
+		SkipPreroll *bool `json:"skip_preroll"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.SkipIntros == nil {
-		writeError(w, http.StatusBadRequest, "bad_request", "skip_intros is required")
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || (req.SkipIntros == nil && req.SkipPreroll == nil) {
+		writeError(w, http.StatusBadRequest, "bad_request", "skip_intros or skip_preroll is required")
 		return
 	}
-	p := store.PlaybackPrefs{SkipIntros: *req.SkipIntros}
+	p, err := s.st.PlaybackPrefsFor(r.Context(), sess.UserID)
+	if err != nil {
+		if err == store.ErrNotFound {
+			writeError(w, http.StatusNotFound, "not_found", "no such account")
+			return
+		}
+		s.writeInternal(w, err, "read playback preferences")
+		return
+	}
+	if req.SkipIntros != nil {
+		p.SkipIntros = *req.SkipIntros
+	}
+	if req.SkipPreroll != nil {
+		p.SkipPreroll = *req.SkipPreroll
+	}
 	if err := s.st.SetPlaybackPrefs(r.Context(), sess.UserID, p); err != nil {
 		if err == store.ErrNotFound {
 			writeError(w, http.StatusNotFound, "not_found", "no such account")

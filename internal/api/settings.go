@@ -91,6 +91,9 @@ func (s *Server) getSettings(w http.ResponseWriter, r *http.Request) {
 		"photo_places":   cur.PhotoPlaces,
 		"login_picker":   cur.LoginPicker,
 
+		// The pre-roll folder (ADR 0099), "" when off.
+		"preroll_dir": cur.PrerollDir,
+
 		// Never null, so a client can render the list without a guard.
 		"trusted_proxies": nonNil(cur.TrustedProxies),
 		// Whether a metrics token exists, and since when (ADR 0096). Never the
@@ -162,6 +165,7 @@ func (s *Server) putSettings(w http.ResponseWriter, r *http.Request) {
 		AuditRetentionDays *int            `json:"audit_retention_days"`
 		BackupEveryDays    *int            `json:"backup_every_days"`
 		BackupKeep         *int            `json:"backup_keep"`
+		PrerollDir         *string         `json:"preroll_dir"`
 		TrustedProxies     *[]string       `json:"trusted_proxies"`
 		DLNAEnabled        *bool           `json:"dlna_enabled"`
 		DLNAAccount        *string         `json:"dlna_account"`
@@ -364,6 +368,14 @@ func (s *Server) putSettings(w http.ResponseWriter, r *http.Request) {
 		}
 		next.BackupKeep = *req.BackupKeep
 	}
+	if req.PrerollDir != nil {
+		dir, problem := validPrerollDir(*req.PrerollDir)
+		if problem != "" {
+			writeError(w, http.StatusBadRequest, "bad_request", problem)
+			return
+		}
+		next.PrerollDir = dir
+	}
 	if req.TrustedProxies != nil {
 		_, normal, err := auth.ParseTrustedProxies(*req.TrustedProxies)
 		if err != nil {
@@ -533,6 +545,8 @@ func changedSettings(prev, next config.Settings) []string {
 	// Audited because lowering the count deletes backups at the next run.
 	add("backup_every_days", prev.BackupEveryDays != next.BackupEveryDays)
 	add("backup_keep", prev.BackupKeep != next.BackupKeep)
+	// Audited: it is a folder the server will read and play to everyone.
+	add("preroll_dir", prev.PrerollDir != next.PrerollDir)
 	// Audited: it decides whose word about a caller's address is believed,
 	// which is what the login throttle and the home-network checks rest on.
 	add("trusted_proxies", !slices.Equal(prev.TrustedProxies, next.TrustedProxies))

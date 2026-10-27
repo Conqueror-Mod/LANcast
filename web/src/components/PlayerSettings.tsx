@@ -281,6 +281,21 @@ function SkipIntrosToggle() {
         Watch intro to go back. Follows your account to every device you sign in
         on. Credits always keep their button.
       </p>
+      {/* ADR 0099: the account's own say over the server's pre-roll. */}
+      <label className="set-toggle">
+        <input
+          type="checkbox"
+          checked={!prefs.data.skip_preroll}
+          disabled={set.isPending}
+          onChange={(e) => set.mutate({ skip_preroll: !e.target.checked })}
+        />
+        Play the pre-roll before films
+      </label>
+      <p className="set-row__sub">
+        When this server has a pre-roll clip, it plays before a film you start from
+        the beginning, never when you carry on watching. You can skip it each time;
+        turn this off to never see it. Follows your account.
+      </p>
     </>
   );
 }

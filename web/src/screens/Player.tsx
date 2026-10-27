@@ -40,7 +40,8 @@ import {
 } from "@/components/PlayerGlyphs";
 import { usePlayback, useFullSurface } from "@/playback/PlaybackProvider";
 import { AUTO_SKIP_IDLE, autoSkipStep, skipTarget, type AutoSkipState } from "@/lib/skip";
-import { useChapters, usePlaybackPrefs } from "@/api/hooks";
+import { fetchPreroll, useChapters, usePlaybackPrefs } from "@/api/hooks";
+import { PrerollOverlay } from "@/components/PrerollOverlay";
 import { nextChapterStart, previousChapterStart, type ChapterMark } from "@/lib/chapters";
 import { UpNextCard } from "@/components/UpNextCard";
 import { AfterFilm } from "@/components/AfterFilm";
@@ -125,8 +126,49 @@ export function Player() {
    */
   const playingRef = useRef(pb.itemID);
   playingRef.current = pb.itemID;
+
+  /*
+   * The pre-roll gate (ADR 0099).
+   *
+   * A film entered fresh — not one already playing, which is coming back from
+   * the mini-player — asks the server first whether a clip plays before it.
+   * The play effect below waits for the answer, and for the clip to end; with
+   * pre-roll off the answer is immediate and nothing is shown. The server owns
+   * the rule (a film, from the start, this account not opted out), so a
+   * resume, an episode or a track all come back with no clip.
+   */
+  const [gate, setGate] = useState<{ id: number; clip: string | null; ready: boolean }>({
+    id: 0,
+    clip: null,
+    ready: false,
+  });
   useEffect(() => {
     if (!itemID) return;
+    if (playingRef.current === itemID) {
+      setGate({ id: itemID, clip: null, ready: true });
+      return;
+    }
+    let live = true;
+    setGate({ id: itemID, clip: null, ready: false });
+    fetchPreroll(itemID, fromStart)
+      .then((a) => {
+        if (!live) return;
+        const key = a.clip?.key;
+        setGate({ id: itemID, clip: key ? `/api/preroll/${encodeURIComponent(key)}` : null, ready: !key });
+      })
+      // A question that fails is a film that starts: pre-roll is never worth
+      // keeping somebody from what they pressed Play on.
+      .catch(() => {
+        if (live) setGate({ id: itemID, clip: null, ready: true });
+      });
+    return () => {
+      live = false;
+    };
+  }, [itemID, fromStart]);
+  const gateOpen = gate.id === itemID && gate.ready;
+
+  useEffect(() => {
+    if (!itemID || !gateOpen) return;
     // Both forms of "here is the queue" count: history state, and the ?queue=
     // the track list and the collection page still use.
     const suppliedQueue = (stateQueue && stateQueue.length > 0) || !!queueParam;
@@ -167,7 +209,7 @@ export function Player() {
     // stateQueue is stable for a history entry; its length identifies it well
     // enough to avoid re-running on an unrelated render.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [itemID, queueParam, play, setShuffle, stateQueue?.length, stateShuffle]);
+  }, [itemID, queueParam, play, setShuffle, stateQueue?.length, stateShuffle, gateOpen]);
 
   // **The URL is not kept in step with the queue, deliberately.**
   //
@@ -640,6 +682,12 @@ export function Player() {
         pb.toggleFullscreen();
       }}
     >
+      {gate.id === itemID && gate.clip && !gate.ready && (
+        <PrerollOverlay
+          src={gate.clip}
+          onDone={() => setGate((g) => ({ ...g, clip: null, ready: true }))}
+        />
+      )}
       {/* A black rectangle with a running clock is what a failed playback looks
           like too. A transcode takes seconds to produce its first frame, and on
           a resumed film the clock starts at the resume point, so without this
