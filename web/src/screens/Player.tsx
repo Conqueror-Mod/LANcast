@@ -40,7 +40,8 @@ import {
 } from "@/components/PlayerGlyphs";
 import { usePlayback, useFullSurface } from "@/playback/PlaybackProvider";
 import { AUTO_SKIP_IDLE, autoSkipStep, skipTarget, type AutoSkipState } from "@/lib/skip";
-import { usePlaybackPrefs } from "@/api/hooks";
+import { useChapters, usePlaybackPrefs } from "@/api/hooks";
+import { nextChapterStart, previousChapterStart, type ChapterMark } from "@/lib/chapters";
 import { UpNextCard } from "@/components/UpNextCard";
 import { AfterFilm } from "@/components/AfterFilm";
 import { DEFAULTS, DIALOGUE_LEVELS } from "@/playback/prefs";
@@ -51,6 +52,10 @@ import {
   nextDialogueLevel,
 } from "@/playback/soundControls";
 import "./Player.css";
+
+// One empty list, so a film without chapters does not hand the key effect a
+// new array on every render.
+const NO_CHAPTERS: ChapterMark[] = [];
 
 // The player screen is chrome. The media element and everything that drives it
 // live in PlaybackProvider, above the router, so that leaving this screen docks
@@ -412,6 +417,9 @@ export function Player() {
   const vizShowing = vizOffered && (pb.vizFull || stageTier(pb.prefs.stage) > 0);
   // The stored MilkDrop presets, each a stop for `,` and `.` (ADR 0091).
   const milkdropIDs = useMilkdropOffer(vizOffered).ids;
+  // The file's chapters, for the scrub bar and Page Up / Page Down. A track
+  // has none worth asking for; a film or an episode often does.
+  const chapters = useChapters(pb.item?.id ?? 0, !pb.isAudio).data?.chapters ?? NO_CHAPTERS;
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       // While typing in the subtitle search box, keys are text — not transport.
@@ -457,7 +465,19 @@ export function Player() {
         // back, the second forward, whatever they have been rebound to.
         const subs = bindingKeys("subtitles");
         const viz = bindingKeys("vizpreset");
-        if (e.key === subs[0]) cycleSub(-1);
+        const chap = bindingKeys("chapter");
+        if (e.key === chap[0] || e.key === chap[1]) {
+          // Only when the file has chapters; otherwise the keys do nothing
+          // rather than something surprising.
+          const to =
+            e.key === chap[0]
+              ? previousChapterStart(chapters, pb.displayTime)
+              : nextChapterStart(chapters, pb.displayTime);
+          if (to !== undefined) {
+            e.preventDefault();
+            pb.seekTo(to);
+          }
+        } else if (e.key === subs[0]) cycleSub(-1);
         else if (e.key === subs[1]) cycleSub(1);
         // Only while a visualizer is showing: over the cover they would turn
         // one on, and routing the music is not a side effect a stray key gets.
@@ -499,6 +519,9 @@ export function Player() {
     vizOffered,
     vizShowing,
     milkdropIDs,
+    chapters,
+    pb.seekTo,
+    pb.displayTime,
     wakeChrome,
   ]);
 
@@ -765,6 +788,7 @@ export function Player() {
             current={pb.displayTime}
             duration={pb.totalDuration}
             onSeek={pb.seekTo}
+            chapters={chapters}
           />
           <div className="player__controls">
             {/* Transport, in the order the hand expects: back through the

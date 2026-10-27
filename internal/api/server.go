@@ -159,6 +159,8 @@ type Deps struct {
 
 // Server holds the API dependencies.
 type Server struct {
+	// chapters caches each file's chapter marks (chapters.go).
+	chapters chapterCache
 	// webhooks delivers events to the URLs in settings (ADR 0097); nil
 	// where nothing runs it. webhookMu serialises edits to the list.
 	webhooks  *webhook.Dispatcher
@@ -812,6 +814,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("PATCH /api/items/{id}", s.adminOnly(s.patchItem))
 	mux.HandleFunc("DELETE /api/items/{id}", s.adminOnly(s.deleteItem))
 	mux.HandleFunc("PUT /api/items/{id}/progress", s.putProgress)
+	// The marks a file carries, for the scrub bar; read on first ask, cached.
+	mux.HandleFunc("GET /api/items/{id}/chapters", s.itemChapters)
 	mux.HandleFunc("DELETE /api/items/{id}/locks/{field}", s.adminOnly(s.deleteLock))
 	mux.HandleFunc("PUT /api/items/{id}/sensitive", s.adminOnly(s.putSensitive))
 	// Admin, like every other write that changes what the library looks like to

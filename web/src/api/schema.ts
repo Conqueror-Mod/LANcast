@@ -256,6 +256,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/items/{id}/chapters": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The chapters a film's file carries
+         * @description Read from the file with `ffprobe -show_chapters` on first ask and kept in memory while the file's size and modification time are unchanged; nothing is stored. Sorted, with duplicates at the same instant dropped, untitled chapters named `Chapter N`, and a single chapter spanning the whole file treated as none. **Every failure is an empty list**, not an error: a file without chapters, no ffprobe, a container with no file, or a read that failed all answer `{"chapters": []}`.
+         */
+        get: operations["itemChapters"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/metrics": {
         parameters: {
             query?: never;
@@ -7578,6 +7598,19 @@ export interface components {
             /** @description `whsec_…`. Signs every delivery: `X-LANcast-Signature: sha256=<hex HMAC-SHA256 of the body>`. Shown once. */
             secret: string;
         };
+        Chapter: {
+            /** Format: int64 */
+            start_ms: number;
+            /**
+             * Format: int64
+             * @description Where the next chapter starts, or the end of the file.
+             */
+            end_ms: number;
+            title: string;
+        };
+        ChapterList: {
+            chapters: components["schemas"]["Chapter"][];
+        };
         BackupFile: {
             name: string;
             /** Format: int64 */
@@ -9555,6 +9588,37 @@ export interface operations {
                 };
             };
             401: components["responses"]["Unauthorized"];
+        };
+    };
+    itemChapters: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The chapters, or none */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ChapterList"];
+                };
+            };
+            /** @description No such item */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
         };
     };
     getMetrics: {

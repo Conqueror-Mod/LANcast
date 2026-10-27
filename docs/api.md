@@ -2379,6 +2379,25 @@ off seasons rather than off the show — the obvious call returns the seasons, a
 every client would otherwise reimplement the walk and get the loose-episode case
 wrong.
 
+### `GET /api/items/{id}/chapters`
+
+The chapters the file carries, for the scrub bar and the chapter keys:
+
+```json
+{ "chapters": [
+    { "start_ms": 0,      "end_ms": 312000,  "title": "Opening" },
+    { "start_ms": 312000, "end_ms": 1500500, "title": "The Heist" } ] }
+```
+
+Read with `ffprobe -show_chapters` on first ask, a container read with no
+stream decoding, and kept in memory while the file's size and modification
+time are unchanged. Nothing is stored in the database. Sorted; two chapters at
+the same instant keep the first; an untitled chapter is `Chapter N`; a single
+chapter spanning the whole file counts as none. **Every failure is an empty
+list, not an error** — no chapters, no ffprobe, a container with no file, or a
+read that failed — so the player carries on as it did before chapters existed.
+`404` for an item the caller cannot see.
+
 ### `GET /api/items/{id}/lyrics`
 
 The words to a track, read off the disk it is already on.
