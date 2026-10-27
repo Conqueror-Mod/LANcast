@@ -224,4 +224,16 @@ func TestALimitedAccountCannotOpenAComic(t *testing.T) {
 			t.Errorf("%s: %d", p, resp.StatusCode)
 		}
 	}
+
+	// Rated by hand, within the limit, it is theirs to read again.
+	resp = h.authed(t, "PATCH", fmt.Sprintf("/api/items/%d", id), map[string]any{"content_rating": "G"})
+	resp.Body.Close()
+	if resp.StatusCode >= 300 {
+		t.Fatalf("rate by hand: %d", resp.StatusCode)
+	}
+	resp = h.asUser(t, m, "GET", fmt.Sprintf("/api/items/%d/pages", id), nil)
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("after rating it G: %d", resp.StatusCode)
+	}
 }
