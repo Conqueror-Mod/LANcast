@@ -500,6 +500,7 @@ func (w *webview) syncVideo() {
 	if w.video == 0 {
 		return
 	}
+	w.roundVideo(w.layout == VideoMini || w.layout == VideoPiP)
 	switch {
 	case visible == 0 || w.layout == VideoHidden:
 		_, _, _ = w32.User32SetWindowPos.Call(w.video, 0, 0, 0, 0, 0,
@@ -789,6 +790,48 @@ func (w *webview) activateOverlay() {
  * click on the film over a game does nothing rather than opening the full
  * player out from under the game.
  */
+/*
+ * Rounded corners on the docked picture.
+ *
+ * Docked, the picture is a window of its own floated over the page's card, so
+ * the card's border-radius never reached it: the film was a hard rectangle
+ * laid over a rounded box, and the box's corners and gold border showed round
+ * its edges unevenly, depending on how the device pixels fell.
+ *
+ * Windows 11 rounds a window's corners itself, anti-aliased, when asked
+ * (DWMWA_WINDOW_CORNER_PREFERENCE). Its radius is 8px at 100% scale; the card
+ * (playback.css, --mini-radius) is drawn to wrap a picture with that radius,
+ * one border-width in. The system border DWM would add to a rounded window is
+ * turned off: the page draws the border.
+ *
+ * Full size it is square again — it fills the client area, and the main
+ * window decides its own corners. Windows 10 refuses the attribute, and the
+ * picture stays the rectangle it always was.
+ */
+const (
+	dwmwaWindowCornerPreference = 33
+	dwmwaBorderColor            = 34
+	dwmwcpDoNotRound            = 1
+	dwmwcpRound                 = 2
+	dwmwaColorNone              = 0xFFFFFFFE
+)
+
+func (w *webview) roundVideo(on bool) {
+	if on == w.videoRound {
+		return
+	}
+	w.videoRound = on
+	pref := uint32(dwmwcpDoNotRound)
+	if on {
+		pref = dwmwcpRound
+	}
+	_, _, _ = procDwmSetWindowAttribute.Call(w.video, dwmwaWindowCornerPreference,
+		uintptr(unsafe.Pointer(&pref)), 4)
+	none := uint32(dwmwaColorNone)
+	_, _, _ = procDwmSetWindowAttribute.Call(w.video, dwmwaBorderColor,
+		uintptr(unsafe.Pointer(&none)), 4)
+}
+
 func (w *webview) raisePiP(origin w32.Point) {
 	const hwndTop = 0
 	_, _, _ = w32.User32SetWindowPos.Call(w.video, hwndTop,
