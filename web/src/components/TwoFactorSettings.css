@@ -1,0 +1,48 @@
+/* Two-factor sign-in, in the Security pane (ADR 0100). */
+.set-tf {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px 14px;
+  border-radius: var(--radius-tile);
+  background: rgba(10, 15, 34, 0.5);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.set-tf .set-add {
+  padding: 0;
+  background: none;
+  border: 0;
+}
+
+.set-tf__key,
+.set-tf__codes code {
+  font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
+  font-size: 15px;
+  letter-spacing: 0.06em;
+  color: var(--text-primary);
+  user-select: all;
+  overflow-wrap: anywhere;
+}
+
+.set-tf__link {
+  font-size: 13px;
+  color: var(--text-muted);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  width: fit-content;
+}
+
+.set-tf__link:hover,
+.set-tf__link:focus-visible {
+  color: var(--text-primary);
+}
+
+.set-tf__codes {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: 6px 16px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}

@@ -38,6 +38,9 @@ const (
 func isPublicPath(p string) bool {
 	switch p {
 	case "/api/health", "/api/auth/status", "/api/auth/login", "/api/auth/setup",
+		// The second half of a sign-in with two-factor on (ADR 0100): the
+		// caller holds a challenge, not a session.
+		"/api/auth/login/two-factor",
 		// Passkey sign-in (ADR 0082): whoever is signing in has no session yet.
 		"/api/auth/passkey/login/options", "/api/auth/passkey/login",
 		// The sign-in page's account picker: home network only, enforced in
@@ -697,6 +700,18 @@ func (s *Server) authLogin(w http.ResponseWriter, r *http.Request) {
 			s.accountWait.Fail(req.Username)
 		}
 		writeError(w, http.StatusUnauthorized, "unauthorized", "incorrect username or password")
+		return
+	}
+	/*
+	 * With two-factor on, the password earns a challenge rather than a
+	 * session (ADR 0100), and the throttles stay as they are until the code
+	 * is right too — clearing them here would give a password-holder a fresh
+	 * budget for guessing codes with every challenge.
+	 */
+	if waiting, err := s.twoFactorChallenge(w, r, u); err != nil {
+		s.writeInternal(w, err, "two-factor challenge")
+		return
+	} else if waiting {
 		return
 	}
 	s.throttle.Reset(key)

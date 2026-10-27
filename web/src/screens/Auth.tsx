@@ -1,6 +1,13 @@
 import { useState, type FormEvent, type ReactNode } from "react";
 import { ApiFailure } from "@/api/client";
-import { useSetup, useLogin, useAuthStatus, usePasskeyLogin, useLoginAccounts } from "@/api/hooks";
+import {
+  useSetup,
+  useLogin,
+  useLoginTwoFactor,
+  useAuthStatus,
+  usePasskeyLogin,
+  useLoginAccounts,
+} from "@/api/hooks";
 import { cancelledByPerson } from "@/lib/webauthn";
 import "./Auth.css";
 
@@ -164,6 +171,20 @@ export function Login() {
     login.mutate({ username: (picked ?? username).trim(), password });
   }
 
+  // The password was right and the account wants a code (ADR 0100).
+  const challenge = login.data?.two_factor ? login.data.challenge : undefined;
+  if (challenge) {
+    return (
+      <CodeStep
+        challenge={challenge}
+        onRestart={() => {
+          setPassword("");
+          login.reset();
+        }}
+      />
+    );
+  }
+
   if (accounts.length > 0 && picked === null && !typing) {
     return (
       <AuthCard label="Who's signing in?">
@@ -270,6 +291,77 @@ export function Login() {
           )}
         </div>
       )}
+    </AuthCard>
+  );
+}
+
+/*
+ * The second half of a sign-in with two-factor on (ADR 0100): six digits from
+ * the app, or a recovery code. A challenge lasts five minutes and five tries;
+ * once the server says it has gone, the only way on is the password again.
+ */
+function CodeStep({ challenge, onRestart }: { challenge: string; onRestart: () => void }) {
+  const verify = useLoginTwoFactor();
+  const [recovery, setRecovery] = useState(false);
+  const [code, setCode] = useState("");
+
+  function submit(e: FormEvent) {
+    e.preventDefault();
+    verify.mutate(
+      recovery ? { challenge, recovery_code: code } : { challenge, code },
+      { onError: () => setCode("") },
+    );
+  }
+
+  const ready = recovery ? code.replace(/[\s-]/g, "").length === 8 : code.replace(/\s/g, "").length === 6;
+
+  return (
+    <AuthCard
+      label={recovery ? "Use a recovery code" : "Enter your code"}
+      intro={
+        recovery
+          ? "One of the codes you saved when you turned on two-factor sign-in. Each works once."
+          : "Open your authenticator app and type the six-digit code for LANcast."
+      }
+    >
+      <form className="auth__form" onSubmit={submit}>
+        <label className="auth__field">
+          <span>{recovery ? "Recovery code" : "Code"}</span>
+          <input
+            key={recovery ? "recovery" : "code"}
+            autoFocus
+            autoComplete="one-time-code"
+            inputMode={recovery ? "text" : "numeric"}
+            spellCheck={false}
+            maxLength={recovery ? 12 : 7}
+            placeholder={recovery ? "xxxx-xxxx" : "123456"}
+            value={code}
+            onChange={(e) => setCode(e.target.value)}
+          />
+        </label>
+        {verify.isError && (
+          <p className="auth__error" role="alert">
+            {errorMessage(verify.error)}
+          </p>
+        )}
+        <button type="submit" className="auth__submit" disabled={verify.isPending || !ready}>
+          {verify.isPending ? "Checking…" : "Sign in"}
+        </button>
+      </form>
+      <button
+        type="button"
+        className="auth__link"
+        onClick={() => {
+          setRecovery(!recovery);
+          setCode("");
+          verify.reset();
+        }}
+      >
+        {recovery ? "Use a code from the app instead" : "Use a recovery code"}
+      </button>
+      <button type="button" className="auth__link" onClick={onRestart}>
+        Start again
+      </button>
     </AuthCard>
   );
 }

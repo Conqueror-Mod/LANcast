@@ -80,6 +80,7 @@ guarantee at no cost.
 
 Every endpoint requires a session cookie except `GET /api/health`,
 `GET /api/auth/status`, `GET /api/auth/accounts`, `POST /api/auth/setup`, `POST /api/auth/login`,
+`POST /api/auth/login/two-factor`,
 `POST /api/auth/passkey/login/options`, `POST /api/auth/passkey/login`, and the
 web assets. Unauthenticated calls return `401 unauthorized`.
 
@@ -2076,6 +2077,63 @@ All three are the caller's own. Another account's passkey is `404`, the same
 answer as one that does not exist. They are not available to API keys or remote
 guests. Adding, renaming and removing are audited. **Changing the password
 does not remove passkeys**, but it does end every session.
+
+### Two-factor sign-in
+
+A code from an authenticator app, asked for after the password
+([ADR 0100](adr/0100-a-code-after-the-password-for-whoever-wants-one.md)).
+**Each account turns it on for itself**, and it is off until it does. An
+administrator cannot turn it on for anybody, only take it off — the way back in
+for somebody who lost their phone and their recovery codes.
+
+**Signing in** with it on:
+
+1. `POST /api/auth/login` with the right password answers `200` with **no
+   cookie**: `{authenticated: false, two_factor: true, challenge}`. A wrong
+   password is the same `401` as always, so the answer says nothing about
+   two-factor to somebody who does not know the password.
+2. `POST /api/auth/login/two-factor` with `{challenge, code}` — six digits
+   from the app — or `{challenge, recovery_code}` answers like a sign-in: the
+   cookie and `{authenticated: true, user}`. A wrong code is `401`. A challenge
+   lasts **five minutes and five tries**; after that, `401` asking for the
+   password again.
+
+A code works **once**, even inside its thirty seconds, and the step either side
+of now is accepted for clock drift. Wrong codes count against the same
+per-address and per-account throttles as wrong passwords, and the password
+alone does not clear them: they clear when the whole sign-in succeeds.
+**Passkey sign-in skips the code**, since a passkey is already two factors.
+API keys are unaffected.
+
+The secret is sealed under the key the server keeps beside the database (as
+RetroAchievements keys are), never in it. A backup restored on **another
+machine** therefore cannot read it: codes stop working there, and **recovery
+codes are the way in**, which is what they are for.
+
+**Setting up** (signed in):
+
+1. `POST /api/profile/two-factor/setup` → `{key, url}`: the secret as a key to
+   type (base32, in groups of four) and an `otpauth://` link for a QR code.
+   Held in memory for ten minutes; nothing is stored yet. `503` when the
+   server could not prepare its sealing key.
+2. `POST /api/profile/two-factor` with `{code}` from the app → `200`
+   `{recovery_codes: [...]}`: ten codes like `k7m2-9qxd`, each good once.
+   **Shown in this answer and never again.** A wrong code is `400`; no setup
+   in progress is `409`.
+
+**Managing:**
+
+| Route | Purpose |
+|---|---|
+| `GET /api/profile/two-factor` | `{enabled, available, recovery_codes_left, enabled_at?}`. `available` is false when the server cannot seal secrets |
+| `POST /api/profile/two-factor/recovery-codes` | `{current_password}` → ten new codes; the old ones stop working |
+| `DELETE /api/profile/two-factor` | `{current_password}` → `204`, off |
+| `DELETE /api/users/{id}/two-factor` | Administrators: take it off somebody else's account → `204` |
+
+The two that weaken the account or show fresh codes ask for the password, on
+the sign-in throttle; a wrong one is `403`. `GET /api/users` marks an account
+using it with `two_factor: true`. Turning it on and off, new codes, a sign-in
+with a recovery code, and an administrator's removal are all audited.
 
 ### `PUT /api/profile/avatar`
 

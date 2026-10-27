@@ -986,6 +986,8 @@ func run(ctx context.Context, addr, dataDir string, log *slog.Logger) error {
 	if sealer, err := secret.Load(cfg.DataDir); err != nil {
 		log.Warn("retroachievements unavailable: the sealing key could not be prepared", "error", err)
 	} else {
+		// Two-factor secrets are sealed under the same key (ADR 0100).
+		apiSrv.SetTwoFactorSealer(sealer)
 		apiSrv.SetRetroAchievements(&api.RetroAchievements{
 			Sealer:   sealer,
 			Client:   ra.Client{UserAgent: "LANcast/" + api.Version},

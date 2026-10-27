@@ -40,6 +40,7 @@ import {
   useCreateUser,
   useDeleteUser,
   useResetUserPassword,
+  useRemoveUserTwoFactor,
   useChangePassword,
   usePlugins,
   useUploadPlugin,
@@ -102,6 +103,7 @@ import { Review } from "./Review";
 import { UpdateSettings } from "@/components/UpdateSettings";
 import { PublicCertificateSettings } from "@/components/PublicCertificateSettings";
 import { PasskeySettings } from "@/components/PasskeySettings";
+import { TwoFactorSettings } from "@/components/TwoFactorSettings";
 import { DesktopSettings } from "@/components/DesktopSettings";
 import { ServerModeSettings } from "@/components/ServerModeSettings";
 import { GamesSettings } from "@/components/GamesSettings";
@@ -116,6 +118,7 @@ import {
 import { BackupSettings, humanBytes } from "@/components/BackupSettings";
 import type {
   AuthUser,
+  ManagedUser,
   NetworkStatus,
   OptimizedVersion,
   Plugin,
@@ -178,8 +181,10 @@ function ProviderKey({
 // apart (ADR 0071 §6).
 const RATING_CEILINGS = RATING_RUNGS;
 
-function UserRow({ user, isSelf }: { user: AuthUser; isSelf: boolean }) {
+function UserRow({ user, isSelf }: { user: ManagedUser; isSelf: boolean }) {
   const del = useDeleteUser();
+  const removeTwoFactor = useRemoveUserTwoFactor();
+  const [removingTwoFactor, setRemovingTwoFactor] = useState(false);
   const reset = useResetUserPassword();
   const update = useUpdateUser();
   const [resetting, setResetting] = useState(false);
@@ -207,6 +212,7 @@ function UserRow({ user, isSelf }: { user: AuthUser; isSelf: boolean }) {
             {user.max_content_rating
               ? ` · ${user.max_content_rating} and under`
               : ""}
+            {user.two_factor ? " · two-factor sign-in" : ""}
           </div>
           {/* The server refuses to demote the last administrator — inside a
               transaction with the count, because two admins demoting each other
@@ -347,6 +353,34 @@ function UserRow({ user, isSelf }: { user: AuthUser; isSelf: boolean }) {
               <button className="set-btn" onClick={() => setResetting(true)}>
                 Reset password
               </button>
+              {/*
+                Only ever to take it off: the way back in for somebody who lost
+                their phone and their recovery codes (ADR 0100). There is no
+                way to turn it on for somebody else. Two presses, in the page.
+              */}
+              {user.two_factor &&
+                (removingTwoFactor ? (
+                  <>
+                    <button
+                      className="set-btn set-btn--danger"
+                      disabled={removeTwoFactor.isPending}
+                      onClick={() =>
+                        removeTwoFactor.mutate(user.id, {
+                          onSuccess: () => setRemovingTwoFactor(false),
+                        })
+                      }
+                    >
+                      Remove two-factor
+                    </button>
+                    <button className="set-btn" onClick={() => setRemovingTwoFactor(false)}>
+                      Keep it
+                    </button>
+                  </>
+                ) : (
+                  <button className="set-btn" onClick={() => setRemovingTwoFactor(true)}>
+                    Remove two-factor…
+                  </button>
+                ))}
               {!isSelf && (
                 <button
                   className="set-btn set-btn--danger"
@@ -360,9 +394,9 @@ function UserRow({ user, isSelf }: { user: AuthUser; isSelf: boolean }) {
           )}
         </div>
       </div>
-      {(del.isError || reset.isError) && (
+      {(del.isError || reset.isError || removeTwoFactor.isError) && (
         <span className="set-error">
-          {errorMessage(del.error ?? reset.error)}
+          {errorMessage(del.error ?? reset.error ?? removeTwoFactor.error)}
         </span>
       )}
       {/* Not for administrators, who are never restricted (ADR 0084), and
@@ -997,6 +1031,8 @@ function SecuritySection() {
       <AuthorizedDevices />
 
       <PasskeySettings />
+
+      <TwoFactorSettings />
 
       <APIKeysPanel />
 

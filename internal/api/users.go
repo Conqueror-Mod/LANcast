@@ -37,6 +37,11 @@ func (s *Server) listUsers(w http.ResponseWriter, r *http.Request) {
 		if u.MaxContentRating != "" {
 			row["max_content_rating"] = u.MaxContentRating
 		}
+		// Whether they use two-factor, so the admin can take it off for
+		// somebody who lost their phone (ADR 0100). Never the secret.
+		if tf, err := s.st.TwoFactorFor(r.Context(), u.ID); err == nil && tf.Enabled {
+			row["two_factor"] = true
+		}
 		out = append(out, row)
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"users": out})
