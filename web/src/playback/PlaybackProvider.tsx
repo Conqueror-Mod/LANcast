@@ -885,7 +885,8 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
     const el = containerRef.current;
     const send = () => {
       const r = el?.getBoundingClientRect();
-      const next = nativeLayout(surface, nativeOn, r ?? null, window.devicePixelRatio, overGame);
+      // clientLeft is the box's border width: the picture goes inside it.
+      const next = nativeLayout(surface, nativeOn, r ?? null, window.devicePixelRatio, overGame, el?.clientLeft ?? 0);
       if (sameLayout(next, sentLayout.current)) return;
       sentLayout.current = next;
       void window

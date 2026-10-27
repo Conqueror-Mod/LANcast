@@ -66,6 +66,9 @@ type webview struct {
 	layout VideoLayout
 	asked  VideoLayout
 	mini   videoRect
+	// videoRound is whether DWM was last asked to round the video window's
+	// corners, so a drag does not repeat the call every frame (overlay.go).
+	videoRound bool
 	// game is the window a retro game draws into, shown while gameOn.
 	game   uintptr
 	gameOn bool

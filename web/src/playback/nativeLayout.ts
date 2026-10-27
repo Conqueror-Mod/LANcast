@@ -31,22 +31,29 @@ export function nativeLayout(
   box: { left: number; top: number; width: number; height: number } | null,
   devicePixelRatio: number,
   overGame = false,
+  border = 0,
 ): NativeLayout {
   if (!playingNatively || surface === "idle") return HIDDEN;
   if (surface === "full") return { layout: "full", x: 0, y: 0, width: 0, height: 0 };
   if (!box || box.width <= 0 || box.height <= 0) return HIDDEN;
   const r = devicePixelRatio > 0 ? devicePixelRatio : 1;
-  // Outer edges rounded outward so the picture never leaves a sliver of the
-  // docked box's black showing along one side.
-  const x = Math.floor(box.left * r);
-  const y = Math.floor(box.top * r);
-  return {
-    layout: overGame ? "pip" : "mini",
-    x,
-    y,
-    width: Math.ceil((box.left + box.width) * r) - x,
-    height: Math.ceil((box.top + box.height) * r) - y,
-  };
+  /*
+   * Inside the box's border, rounded inward.
+   *
+   * The picture is a window of its own laid over the box, and it used to cover
+   * the whole of it, rounded outward. That buried the gold border under the
+   * picture on whichever sides the device pixels fell outward and left a sliver
+   * of it on the others, so the edge looked different on every side. Inside the
+   * border, the page draws the whole edge; rounding inward can only leave the
+   * box's own black showing, which is the colour the picture letterboxes to.
+   */
+  const b = Math.max(0, border);
+  const x = Math.ceil((box.left + b) * r);
+  const y = Math.ceil((box.top + b) * r);
+  const width = Math.floor((box.left + box.width - b) * r) - x;
+  const height = Math.floor((box.top + box.height - b) * r) - y;
+  if (width <= 0 || height <= 0) return HIDDEN;
+  return { layout: overGame ? "pip" : "mini", x, y, width, height };
 }
 
 export function sameLayout(a: NativeLayout, b: NativeLayout): boolean {

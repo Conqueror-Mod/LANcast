@@ -67,7 +67,7 @@
   /* Small, medium or large (lib/dock.ts); medium is the 300px it always was. */
   width: var(--mini-w, 300px);
   aspect-ratio: 16 / 9;
-  border-radius: var(--radius-panel);
+  border-radius: var(--mini-radius);
   border: 1px solid var(--gold-dormant);
   box-shadow: 0 18px 48px rgba(0, 0, 0, 0.55);
   z-index: var(--z-dock-picture);

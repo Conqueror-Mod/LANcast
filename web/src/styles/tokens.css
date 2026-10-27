@@ -157,6 +157,11 @@
   /* The page's side padding, and how far full-bleed pieces step out of it. */
   --main-pad: 28px;
   --mini-gap: 10px; /* gap between the strip and the picture */
+  /* The docked card's corners, picture and strip alike. 9px is not a taste:
+     on the desktop the picture is a window Windows rounds at 8px
+     (overlay.go, roundVideo), laid one 1px border inside the card, so the
+     card's outer curve is 8 + 1 and the two curves run parallel. */
+  --mini-radius: 9px;
   --mini-strip-w: 236px;
   --mini-strip-h: 46px; /* one line of title over one row of icons */
 

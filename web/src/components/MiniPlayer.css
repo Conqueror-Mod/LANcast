@@ -19,7 +19,7 @@
   padding: 8px 10px;
   background: var(--space-raised);
   border: 1px solid var(--gold-dormant);
-  border-radius: var(--radius-panel);
+  border-radius: var(--mini-radius);
   box-shadow: 0 18px 48px rgba(0, 0, 0, 0.55);
   /*
    * Not `overflow: hidden`, which is what it was.
