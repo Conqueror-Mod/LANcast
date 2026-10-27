@@ -174,8 +174,13 @@ is in the [Feature backlog](#feature-backlog) entry it names.*
 
 **Next, once decided.**
 - **A friend joins without being reachable** — [plan](lighter-join-plan.md)
-  merged (#836), waiting on a design session. Option A, the friend's server
-  pushing its roster to the host, is recommended first.
+  (#836), decided 2026-10-27. **Option A is built**
+  ([ADR 0103](adr/0103-a-friend-who-cannot-be-reached-says-who-is-there.md)):
+  a server sends its roster to its peers, so only the host has to be
+  reachable. Proven in the two-server harness with the friend's server
+  unreachable; **a friend on another network is owed before release**. Next is
+  **option C**, inviting a friend as a member of your server instead of
+  pairing a server, as its own change.
 - **In-play RetroAchievements** — unlocks while you play (rcheevos), which needs
   its own ADR. The profile half shipped in v0.9.88.
 

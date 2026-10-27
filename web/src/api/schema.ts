@@ -2314,7 +2314,17 @@ export interface paths {
          *     A roster is stored wholesale, so somebody who turns their visibility off disappears from it on the next refresh and every grant naming them cascades away.
          */
         get: operations["getFederationRoster"];
-        put?: never;
+        /**
+         * A paired server sending its roster, rather than waiting to be asked (ADR 0103)
+         * @description **Peer-to-peer, and not a session route**, authenticated by the mutual-TLS pin like `GET /api/federation/roster` (ADR 0044 §4). The same roster that route answers with, sent the other way, so a server that cannot be reached is still known to the servers it can reach.
+         *
+         *     Stored exactly as a fetched roster is: wholesale, so somebody who has opted out disappears and every grant naming them cascades away. **Receiving one promotes the pairing to `paired`**, because a server only calls servers it holds. It also counts as a fetch, so the receiver does not dial out at once to learn the same thing.
+         *
+         *     `as_of` is the sender's clock in milliseconds when it read its roster. A roster older than the last one accepted from the same server, by less than 10 minutes, is ignored as overtaken and still answered `204`. One older by more is believed (a clock that moved). At most 1,000 people and 256 KB.
+         *
+         *     Sent by the peer watcher when the roster changes, every 5 minutes, and on every 10-second tick while a newly added peer has not yet accepted one. A server too old to take pushes answers `404` or `405`, and the sender tries again on the 5-minute schedule.
+         */
+        put: operations["putFederationRoster"];
         post?: never;
         delete?: never;
         options?: never;
@@ -7478,6 +7488,8 @@ export interface components {
             state: string;
             /** @description Whether this peer answered just now. */
             reachable: boolean;
+            /** @description Not reachable from here, but it has sent this server its roster within the last 11 minutes (ADR 0103): its people are known, can be granted presence and can ask to join; what they watch cannot be asked. Always false when `reachable` is true. */
+            reaches_us?: boolean;
             people: components["schemas"]["PeerPerson"][];
         };
         PeerPresenceList: {
@@ -7524,6 +7536,11 @@ export interface components {
         };
         RosterList: {
             people: components["schemas"]["RosterPerson"][];
+            /**
+             * Format: int64
+             * @description The sender's clock, in milliseconds, when it read this roster (ADR 0103). Absent from a server older than roster push; such a roster is always taken.
+             */
+            as_of?: number;
         };
         /**
          * @description One person on a paired server.
@@ -13828,6 +13845,46 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["RosterList"];
+                };
+            };
+            /** @description No peer certificate, or one that is not recognised. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    putFederationRoster: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RosterList"];
+            };
+        };
+        responses: {
+            /** @description Taken, or ignored as overtaken by a fresher roster. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not a roster, more than 1,000 people, or a person without a usable id. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
                 };
             };
             /** @description No peer certificate, or one that is not recognised. */

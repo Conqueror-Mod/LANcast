@@ -151,7 +151,8 @@ func (s *Server) federationRoster(w http.ResponseWriter, r *http.Request) {
 		s.writeInternal(w, err, "roster")
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"people": people})
+	// as_of orders this answer against a roster the same server pushes (ADR 0103).
+	writeJSON(w, http.StatusOK, rosterBody{People: people, AsOf: time.Now().UnixMilli()})
 }
 
 /*
@@ -178,14 +179,15 @@ func (s *Server) refreshPeer(ctx context.Context, p store.Peer) error {
 		return nil
 	}
 
-	var body struct {
-		People []store.RemotePerson `json:"people"`
-	}
+	var body rosterBody
 	if err := s.callPeer(ctx, p, "/api/federation/roster", &body); err != nil {
 		return err
 	}
-	if err := s.st.ReplaceRemotePeople(ctx, p.Fingerprint, body.People); err != nil {
-		return err
+	// A roster pushed since this was asked for is fresher; keep it (ADR 0103).
+	if s.push.acceptAsOf(p.Fingerprint, body.AsOf) {
+		if err := s.st.ReplaceRemotePeople(ctx, p.Fingerprint, body.People); err != nil {
+			return err
+		}
 	}
 	// It answered a call only a server holding us can answer, so the pairing is
 	// mutual and can finally say so.
@@ -237,11 +239,15 @@ func (s *Server) peerPresence(w http.ResponseWriter, r *http.Request) {
 	}
 
 	type peerOut struct {
-		Fingerprint string           `json:"fingerprint"`
-		Name        string           `json:"name"`
-		State       string           `json:"state"`
-		Reachable   bool             `json:"reachable"`
-		People      []map[string]any `json:"people"`
+		Fingerprint string `json:"fingerprint"`
+		Name        string `json:"name"`
+		State       string `json:"state"`
+		Reachable   bool   `json:"reachable"`
+		// ReachesUs: not reachable from here, but it has sent us its roster
+		// lately (ADR 0103). Its people can be granted presence and can join;
+		// what they watch cannot be asked.
+		ReachesUs bool             `json:"reaches_us"`
+		People    []map[string]any `json:"people"`
 	}
 
 	out := make([]peerOut, len(peers))
@@ -276,6 +282,7 @@ func (s *Server) peerPresence(w http.ResponseWriter, r *http.Request) {
 
 			seen, err := s.askPeerPresence(r.Context(), p, me)
 			out[i].Reachable = err == nil
+			out[i].ReachesUs = !out[i].Reachable && s.push.heardFrom(p.Fingerprint)
 
 			byID := map[string]visible{}
 			for _, v := range seen {
