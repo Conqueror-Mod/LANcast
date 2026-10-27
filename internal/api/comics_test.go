@@ -46,7 +46,7 @@ func upsertComic(t *testing.T, h *harness, libID int64, path string) int64 {
 }
 
 type pagesAnswer struct {
-	Pages int                `json:"pages"`
+	Pages int               `json:"pages"`
 	Place *store.ComicPlace `json:"place"`
 }
 
