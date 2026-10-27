@@ -818,6 +818,9 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/items/{id}/chapters", s.itemChapters)
 	// A film's extras, found in its folder and never imported (ADR 0098).
 	mux.HandleFunc("GET /api/items/{id}/extras", s.listExtras)
+	// Pre-roll (ADR 0099): whether a clip plays before a film, and the clip.
+	mux.HandleFunc("GET /api/preroll", s.getPreroll)
+	mux.HandleFunc("GET /api/preroll/{key}", s.streamPreroll)
 	mux.HandleFunc("GET /api/items/{id}/extras/{key}", s.streamExtra)
 	mux.HandleFunc("DELETE /api/items/{id}/locks/{field}", s.adminOnly(s.deleteLock))
 	mux.HandleFunc("PUT /api/items/{id}/sensitive", s.adminOnly(s.putSensitive))

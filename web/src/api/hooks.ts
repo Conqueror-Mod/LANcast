@@ -11,6 +11,7 @@ import { apiGet, apiPost, apiSend, apiUpload } from "./client";
 import { addPasskey, signInWithPasskey } from "@/lib/webauthn";
 import type {
   BackupFile,
+  PrerollAnswer,
   ChapterList,
   ExtraList,
   RestoreStarted,
@@ -4521,7 +4522,7 @@ export function usePlaybackPrefs(enabled = true) {
   return useQuery({
     queryKey: ["playback-prefs"],
     queryFn: ({ signal }) =>
-      apiGet<{ skip_intros: boolean }>("/api/profile/playback", signal),
+      apiGet<{ skip_intros: boolean; skip_preroll: boolean }>("/api/profile/playback", signal),
     enabled,
     staleTime: 60_000,
   });
@@ -4530,11 +4531,22 @@ export function usePlaybackPrefs(enabled = true) {
 export function useSetPlaybackPrefs() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (p: { skip_intros: boolean }) =>
-      apiPost<{ skip_intros: boolean }>("/api/profile/playback", p, "PUT"),
+    // Either field, or both: the server leaves out what is not sent.
+    mutationFn: (p: { skip_intros?: boolean; skip_preroll?: boolean }) =>
+      apiPost<{ skip_intros: boolean; skip_preroll: boolean }>("/api/profile/playback", p, "PUT"),
     // The switch itself, and the player that reads it.
     onSuccess: (r) => qc.setQueryData(["playback-prefs"], r),
   });
+}
+
+/*
+ * The pre-roll to play before a film, or none (ADR 0099). The server decides
+ * — feature on, this account not opted out, a film, not a resume — so this is
+ * asked fresh each time a film is started, and never cached.
+ */
+export async function fetchPreroll(itemID: number, fromStart: boolean): Promise<PrerollAnswer> {
+  const q = `/api/preroll?item=${itemID}${fromStart ? "&from_start=true" : ""}`;
+  return apiGet<PrerollAnswer>(q);
 }
 
 export function useSetSubtitleStyle() {

@@ -1495,6 +1495,7 @@ function AdminSections({ pane }: { pane: string }) {
         </section>
       )}
 
+      {pane === "progress" && <PrerollSection />}
       {pane === "progress" && (
         <section className="settings__section">
           <span className="section-label">Playback &amp; progress</span>
@@ -4598,6 +4599,48 @@ function ConversionsSection() {
           </div>
         </div>
       ))}
+    </section>
+  );
+}
+
+/*
+ * Pre-roll (ADR 0099): a folder of clips, one played before a film started
+ * from the beginning. Empty is off. Saved when the box loses focus, like the
+ * other folder settings; the server checks it is a folder and says if not.
+ */
+export function PrerollSection() {
+  const { data: settings } = useSettings(true);
+  const update = useUpdateSettings();
+  const [dir, setDir] = useState<string | null>(null);
+  if (!settings) return null;
+  const saved = settings.preroll_dir ?? "";
+  return (
+    <section className="settings__section">
+      <span className="section-label">Pre-roll</span>
+      <label className="set-row">
+        <span>Folder of clips</span>
+        <input
+          className="set-input"
+          aria-label="Pre-roll folder"
+          placeholder="Off"
+          value={dir ?? saved}
+          onChange={(e) => setDir(e.target.value)}
+          onBlur={() => {
+            if (dir !== null && dir.trim() !== saved) {
+              update.mutate({ preroll_dir: dir.trim() });
+            }
+            setDir(null);
+          }}
+        />
+      </label>
+      <p className="set-row__sub">
+        A short clip of your choosing, such as a cinema intro, played before a film someone starts
+        from the beginning. Never when they carry on watching, never before an episode, and anyone can
+        skip it or turn it off for themselves. Put the clips in a folder, such as{" "}
+        <code>D:\LANcast\pre-roll</code>; one plays at random. MP4 plays everywhere. Leave empty
+        for no pre-roll.
+      </p>
+      {update.isError && <span className="set-error">{errorMessage(update.error)}</span>}
     </section>
   );
 }

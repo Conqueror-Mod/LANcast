@@ -2068,6 +2068,122 @@
         }
       }
     },
+    "/preroll": {
+      "get": {
+        "operationId": "getPreroll",
+        "summary": "The clip to play before a film, or none",
+        "description": "Pre-roll (ADR 0099). **The server decides**, so every client follows one rule: a clip is offered only when a pre-roll folder is set, the account has not turned it off for itself (`skip_preroll`), the item is a film, and it is starting from the beginning — never on a resume (a saved place in a film not yet finished), unless `from_start=true`. One video from the folder, at random. Nothing about the clip is recorded.",
+        "tags": [
+          "Items"
+        ],
+        "parameters": [
+          {
+            "name": "item",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          {
+            "name": "from_start",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean"
+            },
+            "description": "Play from start: a fresh start even with a saved place."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The clip, or null",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PrerollAnswer"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "item is missing",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such item",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/preroll/{key}": {
+      "get": {
+        "operationId": "streamPreroll",
+        "summary": "Play a pre-roll clip",
+        "description": "The clip file, with range requests. `key` is looked up in the folder's current listing, never decoded into a path.",
+        "tags": [
+          "Items"
+        ],
+        "parameters": [
+          {
+            "name": "key",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The file",
+            "content": {
+              "video/*": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "206": {
+            "description": "A range of the file",
+            "content": {
+              "video/*": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such clip",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/profile/webhooks": {
       "put": {
         "operationId": "putPlaybackWebhooks",
@@ -15570,6 +15686,10 @@
               }
             }
           },
+          "preroll_dir": {
+            "type": "string",
+            "description": "The folder of pre-roll clips (ADR 0099); \"\" when off."
+          },
           "trusted_proxies": {
             "type": "array",
             "items": {
@@ -15760,6 +15880,10 @@
           },
           "backup_keep": {
             "type": "integer"
+          },
+          "preroll_dir": {
+            "type": "string",
+            "description": "A full path to a folder this server can read; its videos are the pre-roll clips, one played at random before a film. \"\" turns pre-roll off. Anything else is a 400. Audited."
           },
           "trusted_proxies": {
             "type": "array",
@@ -17917,6 +18041,37 @@
             "items": {
               "$ref": "#/components/schemas/Extra"
             }
+          }
+        }
+      },
+      "PrerollAnswer": {
+        "type": "object",
+        "required": [
+          "clip"
+        ],
+        "properties": {
+          "clip": {
+            "oneOf": [
+              {
+                "type": "object",
+                "required": [
+                  "key",
+                  "title"
+                ],
+                "properties": {
+                  "key": {
+                    "type": "string"
+                  },
+                  "title": {
+                    "type": "string",
+                    "description": "The file's name without its extension."
+                  }
+                }
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         }
       },
@@ -21171,10 +21326,12 @@
       },
       "PlaybackPreferences": {
         "type": "object",
-        "required": [
-          "skip_intros"
-        ],
+        "description": "Answered with every field. On PUT each field is optional, and a field left out is left alone; at least one is required.",
         "properties": {
+          "skip_preroll": {
+            "type": "boolean",
+            "description": "This account's own \"no pre-roll for me\" (ADR 0099). Off unless the account turned it on."
+          },
           "skip_intros": {
             "type": "boolean",
             "description": "When playback reaches an intro the player would offer to skip, skip it and say so, with one press to go back. On unless the account turned it off."

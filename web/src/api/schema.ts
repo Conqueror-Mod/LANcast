@@ -792,6 +792,46 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/preroll": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The clip to play before a film, or none
+         * @description Pre-roll (ADR 0099). **The server decides**, so every client follows one rule: a clip is offered only when a pre-roll folder is set, the account has not turned it off for itself (`skip_preroll`), the item is a film, and it is starting from the beginning — never on a resume (a saved place in a film not yet finished), unless `from_start=true`. One video from the folder, at random. Nothing about the clip is recorded.
+         */
+        get: operations["getPreroll"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/preroll/{key}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Play a pre-roll clip
+         * @description The clip file, with range requests. `key` is looked up in the folder's current listing, never decoded into a path.
+         */
+        get: operations["streamPreroll"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/profile/webhooks": {
         parameters: {
             query?: never;
@@ -6713,6 +6753,8 @@ export interface components {
                  */
                 created_at: number;
             };
+            /** @description The folder of pre-roll clips (ADR 0099); "" when off. */
+            preroll_dir?: string;
             /** @description Reverse proxies whose X-Forwarded-For is believed, as addresses or CIDR networks, normalised (a bare address becomes /32 or /128). Empty by default. */
             trusted_proxies: string[];
             /** @description DLNA, so TVs and consoles can browse and play the library (ADR 0086). Off by default. */
@@ -6823,6 +6865,8 @@ export interface components {
             audit_retention_days?: number;
             backup_every_days?: number;
             backup_keep?: number;
+            /** @description A full path to a folder this server can read; its videos are the pre-roll clips, one played at random before a film. "" turns pre-roll off. Anything else is a 400. Audited. */
+            preroll_dir?: string;
             /** @description Replaces the list. Each entry an IP address or CIDR network no wider than an IPv4 /8 or IPv6 /16; anything else is a 400 and nothing is saved. [] clears it. */
             trusted_proxies?: string[];
             dlna_enabled?: boolean;
@@ -7664,6 +7708,13 @@ export interface components {
         };
         ExtraList: {
             extras: components["schemas"]["Extra"][];
+        };
+        PrerollAnswer: {
+            clip: {
+                key: string;
+                /** @description The file's name without its extension. */
+                title: string;
+            } | null;
         };
         BackupFile: {
             name: string;
@@ -8904,9 +8955,12 @@ export interface components {
             /** @description This is the device asking. */
             current: boolean;
         };
+        /** @description Answered with every field. On PUT each field is optional, and a field left out is left alone; at least one is required. */
         PlaybackPreferences: {
+            /** @description This account's own "no pre-roll for me" (ADR 0099). Off unless the account turned it on. */
+            skip_preroll?: boolean;
             /** @description When playback reaches an intro the player would offer to skip, skip it and say so, with one press to go back. On unless the account turned it off. */
-            skip_intros: boolean;
+            skip_intros?: boolean;
         };
         UserLibraries: {
             /** @description Library ids kept from this account. */
@@ -10675,6 +10729,88 @@ export interface operations {
             };
             401: components["responses"]["Unauthorized"];
             404: components["responses"]["NotFound"];
+        };
+    };
+    getPreroll: {
+        parameters: {
+            query: {
+                item: number;
+                /** @description Play from start: a fresh start even with a saved place. */
+                from_start?: boolean;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The clip, or null */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PrerollAnswer"];
+                };
+            };
+            /** @description item is missing */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description No such item */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    streamPreroll: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                key: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The file */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "video/*": string;
+                };
+            };
+            /** @description A range of the file */
+            206: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "video/*": string;
+                };
+            };
+            /** @description No such clip */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
         };
     };
     putPlaybackWebhooks: {

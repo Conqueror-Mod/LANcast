@@ -6,7 +6,7 @@ import (
 )
 
 // CurrentSchemaVersion is the revision this build expects.
-const CurrentSchemaVersion = 80
+const CurrentSchemaVersion = 81
 
 // migration is one forward step. There are deliberately no down migrations:
 // rolling a media library's schema backwards loses data that a rescan cannot
@@ -149,6 +149,9 @@ var migrations = []migration{
 	// Webhooks may report what this account watches (ADR 0097). Null is off:
 	// only the account itself turns it on, and nobody else can.
 	{version: 80, columns: []column{{"user", "share_playback_webhooks", "INTEGER"}}},
+	// An account's own "no pre-roll for me" (ADR 0099). Null is off: the
+	// clip plays when the server has one.
+	{version: 81, columns: []column{{"user", "skip_preroll", "INTEGER"}}},
 }
 
 // migrate brings the database up to CurrentSchemaVersion.
