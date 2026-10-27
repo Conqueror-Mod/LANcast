@@ -310,6 +310,28 @@ describe("people on paired servers", () => {
   });
 
   /*
+   * A friend whose server sends its roster but cannot be called (ADR 0103) is
+   * not "not answering" and has made no choice about what you see: it reaches
+   * you, and what they watch simply cannot be asked from here. They can still
+   * be granted presence, which is what lets them ask to join.
+   */
+  it("says a friend who reaches you is not a machine that is off", async () => {
+    const peers = onePeer(
+      [{ id: "g-1", name: "Gerda", granted: false, shares: false }],
+      false,
+    );
+    (peers[0] as Record<string, unknown>).reaches_us = true;
+    mockServer(peers);
+    await render(() => host.textContent!.includes("Gerda"));
+
+    expect(host.textContent).toContain("Reaches you · can't be reached from here");
+    expect(host.textContent).toContain("What they watch can't be seen from here");
+    expect(host.textContent).not.toContain("Not answering");
+    expect(host.textContent).not.toContain("Not showing you what they watch");
+    expect(host.querySelector('input[type="checkbox"]')).toBeTruthy();
+  });
+
+  /*
    * The grant is *your* decision about *yourself*, so the checkbox must reflect
    * `granted` and never `shares`. Reading the wrong one produces a switch that
    * shows their choice while claiming to be yours — the exact confusion the

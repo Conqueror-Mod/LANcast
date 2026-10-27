@@ -81,6 +81,17 @@ func newTwoServers(t *testing.T) twoServers {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// The guest really is Gerda, and has really opted in to being listed: the
+	// roster the host holds below is the one the guest's server publishes.
+	// Since ADR 0103 the guest's watcher sends that roster to the host every
+	// tick, so a roster made up here would be replaced by the true one, and a
+	// grant naming somebody the guest never listed would cascade away.
+	if err := guest.st.RenameUser(ctx, gu.ID, "Gerda"); err != nil {
+		t.Fatal(err)
+	}
+	if err := guest.st.SetVisibleToPeers(ctx, gu.ID, true); err != nil {
+		t.Fatal(err)
+	}
 	if err := host.st.ReplaceRemotePeople(ctx, guestFP, []store.RemotePerson{{ID: gu.ID, Name: "Gerda"}}); err != nil {
 		t.Fatal(err)
 	}
