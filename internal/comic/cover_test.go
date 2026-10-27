@@ -89,3 +89,37 @@ func TestTheCoverIsTheFirstPage(t *testing.T) {
 		t.Fatalf("cover's red channel is %d, want about 1 (page one)", got)
 	}
 }
+
+// A PDF's cover is its first page that is a picture: one that opens on a page
+// of text (a title, a notice) takes the next (ADR 0102).
+func TestAPDFsCoverIsItsFirstPicture(t *testing.T) {
+	dir := t.TempDir()
+	plain := filepath.Join(dir, "plain.pdf")
+	comictest.WritePDF(t, plain, 3, comictest.PDFOptions{})
+	notice := filepath.Join(dir, "notice.pdf")
+	comictest.WritePDF(t, notice, 3, comictest.PDFOptions{TextPage: 1, Compressed: true})
+	for path, want := range map[string]int{plain: 1, notice: 2} {
+		body, err := comic.Cover(path)
+		if err != nil {
+			t.Fatalf("%s: %v", filepath.Base(path), err)
+		}
+		img, _, err := image.Decode(bytes.NewReader(body))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if r, _, _, _ := img.At(5, 5).RGBA(); int(r>>8)-want > 3 || want-int(r>>8) > 3 {
+			t.Fatalf("%s: cover is page %d, want %d", filepath.Base(path), r>>8, want)
+		}
+	}
+}
+
+// A PDF with no picture on any page is a book of words, not a comic, and is
+// refused when opened rather than read as a run of blank pages.
+func TestAPDFOfTextIsNotAComic(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "essay.pdf")
+	comictest.WritePDF(t, path, 1, comictest.PDFOptions{TextPage: 1})
+	if b, err := comic.OpenBook(path); err == nil {
+		b.Close()
+		t.Fatal("a PDF of text opened as a comic")
+	}
+}

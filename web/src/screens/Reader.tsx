@@ -26,6 +26,8 @@ export function Reader() {
   const setPlace = useSetComicPlace(id);
   const [page, setPage] = useState<number | null>(null);
   const [chrome, setChrome] = useState(true);
+  // The page whose image failed to load, shown as a sentence instead.
+  const [failed, setFailed] = useState<number | null>(null);
   const saved = useRef<number | null>(null);
   const pending = useRef<number | null>(null);
 
@@ -173,13 +175,20 @@ export function Reader() {
         onPointerUp={onPointerUp}
         aria-label={title ? `${title}, page ${(page ?? 0) + 1} of ${pages}` : undefined}
       >
-        {page !== null && pages > 0 && (
+        {page !== null && pages > 0 && failed === page && (
+          <p className="reader__missing" role="status">
+            Page {page + 1} cannot be shown. A PDF page that is text or drawing, rather than a
+            picture, is not read — the pages either side of it are.
+          </p>
+        )}
+        {page !== null && pages > 0 && failed !== page && (
           <img
             key={page}
             className="reader__page"
             src={pageURL(id, page)}
             alt={`Page ${page + 1}`}
             draggable={false}
+            onError={() => setFailed(page)}
           />
         )}
       </div>

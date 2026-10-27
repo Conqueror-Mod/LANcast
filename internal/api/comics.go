@@ -3,6 +3,7 @@ package api
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"os"
 	"strconv"
@@ -53,17 +54,12 @@ func (s *Server) comicFor(w http.ResponseWriter, r *http.Request) (*store.Item, 
 	return it, a, true
 }
 
+// comicArchive is an opened comic — a .cbz or a .pdf (ADR 0102) — and the
+// file's modification time, which a page is revalidated against.
 type comicArchive struct {
 	path string
 	info os.FileInfo
-	zr   interface{ Close() error }
-	// pages in reading order.
-	pages []pageEntry
-}
-
-type pageEntry struct {
-	name string
-	read func() ([]byte, error)
+	comic.Book
 }
 
 func openComicArchive(path string) (*comicArchive, error) {
@@ -71,24 +67,14 @@ func openComicArchive(path string) (*comicArchive, error) {
 	if err != nil {
 		return nil, err
 	}
-	zr, err := comic.Open(path)
+	b, err := comic.OpenBook(path)
 	if err != nil {
 		return nil, err
 	}
-	files, err := comic.Pages(&zr.Reader)
-	if err != nil {
-		zr.Close()
-		return nil, err
-	}
-	a := &comicArchive{path: path, info: info, zr: zr}
-	for _, f := range files {
-		f := f
-		a.pages = append(a.pages, pageEntry{name: f.Name, read: func() ([]byte, error) { return comic.ReadPage(f) }})
-	}
-	return a, nil
+	return &comicArchive{path: path, info: info, Book: b}, nil
 }
 
-func (a *comicArchive) Close() { _ = a.zr.Close() }
+func (a *comicArchive) Close() { _ = a.Book.Close() }
 
 // comicPages answers GET /api/items/{id}/pages: how many, and where the caller
 // is.
@@ -98,7 +84,7 @@ func (s *Server) comicPages(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer a.Close()
-	out := map[string]any{"pages": len(a.pages), "place": nil}
+	out := map[string]any{"pages": a.Len(), "place": nil}
 	place, has, err := s.st.ComicPlaceFor(r.Context(), s.userID(r), it.ID)
 	if err != nil {
 		s.writeInternal(w, err, "read comic place")
@@ -107,8 +93,8 @@ func (s *Server) comicPages(w http.ResponseWriter, r *http.Request) {
 	if has {
 		// A place past the end of an archive that has since lost pages is
 		// its last page, not an error.
-		if place.Page >= len(a.pages) {
-			place.Page = len(a.pages) - 1
+		if place.Page >= a.Len() {
+			place.Page = a.Len() - 1
 		}
 		out["place"] = place
 	}
@@ -123,20 +109,25 @@ func (s *Server) comicPage(w http.ResponseWriter, r *http.Request) {
 	}
 	defer a.Close()
 	n, err := strconv.Atoi(r.PathValue("n"))
-	if err != nil || n < 0 || n >= len(a.pages) {
+	if err != nil || n < 0 || n >= a.Len() {
 		writeError(w, http.StatusNotFound, "not_found", "no such page")
 		return
 	}
-	p := a.pages[n]
-	body, err := p.read()
+	body, ctype, err := a.Page(n)
 	if err != nil {
-		s.log.Warn("could not read a comic page", "path", a.path, "page", n, "error", err)
-		writeError(w, http.StatusServiceUnavailable, "unavailable", "this page cannot be read")
+		msg := "this page cannot be read"
+		var why comic.UnreadablePage
+		if errors.As(err, &why) {
+			msg = string(why)
+		} else {
+			s.log.Warn("could not read a comic page", "path", a.path, "page", n, "error", err)
+		}
+		writeError(w, http.StatusServiceUnavailable, "unavailable", msg)
 		return
 	}
 	// Revalidated against the archive's modification time, as a photo is: the
 	// file behind an item id can be replaced without the id changing.
-	w.Header().Set("Content-Type", comic.ContentType(p.name))
+	w.Header().Set("Content-Type", ctype)
 	w.Header().Set("Cache-Control", "private, max-age=0, must-revalidate")
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 	http.ServeContent(w, r, "", a.info.ModTime(), bytes.NewReader(body))
@@ -149,7 +140,7 @@ func (s *Server) putComicPlace(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	pages := len(a.pages)
+	pages := a.Len()
 	a.Close()
 	var req struct {
 		Page *int `json:"page"`

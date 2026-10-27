@@ -846,7 +846,11 @@ func (s *Scanner) walkRoot(ctx context.Context, lib store.Library, root store.Li
 			// film, or — the case this exists for — a music library created with
 			// the wrong kind, where every track is discarded and the scan
 			// otherwise reports "0 items" as though the folder were empty.
-			if media.IsAudio(path) || media.IsVideo(path) {
+			// A comics library counts the comics it cannot read (.cbr and
+			// the like) for the same reason: a folder of them otherwise
+			// scans as "0 items" and looks empty rather than unread.
+			if media.IsAudio(path) || media.IsVideo(path) ||
+				(lib.Kind == media.LibraryComics && media.IsUnreadComic(path)) {
 				s.mu.Lock()
 				p.SkippedKind++
 				s.mu.Unlock()
