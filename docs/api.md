@@ -1348,8 +1348,9 @@ is not a position in milliseconds; finishing one is `watched`, so the tick,
 Mark as unwatched and the watched filter work as they do for a film. A broken
 or missing archive is `503` on all three.
 
-**An account with a content limit sees no comics.** Nothing rates them yet, and
-an unrated title is hidden from a limited account, as an unrated film is.
+**An account with a content limit sees no comics** until an administrator rates
+one by hand on its page. Nothing rates them otherwise, and an unrated title is
+hidden from a limited account, as an unrated film is.
 
 ### `GET /api/items/{id}/photo`
 

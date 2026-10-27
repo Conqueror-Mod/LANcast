@@ -49,10 +49,11 @@ goes. Nothing about a comic goes to the desktop's mpv.
 
 ## Consequences
 
-- **An account with a content limit sees no comics.** Nothing rates them, and
-  an unrated title is kept from a limited account, as an unrated film is
-  (ADR 0071). `ComicInfo.xml` carries an `AgeRating` that could change this;
-  reading it is a later decision.
+- **An account with a content limit sees no comics** until an administrator
+  rates one by hand on its page, the control every unrated title already has.
+  Nothing rates them otherwise, and an unrated title is kept from a limited
+  account, as an unrated film is (ADR 0071). `ComicInfo.xml` carries an
+  `AgeRating` that could fill this in; reading it is a later decision.
 - A comics library is not shared with paired servers and is not offered over
   DLNA: a friend's server and a television have no reader for it.
 - No two-page spreads, right-to-left reading or `ComicInfo.xml` metadata yet.
