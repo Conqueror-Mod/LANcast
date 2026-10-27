@@ -28,6 +28,7 @@ import (
 	"lancast/internal/api"
 	"lancast/internal/artwork"
 	"lancast/internal/backup"
+	"lancast/internal/comic"
 	"lancast/internal/config"
 	"lancast/internal/coverart"
 	"lancast/internal/enrich"
@@ -722,6 +723,19 @@ func run(ctx context.Context, addr, dataDir string, log *slog.Logger) error {
 		}()
 	}
 
+	// Comic covers (ADR 0101): the first page of each new comic, made into
+	// its poster. The worker refuses a second pass while one runs.
+	comicCovers := comic.NewCoverWorker(st, art, log)
+	comicSoon := func() {
+		workers.Add(1)
+		go func() {
+			defer workers.Done()
+			if err := comicCovers.Run(enrichCtx); err != nil && !errors.Is(err, context.Canceled) {
+				log.Warn("comic cover pass failed", "error", err)
+			}
+		}()
+	}
+
 	var coverMu sync.Mutex
 	coverSoon := func() {
 		workers.Add(1)
@@ -936,6 +950,7 @@ func run(ctx context.Context, addr, dataDir string, log *slog.Logger) error {
 		photoSoon()
 		placesSoon()
 		romSoon()
+		comicSoon()
 		// Last, and it will mostly find nothing to do on this pass: the items
 		// this scan added are not probed yet, so they become eligible on the
 		// next one rather than this one. That is the ordering being honest
@@ -1036,6 +1051,9 @@ func run(ctx context.Context, addr, dataDir string, log *slog.Logger) error {
 	// And ROMs, for the same reason: revision 64 adds the queue, and a
 	// library scanned before it would otherwise wait for the next scan.
 	romSoon()
+	// And comic covers: a pass cut short by a restart would otherwise wait
+	// for the next scan.
+	comicSoon()
 	// And places: unmarking a folder, or a pass cut short by a restart,
 	// leaves photos unread with no scan coming (ADR 0078).
 	placesSoon()

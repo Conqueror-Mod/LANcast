@@ -178,8 +178,8 @@ func (s *Server) dlnaBrowse(r *http.Request, account string, b dlna.Browse) ([]d
 		}
 		var all []dlna.Object
 		for _, l := range libs {
-			if l.Kind == "retro" || containsID(hidden, l.ID) {
-				continue // ROMs play in LANcast's own player, not a TV's
+			if l.Kind == "retro" || l.Kind == "comics" || containsID(hidden, l.ID) {
+				continue // ROMs and comics are LANcast's own to show, not a TV's
 			}
 			all = append(all, libraryObject(l))
 		}
@@ -191,7 +191,7 @@ func (s *Server) dlnaBrowse(r *http.Request, account string, b dlna.Browse) ([]d
 			return nil, 0, false
 		}
 		lib, err := s.st.GetLibrary(ctx, id)
-		if err != nil || lib.Kind == "retro" {
+		if err != nil || lib.Kind == "retro" || lib.Kind == "comics" {
 			return nil, 0, false
 		}
 		if b.Metadata {

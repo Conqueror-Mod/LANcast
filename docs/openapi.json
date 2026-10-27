@@ -759,6 +759,177 @@
         }
       }
     },
+    "/items/{id}/pages": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/ItemId"
+        }
+      ],
+      "get": {
+        "operationId": "getComicPages",
+        "tags": [
+          "items"
+        ],
+        "summary": "How many pages a comic has, and where you are in it",
+        "description": "Comics only (ADR 0101); anything else is `404`. The pages are the archive's images in natural name order (`p2` before `p10`); `ComicInfo.xml`, macOS's `__MACOSX` folder and hidden files are not pages. `place` is the caller's own, or `null` before they have opened it.",
+        "responses": {
+          "200": {
+            "description": "The count and your place.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ComicPages"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "503": {
+            "description": "The archive is missing or is not a comic archive, or this page cannot be read.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/items/{id}/pages/{n}": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/ItemId"
+        },
+        {
+          "name": "n",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "description": "The page's number in reading order, from 0. Never a name inside the archive."
+        }
+      ],
+      "get": {
+        "operationId": "getComicPage",
+        "tags": [
+          "items"
+        ],
+        "summary": "One page of a comic",
+        "description": "The image, read out of the archive when asked for; nothing is unpacked to disk. Revalidated against the archive's modification time, with range requests. Containment is re-verified against the owning library root, as for every file route.",
+        "responses": {
+          "200": {
+            "description": "The page.",
+            "content": {
+              "image/jpeg": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              },
+              "image/png": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              },
+              "image/webp": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              },
+              "image/gif": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "503": {
+            "description": "The archive is missing or is not a comic archive, or this page cannot be read.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/items/{id}/place": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/ItemId"
+        }
+      ],
+      "put": {
+        "operationId": "putComicPlace",
+        "tags": [
+          "items"
+        ],
+        "summary": "Keep your place in a comic",
+        "description": "The caller's own. **Reaching the last page marks the comic read**, which is `watched` like everything else, so Mark as unwatched and the watched filter work on comics. A place is not a position in milliseconds and is not progress: a comic does not join Continue Watching.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ComicPlaceRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": "Kept. No body."
+          },
+          "400": {
+            "description": "`page` is missing or is not a page of this comic.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "503": {
+            "description": "The archive is missing or is not a comic archive, or this page cannot be read.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/metrics": {
       "get": {
         "operationId": "getMetrics",
@@ -18509,6 +18680,62 @@
           "current_password": {
             "type": "string",
             "format": "password"
+          }
+        }
+      },
+      "ComicPages": {
+        "type": "object",
+        "required": [
+          "pages",
+          "place"
+        ],
+        "properties": {
+          "pages": {
+            "type": "integer"
+          },
+          "place": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/ComicPlace"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
+      "ComicPlace": {
+        "type": "object",
+        "required": [
+          "page",
+          "pages",
+          "updated_at"
+        ],
+        "properties": {
+          "page": {
+            "type": "integer",
+            "description": "From 0. Never past the last page, even if the archive has since lost some."
+          },
+          "pages": {
+            "type": "integer",
+            "description": "How many pages there were when the place was kept."
+          },
+          "updated_at": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
+      "ComicPlaceRequest": {
+        "type": "object",
+        "required": [
+          "page"
+        ],
+        "properties": {
+          "page": {
+            "type": "integer",
+            "minimum": 0
           }
         }
       },

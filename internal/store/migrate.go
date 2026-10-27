@@ -6,7 +6,7 @@ import (
 )
 
 // CurrentSchemaVersion is the revision this build expects.
-const CurrentSchemaVersion = 82
+const CurrentSchemaVersion = 83
 
 // migration is one forward step. There are deliberately no down migrations:
 // rolling a media library's schema backwards loses data that a rescan cannot
@@ -161,6 +161,7 @@ var migrations = []migration{
 		{"user", "totp_enabled_at", "INTEGER"},
 		{"user", "totp_recovery", "TEXT"},
 	}},
+	{version: 83, sql: schemaRevision83},
 }
 
 // migrate brings the database up to CurrentSchemaVersion.
@@ -2470,5 +2471,21 @@ CREATE TABLE IF NOT EXISTS collection_film (
     overview      TEXT,
     poster_hash   TEXT,
     PRIMARY KEY (collection_id, provider, external_id)
+);
+`
+
+// Revision 83 — where each person is in each comic (ADR 0101).
+//
+// A page, not a position in milliseconds, so not playback_state: a comic there
+// would have joined Continue Watching with a bar drawn from a duration it does
+// not have. Cascades from media_item; an account's rows go with the account.
+const schemaRevision83 = `
+CREATE TABLE IF NOT EXISTS comic_place (
+    user_id    TEXT    NOT NULL,
+    item_id    INTEGER NOT NULL REFERENCES media_item(id) ON DELETE CASCADE,
+    page       INTEGER NOT NULL,
+    pages      INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL,
+    PRIMARY KEY (user_id, item_id)
 );
 `

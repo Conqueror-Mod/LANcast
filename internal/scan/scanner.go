@@ -1062,6 +1062,11 @@ func (s *Scanner) reconcileLibrary(ctx context.Context, lib store.Library, p *Pr
 	if lib.Kind == media.LibraryRetro {
 		return s.st.TouchLibraryScanned(ctx, lib.ID)
 	}
+	// Nor has a comics library (ADR 0101): "Saga 012" is an issue, not a
+	// season and episode, and its cover is the cover worker's.
+	if lib.Kind == media.LibraryComics {
+		return s.st.TouchLibraryScanned(ctx, lib.ID)
+	}
 
 	if err := s.reconcileHierarchy(ctx, lib); err != nil {
 		// Hierarchy is a grouping convenience layered over episodes that already
@@ -1405,6 +1410,8 @@ func reinterpreted(stored string, parsed media.Kind) bool {
 		return stored != "photo"
 	case media.KindROM:
 		return stored != "rom"
+	case media.KindComic:
+		return stored != "comic"
 	default:
 		return stored != "other"
 	}

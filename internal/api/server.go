@@ -955,6 +955,10 @@ func (s *Server) Handler() http.Handler {
 	// A picture is served by item id like a stream, and for the same reason:
 	// the client knows items, not paths, and paths never leave the server.
 	mux.HandleFunc("GET /api/items/{id}/photo", s.photo)
+	// Comics (ADR 0101): pages out of the archive, and where you are in it.
+	mux.HandleFunc("GET /api/items/{id}/pages", s.comicPages)
+	mux.HandleFunc("GET /api/items/{id}/pages/{n}", s.comicPage)
+	mux.HandleFunc("PUT /api/items/{id}/place", s.putComicPlace)
 	mux.HandleFunc("GET /api/stream/{id}", s.stream)
 	// A retro game's files and its player's saves (ADR 0073). A ticket minted
 	// for the game reaches these too; see streamticket.go.

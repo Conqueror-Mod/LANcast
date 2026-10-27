@@ -336,6 +336,77 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/items/{id}/pages": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The item's id. */
+                id: components["parameters"]["ItemId"];
+            };
+            cookie?: never;
+        };
+        /**
+         * How many pages a comic has, and where you are in it
+         * @description Comics only (ADR 0101); anything else is `404`. The pages are the archive's images in natural name order (`p2` before `p10`); `ComicInfo.xml`, macOS's `__MACOSX` folder and hidden files are not pages. `place` is the caller's own, or `null` before they have opened it.
+         */
+        get: operations["getComicPages"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/items/{id}/pages/{n}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The item's id. */
+                id: components["parameters"]["ItemId"];
+                /** @description The page's number in reading order, from 0. Never a name inside the archive. */
+                n: number;
+            };
+            cookie?: never;
+        };
+        /**
+         * One page of a comic
+         * @description The image, read out of the archive when asked for; nothing is unpacked to disk. Revalidated against the archive's modification time, with range requests. Containment is re-verified against the owning library root, as for every file route.
+         */
+        get: operations["getComicPage"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/items/{id}/place": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The item's id. */
+                id: components["parameters"]["ItemId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Keep your place in a comic
+         * @description The caller's own. **Reaching the last page marks the comic read**, which is `watched` like everything else, so Mark as unwatched and the watched filter work on comics. A place is not a position in milliseconds and is not progress: a comic does not join Continue Watching.
+         */
+        put: operations["putComicPlace"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/metrics": {
         parameters: {
             query?: never;
@@ -7870,6 +7941,21 @@ export interface components {
             /** Format: password */
             current_password: string;
         };
+        ComicPages: {
+            pages: number;
+            place: components["schemas"]["ComicPlace"] | null;
+        };
+        ComicPlace: {
+            /** @description From 0. Never past the last page, even if the archive has since lost some. */
+            page: number;
+            /** @description How many pages there were when the place was kept. */
+            pages: number;
+            /** Format: int64 */
+            updated_at: number;
+        };
+        ComicPlaceRequest: {
+            page: number;
+        };
         BackupFile: {
             name: string;
             /** Format: int64 */
@@ -9994,6 +10080,124 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    getComicPages: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The item's id. */
+                id: components["parameters"]["ItemId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The count and your place. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ComicPages"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            /** @description The archive is missing or is not a comic archive, or this page cannot be read. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    getComicPage: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The item's id. */
+                id: components["parameters"]["ItemId"];
+                /** @description The page's number in reading order, from 0. Never a name inside the archive. */
+                n: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The page. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "image/jpeg": string;
+                    "image/png": string;
+                    "image/webp": string;
+                    "image/gif": string;
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            /** @description The archive is missing or is not a comic archive, or this page cannot be read. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    putComicPlace: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The item's id. */
+                id: components["parameters"]["ItemId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ComicPlaceRequest"];
+            };
+        };
+        responses: {
+            /** @description Kept. No body. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description `page` is missing or is not a page of this comic. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            /** @description The archive is missing or is not a comic archive, or this page cannot be read. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
                 };
             };
         };
