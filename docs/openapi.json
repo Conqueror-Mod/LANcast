@@ -123,6 +123,62 @@
     }
   ],
   "paths": {
+    "/auth/login/two-factor": {
+      "post": {
+        "operationId": "postAuthLoginTwoFactor",
+        "tags": [
+          "auth"
+        ],
+        "summary": "Finish a sign-in with a code",
+        "description": "Public: the caller holds a challenge, not a session (ADR 0100). Trades the `challenge` from `POST /api/auth/login`, with a six-digit `code` from the authenticator app **or** a `recovery_code`, for a session. A challenge lasts five minutes and five tries; a code works once, even inside its thirty seconds; a recovery code works once. Every wrong answer counts against the same throttles as a wrong password, and they clear only when the whole sign-in succeeds.",
+        "security": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TwoFactorLoginRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Signed in. The session cookie is set on this response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LoginResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "description": "The code is not right, or the challenge has expired or run out of tries (enter the password again).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too many attempts from this client, or at this account from outside; wait a few minutes.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/health": {
       "get": {
         "operationId": "getHealth",
@@ -309,7 +365,7 @@
         },
         "responses": {
           "200": {
-            "description": "Signed in. The session cookie is set on this response.",
+            "description": "Signed in, with the session cookie set; or, for an account with two-factor sign-in on, a challenge and no cookie.",
             "content": {
               "application/json": {
                 "schema": {
@@ -2177,6 +2233,246 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/profile/two-factor": {
+      "get": {
+        "operationId": "getTwoFactor",
+        "tags": [
+          "profile"
+        ],
+        "summary": "Your two-factor sign-in",
+        "description": "The caller's own (ADR 0100). Never the secret.",
+        "responses": {
+          "200": {
+            "description": "State.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TwoFactorState"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      },
+      "post": {
+        "operationId": "enableTwoFactor",
+        "tags": [
+          "profile"
+        ],
+        "summary": "Turn two-factor sign-in on",
+        "description": "With a code from the app the setup's secret was added to, which proves it was. **The recovery codes are in this answer and never again.** Audited as `profile.two_factor_on`.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TwoFactorCode"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "On. Ten recovery codes, each good once.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RecoveryCodes"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The code is not right (check the phone's clock).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "409": {
+            "description": "No setup in progress, or it has expired (ten minutes): start again.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The server could not prepare the key two-factor secrets are sealed under.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "operationId": "disableTwoFactor",
+        "tags": [
+          "profile"
+        ],
+        "summary": "Turn two-factor sign-in off",
+        "description": "**The password is asked for**: a session left open on somebody else's screen is not enough to weaken the account. Throttled like sign-in. Audited as `profile.two_factor_off`.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CurrentPassword"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": "Off. No body."
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "description": "`current_password` is not right.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too many attempts from this client, or at this account from outside; wait a few minutes.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/profile/two-factor/recovery-codes": {
+      "post": {
+        "operationId": "newRecoveryCodes",
+        "tags": [
+          "profile"
+        ],
+        "summary": "Replace your recovery codes",
+        "description": "Ten new codes; every old one stops working. The password is asked for. Audited as `profile.two_factor_codes`.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CurrentPassword"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The new codes, shown once.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RecoveryCodes"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "description": "`current_password` is not right.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Two-factor sign-in is off.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too many attempts from this client, or at this account from outside; wait a few minutes.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/profile/two-factor/setup": {
+      "post": {
+        "operationId": "startTwoFactor",
+        "tags": [
+          "profile"
+        ],
+        "summary": "Start adding an authenticator app",
+        "description": "A fresh secret, as a key to type and an `otpauth://` link to scan. Nothing is stored until `POST /api/profile/two-factor` returns a code from it; the secret is held in memory for ten minutes.",
+        "responses": {
+          "200": {
+            "description": "The secret, for the app.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TwoFactorSetup"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "503": {
+            "description": "The server could not prepare the key two-factor secrets are sealed under.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
                 }
               }
             }
@@ -13213,6 +13509,35 @@
         ]
       }
     },
+    "/users/{id}/two-factor": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/UserId"
+        }
+      ],
+      "delete": {
+        "operationId": "removeUserTwoFactor",
+        "tags": [
+          "users"
+        ],
+        "summary": "Take two-factor sign-in off another account",
+        "description": "Administrators only: the way back in for somebody who lost their phone and their recovery codes. **There is no way to turn it on for somebody else.** Audited as `user.two_factor_removed`.",
+        "responses": {
+          "204": {
+            "description": "Removed. No body."
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
     "/watchlist": {
       "get": {
         "operationId": "getWatchlist",
@@ -14171,8 +14496,7 @@
       "LoginResponse": {
         "type": "object",
         "required": [
-          "authenticated",
-          "user"
+          "authenticated"
         ],
         "properties": {
           "authenticated": {
@@ -14180,8 +14504,17 @@
           },
           "user": {
             "$ref": "#/components/schemas/User"
+          },
+          "two_factor": {
+            "type": "boolean",
+            "description": "Present and true when a code is wanted."
+          },
+          "challenge": {
+            "type": "string",
+            "description": "Present with `two_factor`. Five minutes, five tries."
           }
-        }
+        },
+        "description": "Either signed in (`authenticated: true` with `user`), or the password was right and a code is wanted (ADR 0100): `authenticated: false`, `two_factor: true` and a `challenge` for `POST /api/auth/login/two-factor`, with no cookie set."
       },
       "ChangePasswordRequest": {
         "type": "object",
@@ -17140,6 +17473,10 @@
           "max_content_rating": {
             "type": "string",
             "description": "The ceiling set for this account, **omitted when there is none**. Reported on the management view rather than on the account's own, because it is visible to whoever can change it."
+          },
+          "two_factor": {
+            "type": "boolean",
+            "description": "Present and true when the account uses two-factor sign-in (ADR 0100), so an administrator can take it off. Never the secret."
           }
         }
       },
@@ -18072,6 +18409,106 @@
                 "type": "null"
               }
             ]
+          }
+        }
+      },
+      "TwoFactorLoginRequest": {
+        "type": "object",
+        "required": [
+          "challenge"
+        ],
+        "properties": {
+          "challenge": {
+            "type": "string",
+            "description": "From `POST /api/auth/login`."
+          },
+          "code": {
+            "type": "string",
+            "description": "Six digits from the app. Spaces are ignored."
+          },
+          "recovery_code": {
+            "type": "string",
+            "description": "One of the recovery codes, as `xxxx-xxxx`; case and the dash do not matter."
+          }
+        },
+        "description": "Exactly one of `code` and `recovery_code`."
+      },
+      "TwoFactorState": {
+        "type": "object",
+        "required": [
+          "enabled",
+          "available",
+          "recovery_codes_left"
+        ],
+        "properties": {
+          "enabled": {
+            "type": "boolean"
+          },
+          "available": {
+            "type": "boolean",
+            "description": "Whether this server can turn it on: false when it could not prepare its sealing key."
+          },
+          "recovery_codes_left": {
+            "type": "integer"
+          },
+          "enabled_at": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Unix seconds; present when enabled."
+          }
+        }
+      },
+      "TwoFactorSetup": {
+        "type": "object",
+        "required": [
+          "key",
+          "url"
+        ],
+        "properties": {
+          "key": {
+            "type": "string",
+            "description": "The secret in base32, in groups of four, for typing into an app."
+          },
+          "url": {
+            "type": "string",
+            "description": "`otpauth://totp/LANcast:<name>?…` for a QR code. SHA-1, six digits, thirty seconds."
+          }
+        }
+      },
+      "TwoFactorCode": {
+        "type": "object",
+        "required": [
+          "code"
+        ],
+        "properties": {
+          "code": {
+            "type": "string"
+          }
+        }
+      },
+      "RecoveryCodes": {
+        "type": "object",
+        "required": [
+          "recovery_codes"
+        ],
+        "properties": {
+          "recovery_codes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "CurrentPassword": {
+        "type": "object",
+        "required": [
+          "current_password"
+        ],
+        "properties": {
+          "current_password": {
+            "type": "string",
+            "format": "password"
           }
         }
       },

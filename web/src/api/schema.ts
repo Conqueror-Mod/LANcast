@@ -4,6 +4,26 @@
  */
 
 export interface paths {
+    "/auth/login/two-factor": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Finish a sign-in with a code
+         * @description Public: the caller holds a challenge, not a session (ADR 0100). Trades the `challenge` from `POST /api/auth/login`, with a six-digit `code` from the authenticator app **or** a `recovery_code`, for a session. A challenge lasts five minutes and five tries; a code works once, even inside its thirty seconds; a recovery code works once. Every wrong answer counts against the same throttles as a wrong password, and they clear only when the whole sign-in succeeds.
+         */
+        post: operations["postAuthLoginTwoFactor"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/health": {
         parameters: {
             query?: never;
@@ -826,6 +846,74 @@ export interface paths {
         get: operations["streamPreroll"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/profile/two-factor": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Your two-factor sign-in
+         * @description The caller's own (ADR 0100). Never the secret.
+         */
+        get: operations["getTwoFactor"];
+        put?: never;
+        /**
+         * Turn two-factor sign-in on
+         * @description With a code from the app the setup's secret was added to, which proves it was. **The recovery codes are in this answer and never again.** Audited as `profile.two_factor_on`.
+         */
+        post: operations["enableTwoFactor"];
+        /**
+         * Turn two-factor sign-in off
+         * @description **The password is asked for**: a session left open on somebody else's screen is not enough to weaken the account. Throttled like sign-in. Audited as `profile.two_factor_off`.
+         */
+        delete: operations["disableTwoFactor"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/profile/two-factor/recovery-codes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Replace your recovery codes
+         * @description Ten new codes; every old one stops working. The password is asked for. Audited as `profile.two_factor_codes`.
+         */
+        post: operations["newRecoveryCodes"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/profile/two-factor/setup": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Start adding an authenticator app
+         * @description A fresh secret, as a key to type and an `otpauth://` link to scan. Nothing is stored until `POST /api/profile/two-factor` returns a code from it; the secret is held in memory for ten minutes.
+         */
+        post: operations["startTwoFactor"];
         delete?: never;
         options?: never;
         head?: never;
@@ -5841,6 +5929,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/users/{id}/two-factor": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The account id. */
+                id: components["parameters"]["UserId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Take two-factor sign-in off another account
+         * @description Administrators only: the way back in for somebody who lost their phone and their recovery codes. **There is no way to turn it on for somebody else.** Audited as `user.two_factor_removed`.
+         */
+        delete: operations["removeUserTwoFactor"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/watchlist": {
         parameters: {
             query?: never;
@@ -6138,9 +6249,14 @@ export interface components {
             /** Format: password */
             password: string;
         };
+        /** @description Either signed in (`authenticated: true` with `user`), or the password was right and a code is wanted (ADR 0100): `authenticated: false`, `two_factor: true` and a `challenge` for `POST /api/auth/login/two-factor`, with no cookie set. */
         LoginResponse: {
             authenticated: boolean;
-            user: components["schemas"]["User"];
+            user?: components["schemas"]["User"];
+            /** @description Present and true when a code is wanted. */
+            two_factor?: boolean;
+            /** @description Present with `two_factor`. Five minutes, five tries. */
+            challenge?: string;
         };
         ChangePasswordRequest: {
             /** Format: password */
@@ -7363,6 +7479,8 @@ export interface components {
             sessions: number;
             /** @description The ceiling set for this account, **omitted when there is none**. Reported on the management view rather than on the account's own, because it is visible to whoever can change it. */
             max_content_rating?: string;
+            /** @description Present and true when the account uses two-factor sign-in (ADR 0100), so an administrator can take it off. Never the secret. */
+            two_factor?: boolean;
         };
         ManagedUserList: {
             users: components["schemas"]["ManagedUser"][];
@@ -7715,6 +7833,42 @@ export interface components {
                 /** @description The file's name without its extension. */
                 title: string;
             } | null;
+        };
+        /** @description Exactly one of `code` and `recovery_code`. */
+        TwoFactorLoginRequest: {
+            /** @description From `POST /api/auth/login`. */
+            challenge: string;
+            /** @description Six digits from the app. Spaces are ignored. */
+            code?: string;
+            /** @description One of the recovery codes, as `xxxx-xxxx`; case and the dash do not matter. */
+            recovery_code?: string;
+        };
+        TwoFactorState: {
+            enabled: boolean;
+            /** @description Whether this server can turn it on: false when it could not prepare its sealing key. */
+            available: boolean;
+            recovery_codes_left: number;
+            /**
+             * Format: int64
+             * @description Unix seconds; present when enabled.
+             */
+            enabled_at?: number;
+        };
+        TwoFactorSetup: {
+            /** @description The secret in base32, in groups of four, for typing into an app. */
+            key: string;
+            /** @description `otpauth://totp/LANcast:<name>?…` for a QR code. SHA-1, six digits, thirty seconds. */
+            url: string;
+        };
+        TwoFactorCode: {
+            code: string;
+        };
+        RecoveryCodes: {
+            recovery_codes: string[];
+        };
+        CurrentPassword: {
+            /** Format: password */
+            current_password: string;
         };
         BackupFile: {
             name: string;
@@ -9351,6 +9505,49 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    postAuthLoginTwoFactor: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TwoFactorLoginRequest"];
+            };
+        };
+        responses: {
+            /** @description Signed in. The session cookie is set on this response. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LoginResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            /** @description The code is not right, or the challenge has expired or run out of tries (enter the password again). */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Too many attempts from this client, or at this account from outside; wait a few minutes. */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
     getHealth: {
         parameters: {
             query?: never;
@@ -9500,7 +9697,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Signed in. The session cookie is set on this response. */
+            /** @description Signed in, with the session cookie set; or, for an account with two-factor sign-in on, a challenge and no cookie. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -10809,6 +11006,204 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    getTwoFactor: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description State. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TwoFactorState"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+        };
+    };
+    enableTwoFactor: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TwoFactorCode"];
+            };
+        };
+        responses: {
+            /** @description On. Ten recovery codes, each good once. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RecoveryCodes"];
+                };
+            };
+            /** @description The code is not right (check the phone's clock). */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            /** @description No setup in progress, or it has expired (ten minutes): start again. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description The server could not prepare the key two-factor secrets are sealed under. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    disableTwoFactor: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CurrentPassword"];
+            };
+        };
+        responses: {
+            /** @description Off. No body. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            /** @description `current_password` is not right. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Too many attempts from this client, or at this account from outside; wait a few minutes. */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    newRecoveryCodes: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CurrentPassword"];
+            };
+        };
+        responses: {
+            /** @description The new codes, shown once. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RecoveryCodes"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            /** @description `current_password` is not right. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Two-factor sign-in is off. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Too many attempts from this client, or at this account from outside; wait a few minutes. */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    startTwoFactor: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The secret, for the app. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TwoFactorSetup"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            /** @description The server could not prepare the key two-factor secrets are sealed under. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
                 };
             };
         };
@@ -18586,6 +18981,30 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorEnvelope"];
                 };
             };
+        };
+    };
+    removeUserTwoFactor: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The account id. */
+                id: components["parameters"]["UserId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Removed. No body. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
         };
     };
     getWatchlist: {

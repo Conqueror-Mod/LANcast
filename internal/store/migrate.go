@@ -6,7 +6,7 @@ import (
 )
 
 // CurrentSchemaVersion is the revision this build expects.
-const CurrentSchemaVersion = 81
+const CurrentSchemaVersion = 82
 
 // migration is one forward step. There are deliberately no down migrations:
 // rolling a media library's schema backwards loses data that a rescan cannot
@@ -152,6 +152,15 @@ var migrations = []migration{
 	// An account's own "no pre-roll for me" (ADR 0099). Null is off: the
 	// clip plays when the server has one.
 	{version: 81, columns: []column{{"user", "skip_preroll", "INTEGER"}}},
+	// Two-factor sign-in (ADR 0100): the sealed authenticator secret, the
+	// last step used (a code works once), when it was turned on, and the
+	// hashes of the unused recovery codes. All null for an account without.
+	{version: 82, columns: []column{
+		{"user", "totp_secret", "BLOB"},
+		{"user", "totp_last_step", "INTEGER"},
+		{"user", "totp_enabled_at", "INTEGER"},
+		{"user", "totp_recovery", "TEXT"},
+	}},
 }
 
 // migrate brings the database up to CurrentSchemaVersion.

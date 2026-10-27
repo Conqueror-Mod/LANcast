@@ -240,6 +240,10 @@ export type TogetherAskAnswer = components["schemas"]["TogetherAskAnswer"];
 // PATCH /api/users/{id} — an account as the manager sees it. `sessions` is live
 // sessions, not a login history: it answers "is this person here right now".
 export type ManagedUser = components["schemas"]["ManagedUser"];
+export type LoginResult = components["schemas"]["LoginResponse"];
+export type TwoFactorState = components["schemas"]["TwoFactorState"];
+export type TwoFactorSetup = components["schemas"]["TwoFactorSetup"];
+export type RecoveryCodes = components["schemas"]["RecoveryCodes"];
 
 // GET /api/channels — Live TV. A channel is deliberately not an Item: it has no
 // duration, no file and no identity a provider could match. The upstream URL is

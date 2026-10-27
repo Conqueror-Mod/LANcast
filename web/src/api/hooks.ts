@@ -36,6 +36,11 @@ import type {
   AuditPage,
   AuthStatus,
   AuthUser,
+  LoginResult,
+  ManagedUser,
+  RecoveryCodes,
+  TwoFactorSetup,
+  TwoFactorState,
   BrowseResult,
   Channel,
   ChannelSource,
@@ -149,15 +154,79 @@ export function useSetup() {
   });
 }
 
+/*
+ * A right password may answer with a challenge instead of a session, when the
+ * account has two-factor sign-in on (ADR 0100): nothing is signed in yet, so
+ * auth status is left alone until the code step succeeds.
+ */
 export function useLogin() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (creds: { username: string; password: string }) =>
-      apiPost<{ authenticated: boolean; user: AuthUser }>(
-        "/api/auth/login",
-        creds,
-      ),
+      apiPost<LoginResult>("/api/auth/login", creds),
+    onSuccess: (r) => {
+      if (r.authenticated) qc.invalidateQueries({ queryKey: ["auth-status"] });
+    },
+  });
+}
+
+export function useLoginTwoFactor() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (v: { challenge: string; code?: string; recovery_code?: string }) =>
+      apiPost<LoginResult>("/api/auth/login/two-factor", v),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["auth-status"] }),
+  });
+}
+
+export function useTwoFactor() {
+  return useQuery({
+    queryKey: ["two-factor"],
+    queryFn: ({ signal }) => apiGet<TwoFactorState>("/api/profile/two-factor", signal),
+  });
+}
+
+export function useStartTwoFactor() {
+  return useMutation({
+    mutationFn: () => apiPost<TwoFactorSetup>("/api/profile/two-factor/setup", {}),
+  });
+}
+
+export function useEnableTwoFactor() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (code: string) => apiPost<RecoveryCodes>("/api/profile/two-factor", { code }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["two-factor"] }),
+  });
+}
+
+export function useDisableTwoFactor() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (currentPassword: string) =>
+      apiSend("/api/profile/two-factor", "DELETE", { current_password: currentPassword }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["two-factor"] }),
+  });
+}
+
+export function useNewRecoveryCodes() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (currentPassword: string) =>
+      apiPost<RecoveryCodes>("/api/profile/two-factor/recovery-codes", {
+        current_password: currentPassword,
+      }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["two-factor"] }),
+  });
+}
+
+// An administrator taking two-factor off somebody who lost their phone. The
+// users list carries the flag, so that is what changes.
+export function useRemoveUserTwoFactor() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => apiSend(`/api/users/${id}/two-factor`, "DELETE"),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["users"] }),
   });
 }
 
@@ -289,7 +358,7 @@ export function useUsers() {
   return useQuery({
     queryKey: ["users"],
     queryFn: ({ signal }) =>
-      apiGet<{ users: AuthUser[] }>("/api/users", signal).then((r) => r.users),
+      apiGet<{ users: ManagedUser[] }>("/api/users", signal).then((r) => r.users),
   });
 }
 

@@ -39,6 +39,7 @@ import (
 	"lancast/internal/retro/identify"
 	"lancast/internal/retro/retrodb"
 	"lancast/internal/scan"
+	"lancast/internal/secret"
 	"lancast/internal/store"
 	"lancast/internal/subtitle"
 	"lancast/internal/tasks"
@@ -261,6 +262,10 @@ type Server struct {
 	// passkeyRPFor replaces the RP check in tests, whose server has no TLS.
 	passkeyChallenges *passkey.Challenges
 	passkeyRPFor      func(*http.Request) (string, bool)
+	// tfSealer seals two-factor secrets and tfBook holds sign-ins waiting on
+	// a code (ADR 0100); tfSealer is nil when the key could not be prepared.
+	tfSealer *secret.Sealer
+	tfBook   *twoFactorBook
 	// presence is who is watching what, right now. In memory and never
 	// persisted, which is ADR 0045 §4 and not an optimisation.
 	presence *presence.Tracker
@@ -363,6 +368,7 @@ func New(d Deps) *Server {
 		throttle:          auth.NewThrottle(),
 		accountWait:       auth.NewAccountBackoff(),
 		passkeyChallenges: passkey.NewChallenges(),
+		tfBook:            newTwoFactorBook(),
 		crashes:           crashlog.New(d.DataDir, Version),
 		together:          together.New(),
 		prober:            probe.New(),
@@ -424,6 +430,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/auth/accounts", s.loginAccounts)
 	mux.HandleFunc("POST /api/auth/setup", s.authSetup)
 	mux.HandleFunc("POST /api/auth/login", s.authLogin)
+	mux.HandleFunc("POST /api/auth/login/two-factor", s.authLoginTwoFactor)
 	mux.HandleFunc("POST /api/auth/logout", s.authLogout)
 	mux.HandleFunc("POST /api/auth/password", s.authChangePassword)
 	mux.HandleFunc("POST /api/auth/passkey/login/options", s.passkeyLoginOptions)
@@ -433,6 +440,11 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/profile/passkeys", s.passkeyRegister)
 	mux.HandleFunc("PATCH /api/profile/passkeys/{id}", s.renamePasskey)
 	mux.HandleFunc("DELETE /api/profile/passkeys/{id}", s.deletePasskey)
+	mux.HandleFunc("GET /api/profile/two-factor", s.getTwoFactor)
+	mux.HandleFunc("POST /api/profile/two-factor/setup", s.startTwoFactor)
+	mux.HandleFunc("POST /api/profile/two-factor", s.enableTwoFactor)
+	mux.HandleFunc("DELETE /api/profile/two-factor", s.disableTwoFactor)
+	mux.HandleFunc("POST /api/profile/two-factor/recovery-codes", s.newRecoveryCodes)
 
 	// Filesystem enumeration is reconnaissance for library creation, so it is an
 	// admin-only power like library creation itself.
@@ -935,6 +947,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("DELETE /api/users/{id}", s.adminOnly(s.deleteUser))
 	mux.HandleFunc("PATCH /api/users/{id}", s.adminOnly(s.patchUser))
 	mux.HandleFunc("POST /api/users/{id}/password", s.adminOnly(s.resetUserPassword))
+	mux.HandleFunc("DELETE /api/users/{id}/two-factor", s.adminOnly(s.removeUserTwoFactor))
 	// Which libraries an account cannot see (ADR 0084).
 	mux.HandleFunc("GET /api/users/{id}/libraries", s.adminOnly(s.userLibraries))
 	mux.HandleFunc("PUT /api/users/{id}/libraries", s.adminOnly(s.setUserLibraries))
