@@ -149,10 +149,11 @@ native desktop client, which plays through libmpv. The media types are films,
 TV, music, pictures and live TV, with live TV parked. On top of that sit
 federation between servers, Watch Together, installed games, plugins,
 semantic photo search, retro games, DLNA, optimized versions and music
-visualizers, and webhooks. The schema is at **revision 80**. The [Areas](#areas)
-tables hold the status of each piece, and the [Releases](#releases) table records
-when each one landed. What is left is breadth, and it is listed in the
-[Feature backlog](#feature-backlog).
+visualizers, and webhooks; chapters, extras, pre-roll, two-factor sign-in and a
+comics reader are built and not yet released. The schema is at **revision 83**.
+The [Areas](#areas) tables hold the status of each piece, and the
+[Releases](#releases) table records when each one landed. What is left is
+breadth, and it is listed in the [Feature backlog](#feature-backlog).
 
 ## What is left
 
@@ -167,18 +168,18 @@ is in the [Feature backlog](#feature-backlog) entry it names.*
   its own ADR. The profile half shipped in v0.9.88.
 
 **Feature backlog, not yet planned.**
-- Libraries and media: **audiobooks**, **ebooks** (comics first),
-  **extras on the detail page**, **pre-roll**, photo **bursts and RAW**, and
-  **loudness normalisation across a music library** (ReplayGain-style).
-- Playback: **chapters and preview thumbnails** on the scrub bar,
+- Libraries and media: **audiobooks**, **ebooks** beyond comics (EPUB),
+  `.cbr` comics, photo **bursts and RAW**, and **loudness normalisation across a
+  music library** (ReplayGain-style).
+- Playback: **preview thumbnails** on the scrub bar (chapters are built),
   **Chromecast and AirPlay**, and **offline downloads** (the client half).
 - Social: **Last.fm and Trakt scrobbling**.
 - Operations: a **server dashboard** with history (the metrics endpoint now
   has the numbers), **bandwidth limits**, and **granular sharing** by label or
   on a friend's server (confirm somebody needs it first).
 - Security hardening: **ffmpeg under fewer privileges** than LocalSystem, an
-  **update path for the pinned ffmpeg** (check before building), and **TOTP or
-  OIDC** with per-key API rate limits.
+  **update path for the pinned ffmpeg** (check before building), and **OIDC**
+  with per-key API rate limits (two-factor codes are built).
 
 **Back burner.** **Theme music**, blocked on OST identification, and
 **artist images from TheAudioDB** (provider built, not wired, needs a key).
@@ -191,6 +192,11 @@ step 6, which is now native HLS against MSE, and
 is watching that keeps running.
 
 **Built, not yet watched working.**
+- The second unattended batch (2026-10-26, #949–#953), unreleased:
+  **chapters as the installed service** (a new ffprobe call), **extras** that
+  are MKV in the desktop window, the **pre-roll** handing over to mpv in the
+  desktop window, **two-factor sign-in** with a real authenticator app on a
+  phone, and the **comics reader** in the desktop window and on a phone.
 - Watch Together and live updates between two servers on **different
   networks**, and the follower side of Watch Together on one server.
 - Retro: **Game Boy, Game Boy Color and Master System** on real dumps, a pad
@@ -1075,9 +1081,18 @@ group is not priority.
   position**: a location in reflowable text is not a millisecond, so it does not
   fit `playback_state` as it stands. **Metadata**: the OPF inside the file names
   title, author and series, and should be read before any provider is asked.
-  Comics (CBZ/CBR) are the cheap first step if this is wanted at all — an
-  archive of images, and the pictures viewer already displays images.
-- **Extras on the detail page** — trailers, featurettes, behind-the-scenes and
+  ~~Comics (CBZ/CBR) are the cheap first step~~ — **comics are built** (#953,
+  [ADR 0101](adr/0101-a-comic-is-read-out-of-its-archive.md)): a `comics`
+  library of `.cbz` files, pages read out of the archive, the first page as the
+  cover, and a reader that keeps your place in its own table — the "a page is
+  not a millisecond" question this entry raised, answered for comics. `.cbr`
+  (RAR) is not read: no standard-library reader.
+- ~~**Extras on the detail page**~~ — **built** (#950,
+  [ADR 0098](adr/0098-extras-are-found-not-imported.md)): a row on a film's or a
+  show's page, found on demand from the files ADR 0038 already recognised and
+  never imported, so no extra can reach a grid or a count. A local trailer
+  replaces the online Trailer button. Original entry: trailers, featurettes,
+  behind-the-scenes and
   deleted scenes, played rather than skipped. The files are already recognised:
   `media.IsExtra` finds them by the folder and suffix conventions Plex and Kodi
   document, the scan leaves them out, and library settings reports how many
@@ -1087,7 +1102,12 @@ group is not priority.
   plays through the same routes. This entry is that follow-up. It must not undo
   the reason 0038 exists: an extra never appears as a film, in the grid or in a
   count. The online Trailer button stays for films with no local trailer.
-- **Pre-roll (custom cinema intros)** — not built. A clip the owner chooses,
+- ~~**Pre-roll (custom cinema intros)**~~ — **built** (#951,
+  [ADR 0099](adr/0099-a-preroll-plays-before-a-film-from-the-start.md)): a folder
+  set in Settings, one clip at random, before a film started from the beginning
+  only, never recorded, skippable, and each account can turn it off for itself.
+  It plays at the player's entrance, so neither engine changed. Original entry:
+  a clip the owner chooses,
   played before a film; Plex's version is a list of paths with one picked at
   random. Four questions decide it: server-wide or per library; **never on a
   resume**, since a pre-roll before minute 47 is only an obstacle; it must not
@@ -1755,8 +1775,11 @@ group is not priority.
   transcodes, scan durations, request errors) for people who already run
   Grafana. Administrator- or loopback-only, and the same data the server
   dashboard entry above would draw on.
-- **Sign-in beyond passwords and passkeys** — not built. The review asked for
-  2FA or OIDC. Passkeys (ADR 0082) already give phishing-resistant sign-in, so
+- **Sign-in beyond passwords and passkeys** — **two-factor codes are built**
+  (#952, [ADR 0100](adr/0100-a-code-after-the-password-for-whoever-wants-one.md)):
+  each account opts in, an administrator can only remove it, ten recovery
+  codes, and the secret sealed beside the database. OIDC is what is left. The
+  review asked for 2FA or OIDC. Passkeys (ADR 0082) already give phishing-resistant sign-in, so
   TOTP is the smaller remaining gap; OIDC (Authelia, Authentik, Keycloak) is for
   households that already run an identity provider, and is outbound only to the
   one the owner names. Rate limits beyond login — per-key limits on the API —
@@ -2007,7 +2030,10 @@ group is not priority.
   defaults whatever anyone had chosen, with nothing failing anywhere — the third
   time this project has shipped a feature whose halves were each correct and
   never joined.
-- **Chapters and preview thumbnails on the scrub bar** — not built. Two halves
+- **Chapters and preview thumbnails on the scrub bar** — **chapters are built**
+  (#949): ffprobe's chapters, cached per file, as ticks on the scrub bar with
+  the name on hover, and Page Up/Down to skip between them. Preview thumbnails
+  are what is left. Two halves
   of one control. **Chapters** are already in most MKVs and MP4s; `probe` does
   not ask ffprobe for them, and once it does the scrub bar can mark them and
   skip to them. That half is cheap. **Preview thumbnails** (trickplay) are the
