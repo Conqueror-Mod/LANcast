@@ -108,18 +108,21 @@ func (w *CoverWorker) one(ctx context.Context, it store.Item) {
 	}
 }
 
-// Cover is the first page of the archive at path, fitted and as JPEG.
+// Cover is the first page of the comic at path, fitted and as JPEG.
 func Cover(path string) ([]byte, error) {
-	zr, err := Open(path)
+	b, err := OpenBook(path)
 	if err != nil {
 		return nil, err
 	}
-	defer zr.Close()
-	pages, err := Pages(&zr.Reader)
-	if err != nil {
-		return nil, err
+	defer b.Close()
+	// The first page that is a picture: a PDF can open on a page of text
+	// (a title or a notice), and its cover is the next one.
+	var raw []byte
+	for n := 0; n < b.Len() && n < 5; n++ {
+		if raw, _, err = b.Page(n); err == nil {
+			break
+		}
 	}
-	raw, err := ReadPage(pages[0])
 	if err != nil {
 		return nil, err
 	}

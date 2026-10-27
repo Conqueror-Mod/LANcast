@@ -379,7 +379,14 @@ export function LibraryRow({ library }: { library: Library }) {
               the library and they play; nothing failed.
             </div>
           )}
-          {!running && skippedKind > 0 && (
+          {!running && skippedKind > 0 && library.kind === "comics" && (
+            <div className="set-row__note">
+              {skippedKind.toLocaleString()} comic file
+              {skippedKind === 1 ? "" : "s"} ignored — a comics library reads
+              .cbz and .pdf, not .cbr, .cb7 or ebooks.
+            </div>
+          )}
+          {!running && skippedKind > 0 && library.kind !== "comics" && (
             <div className="set-row__note">
               {skippedKind.toLocaleString()} {excluded} file
               {skippedKind === 1 ? "" : "s"} ignored — this library's type is{" "}

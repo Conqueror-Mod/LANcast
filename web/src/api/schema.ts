@@ -348,7 +348,7 @@ export interface paths {
         };
         /**
          * How many pages a comic has, and where you are in it
-         * @description Comics only (ADR 0101); anything else is `404`. The pages are the archive's images in natural name order (`p2` before `p10`); `ComicInfo.xml`, macOS's `__MACOSX` folder and hidden files are not pages. `place` is the caller's own, or `null` before they have opened it.
+         * @description Comics only (ADR 0101); anything else is `404`. For a `.cbz`, the pages are the archive's images in natural name order (`p2` before `p10`); `ComicInfo.xml`, macOS's `__MACOSX` folder and hidden files are not pages. For a `.pdf` (ADR 0102), they are the file's pages in its own order, each served as the one picture it shows. `place` is the caller's own, or `null` before they have opened it.
          */
         get: operations["getComicPages"];
         put?: never;
@@ -6942,6 +6942,8 @@ export interface components {
             };
             /** @description The folder of pre-roll clips (ADR 0099); "" when off. */
             preroll_dir?: string;
+            /** @description Read only: how many videos are directly in `preroll_dir` now, `0` when off. A folder that is set and holds none plays nothing. */
+            preroll_clips?: number;
             /** @description Reverse proxies whose X-Forwarded-For is believed, as addresses or CIDR networks, normalised (a bare address becomes /32 or /128). Empty by default. */
             trusted_proxies: string[];
             /** @description DLNA, so TVs and consoles can browse and play the library (ADR 0086). Off by default. */
@@ -10107,7 +10109,7 @@ export interface operations {
             };
             401: components["responses"]["Unauthorized"];
             404: components["responses"]["NotFound"];
-            /** @description The archive is missing or is not a comic archive, or this page cannot be read. */
+            /** @description The file is missing or is not a comic, or this page cannot be read. A PDF page that is not a single picture (text, drawing, several pictures, JPEG 2000) is this, with the reason in `error.message`; the pages either side still read. */
             503: {
                 headers: {
                     [name: string]: unknown;
@@ -10146,7 +10148,7 @@ export interface operations {
             };
             401: components["responses"]["Unauthorized"];
             404: components["responses"]["NotFound"];
-            /** @description The archive is missing or is not a comic archive, or this page cannot be read. */
+            /** @description The file is missing or is not a comic, or this page cannot be read. A PDF page that is not a single picture (text, drawing, several pictures, JPEG 2000) is this, with the reason in `error.message`; the pages either side still read. */
             503: {
                 headers: {
                     [name: string]: unknown;
@@ -10191,7 +10193,7 @@ export interface operations {
             };
             401: components["responses"]["Unauthorized"];
             404: components["responses"]["NotFound"];
-            /** @description The archive is missing or is not a comic archive, or this page cannot be read. */
+            /** @description The file is missing or is not a comic, or this page cannot be read. A PDF page that is not a single picture (text, drawing, several pictures, JPEG 2000) is this, with the reason in `error.message`; the pages either side still read. */
             503: {
                 headers: {
                     [name: string]: unknown;

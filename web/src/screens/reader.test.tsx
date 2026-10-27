@@ -153,6 +153,21 @@ describe("the comic reader", () => {
     expect(puts).toEqual([1]);
   });
 
+  // A PDF page that is text, not a picture (ADR 0102), fails to load as an
+  // image; it is said in words in its place, and the next page still shows.
+  it("says so in place when a page cannot be shown", async () => {
+    await open();
+    await key("ArrowRight");
+    act(() => {
+      host.querySelector("img.reader__page")!.dispatchEvent(new Event("error"));
+    });
+    expect(host.querySelector("img.reader__page")).toBeNull();
+    expect(host.querySelector(".reader__missing")?.textContent).toContain("Page 2 cannot be shown");
+    await key("ArrowRight");
+    expect(shown()).toBe("/api/items/7/pages/2");
+    expect(host.querySelector(".reader__missing")).toBeNull();
+  });
+
   it("says so when the comic cannot be opened", async () => {
     await act(async () => {
       root.render(

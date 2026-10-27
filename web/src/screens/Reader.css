@@ -111,3 +111,12 @@
   text-align: center;
   color: var(--text-secondary);
 }
+
+/* A page that is not a picture (ADR 0102), said in words where it would be. */
+.reader__missing {
+  max-width: 32em;
+  padding: 16px;
+  color: var(--text-secondary);
+  text-align: center;
+  line-height: 1.5;
+}

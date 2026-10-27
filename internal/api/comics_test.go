@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"image"
+	_ "image/jpeg"
 	_ "image/png"
 	"io"
 	"net/http"
@@ -235,5 +236,44 @@ func TestALimitedAccountCannotOpenAComic(t *testing.T) {
 	resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("after rating it G: %d", resp.StatusCode)
+	}
+}
+
+// A PDF comic's pages come out as the pictures its pages are, in order, and a
+// page that is text says so in place, between pages that read (ADR 0102).
+func TestAPDFComicsPages(t *testing.T) {
+	h := newHarness(t)
+	dir := t.TempDir()
+	lib, err := h.st.CreateLibrary(context.Background(), "Comics", "comics", dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(dir, "Star Courier 001.pdf")
+	comictest.WritePDF(t, path, 4, comictest.PDFOptions{TextPage: 3, Compressed: true})
+	id := upsertComic(t, h, lib.ID, path)
+
+	if a := readPages(t, h, id); a.Pages != 4 {
+		t.Fatalf("pages = %+v", a)
+	}
+	for _, n := range []int{0, 1, 3} {
+		resp := h.do(t, "GET", fmt.Sprintf("/api/items/%d/pages/%d", id, n), nil)
+		body, _ := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		if resp.StatusCode != http.StatusOK || resp.Header.Get("Content-Type") != "image/jpeg" {
+			t.Fatalf("page %d: %d %s", n, resp.StatusCode, resp.Header.Get("Content-Type"))
+		}
+		img, _, err := image.Decode(bytes.NewReader(body))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if r, _, _, _ := img.At(1, 1).RGBA(); int(r>>8)-(n+1) > 2 || (n+1)-int(r>>8) > 2 {
+			t.Fatalf("page %d shows page %d", n, r>>8)
+		}
+	}
+	resp := h.do(t, "GET", fmt.Sprintf("/api/items/%d/pages/2", id), nil)
+	body, _ := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusServiceUnavailable || !bytes.Contains(body, []byte("text or drawing")) {
+		t.Fatalf("the text page: %d %s", resp.StatusCode, body)
 	}
 }

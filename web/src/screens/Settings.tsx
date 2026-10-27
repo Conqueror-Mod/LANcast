@@ -4648,8 +4648,12 @@ export function PrerollSection() {
   const { data: settings } = useSettings(true);
   const update = useUpdateSettings();
   const [dir, setDir] = useState<string | null>(null);
+  // Said once the server has taken it: a box that saves when you leave it
+  // and says nothing reads as a box that does not save.
+  const [done, setDone] = useState<string | null>(null);
   if (!settings) return null;
   const saved = settings.preroll_dir ?? "";
+  const clips = settings.preroll_clips ?? 0;
   return (
     <section className="settings__section">
       <span className="section-label">Pre-roll</span>
@@ -4660,15 +4664,39 @@ export function PrerollSection() {
           aria-label="Pre-roll folder"
           placeholder="Off"
           value={dir ?? saved}
-          onChange={(e) => setDir(e.target.value)}
+          onChange={(e) => {
+            setDir(e.target.value);
+            setDone(null);
+          }}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") e.currentTarget.blur();
+          }}
           onBlur={() => {
             if (dir !== null && dir.trim() !== saved) {
-              update.mutate({ preroll_dir: dir.trim() });
+              const next = dir.trim();
+              update.mutate({ preroll_dir: next }, { onSuccess: () => setDone(next) });
             }
             setDir(null);
           }}
         />
       </label>
+      {done !== null && (
+        <span className="set-note" role="status">
+          {done ? "Saved." : "Saved. Pre-roll is off."}
+        </span>
+      )}
+      {/* What the folder holds now, from the server: a folder that is set
+          but holds no video plays nothing, and saying "saved" alone would
+          let that pass for working. */}
+      {saved && dir === null && (
+        <p className={clips === 0 ? "set-error" : "set-row__sub"}>
+          {clips === 0
+            ? "This folder has no videos in it, so no clip plays until one is added."
+            : clips === 1
+              ? "1 clip in this folder."
+              : `${clips} clips in this folder; one plays at random.`}
+        </p>
+      )}
       <p className="set-row__sub">
         A short clip of your choosing, such as a cinema intro, played before a film someone starts
         from the beginning. Never when they carry on watching, never before an episode, and anyone can

@@ -144,3 +144,35 @@ func TestThePrerollFolderIsValidated(t *testing.T) {
 		t.Errorf("clearing it: %d", code)
 	}
 }
+
+// Settings reads back how many clips the folder holds, so a folder that is set
+// but empty can be named as playing nothing (it was tried for real: a folder
+// was saved, nothing said it held no video).
+func TestSettingsSayHowManyClipsTheFolderHolds(t *testing.T) {
+	h, _, dir := prerollHarness(t)
+	count := func() int {
+		var got struct {
+			Clips *int `json:"preroll_clips"`
+		}
+		decode(t, h.authed(t, "GET", "/api/settings", nil), &got)
+		if got.Clips == nil {
+			t.Fatal("no preroll_clips in settings")
+		}
+		return *got.Clips
+	}
+	if n := count(); n != 0 {
+		t.Fatalf("off: %d", n)
+	}
+	if code := setPrerollDir(t, h, dir); code != http.StatusOK && code != http.StatusNoContent {
+		t.Fatalf("set: %d", code)
+	}
+	// The .mp4 and not the notes beside it.
+	if n := count(); n != 1 {
+		t.Fatalf("one clip: %d", n)
+	}
+	empty := t.TempDir()
+	setPrerollDir(t, h, empty)
+	if n := count(); n != 0 {
+		t.Fatalf("empty folder: %d", n)
+	}
+}
