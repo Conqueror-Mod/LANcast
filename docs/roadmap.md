@@ -1085,8 +1085,10 @@ group is not priority.
   [ADR 0101](adr/0101-a-comic-is-read-out-of-its-archive.md)): a `comics`
   library of `.cbz` files, pages read out of the archive, the first page as the
   cover, and a reader that keeps your place in its own table — the "a page is
-  not a millisecond" question this entry raised, answered for comics. `.cbr`
-  (RAR) is not read: no standard-library reader.
+  not a millisecond" question this entry raised, answered for comics. **PDF**
+  comics followed ([ADR 0102](adr/0102-a-pdf-comic-is-its-pictures.md)): each page
+  is served as the one picture it shows, with no renderer. `.cbr` (RAR) is not
+  read: no standard-library reader; a scan now counts them.
 - ~~**Extras on the detail page**~~ — **built** (#950,
   [ADR 0098](adr/0098-extras-are-found-not-imported.md)): a row on a film's or a
   show's page, found on demand from the files ADR 0038 already recognised and

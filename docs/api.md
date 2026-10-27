@@ -1040,7 +1040,7 @@ the body. Scans are never queued.
 
 **`kind` is permanent.** It decides which files are scanned at all — a `music`
 library indexes audio, a `picture` library images, a `retro` library ROMs and
-disc images, a `comics` library `.cbz` archives, everything else video — and
+disc images, a `comics` library `.cbz` and `.pdf` comics, everything else video — and
 it biases matching between films and TV. There is no endpoint to change it:
 altering it would mean a rescan re-litigating identity for an entire library,
 which is what field locking exists to prevent. Remove the library and add it
@@ -1323,11 +1323,11 @@ person does with the download, which is how *no phone-home* survives an export.
 ### Comics
 
 A `comics` library ([ADR 0101](adr/0101-a-comic-is-read-out-of-its-archive.md))
-indexes `.cbz` files, each a `comic` item. Its title and year come from the
+indexes `.cbz` and `.pdf` files ([ADR 0102](adr/0102-a-pdf-comic-is-its-pictures.md)), each a `comic` item. Its title and year come from the
 filename (`Saga 012 (2014) (Digital).cbz` is *Saga 012*, 2014), its `series` is
 the folder it sits in when that is not the library's root, and its poster is its
 first page. No metadata provider and no ffprobe ever see one. `.cbr` (RAR) and
-`.cb7` are not read. A comics library cannot be shared with a paired server and
+`.cb7` are not read, and are counted in a scan's `skipped_kind`. A comics library cannot be shared with a paired server and
 is not offered over DLNA.
 
 | Route | Purpose |
@@ -1342,6 +1342,8 @@ pages. A page is named by its number, never by its name inside the archive, so
 nothing a client sends is a path, and nothing is unpacked to disk: each page is
 read out of the zip when asked for. A page over 64 MB, or an archive over 5,000
 pages, is refused.
+
+**A PDF's pages are the pictures its pages show**, served as the file holds them: a JPEG as it is, a lossless picture as a PNG. Nothing is rendered. A page that is not a single picture — text, drawing, several pictures tiled, JPEG 2000 — is still a page, numbered in its place, and its image route is `503` with the reason in `error.message`. A PDF in which no page is a picture, or an encrypted one, is `503` on all three routes.
 
 A place is not progress. A comic does not join Continue Watching, and its place
 is not a position in milliseconds; finishing one is `watched`, so the tick,
@@ -5311,7 +5313,7 @@ to "have I watched this".
 | `audit_retention_days` | `90` | 0–3650 | Audit events older than this are deleted by a daily pass. **0 means keep for ever**, the same shape of answer `continue_weeks` gives — not "delete now". Takes effect without a restart. Cached provider responses are dropped after **7 days** regardless: that is a cache, every entry refetches, and it is not covered by this setting. Changing this value makes a pass due on the next check rather than a day later — a stamp records the policy it ran under, so shortening a window takes effect promptly instead of looking broken |
 | `backup_every_days` | `7` | 0–90 | Take a backup on a schedule, every this many days (`GET /api/backups`). **0 is off.** On by default, weekly: the database holds every correction made by hand, the one thing a rescan cannot rebuild. Checked every half hour, so turning it on, or shortening the interval past the last scheduled backup, takes one within the half hour. Scheduled backups are named with `-auto` before the extension and listed with `scheduled: true`. Not audited when taken — nobody did it — and logged as `scheduled backup taken`. On the Scheduled tasks board as `backup` |
 | `trusted_proxies` | `[]` | up to 32 | Reverse proxies whose `X-Forwarded-For` is believed, as IP addresses or CIDR networks. **Empty by default**, which reads only the connecting address, as LANcast always has. When a request arrives from an address on this list, the header is read **right to left** and the first entry that is not itself a trusted proxy becomes the caller's address — for the login throttle, the per-account wait's home-network exemption, the sign-in page's account picker, the request log and a session's device address. An entry to the left of that is the caller's own claim and is not believed. A trusted proxy that sends no usable header leaves the request as it was. Stored normalised (`127.0.0.1` reads back as `127.0.0.1/32`); refused with `400` when an entry does not parse, is wider than an IPv4 `/8` or IPv6 `/16`, or there are more than 32. Applies to the next request, with no restart. Audited. Only `X-Forwarded-For` is read, not `Forwarded` or `X-Real-IP` |
-| `preroll_dir` | `""` | a folder | The folder of pre-roll clips ([ADR 0099](adr/0099-a-preroll-plays-before-a-film-from-the-start.md)). Every video directly in it is a candidate, one played at random before a film started from the beginning (`GET /api/preroll`). **`""` is off**, the default. Must be a full path to a folder this server can read, or `400`. Audited |
+| `preroll_dir` | `""` | a folder | The folder of pre-roll clips ([ADR 0099](adr/0099-a-preroll-plays-before-a-film-from-the-start.md)). Every video directly in it is a candidate, one played at random before a film started from the beginning (`GET /api/preroll`). **`""` is off**, the default. Must be a full path to a folder this server can read, or `400`. Audited. Read back with `preroll_clips`, how many videos the folder holds now (read only), so a folder with none can be named as playing nothing |
 | `backup_keep` | `4` | 1–52 | How many **scheduled** backups to keep. After each scheduled backup, older scheduled ones past this count are deleted. **A backup taken by hand is never counted and never deleted**, however many there are: the one somebody took before an upgrade is the one they will come looking for. Lowering it deletes the extras at the next scheduled run, not at once. Rotation runs only after a backup has been written, so a schedule failing on a full disk does not then delete the copies it has |
 | `dlna_enabled` | `false` | — | DLNA, so TVs, consoles and VLC can find and play the library with no LANcast app ([ADR 0086](adr/0086-a-tv-browses-as-somebody.md)). **Off by default.** Runs only when `dlna_account` is set and the server is bound to the LAN; never widens the loopback rule. Serves plain HTTP on **8200** and discovery on UDP **1900**, to LAN clients only. Takes effect within seconds, no restart. Audited |
 | `dlna_account` | `""` | an account id | The account a TV browses **as**: it sees exactly what that account sees, rating limit and hidden libraries included. An id that is not an account is `400`. Audited |

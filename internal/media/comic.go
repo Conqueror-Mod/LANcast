@@ -17,13 +17,27 @@ import (
  * because "Saga 012" is what somebody looks for, and not run through clean(),
  * whose vocabulary is a video convention.
  *
- * Only .cbz. A .cbr is a RAR archive, which the standard library cannot open,
- * and a .cb7 is 7-Zip; neither is worth a dependency before somebody asks.
+ * .cbz and .pdf (ADR 0102): a PDF comic is a picture a page, and its pages are
+ * those pictures. A .cbr is a RAR archive, which the standard library cannot
+ * open, and a .cb7 is 7-Zip; neither is worth a dependency before somebody
+ * asks.
  */
 
 // IsComic reports whether a path is a file a comics library indexes.
 func IsComic(path string) bool {
-	return strings.EqualFold(filepath.Ext(path), ".cbz")
+	ext := filepath.Ext(path)
+	return strings.EqualFold(ext, ".cbz") || strings.EqualFold(ext, ".pdf")
+}
+
+// IsUnreadComic reports whether a path is a comic in a format a comics library
+// does not read: RAR and 7-Zip archives, tar, and ebooks. Counted by the
+// scan so that a library of them says why it is empty.
+func IsUnreadComic(path string) bool {
+	switch strings.ToLower(filepath.Ext(path)) {
+	case ".cbr", ".cb7", ".cbt", ".cba", ".rar", ".epub", ".mobi", ".azw3", ".djvu":
+		return true
+	}
+	return false
 }
 
 var (

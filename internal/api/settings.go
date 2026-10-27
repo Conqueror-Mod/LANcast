@@ -93,6 +93,9 @@ func (s *Server) getSettings(w http.ResponseWriter, r *http.Request) {
 
 		// The pre-roll folder (ADR 0099), "" when off.
 		"preroll_dir": cur.PrerollDir,
+		// How many clips that folder holds now, so Settings can say a folder
+		// with no video in it will play nothing rather than promise a clip.
+		"preroll_clips": len(prerollClips(cur.PrerollDir)),
 
 		// Never null, so a client can render the list without a guard.
 		"trusted_proxies": nonNil(cur.TrustedProxies),
