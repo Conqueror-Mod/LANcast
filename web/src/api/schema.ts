@@ -276,6 +276,46 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/items/{id}/extras": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * A film's or show's extras
+         * @description Trailers, featurettes, deleted scenes and the rest, **found in the item's folder on each request and never imported** (ADR 0098), by the rules that keep them out of the library (ADR 0038). Only films and shows have extras; anything else answers an empty list. Samples are never listed. Sorted by kind (trailers first), then title.
+         */
+        get: operations["listExtras"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/items/{id}/extras/{key}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Play one extra
+         * @description The file itself, with range requests. `key` comes from the listing and is **looked up against a fresh listing**, never decoded into a path, so a key names one of this item's extras or nothing. Nothing is recorded: an extra has no progress and is never watched.
+         */
+        get: operations["streamExtra"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/metrics": {
         parameters: {
             query?: never;
@@ -7611,6 +7651,20 @@ export interface components {
         ChapterList: {
             chapters: components["schemas"]["Chapter"][];
         };
+        Extra: {
+            /** @description Opaque; pass it back to play this extra. */
+            key: string;
+            /** @enum {string} */
+            kind: "trailer" | "featurette" | "behind_the_scenes" | "deleted_scene" | "interview" | "scene" | "short" | "other";
+            title: string;
+            /** Format: int64 */
+            bytes: number;
+            /** @description The file's extension, lower case, so a client can say what it could not play. */
+            container: string;
+        };
+        ExtraList: {
+            extras: components["schemas"]["Extra"][];
+        };
         BackupFile: {
             name: string;
             /** Format: int64 */
@@ -9611,6 +9665,78 @@ export interface operations {
                 };
             };
             /** @description No such item */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    listExtras: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The extras, or none */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExtraList"];
+                };
+            };
+            /** @description No such item, or no such extra */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    streamExtra: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+                key: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The file */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "video/*": string;
+                };
+            };
+            /** @description A range of the file */
+            206: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "video/*": string;
+                };
+            };
+            /** @description No such item, or no such extra */
             404: {
                 headers: {
                     [name: string]: unknown;

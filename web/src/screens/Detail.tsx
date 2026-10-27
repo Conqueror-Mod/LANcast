@@ -11,6 +11,7 @@ import {
   useRefreshItem,
   useRedetectCredits,
   useTrailer,
+  useExtras,
   useChildren,
   useCollectionMembers,
   useIsAdmin,
@@ -73,6 +74,11 @@ import { PhotoViewer } from "@/components/PhotoViewer";
 import { TrackList } from "@/components/TrackList";
 import { EpisodeList } from "@/components/EpisodeList";
 import { TrailerModal } from "@/components/TrailerModal";
+import { ExtraPlayer, ExtrasRow } from "@/components/Extras";
+import type { Extra } from "@/api/types";
+
+// One empty list, so a film without extras is not a new array every render.
+const NO_EXTRAS: Extra[] = [];
 import { useDownloads, downloadURL } from "@/lib/downloads";
 import { RateItem } from "@/components/RateItem";
 import { TagItem } from "@/components/TagItem";
@@ -460,6 +466,11 @@ export function Detail() {
   const [, setHeroMode] = useHeroMode();
   const pinned = pinnedID === itemID;
   const { data: trailer } = useTrailer(itemID);
+  // The film's own extras, found in its folder (ADR 0098). Its own trailer,
+  // when it has one, is what the Trailer button plays.
+  const extras =
+    useExtras(itemID, item?.kind === "movie" || item?.kind === "show").data?.extras ?? NO_EXTRAS;
+  const ownTrailer = extras.find((x) => x.kind === "trailer");
 
   // A container (show, season, collection, or a multi-part work) has no file to
   // play — it holds other items. Fetch those; the query stays idle for a plain
@@ -535,6 +546,7 @@ export function Detail() {
   const [shown, setShown] = useState<Item | null>(null);
   const [viewerOpen, setViewerOpen] = useState(false);
   const [trailerOpen, setTrailerOpen] = useState(false);
+  const [extraOpen, setExtraOpen] = useState<Extra | null>(null);
   const [removeOpen, setRemoveOpen] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
   // Optimized copies (ADR 0087), for administrators' More Options.
@@ -1224,7 +1236,11 @@ export function Detail() {
                 />
               )}
               {watchlistable(item) && <WatchlistButton id={item.id} />}
-              {trailer && <TrailerButton onOpen={() => setTrailerOpen(true)} />}
+              {(ownTrailer || trailer) && (
+                <TrailerButton
+                  onOpen={() => (ownTrailer ? setExtraOpen(ownTrailer) : setTrailerOpen(true))}
+                />
+              )}
               {/*
                * Everything that is not playing it, behind one button.
                *
@@ -1330,6 +1346,7 @@ export function Detail() {
             )}
 
             <CastRow cast={cast} libraryID={item.library_id} />
+            <ExtrasRow itemID={item.id} extras={extras} onPlay={setExtraOpen} />
           </div>
         </div>
 
@@ -1472,6 +1489,14 @@ export function Detail() {
         />
       )}
       {childDialogs}
+      {extraOpen && (
+        <ExtraPlayer
+          itemID={item.id}
+          extra={extraOpen}
+          filmTitle={item.title}
+          onClose={() => setExtraOpen(null)}
+        />
+      )}
       {trailerOpen && trailer && (
         <TrailerModal
           trailer={trailer}

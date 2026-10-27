@@ -1,0 +1,64 @@
+.detail__extras {
+  margin-top: 30px;
+}
+
+.detail__extras-row {
+  display: flex;
+  gap: 14px;
+  margin-top: 14px;
+  overflow-x: auto;
+  padding-bottom: 6px;
+}
+
+/*
+ * A text tile: what it is, then its name. flex-shrink 0, because in a
+ * scrolling flex row items otherwise shrink to fit instead of scrolling, and
+ * collapse to slivers with every style apparently applied.
+ *
+ * No gold at rest: gold says where you are, so it arrives on hover and focus.
+ */
+.extra-tile {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  width: 200px;
+  padding: 12px 14px;
+  border-radius: var(--radius-panel);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text-primary);
+  text-align: left;
+  cursor: pointer;
+}
+
+.extra-tile:hover,
+.extra-tile:focus-visible {
+  border-color: var(--gold);
+  outline: none;
+}
+
+.extra-tile__kind {
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+
+.extra-tile__title {
+  font-size: 14px;
+  line-height: 1.3;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+.trailer__frame video {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  background: #000;
+}
