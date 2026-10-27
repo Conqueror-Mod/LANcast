@@ -19,7 +19,18 @@ behind: the Releases table stopped at v0.9.78, and three backlog entries still
 listed work that had shipped as open. The release-by-release record is the
 [Releases](#releases) table, and what remains is [What is left](#what-is-left).*
 
-**Nothing sits unreleased.** v0.9.97 is current. Since v0.9.78:
+**Unreleased on `main`, all checked as the installed service (2026-10-27)
+except extras:** chapters on the scrub bar (#949), extras on the detail page
+([ADR 0098](adr/0098-extras-are-found-not-imported.md), #950), pre-roll
+([ADR 0099](adr/0099-a-preroll-plays-before-a-film-from-the-start.md), #951),
+two-factor sign-in
+([ADR 0100](adr/0100-a-code-after-the-password-for-whoever-wants-one.md),
+#952), and a comics library that reads `.cbz`
+([ADR 0101](adr/0101-a-comic-is-read-out-of-its-archive.md), #953) and `.pdf`
+([ADR 0102](adr/0102-a-pdf-comic-is-its-pictures.md), #955). Schema 81–83,
+one-way. Held for release by choice, not for a fault.
+
+v0.9.97 is the latest release. Since v0.9.78:
 - **v0.9.79:** one program, `LANcast.exe`, with the tray always present
   ([ADR 0080](adr/0080-one-executable-two-roles.md)), and a scan can be cancelled.
 - **v0.9.80–v0.9.81:** collections continue the way shows do, an About tab,
@@ -150,7 +161,8 @@ TV, music, pictures and live TV, with live TV parked. On top of that sit
 federation between servers, Watch Together, installed games, plugins,
 semantic photo search, retro games, DLNA, optimized versions and music
 visualizers, and webhooks; chapters, extras, pre-roll, two-factor sign-in and a
-comics reader are built and not yet released. The schema is at **revision 83**.
+comics reader (CBZ and PDF) are built, checked as the installed service, and not
+yet released. The schema is at **revision 83**.
 The [Areas](#areas) tables hold the status of each piece, and the
 [Releases](#releases) table records when each one landed. What is left is
 breadth, and it is listed in the [Feature backlog](#feature-backlog).
@@ -162,8 +174,13 @@ is in the [Feature backlog](#feature-backlog) entry it names.*
 
 **Next, once decided.**
 - **A friend joins without being reachable** — [plan](lighter-join-plan.md)
-  merged (#836), waiting on a design session. Option A, the friend's server
-  pushing its roster to the host, is recommended first.
+  (#836), decided 2026-10-27. **Option A is built**
+  ([ADR 0103](adr/0103-a-friend-who-cannot-be-reached-says-who-is-there.md)):
+  a server sends its roster to its peers, so only the host has to be
+  reachable. Proven in the two-server harness with the friend's server
+  unreachable; **a friend on another network is owed before release**. Next is
+  **option C**, inviting a friend as a member of your server instead of
+  pairing a server, as its own change.
 - **In-play RetroAchievements** — unlocks while you play (rcheevos), which needs
   its own ADR. The profile half shipped in v0.9.88.
 
@@ -192,11 +209,10 @@ step 6, which is now native HLS against MSE, and
 is watching that keeps running.
 
 **Built, not yet watched working.**
-- The second unattended batch (2026-10-26, #949–#953), unreleased:
-  **chapters as the installed service** (a new ffprobe call), **extras** that
-  are MKV in the desktop window, the **pre-roll** handing over to mpv in the
-  desktop window, **two-factor sign-in** with a real authenticator app on a
-  phone, and the **comics reader** in the desktop window and on a phone.
+- **Extras** (#950), the one piece of the second unattended batch not seen
+  working: an MKV extra played in the desktop window. Chapters, pre-roll,
+  two-factor sign-in and the comics reader (CBZ and PDF) all passed as the
+  installed service on 2026-10-27.
 - Watch Together and live updates between two servers on **different
   networks**, and the follower side of Watch Together on one server.
 - Retro: **Game Boy, Game Boy Color and Master System** on real dumps, a pad

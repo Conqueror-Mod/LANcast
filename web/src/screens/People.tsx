@@ -217,7 +217,11 @@ function PeerCard({ peer }: { peer: PeerPresence }) {
               : "people__peer-state"
           }
         >
-          {peer.reachable ? "Online" : "Not answering"}
+          {peer.reachable
+            ? "Online"
+            : peer.reaches_us
+              ? "Reaches you · can't be reached from here"
+              : "Not answering"}
         </span>
       </div>
 
@@ -258,6 +262,7 @@ function PeerCard({ peer }: { peer: PeerPresence }) {
           person={person}
           fingerprint={peer.fingerprint}
           reachable={peer.reachable}
+          reachesUs={peer.reaches_us ?? false}
         />
       ))}
 
@@ -310,10 +315,12 @@ function PeerPersonRow({
   person,
   fingerprint,
   reachable,
+  reachesUs,
 }: {
   person: PeerPerson;
   fingerprint: string;
   reachable: boolean;
+  reachesUs: boolean;
 }) {
   const grant = useGrantPresence();
 
@@ -322,7 +329,7 @@ function PeerPersonRow({
       <div className="people__peer-who">
         <span className="people__peer-person-name">{person.name}</span>
         <span className="people__peer-status">
-          {statusOf(person, reachable)}
+          {statusOf(person, reachable, reachesUs)}
         </span>
       </div>
 
@@ -377,7 +384,11 @@ function PeerPersonRow({
  * no libraries", while four of them were sitting in the rail. Presence says
  * what it is about now, and nothing on this card says "sharing" unqualified.
  */
-function statusOf(person: PeerPerson, reachable: boolean): string {
+function statusOf(person: PeerPerson, reachable: boolean, reachesUs = false): string {
+  // A friend whose server sends us its roster but cannot be called (ADR 0103):
+  // what they watch cannot be asked, so "not showing you" would invent a
+  // choice. Checked first for exactly that reason.
+  if (!reachable && reachesUs) return "What they watch can't be seen from here";
   if (!person.shares) return "Not showing you what they watch";
   if (!reachable) return "Server not answering";
   if (!person.online) return "Offline";

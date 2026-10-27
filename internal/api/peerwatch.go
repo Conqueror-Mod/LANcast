@@ -37,7 +37,9 @@ import (
  * household switched off for a weekend costs one call every few minutes, not
  * one every ten seconds.
  *
- * Federation stays pull-only. Nothing here adds a route between servers.
+ * Federation was pull-only when this was written. ADR 0103 added one push,
+ * the roster, sent from this same tick (rosterpush.go), so that a friend who
+ * cannot be reached is still known to the host.
  */
 
 const (
@@ -107,6 +109,13 @@ func (s *Server) peerTick(ctx context.Context) {
 	s.forgetPresenceOf(users)
 
 	var wg sync.WaitGroup
+	// Our roster out to them (ADR 0103), beside theirs in from them: a peer
+	// that cannot be reached still learns who is here.
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		s.pushRosters(ctx, peers)
+	}()
 	for _, p := range peers {
 		wg.Add(1)
 		go func(p store.Peer) {

@@ -335,6 +335,8 @@ type Server struct {
 	// presenceSeen is the last presence answer per peer and person, so the
 	// watcher publishes only a change. Guarded by rosterMu.
 	presenceSeen map[string]string
+	// push is the roster push's state (rosterpush.go, ADR 0103).
+	push *rosterPush
 }
 
 func New(d Deps) *Server {
@@ -355,6 +357,7 @@ func New(d Deps) *Server {
 		nonces:     guestticket.NewNonceStore(0),
 		guests:     newGuestBook(),
 		rosterAt:   map[string]time.Time{},
+		push:       newRosterPush(),
 		peerTitles: map[string]peerTitleEntry{},
 		goodAddr:   map[string]string{},
 		cookieSent: map[string]time.Time{},
@@ -744,6 +747,7 @@ func (s *Server) Handler() http.Handler {
 	// caller is a server, not a browser. See federationPresence.
 	mux.HandleFunc("GET /api/federation/presence", s.federationPresence)
 	mux.HandleFunc("GET /api/federation/roster", s.federationRoster)
+	mux.HandleFunc("PUT /api/federation/roster", s.federationRosterPush)
 
 	/*
 	 * Browsing a share, asked for by the friend's own server rather than by

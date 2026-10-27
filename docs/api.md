@@ -364,6 +364,7 @@ are, and every later capability is granted separately.
 | `DELETE /api/presence` | Playback stopped; drop the caller's live presence now |
 | `GET /api/federation/presence?person={id}` | **Peer-to-peer.** Answers what that peer's person may see. Not a session route — see below |
 | `GET /api/federation/roster` | **Peer-to-peer.** The accounts here that have opted into being listed |
+| `PUT /api/federation/roster` | **Peer-to-peer.** `{people, as_of}` → `204`. A paired server sending its roster instead of waiting to be asked ([ADR 0103](adr/0103-a-friend-who-cannot-be-reached-says-who-is-there.md)), so one that cannot be reached is still known here. Stored as a fetched roster is, wholesale; promotes the pairing to `paired`; an older `as_of` than the last accepted (by under 10 minutes) is ignored. At most 1,000 people and 256 KB |
 | `GET /api/federation/libraries` | **Peer-to-peer.** The libraries shared with the calling server |
 | `GET /api/federation/items` | **Peer-to-peer.** `?library=&kind=&q=&sort=&parent=&limit=&offset=` → browse or search one shared library, under that share's limit; `parent` opens one container, as on `/api/guest/items` |
 | `GET /api/federation/stream` | **Peer-to-peer.** `?item=` → the file itself, with Range support, if that item is in a shared library and under its limit |
