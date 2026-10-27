@@ -51,6 +51,25 @@ func (s *Server) audit(r *http.Request, action, targetKind, targetID, summary st
 	s.log.Info(summary, "action", action, "actor", ev.ActorName)
 }
 
+// auditAs records an act whose actor has no session yet: somebody redeeming
+// an invite is the account being made (ADR 0104), and the request carries no
+// session to name them by.
+func (s *Server) auditAs(r *http.Request, actorID, actorName, action, targetKind, targetID, summary string, detail any) {
+	ev := store.AuditEvent{
+		ActorID: actorID, ActorName: actorName, Action: action,
+		TargetKind: targetKind, TargetID: targetID, Summary: summary,
+	}
+	if detail != nil {
+		if b, err := json.Marshal(detail); err == nil {
+			ev.Detail = string(b)
+		}
+	}
+	if err := s.st.AppendAudit(context.WithoutCancel(r.Context()), ev); err != nil {
+		s.log.Error("audit write failed", "action", action, "summary", summary, "error", err)
+	}
+	s.log.Info(summary, "action", action, "actor", actorName)
+}
+
 // actorName is the display name to freeze into the event. It falls back to the
 // id rather than to "unknown", so an event is always attributable to something.
 func (s *Server) actorName(r *http.Request) string {

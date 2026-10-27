@@ -337,6 +337,8 @@ type Server struct {
 	presenceSeen map[string]string
 	// push is the roster push's state (rosterpush.go, ADR 0103).
 	push *rosterPush
+	// inviteThrottle counts failed invite lookups per address (ADR 0104).
+	inviteThrottle *auth.Throttle
 }
 
 func New(d Deps) *Server {
@@ -350,20 +352,21 @@ func New(d Deps) *Server {
 		updates:  d.Updates,
 		tasks:    d.Tasks,
 		settings: d.Settings, dataDir: d.DataDir, log: d.Log, web: web,
-		ident:      d.Identity,
-		listenAddr: d.ListenAddr,
-		presence:   presence.New(),
-		tickets:    newTicketBook(),
-		nonces:     guestticket.NewNonceStore(0),
-		guests:     newGuestBook(),
-		rosterAt:   map[string]time.Time{},
-		push:       newRosterPush(),
-		peerTitles: map[string]peerTitleEntry{},
-		goodAddr:   map[string]string{},
-		cookieSent: map[string]time.Time{},
-		quiet:      applog.NewQuiet(10 * time.Minute),
-		peerDown:   map[string]time.Time{},
-		rebuild:    d.Rebuild, reloadPlugins: d.ReloadPlugins, enrich: d.Enrich,
+		ident:          d.Identity,
+		listenAddr:     d.ListenAddr,
+		presence:       presence.New(),
+		tickets:        newTicketBook(),
+		nonces:         guestticket.NewNonceStore(0),
+		guests:         newGuestBook(),
+		rosterAt:       map[string]time.Time{},
+		push:           newRosterPush(),
+		inviteThrottle: auth.NewThrottle(),
+		peerTitles:     map[string]peerTitleEntry{},
+		goodAddr:       map[string]string{},
+		cookieSent:     map[string]time.Time{},
+		quiet:          applog.NewQuiet(10 * time.Minute),
+		peerDown:       map[string]time.Time{},
+		rebuild:        d.Rebuild, reloadPlugins: d.ReloadPlugins, enrich: d.Enrich,
 		probe: d.Probe, detectMarkers: d.DetectMarkers, coversSoon: d.Cover,
 		retro: d.Retro, retroDB: d.RetroDB, retroSoon: d.RetroSoon, retroInstall: &retroJob{}, webCoreInstall: &webCoreJob{},
 		locations: d.Locations, placesSoon: d.PlacesSoon,
@@ -748,6 +751,14 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/federation/presence", s.federationPresence)
 	mux.HandleFunc("GET /api/federation/roster", s.federationRoster)
 	mux.HandleFunc("PUT /api/federation/roster", s.federationRosterPush)
+
+	// Invites (ADR 0104): made by an administrator, redeemed by anybody
+	// holding the link.
+	mux.HandleFunc("POST /api/invites", s.adminOnly(s.createInvite))
+	mux.HandleFunc("GET /api/invites", s.adminOnly(s.listInvites))
+	mux.HandleFunc("DELETE /api/invites/{id}", s.adminOnly(s.deleteInvite))
+	mux.HandleFunc("POST /api/invites/check", s.checkInvite)
+	mux.HandleFunc("POST /api/invites/redeem", s.redeemInvite)
 
 	/*
 	 * Browsing a share, asked for by the friend's own server rather than by

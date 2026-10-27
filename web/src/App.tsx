@@ -30,7 +30,7 @@ import { People } from "@/screens/People";
 import { RetroPlayRoute } from "@/screens/RetroWebPlay";
 import { Reader } from "@/screens/Reader";
 import { Stub } from "@/screens/Stub";
-import { Setup, Login } from "@/screens/Auth";
+import { Setup, Login, JoinWithInvite, JoinWhileSignedIn } from "@/screens/Auth";
 import { MiniPlayer } from "@/components/MiniPlayer";
 import { PlaybackProvider } from "@/playback/PlaybackProvider";
 import { TogetherProvider } from "@/playback/TogetherProvider";
@@ -69,6 +69,8 @@ export function App() {
     return <Setup restartRequired={auth.restart_required} />;
 
   // Configured but not signed in.
+  // An invite link (ADR 0104) is opened by somebody with no account yet.
+  if (!auth.authenticated && window.location.pathname === "/join") return <JoinWithInvite />;
   if (!auth.authenticated) return <Login />;
 
   // Playback wraps the router, not a route: the media element has to outlive
@@ -146,6 +148,7 @@ export function App() {
           <Route path="/live" element={<LiveTV />} />
           <Route path="/people" element={<People />} />
           <Route path="/settings" element={<Settings />} />
+          <Route path="/join" element={<JoinWhileSignedIn name={auth.user?.name ?? ""} />} />
           <Route
             path="*"
             element={<Stub name="Not found" note="No such page." />}

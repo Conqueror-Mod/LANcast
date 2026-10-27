@@ -2,7 +2,8 @@
 
 *Written 2026-10-11. Decided 2026-10-27: **A is built**
 ([ADR 0103](adr/0103-a-friend-who-cannot-be-reached-says-who-is-there.md)),
-with presence towards the host left absent; **C is next**, as its own change;
+with presence towards the host left absent; **C is built**
+([ADR 0104](adr/0104-a-friend-is-invited-by-a-link-that-works-once.md));
 B and D stay parked. Proven in the two-server harness; a friend on another
 network is owed before release.*
 

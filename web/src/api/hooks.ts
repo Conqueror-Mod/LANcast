@@ -11,6 +11,7 @@ import { apiGet, apiPost, apiSend, apiUpload } from "./client";
 import { addPasskey, signInWithPasskey } from "@/lib/webauthn";
 import type {
   BackupFile,
+  Invite,
   PrerollAnswer,
   ChapterList,
   ExtraList,
@@ -369,6 +370,63 @@ export function useCreateUser() {
     mutationFn: (u: { username: string; password: string; role: string }) =>
       apiPost<AuthUser>("/api/users", u),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["users"] }),
+  });
+}
+
+/*
+ * Invites (ADR 0104). The list is what an administrator is looking at when
+ * they make or withdraw one, so both refresh it; the secret comes back once,
+ * from the mutation, and is never in the list.
+ */
+export function useInvites() {
+  return useQuery({
+    queryKey: ["invites"],
+    queryFn: ({ signal }) =>
+      apiGet<{ invites: Invite[] }>("/api/invites", signal).then((r) => r.invites),
+  });
+}
+
+export function useCreateInvite() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (v: { note: string; max_content_rating: string; hidden_libraries: number[] }) =>
+      apiPost<{ invite: Invite; token: string; public_name: string }>("/api/invites", v),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["invites"] }),
+  });
+}
+
+export function useDeleteInvite() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => apiSend(`/api/invites/${encodeURIComponent(id)}`, "DELETE"),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["invites"] }),
+  });
+}
+
+// Public: whoever holds the link has no session. Not retried: a dead link
+// is an answer, not a fault.
+export function useCheckInvite(token: string) {
+  return useQuery({
+    queryKey: ["invite-check", token],
+    queryFn: () =>
+      apiPost<{ from: string; expires_at: number }>("/api/invites/check", { token }),
+    enabled: token !== "",
+    retry: false,
+    staleTime: Infinity,
+  });
+}
+
+/*
+ * Redeeming signs the new account in. The auth status is deliberately NOT
+ * refreshed here: doing so swapped the join page for the signed-in app before
+ * the page could leave, and a friend who had just joined was told they were
+ * "already signed in" and that the link was for somebody new. The join page
+ * reloads into the library instead, which reads the new session fresh.
+ */
+export function useRedeemInvite() {
+  return useMutation({
+    mutationFn: (v: { token: string; username: string; password: string }) =>
+      apiPost<AuthUser>("/api/invites/redeem", v),
   });
 }
 

@@ -6,7 +6,7 @@ import (
 )
 
 // CurrentSchemaVersion is the revision this build expects.
-const CurrentSchemaVersion = 83
+const CurrentSchemaVersion = 84
 
 // migration is one forward step. There are deliberately no down migrations:
 // rolling a media library's schema backwards loses data that a rescan cannot
@@ -162,6 +162,7 @@ var migrations = []migration{
 		{"user", "totp_recovery", "TEXT"},
 	}},
 	{version: 83, sql: schemaRevision83},
+	{version: 84, sql: schemaRevision84},
 }
 
 // migrate brings the database up to CurrentSchemaVersion.
@@ -2487,5 +2488,23 @@ CREATE TABLE IF NOT EXISTS comic_place (
     pages      INTEGER NOT NULL,
     updated_at INTEGER NOT NULL,
     PRIMARY KEY (user_id, item_id)
+);
+`
+
+// Revision 84 — invites (ADR 0104): a link that makes one member account,
+// once. The secret is never stored, only its SHA-256, so a copy of the
+// database is not a set of working links. A row is deleted when it is
+// redeemed, withdrawn, or found expired; hidden_libraries is a comma-separated
+// list of library ids, applied when the account is made.
+const schemaRevision84 = `
+CREATE TABLE IF NOT EXISTS invite (
+    id                 TEXT    PRIMARY KEY,
+    token_hash         BLOB    NOT NULL UNIQUE,
+    note               TEXT    NOT NULL DEFAULT '',
+    max_content_rating TEXT    NOT NULL DEFAULT '',
+    hidden_libraries   TEXT    NOT NULL DEFAULT '',
+    created_by         TEXT    NOT NULL,
+    created_at         INTEGER NOT NULL,
+    expires_at         INTEGER NOT NULL
 );
 `

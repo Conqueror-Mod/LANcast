@@ -314,6 +314,8 @@ export type MediaToolsState = components["schemas"]["MediaToolsState"];
 export type PeerPerson = components["schemas"]["PeerPerson"];
 
 export type PeerPresence = components["schemas"]["PeerPresence"];
+// An outstanding invite, as an administrator sees it (ADR 0104). Never the secret.
+export type Invite = components["schemas"]["Invite"];
 
 /*
  * A paired server as this one records it, and the invite that introduces one.

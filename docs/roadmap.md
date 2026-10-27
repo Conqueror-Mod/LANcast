@@ -178,9 +178,12 @@ is in the [Feature backlog](#feature-backlog) entry it names.*
   ([ADR 0103](adr/0103-a-friend-who-cannot-be-reached-says-who-is-there.md)):
   a server sends its roster to its peers, so only the host has to be
   reachable. Proven in the two-server harness with the friend's server
-  unreachable; **a friend on another network is owed before release**. Next is
-  **option C**, inviting a friend as a member of your server instead of
-  pairing a server, as its own change.
+  unreachable; **a friend on another network is owed before release**.
+  **Option C is built too**
+  ([ADR 0104](adr/0104-a-friend-is-invited-by-a-link-that-works-once.md)):
+  Settings › Users & access › **Invite a friend** makes a link that creates one
+  member account, once, for 7 days, with its limits set before anything is
+  seen. Schema 84.
 - **In-play RetroAchievements** — unlocks while you play (rcheevos), which needs
   its own ADR. The profile half shipped in v0.9.88.
 

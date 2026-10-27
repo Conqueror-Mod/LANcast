@@ -1,4 +1,4 @@
-import { useState, type FormEvent, type ReactNode } from "react";
+import { useEffect, useState, type FormEvent, type ReactNode } from "react";
 import { ApiFailure } from "@/api/client";
 import {
   useSetup,
@@ -7,6 +7,8 @@ import {
   useAuthStatus,
   usePasskeyLogin,
   useLoginAccounts,
+  useCheckInvite,
+  useRedeemInvite,
 } from "@/api/hooks";
 import { cancelledByPerson } from "@/lib/webauthn";
 import "./Auth.css";
@@ -362,6 +364,149 @@ function CodeStep({ challenge, onRestart }: { challenge: string; onRestart: () =
       <button type="button" className="auth__link" onClick={onRestart}>
         Start again
       </button>
+    </AuthCard>
+  );
+}
+
+/*
+ * Joining with an invite (ADR 0104): the page a link opens.
+ *
+ * The secret is in the fragment, which the browser never sent anywhere. It is
+ * read once and the address bar is put back to plain /join, so the secret is
+ * not left in history, a bookmark or a screenshot. From here it goes to the
+ * server only in a POST body.
+ */
+// A server message as the start of a sentence: capitalised, with a full stop.
+function sentence(msg: string): string {
+  const s = msg.charAt(0).toUpperCase() + msg.slice(1);
+  return /[.!?]$/.test(s) ? s : s + ".";
+}
+
+function readInviteSecret(): string {
+  const secret = decodeURIComponent(window.location.hash.replace(/^#/, ""));
+  if (secret) window.history.replaceState(null, "", "/join");
+  return secret;
+}
+
+// Where a new account goes: the library, reloaded so the new session is read fresh.
+const openLibrary = () => window.location.replace("/");
+
+export function JoinWithInvite({
+  onJoined = openLibrary,
+}: {
+  // Where to go once signed in as the new account. A prop so a test can see
+  // it happen; the library, reloaded fresh, everywhere else.
+  onJoined?: () => void;
+} = {}) {
+  const [token] = useState(readInviteSecret);
+  const check = useCheckInvite(token);
+  const redeem = useRedeemInvite();
+  const [name, setName] = useState("");
+  const [password, setPassword] = useState("");
+  const [again, setAgain] = useState("");
+  const [mismatch, setMismatch] = useState(false);
+
+  // A link pasted into a tab already on /join changes only the fragment, and
+  // a fragment change reloads nothing: the secret read at load would stand.
+  // Reload, so the page reads the link it now has.
+  useEffect(() => {
+    const reread = () => window.location.reload();
+    window.addEventListener("hashchange", reread);
+    return () => window.removeEventListener("hashchange", reread);
+  }, []);
+
+  if (!token || check.isError) {
+    return (
+      <AuthCard
+        label="This invite can't be used"
+        intro={
+          token
+            ? `${sentence(errorMessage(check.error))} Ask whoever sent it for a new one.`
+            : "This link is missing the part that makes it work. Copy the whole link from the message it came in."
+        }
+      >
+        <a className="auth__link" href="/">
+          Sign in instead
+        </a>
+      </AuthCard>
+    );
+  }
+  if (!check.data) {
+    return <AuthCard label="Checking your invite…">{null}</AuthCard>;
+  }
+
+  function submit(e: FormEvent) {
+    e.preventDefault();
+    if (password !== again) {
+      setMismatch(true);
+      return;
+    }
+    setMismatch(false);
+    // Signed in as the new account: open the library, fresh.
+    redeem.mutate({ token, username: name.trim(), password }, { onSuccess: () => onJoined() });
+  }
+
+  return (
+    <AuthCard
+      label={`Join ${check.data.from}'s LANcast`}
+      intro="Choose the name and password you'll sign in with. This link works once."
+    >
+      <form className="auth__form" onSubmit={submit}>
+        <label className="auth__field">
+          <span>Your name</span>
+          <input
+            autoFocus
+            autoComplete="username"
+            maxLength={64}
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            required
+          />
+        </label>
+        <label className="auth__field">
+          <span>Password</span>
+          <input
+            type="password"
+            autoComplete="new-password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            required
+          />
+        </label>
+        <label className="auth__field">
+          <span>Password again</span>
+          <input
+            type="password"
+            autoComplete="new-password"
+            value={again}
+            onChange={(e) => setAgain(e.target.value)}
+            required
+          />
+        </label>
+        {(mismatch || redeem.isError) && (
+          <p className="auth__error" role="alert">
+            {mismatch ? "The two passwords are different." : errorMessage(redeem.error)}
+          </p>
+        )}
+        <button type="submit" className="auth__submit" disabled={redeem.isPending || redeem.isSuccess}>
+          {redeem.isPending || redeem.isSuccess ? "Joining…" : "Join"}
+        </button>
+      </form>
+    </AuthCard>
+  );
+}
+
+// The same link opened by somebody already signed in: it is for somebody
+// new, and spending it here would make a second account for the wrong person.
+export function JoinWhileSignedIn({ name }: { name: string }) {
+  return (
+    <AuthCard
+      label="You're already signed in"
+      intro={`You're signed in as ${name}. This invite is for somebody new: send the link on to them, or sign out first if it's meant for you.`}
+    >
+      <a className="auth__link" href="/">
+        Go to the library
+      </a>
     </AuthCard>
   );
 }
