@@ -12,6 +12,7 @@ import { addPasskey, signInWithPasskey } from "@/lib/webauthn";
 import type {
   BackupFile,
   ChapterList,
+  ExtraList,
   RestoreStarted,
   WebhookList,
   WebhookCreate,
@@ -3490,16 +3491,6 @@ export function useYearInReview(year?: number) {
 // -------------------------------------------------------------- lyrics
 
 /*
- * The words to a track, read off the server's disk.
- *
- * Its own key rather than a sibling of ["item", id]: nothing invalidates
- * lyrics, and a key reached by prefix from the item would be refetched every
- * time anything about the item changed — a file on disk that has not moved.
- *
- * Long staleTime for the same reason. This answer changes when somebody drops
- * an .lrc next to a track, which is not something a player needs to poll for.
- */
-/*
  * The chapters a film's file carries (GET /api/items/{id}/chapters). Read by
  * the player for the scrub bar and the chapter keys. Long-lived: a file's
  * chapters change only when the file does, and the server checks that.
@@ -3513,6 +3504,29 @@ export function useChapters(itemID: number, enabled = true) {
   });
 }
 
+/*
+ * A film's or show's extras (ADR 0098), found in its folder on each ask. Read
+ * by the detail page; nothing writes them, so nothing invalidates them.
+ */
+export function useExtras(itemID: number, enabled = true) {
+  return useQuery({
+    queryKey: ["extras", itemID],
+    queryFn: ({ signal }) => apiGet<ExtraList>(`/api/items/${itemID}/extras`, signal),
+    enabled: enabled && itemID > 0,
+    staleTime: 5 * 60_000,
+  });
+}
+
+/*
+ * The words to a track, read off the server's disk.
+ *
+ * Its own key rather than a sibling of ["item", id]: nothing invalidates
+ * lyrics, and a key reached by prefix from the item would be refetched every
+ * time anything about the item changed — a file on disk that has not moved.
+ *
+ * Long staleTime for the same reason. This answer changes when somebody drops
+ * an .lrc next to a track, which is not something a player needs to poll for.
+ */
 export function useLyrics(itemID: number) {
   return useQuery({
     queryKey: ["lyrics", itemID],

@@ -816,6 +816,9 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("PUT /api/items/{id}/progress", s.putProgress)
 	// The marks a file carries, for the scrub bar; read on first ask, cached.
 	mux.HandleFunc("GET /api/items/{id}/chapters", s.itemChapters)
+	// A film's extras, found in its folder and never imported (ADR 0098).
+	mux.HandleFunc("GET /api/items/{id}/extras", s.listExtras)
+	mux.HandleFunc("GET /api/items/{id}/extras/{key}", s.streamExtra)
 	mux.HandleFunc("DELETE /api/items/{id}/locks/{field}", s.adminOnly(s.deleteLock))
 	mux.HandleFunc("PUT /api/items/{id}/sensitive", s.adminOnly(s.putSensitive))
 	// Admin, like every other write that changes what the library looks like to

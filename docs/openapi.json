@@ -597,6 +597,112 @@
         }
       }
     },
+    "/items/{id}/extras": {
+      "get": {
+        "operationId": "listExtras",
+        "summary": "A film's or show's extras",
+        "description": "Trailers, featurettes, deleted scenes and the rest, **found in the item's folder on each request and never imported** (ADR 0098), by the rules that keep them out of the library (ADR 0038). Only films and shows have extras; anything else answers an empty list. Samples are never listed. Sorted by kind (trailers first), then title.",
+        "tags": [
+          "Items"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The extras, or none",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExtraList"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such item, or no such extra",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/items/{id}/extras/{key}": {
+      "get": {
+        "operationId": "streamExtra",
+        "summary": "Play one extra",
+        "description": "The file itself, with range requests. `key` comes from the listing and is **looked up against a fresh listing**, never decoded into a path, so a key names one of this item's extras or nothing. Nothing is recorded: an extra has no progress and is never watched.",
+        "tags": [
+          "Items"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          {
+            "name": "key",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The file",
+            "content": {
+              "video/*": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "206": {
+            "description": "A range of the file",
+            "content": {
+              "video/*": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such item, or no such extra",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/metrics": {
       "get": {
         "operationId": "getMetrics",
@@ -17756,6 +17862,60 @@
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/Chapter"
+            }
+          }
+        }
+      },
+      "Extra": {
+        "type": "object",
+        "required": [
+          "key",
+          "kind",
+          "title",
+          "bytes",
+          "container"
+        ],
+        "properties": {
+          "key": {
+            "type": "string",
+            "description": "Opaque; pass it back to play this extra."
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "trailer",
+              "featurette",
+              "behind_the_scenes",
+              "deleted_scene",
+              "interview",
+              "scene",
+              "short",
+              "other"
+            ]
+          },
+          "title": {
+            "type": "string"
+          },
+          "bytes": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "container": {
+            "type": "string",
+            "description": "The file's extension, lower case, so a client can say what it could not play."
+          }
+        }
+      },
+      "ExtraList": {
+        "type": "object",
+        "required": [
+          "extras"
+        ],
+        "properties": {
+          "extras": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Extra"
             }
           }
         }

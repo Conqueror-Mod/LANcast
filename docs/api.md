@@ -2398,6 +2398,36 @@ list, not an error** — no chapters, no ffprobe, a container with no file, or a
 read that failed — so the player carries on as it did before chapters existed.
 `404` for an item the caller cannot see.
 
+### `GET /api/items/{id}/extras`
+
+A film's or show's extras ([ADR 0098](adr/0098-extras-are-found-not-imported.md)):
+
+```json
+{ "extras": [
+    { "key": "VHJhaWxlcnMvVGVhc2VyLm1wNA", "kind": "trailer", "title": "Teaser",
+      "bytes": 48213902, "container": "mp4" } ] }
+```
+
+**Found in the item's folder on each request, never imported**, by the rules
+that keep extras out of the library (ADR 0038), so an extra never appears as a
+film anywhere. For a film in a folder of its own: the marked files beside it and
+every video in the extras folders directly inside it (`Trailers/`,
+`Featurettes/`, `Behind The Scenes/`, …). For a film sharing a folder with
+others, only marked files that name it (`Alien-trailer` is Alien's, not
+Aliens'). A show's are found the same way in its folder. Samples are never
+listed. `kind` is one of `trailer`, `featurette`, `behind_the_scenes`,
+`deleted_scene`, `interview`, `scene`, `short`, `other`; sorted by kind, trailers
+first, then title. Only films and shows have extras: anything else answers
+`{"extras": []}`. `404` for an item the caller cannot see.
+
+### `GET /api/items/{id}/extras/{key}`
+
+Plays one: the file itself, with range requests. `key` is **looked up against a
+fresh listing, never decoded into a path**, so it names one of this item's
+extras or nothing (`404`). Each file is also held to the library root with
+links followed (ADR 0094). Nothing is recorded: an extra has no progress, is
+never marked watched, and is not in history.
+
 ### `GET /api/items/{id}/lyrics`
 
 The words to a track, read off the disk it is already on.
