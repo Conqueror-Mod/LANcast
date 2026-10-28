@@ -1582,13 +1582,12 @@ function AdminSections({ pane }: { pane: string }) {
                 Detect where the credits start
               </label>
               <p className="set-row__sub">
-                Looks at the end of each film and episode in the background and
-                records where the credits appear to begin. Off by default
+                Looks at each film and episode in the background for where the
+                credits begin, and at each season for where its intro is. That
+                is what puts Skip intro and Skip credits on screen, and brings
+                an episode&rsquo;s Up Next card in at its credits. Off by default
                 because it reads a quarter of every file, which takes hours on a
-                large library. Nothing uses it yet — playback and what counts as
-                watched are unchanged — so this only fills in what a later
-                release will be able to skip to. Only files that have been read
-                are examined.
+                large library. Only files that have been read are examined.
               </p>
               <label className="set-toggle">
                 <input

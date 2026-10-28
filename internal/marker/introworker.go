@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"time"
 
+	"lancast/internal/childproc"
 	"lancast/internal/store"
 )
 
@@ -513,7 +514,7 @@ const (
  * the caller places them by subtracting their length from the duration.
  */
 func (w *Worker) decodeTail(ctx context.Context, path string, secs int) ([]float64, error) {
-	out, err := exec.CommandContext(ctx, w.bin(),
+	cmd := exec.CommandContext(ctx, w.bin(),
 		"-hide_banner", "-nostats", "-v", "error",
 		"-threads", strconv.Itoa(w.threads()),
 		"-sseof", "-"+strconv.Itoa(secs),
@@ -522,7 +523,9 @@ func (w *Worker) decodeTail(ctx context.Context, path string, secs int) ([]float
 		"-ac", "1",
 		"-ar", strconv.Itoa(SampleRate),
 		"-f", "s16le", "-",
-	).Output()
+	)
+	childproc.Hide(cmd)
+	out, err := cmd.Output()
 	if err != nil {
 		return nil, fmt.Errorf("ffmpeg: %w", err)
 	}
@@ -540,7 +543,7 @@ func (w *Worker) decodeTail(ctx context.Context, path string, secs int) ([]float
  * in session 0 where there is no D3D device.
  */
 func (w *Worker) decodeHead(ctx context.Context, path string, secs int) ([]float64, error) {
-	out, err := exec.CommandContext(ctx, w.bin(),
+	cmd := exec.CommandContext(ctx, w.bin(),
 		"-hide_banner", "-nostats", "-v", "error",
 		// Capped for the same reason the credits scan is: one ffmpeg with a
 		// filter attached will take the whole machine, and nothing waits on a
@@ -552,7 +555,9 @@ func (w *Worker) decodeHead(ctx context.Context, path string, secs int) ([]float
 		"-ac", "1",
 		"-ar", strconv.Itoa(SampleRate),
 		"-f", "s16le", "-",
-	).Output()
+	)
+	childproc.Hide(cmd)
+	out, err := cmd.Output()
 	if err != nil {
 		return nil, fmt.Errorf("ffmpeg: %w", err)
 	}

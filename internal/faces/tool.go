@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"os"
 	"os/exec"
+
+	"lancast/internal/childproc"
 	"path/filepath"
 	"runtime"
 	"sync"
@@ -304,6 +306,7 @@ func (t *Tool) probe(ctx context.Context) Capabilities {
 
 	cmd := exec.CommandContext(ctx, path, args...)
 	cmd.Env = t.env()
+	childproc.Hide(cmd)
 	out, err := cmd.Output()
 	if err != nil {
 		return Capabilities{Reason: "the face worker did not answer: " + err.Error()}
