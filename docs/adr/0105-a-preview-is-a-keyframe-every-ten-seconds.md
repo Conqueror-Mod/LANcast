@@ -82,3 +82,6 @@ sends becomes a path.
   sees chapters and no pictures. That can come with federation's next change.
 - The per-file cost is a decode of keyframes, so a scan does not get slower.
   The work happens after it, off the request path.
+
+## Amendment, 2026-10-27: a film you open goes first
+ first pass as the installed service worked, and still looked broken: the film tried had **2,136 items ahead of it**, because the queue runs newest first over 2,325 films and episodes, roughly 15–20 hours. Previews are for the film somebody is watching, so a film opened in the player with none yet now goes to the front. `GET /api/items/{id}/previews` puts it on the worker's wanted list (most recent ask first, at most 8) and starts a pass if none is running. A running pass takes wanted items before its next file, and skips them if they come up again in its current batch. The answer is `404` with code `queued`, and the player asks again every 20 s, for up to ten minutes, so the frames appear while the film plays. Only while the setting is on, and only for films and episodes.

@@ -151,6 +151,9 @@ type Deps struct {
 	// PreviewsDir is where previews are kept.
 	Previews    func()
 	PreviewsDir string
+	// PreviewsWant puts an item at the front of the previews queue and
+	// starts a pass (somebody opened it in the player).
+	PreviewsWant func(itemID int64)
 	// Cover triggers a background album-art pass, for the same reason.
 	Cover func()
 	// LANBound reports whether the server is actually listening beyond
@@ -237,6 +240,7 @@ type Server struct {
 	// previewsSoon kicks a previews pass; previewsDir is where they live.
 	previewsSoon  func()
 	previewsDir   string
+	previewsWant  func(itemID int64)
 	coversSoon    func()
 	lanBound      bool
 	restartWidens bool
@@ -380,7 +384,7 @@ func New(d Deps) *Server {
 		peerDown:       map[string]time.Time{},
 		rebuild:        d.Rebuild, reloadPlugins: d.ReloadPlugins, enrich: d.Enrich,
 		probe: d.Probe, detectMarkers: d.DetectMarkers, coversSoon: d.Cover,
-		previewsSoon: d.Previews, previewsDir: d.PreviewsDir,
+		previewsSoon: d.Previews, previewsDir: d.PreviewsDir, previewsWant: d.PreviewsWant,
 		retro: d.Retro, retroDB: d.RetroDB, retroSoon: d.RetroSoon, retroInstall: &retroJob{}, webCoreInstall: &webCoreJob{},
 		locations: d.Locations, placesSoon: d.PlacesSoon,
 		lanBound: d.LANBound, restartWidens: d.RestartWidens,

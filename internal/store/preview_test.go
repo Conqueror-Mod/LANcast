@@ -72,3 +72,26 @@ func TestExistingItemsIsWhatIsThere(t *testing.T) {
 		t.Fatalf("%v", got)
 	}
 }
+
+// One item by id, only while it still needs previews: what the wanted list
+// asks before making one somebody opened.
+func TestOnePendingPreviewItem(t *testing.T) {
+	st := openTestStore(t)
+	ctx := context.Background()
+	film := seedMarkerFilm(t, st, "Film", 6_000_000, true)
+	unprobed := seedMarkerFilm(t, st, "Unprobed", 6_000_000, false)
+	it, err := st.PendingPreviewItem(ctx, film, 1)
+	if err != nil || it == nil || it.ID != film {
+		t.Fatalf("pending film: %+v %v", it, err)
+	}
+	if it, _ := st.PendingPreviewItem(ctx, unprobed, 1); it != nil {
+		t.Fatal("an unprobed item is pending")
+	}
+	st.SetPreviewKey(ctx, film, "1:1:1")
+	if it, _ := st.PendingPreviewItem(ctx, film, 1); it != nil {
+		t.Fatal("a made item is still pending")
+	}
+	if it, _ := st.PendingPreviewItem(ctx, 999999, 1); it != nil {
+		t.Fatal("a missing item is pending")
+	}
+}

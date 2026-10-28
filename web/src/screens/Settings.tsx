@@ -1602,7 +1602,7 @@ function AdminSections({ pane }: { pane: string }) {
               <p className="set-row__sub">
                 Hover or drag along the bar while a film or episode plays and see the moment you would
                 land on. Off by default because it reads every film and episode once in the background,
-                about 40 seconds each, newest first, and keeps about 2 MB per film beside the database.
+                about 40 seconds each, newest first, and keeps about 2 MB per film beside the database. A film you open that has none yet is made next, and its pictures appear within a minute or so.
                 Turning it off stops the work and keeps what was made.
               </p>
             </>

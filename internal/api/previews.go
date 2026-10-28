@@ -38,6 +38,18 @@ func (s *Server) previewsFor(w http.ResponseWriter, r *http.Request) (*store.Ite
 	}
 	m, err := preview.Load(s.previewsDir, it.ID)
 	if err != nil || m.Key != store.PreviewKey(*it, preview.Rev) {
+		/*
+		 * None yet, and somebody has this open in the player: make it next
+		 * rather than after the rest of the library, and say so, so the
+		 * player knows asking again soon is worth it. Only films and
+		 * episodes, and only while the setting is on.
+		 */
+		if s.previewsWant != nil && s.settings.Get().ScrubPreviews &&
+			(it.Kind == "movie" || it.Kind == "episode") {
+			s.previewsWant(it.ID)
+			writeError(w, http.StatusNotFound, "queued", "previews for this item are being made next")
+			return nil, nil
+		}
 		writeError(w, http.StatusNotFound, "not_found", "no previews for this item")
 		return nil, nil
 	}

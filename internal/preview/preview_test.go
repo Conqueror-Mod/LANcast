@@ -42,6 +42,16 @@ func (f *fakeStore) ExistingItems(_ context.Context, ids []int64) (map[int64]boo
 	return out, nil
 }
 
+func (f *fakeStore) PendingPreviewItem(_ context.Context, id int64, rev int) (*store.Item, error) {
+	for _, it := range f.items {
+		if it.ID == id && f.keys[it.ID] != store.PreviewKey(it, rev) {
+			it := it
+			return &it, nil
+		}
+	}
+	return nil, nil
+}
+
 func item(id int64, path string) store.Item {
 	size, mtime := int64(100), int64(200)
 	return store.Item{ID: id, Path: path, SizeBytes: &size, MTime: &mtime}
@@ -160,5 +170,64 @@ func TestPruningRemovesWhatHasNoItem(t *testing.T) {
 func TestNoSheetsIsAFailure(t *testing.T) {
 	if _, err := Describe(t.TempDir()); err == nil {
 		t.Fatal("an empty folder described as previews")
+	}
+}
+
+// A film somebody opens goes first: made before the batch the pass is on,
+// and not made twice when the batch reaches it.
+func TestAWantedFilmGoesFirst(t *testing.T) {
+	st := &fakeStore{
+		items: []store.Item{item(1, "a"), item(2, "b"), item(3, "c"), item(4, "d")},
+		keys:  map[int64]string{}, exist: map[int64]bool{},
+	}
+	w := NewWorker(st, t.TempDir(), quiet())
+	var order []int64
+	w.makeFn = func(_ context.Context, it store.Item, dir string) (*Manifest, error) {
+		order = append(order, it.ID)
+		if it.ID == 1 {
+			w.Want(3) // opened in the player while the first file was being made
+		}
+		os.MkdirAll(dir, 0o755)
+		return &Manifest{Sheets: 1}, nil
+	}
+	if err := w.Run(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if len(order) != 4 || order[0] != 1 || order[1] != 3 {
+		t.Fatalf("made in order %v, want 1, then the wanted 3, then the rest once each", order)
+	}
+}
+
+// The most recent ask goes first, asking again moves it back to the front,
+// and the list is bounded.
+func TestTheWantedListIsMostRecentFirstAndBounded(t *testing.T) {
+	w := NewWorker(&fakeStore{}, t.TempDir(), quiet())
+	for id := int64(1); id <= 10; id++ {
+		w.Want(id)
+	}
+	w.Want(5)
+	if !w.Wanted(5) || w.Wanted(1) {
+		t.Fatalf("wanted %v", w.wanted)
+	}
+	if len(w.wanted) != maxWanted || w.wanted[0] != 5 || w.wanted[1] != 10 {
+		t.Fatalf("wanted %v", w.wanted)
+	}
+}
+
+// A wanted item that needs nothing (made meanwhile, or not a film) is
+// skipped, not made.
+func TestAWantedItemThatNeedsNothingIsSkipped(t *testing.T) {
+	st := &fakeStore{items: []store.Item{item(1, "a")}, keys: map[int64]string{}, exist: map[int64]bool{}}
+	st.keys[1] = store.PreviewKey(st.items[0], Rev)
+	w := NewWorker(st, t.TempDir(), quiet())
+	w.Want(1)
+	w.Want(99)
+	calls := 0
+	w.makeFn = func(context.Context, store.Item, string) (*Manifest, error) { calls++; return nil, errors.New("no") }
+	if err := w.Run(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if calls != 0 {
+		t.Fatalf("made %d", calls)
 	}
 }

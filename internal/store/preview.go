@@ -51,6 +51,22 @@ func (s *Store) PendingPreviews(ctx context.Context, rev, limit int) ([]Item, er
 	return scanItems(rows)
 }
 
+// PendingPreviewItem is one item if it still needs previews at rev, or nil:
+// for an item somebody has opened, which may have been made meanwhile, or not
+// be a film at all.
+func (s *Store) PendingPreviewItem(ctx context.Context, id int64, rev int) (*Item, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT `+itemCols+` FROM media_item WHERE id = ? AND `+previewPending, id, rev)
+	if err != nil {
+		return nil, fmt.Errorf("pending preview item: %w", err)
+	}
+	defer rows.Close()
+	items, err := scanItems(rows)
+	if err != nil || len(items) == 0 {
+		return nil, err
+	}
+	return &items[0], nil
+}
+
 // PendingPreviewsCount is how many are still waiting.
 func (s *Store) PendingPreviewsCount(ctx context.Context, rev int) (int, error) {
 	var n int

@@ -115,3 +115,40 @@ func TestPreviewsFollowTheItemsVisibility(t *testing.T) {
 		}
 	}
 }
+
+// A film opened with no previews yet is put at the front of the queue, and
+// the answer says so, while the setting is on; not otherwise.
+func TestAnOpenedFilmWithoutPreviewsIsQueued(t *testing.T) {
+	h := newHarness(t)
+	h.srvAPI.previewsDir = t.TempDir()
+	var wanted []int64
+	h.srvAPI.previewsWant = func(id int64) { wanted = append(wanted, id) }
+	id := h.addFile(t, "film.mkv", []byte("a film"))
+
+	code := func() (int, string) {
+		resp := h.do(t, "GET", "/api/items/"+itoa(id)+"/previews", nil)
+		defer resp.Body.Close()
+		var body struct {
+			Error struct {
+				Code string `json:"code"`
+			} `json:"error"`
+		}
+		json.NewDecoder(resp.Body).Decode(&body)
+		return resp.StatusCode, body.Error.Code
+	}
+
+	// Off: the plain answer, nothing queued.
+	if c, why := code(); c != http.StatusNotFound || why != "not_found" || len(wanted) != 0 {
+		t.Fatalf("off: %d %q, wanted %v", c, why, wanted)
+	}
+	resp := h.do(t, "PUT", "/api/settings", map[string]any{"scrub_previews": true})
+	resp.Body.Close()
+	if c, why := code(); c != http.StatusNotFound || why != "queued" || len(wanted) != 1 || wanted[0] != id {
+		t.Fatalf("on: %d %q, wanted %v", c, why, wanted)
+	}
+	// Made: served, not queued again.
+	placePreviews(t, h, id, 1)
+	if c, _ := code(); c != http.StatusOK || len(wanted) != 1 {
+		t.Fatalf("once made: %d, wanted %v", c, wanted)
+	}
+}
