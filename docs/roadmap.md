@@ -1,6 +1,6 @@
 # Roadmap
 
-Last updated: 2026-10-26 · **v0.9.97 released · M0–M4 built.** The React client executes the design
+Last updated: 2026-10-28 · **v0.9.98 released · M0–M4 built.** The React client executes the design
 system and the client-UX backlog is closed. Observability (match, review, scan
 diagnostics), an audit log and CI are in place. Transport security (TLS) and
 multi-user accounts (admin/member roles) are built, and branding & splash shipped.
@@ -19,18 +19,7 @@ behind: the Releases table stopped at v0.9.78, and three backlog entries still
 listed work that had shipped as open. The release-by-release record is the
 [Releases](#releases) table, and what remains is [What is left](#what-is-left).*
 
-**Unreleased on `main`, all checked as the installed service (2026-10-27)
-except extras:** chapters on the scrub bar (#949), extras on the detail page
-([ADR 0098](adr/0098-extras-are-found-not-imported.md), #950), pre-roll
-([ADR 0099](adr/0099-a-preroll-plays-before-a-film-from-the-start.md), #951),
-two-factor sign-in
-([ADR 0100](adr/0100-a-code-after-the-password-for-whoever-wants-one.md),
-#952), and a comics library that reads `.cbz`
-([ADR 0101](adr/0101-a-comic-is-read-out-of-its-archive.md), #953) and `.pdf`
-([ADR 0102](adr/0102-a-pdf-comic-is-its-pictures.md), #955). Schema 81–83,
-one-way. Held for release by choice, not for a fault.
-
-v0.9.97 is the latest release. Since v0.9.78:
+**Nothing sits unreleased.** v0.9.98 is the latest release. Since v0.9.78:
 - **v0.9.79:** one program, `LANcast.exe`, with the tray always present
   ([ADR 0080](adr/0080-one-executable-two-roles.md)), and a scan can be cancelled.
 - **v0.9.80–v0.9.81:** collections continue the way shows do, an About tab,
@@ -60,6 +49,9 @@ v0.9.97 is the latest release. Since v0.9.78:
   ([ADR 0091](adr/0091-milkdrop-presets.md)), and visualizers that fit a phone.
 - **v0.9.94:** a film ends on what to watch next, and running as a service is
   a choice ([ADR 0092](adr/0092-the-library-moves-with-the-server.md)).
+- **v0.9.98:** comics (CBZ and PDF), chapters and previews on the scrub bar,
+  extras, pre-roll, two-factor sign-in, invite links, friends who need not be
+  reachable, and the dashboard's history.
 - **v0.9.97:** a restore reloads at once, and any session that ends forgets
   its cache.
 - **v0.9.96:** restore from Settings and a backup before every update (ADR
@@ -160,9 +152,9 @@ native desktop client, which plays through libmpv. The media types are films,
 TV, music, pictures and live TV, with live TV parked. On top of that sit
 federation between servers, Watch Together, installed games, plugins,
 semantic photo search, retro games, DLNA, optimized versions and music
-visualizers, and webhooks; chapters, extras, pre-roll, two-factor sign-in and a
-comics reader (CBZ and PDF) are built, checked as the installed service, and not
-yet released. The schema is at **revision 83**.
+visualizers, and webhooks; and from v0.9.98 comics (CBZ and PDF), chapters and
+previews on the scrub bar, extras, pre-roll, two-factor sign-in, invite links and
+the dashboard's history. The schema is at **revision 85**.
 The [Areas](#areas) tables hold the status of each piece, and the
 [Releases](#releases) table records when each one landed. What is left is
 breadth, and it is listed in the [Feature backlog](#feature-backlog).
@@ -234,6 +226,7 @@ is watching that keeps running.
 
 | Version | Date | What shipped |
 |---|---|---|
+| **v0.9.98** | 2026-10-28 | **Comics, friends who cannot be reached, and a picture over the scrub bar.** Two unattended batches and the lighter join, #949–#962. **Comics** ([ADR 0101](adr/0101-a-comic-is-read-out-of-its-archive.md), [ADR 0102](adr/0102-a-pdf-comic-is-its-pictures.md)): a `comics` library of `.cbz` and `.pdf`, a reader that keeps your place in its own table, the first page as the cover; a PDF page is the picture it shows, never rendered, byte-identical to pypdf on five real issues. **Watching:** chapters on the scrub bar (#949), extras on the detail page (ADR 0098), pre-roll (ADR 0099), and scrub-bar previews ([ADR 0105](adr/0105-a-preview-is-a-keyframe-every-ten-seconds.md)), a keyframe every 10 s off by default; the first service pass looked broken because the film tried had 2,136 items ahead of it, so a film you open now goes first (#962). **Friends:** a server pushes its roster ([ADR 0103](adr/0103-a-friend-who-cannot-be-reached-says-who-is-there.md)), so only the host must be reachable, and invite links make a member account once ([ADR 0104](adr/0104-a-friend-is-invited-by-a-link-that-works-once.md)); the dev server found the join page told a brand-new friend they were `already signed in`. **Two-factor** codes (ADR 0100). **Dashboard history** ([ADR 0106](adr/0106-the-dashboard-remembers-two-days.md)), 48 h of minute readings, no bandwidth. Checked as the service: chapters, pre-roll, two-factor, comics, PDF comics, previews. **Not seen working:** extras in the desktop window, an invite link on a phone, the roster push across a real NAT. Schema 80 → 85, one-way |
 | **v0.9.97** | 2026-10-26 | **What a restore restored, and nobody else's cache.** Found testing v0.9.96 as the service: after a restore the rail showed a library under the name the restore had taken away. Two faults (#947). A restart quick enough that no poll saw the server down left the restore screen waiting for its 90 s fallback; the restore ends every session, so the server answering with this one gone now counts as restarted. Meanwhile the app, finding itself signed out, put the sign-in page up over its whole cache and showed it after sign-in. That was wider than restore: a password change, "sign out every other device" or expiry left the previous person's lists for whoever signed in next. Any session that ends now forgets the cache as signing out did. No schema change. |
 | **v0.9.96** | 2026-10-26 | **Restore from Settings, webhooks, metrics, and a backup before every update.** Built in one unattended day (#940–#944) and tested by the owner as the installed service before release. **Restore from Settings (#942):** stages the backup and the server restarts itself, after backing up what it had; the next start applies it before anything opens the database, once, and a failure is reported on the Backup page. **A backup before every migration (#940):** `…-schema<N>-premigrate.db`, newest three kept apart from the schedule (ADR 0058 amended twice). **Webhooks (#944, [ADR 0097](adr/0097-a-webhook-goes-where-the-owner-points-it.md)):** admin-only, none by default, HMAC-signed, three tries, no redirects; playback only for accounts that opted in, and only the work's title. **Metrics (#943, [ADR 0096](adr/0096-metrics-have-their-own-key.md)):** Prometheus text at `/api/metrics`, for an admin or a metrics token that opens that route only. **Trusted proxies (#941, [ADR 0095](adr/0095-a-proxy-is-believed-by-name.md)):** `X-Forwarded-For` from named proxies only, right to left; behind a same-machine proxy the sign-in account picker had been public. **Fix:** the relaunch helper dropped `serve`, so a non-service server finishing an update came back as the window (since v0.9.79). Schema 79 → 80, one way. |
 | **v0.9.95** | 2026-10-26 | **Collections that know what is missing, and retro games on a phone.** **Missing films ([ADR 0093](adr/0093-a-collection-knows-its-missing-films.md), #932):** a collection's page lists the films in the franchise that are not in the library, with posters, years and "Coming 2027"; owned is decided at read time from a `collection_film` table, backfilled at the end of an enrichment pass. TMDB descriptions, an administrator's own description that survives a refresh, "2 of 5 watched" or "Started" on the tiles, and Continue Watching carrying on through a collection. The TMDB plugin gained the same fields, held to the native provider by its equivalence test. **Retro in a browser:** three numbered save states, each saying which player made it (#928), and on-screen controls on a touch screen that step aside for a controller (#929). **Getting in touch:** Report an issue opens the person's own mail program; Settings › About names the developer. **Invites** show a check code, name, fingerprint and addresses (#932), and stop carrying WSL and Hyper-V adapter addresses (#935). **Fixes:** shuffling the whole music library plays (#924), HEIC capture time is read (#926), uploaded MilkDrop presets keep their shaders (#915, #925), and **containment follows links** ([ADR 0094](adr/0094-containment-follows-links.md), #934). Schema 77 → 79, one way. |
