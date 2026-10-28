@@ -869,6 +869,12 @@ func (s *Scanner) walkRoot(ctx context.Context, lib store.Library, root store.Li
 		if lib.Kind == media.LibraryRetro && media.IsDisc(path) && listedDiscs(path)[filepath.Clean(path)] {
 			return nil
 		}
+		// A RAW beside a JPEG of the same name is that photograph shot twice
+		// (RAW+JPEG): it shows once, as the JPEG (ADR 0107). Not marked seen,
+		// so a RAW indexed before its JPEG appeared is marked missing.
+		if lib.Kind == media.LibraryPicture && media.HasDevelopedTwin(path) {
+			return nil
+		}
 		if ignored[path] {
 			// On the ignore list — present on disk, deliberately kept out of the
 			// library. Not counted as seen, so it is never re-added.

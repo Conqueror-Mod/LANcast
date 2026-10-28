@@ -131,7 +131,11 @@ func (s *Store) SaveProbe(ctx context.Context, itemID int64, r ProbeResult) erro
  * their own worker (internal/retro/identify).
  */
 // A comic is a zip of pictures (ADR 0101), which ffprobe has nothing to say about.
-const notProbed = `kind NOT IN ('rom', 'comic')`
+// A photo (ADR 0028) is read by the photo worker, which records its size the way
+// it is seen, rotation included. ffprobe recorded it too, over the top: the
+// stored size of a rotated photo, nothing at all for some JPEGs, and a RAW's
+// 160 × 120 TIFF thumbnail (ADR 0107). Whichever pass finished last won.
+const notProbed = `kind NOT IN ('rom', 'comic', 'photo')`
 
 // PendingProbe returns items that have never been probed, or whose file
 // changed since they were.
