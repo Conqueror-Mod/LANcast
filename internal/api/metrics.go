@@ -43,6 +43,8 @@ import (
 type metricsCounters struct {
 	requests     atomic.Int64
 	serverErrors atomic.Int64
+	// mediaBytes is what the media routes have written (mediabytes.go).
+	mediaBytes atomic.Int64
 }
 
 // metricsTokenPrefix tells a metrics token apart from an API key at a glance,
@@ -219,6 +221,9 @@ func (s *Server) writeMetrics(w http.ResponseWriter, r *http.Request) {
 	p.family("lancast_http_server_errors_total", "counter",
 		"Requests answered with an unexpected server error since start. A client that went away is not counted.")
 	p.sample("lancast_http_server_errors_total", float64(s.counters.serverErrors.Load()))
+	p.family("lancast_http_media_bytes_total", "counter",
+		"Bytes of media sent since start: streams, conversions, downloads, extras, pre-roll, live channels, and the same for and through paired servers.")
+	p.sample("lancast_http_media_bytes_total", float64(s.counters.mediaBytes.Load()))
 
 	s.writeTranscodeMetrics(&p)
 	s.writeLibraryMetrics(ctx, &p)
