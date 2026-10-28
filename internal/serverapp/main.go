@@ -1021,6 +1021,16 @@ func run(ctx context.Context, addr, dataDir string, log *slog.Logger) error {
 	// a pairing mutual without anybody opening People.
 	go apiSrv.WatchPeers(ctx)
 
+	// The dashboard's minute-by-minute history (ADR 0106). In the workers
+	// group so its last save finishes before the process exits, and on
+	// enrichCtx because that is the one cancelled on every way out, the
+	// update-finishing exit included, where ctx is not.
+	workers.Add(1)
+	go func() {
+		defer workers.Done()
+		apiSrv.RecordHistory(enrichCtx, cfg.DataDir)
+	}()
+
 	// Records whose relevance is their age, dropped once a day.
 	go periodicPrune(ctx, st, settings, filepath.Join(cfg.DataDir, "artwork"), log, board)
 

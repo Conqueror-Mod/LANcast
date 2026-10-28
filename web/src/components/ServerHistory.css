@@ -1,0 +1,175 @@
+/* Server activity (ADR 0106). The series colour is a step of the field's
+   blue, validated for the dark surface (lightness 0.48–0.67, ≥ 3:1). Never
+   gold: gold is where you are. Text stays in text tokens. */
+.history__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.history__range {
+  display: inline-flex;
+  gap: 4px;
+}
+
+.history__range-btn {
+  min-width: 44px;
+  padding: 4px 10px;
+  border-radius: var(--radius-tile);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--text-muted);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.history__range-btn.is-on {
+  color: var(--text-primary);
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.history__range-btn:focus-visible {
+  outline: 2px solid var(--gold);
+  outline-offset: 2px;
+}
+
+.history__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 12px;
+}
+
+.history__chart {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: var(--radius-tile);
+  background: rgba(10, 15, 34, 0.5);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  min-width: 0;
+}
+
+.history__title {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin-bottom: 6px;
+}
+
+.history__now {
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+.history__plot {
+  position: relative;
+}
+
+.history__plot svg {
+  display: block;
+  width: 100%;
+  height: 90px;
+  overflow: visible;
+  touch-action: pan-y;
+}
+
+.history__ymax {
+  position: absolute;
+  top: -2px;
+  left: 2px;
+  font-size: 10px;
+  color: var(--text-muted);
+  pointer-events: none;
+}
+
+.history__grid-line {
+  stroke: rgba(255, 255, 255, 0.06);
+  stroke-width: 1;
+}
+
+.history__base {
+  stroke: rgba(255, 255, 255, 0.18);
+  stroke-width: 1;
+}
+
+.history__line {
+  fill: none;
+  stroke: #5f8ee0;
+  stroke-width: 2;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+
+.history__crosshair {
+  stroke: rgba(255, 255, 255, 0.45);
+  stroke-width: 1;
+}
+
+.history__tip {
+  position: absolute;
+  top: -6px;
+  transform: translate(-50%, -100%);
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 4px 8px;
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.85);
+  color: var(--text-secondary);
+  font-size: 11px;
+  white-space: nowrap;
+  pointer-events: none;
+  z-index: 2;
+}
+
+.history__tip strong {
+  color: var(--text-primary);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.history__axis {
+  display: flex;
+  justify-content: space-between;
+  font-size: 10px;
+  color: var(--text-muted);
+  margin-top: 3px;
+}
+
+.history__none {
+  margin: 0;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.history__table {
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.history__table summary {
+  cursor: pointer;
+}
+
+.history__table table {
+  width: 100%;
+  margin-top: 4px;
+  border-collapse: collapse;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-secondary);
+}
+
+.history__table th,
+.history__table td {
+  text-align: right;
+  padding: 2px 4px;
+}
+
+.history__table th:first-child,
+.history__table td:first-child {
+  text-align: left;
+}

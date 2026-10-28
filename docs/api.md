@@ -5760,6 +5760,25 @@ Sends `ping`, once and without retries, whatever the webhook subscribes to, and
 answers with what happened: `{ "at", "event", "ok", "status", "error",
 "tries", "took_ms" }`.
 
+## Dashboard history
+
+`GET /api/dashboard/history?hours=N`. Administrators only. Settings › Dashboard draws it ([ADR 0106](adr/0106-the-dashboard-remembers-two-days.md)).
+
+```json
+{ "every_seconds": 60,
+  "samples": [ { "at": 1793140000, "watching": 2, "encoding": 1, "copying": 0,
+                 "cpu": 37.5, "memory_mb": 182.4, "requests": 310, "errors": 0 } ] }
+```
+
+A sample every minute, oldest first, for the last `hours`: 1 to 48, default 6. `400` outside that range. Each sample has:
+
+- people here watching something;
+- conversions running (`encoding` re-encodes the picture; `copying` only rewraps it);
+- the whole machine's CPU, 0–100, or `-1` where it cannot be read;
+- the memory this program holds;
+- requests and unexpected server errors during the minute.
+
+It is read from what the server already keeps for `/api/metrics`. It is kept 48 hours, and saved beside the database (`history.json`) every five minutes and at shutdown, so a restart keeps it. **No bandwidth**: the server counts the bytes conversions hand out and nothing else, and counting every response would mean wrapping the response writer, which the event stream cannot have.
 ## Metrics
 
 ### `GET /api/metrics`
