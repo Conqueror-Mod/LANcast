@@ -11,6 +11,7 @@ import (
 	"sync"
 	"time"
 
+	"lancast/internal/childproc"
 	"lancast/internal/store"
 )
 
@@ -517,6 +518,7 @@ func (w *Worker) frameShape(ctx context.Context, path string, atSec float64) Sha
 			"edgedetect=low=0.08:high=0.2,signalstats,metadata=print",
 		"-f", "null", "-",
 	)
+	childproc.Hide(cmd)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		return Shape{}
@@ -534,6 +536,7 @@ func (w *Worker) scanTail(ctx context.Context, path string, startSec float64) (s
 		"-vf", fmt.Sprintf("blackdetect=d=%.2f:pix_th=0.10", FallbackLen/2),
 		"-f", "null", "-",
 	)
+	childproc.Hide(cmd)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		return "", fmt.Errorf("ffmpeg: %w", err)
