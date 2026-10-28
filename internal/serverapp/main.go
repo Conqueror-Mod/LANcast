@@ -43,6 +43,7 @@ import (
 	"lancast/internal/peer"
 	"lancast/internal/photo"
 	"lancast/internal/plugin"
+	"lancast/internal/preview"
 	"lancast/internal/probe"
 	"lancast/internal/publiccert"
 	"lancast/internal/retro/identify"
@@ -628,6 +629,10 @@ func run(ctx context.Context, addr, dataDir string, log *slog.Logger) error {
 	// API key, and playback decisions depend on it. Tying it to enrichment
 	// would mean a library with no TMDB key never gets probed.
 	var probeMu sync.Mutex
+	// afterProbe runs when a probe pass ends: what needed a probed duration
+	// can start on the files that pass just measured. Set once below, before
+	// anything calls probeSoon.
+	var afterProbe func()
 	probeSoon := func() {
 		workers.Add(1)
 		go func() {
@@ -636,6 +641,9 @@ func run(ctx context.Context, addr, dataDir string, log *slog.Logger) error {
 			defer probeMu.Unlock()
 			if err := board.Track("probe", func() error { return probes.Run(enrichCtx) }); err != nil && !errors.Is(err, context.Canceled) {
 				log.Warn("probe pass failed", "error", err)
+			}
+			if afterProbe != nil {
+				afterProbe()
 			}
 		}()
 	}
@@ -680,6 +688,35 @@ func run(ctx context.Context, addr, dataDir string, log *slog.Logger) error {
 			})
 		}()
 	}
+
+	/*
+	 * Scrub-bar previews (ADR 0105). Off until somebody turns the setting on,
+	 * like credits detection, and for the same reason: it reads every film.
+	 * Its own mutex and its own job on the board; the worker also refuses a
+	 * second pass while one runs.
+	 */
+	previewsDir := filepath.Join(cfg.DataDir, "previews")
+	previews := preview.NewWorker(st, previewsDir, log)
+	previews.Enabled = func() bool { return settings.Get().ScrubPreviews }
+	var previewMu sync.Mutex
+	previewSoon := func() {
+		if !settings.Get().ScrubPreviews {
+			return
+		}
+		workers.Add(1)
+		go func() {
+			defer workers.Done()
+			previewMu.Lock()
+			defer previewMu.Unlock()
+			if err := board.Track("previews", func() error { return previews.Run(enrichCtx) }); err != nil && !errors.Is(err, context.Canceled) {
+				log.Warn("scrub-bar previews pass failed", "error", err)
+			}
+		}()
+	}
+
+	// A film a scan just added is probed after the scan ends; its previews
+	// start then, rather than waiting for the next scan.
+	afterProbe = previewSoon
 
 	var photoMu sync.Mutex
 	photoSoon := func() {
@@ -918,6 +955,8 @@ func run(ctx context.Context, addr, dataDir string, log *slog.Logger) error {
 		Enrich:        enrichSoon,
 		Probe:         probeSoon,
 		DetectMarkers: markerSoon,
+		Previews:      previewSoon,
+		PreviewsDir:   previewsDir,
 		Cover:         coverSoon,
 		Tasks:         board,
 	})
@@ -944,6 +983,7 @@ func run(ctx context.Context, addr, dataDir string, log *slog.Logger) error {
 	// A scan produces pending items; both workers consume them. Without this
 	// wiring a fresh scan stays unenriched and unprobed until the next restart.
 	scanner.OnFinish(func() {
+		// Previews of what this scan added follow the probe pass (afterProbe).
 		probeSoon()
 		enrichSoon()
 		coverSoon()
@@ -1058,6 +1098,8 @@ func run(ctx context.Context, addr, dataDir string, log *slog.Logger) error {
 	 */
 	photoSoon()
 	coverSoon()
+	// Previews, so a pass cut short by a restart carries on without a scan.
+	previewSoon()
 	// And ROMs, for the same reason: revision 64 adds the queue, and a
 	// library scanned before it would otherwise wait for the next scan.
 	romSoon()

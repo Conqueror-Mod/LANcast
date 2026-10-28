@@ -731,6 +731,37 @@
         }
       }
     },
+    "/items/{id}/previews": {
+      "get": {
+        "operationId": "getItemPreviews",
+        "tags": ["playback"],
+        "summary": "The shape of an item's scrub-bar preview sheets (ADR 0105)",
+        "description": "Frames shown over the scrub bar: one every `interval_ms`, `width` × `height` each, tiled `columns` × `rows` to a JPEG sheet, `sheets` of them, fetched from `/api/items/{id}/previews/{n}`. Frame *i* is on sheet `floor(i / (columns·rows))`, at column `i mod columns` and row `floor((i mod (columns·rows)) / columns)` of it. The last sheet is padded with black past the file's end.\n\nMade in the background by the `scrub_previews` setting, **off by default**, so `404` is the ordinary answer until the pass reaches a file, for a file replaced since, and for a title kept from the caller.",
+        "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "integer", "format": "int64" } }],
+        "responses": {
+          "200": { "description": "The sheets.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/PreviewSheets" } } } },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "404": { "$ref": "#/components/responses/NotFound" }
+        }
+      }
+    },
+    "/items/{id}/previews/{n}": {
+      "get": {
+        "operationId": "getItemPreviewSheet",
+        "tags": ["playback"],
+        "summary": "One scrub-bar preview sheet, from 0",
+        "description": "A JPEG. Addressed by number, never by name. Revalidated against the sheet's modification time.",
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "integer", "format": "int64" } },
+          { "name": "n", "in": "path", "required": true, "schema": { "type": "integer" } }
+        ],
+        "responses": {
+          "200": { "description": "The sheet.", "content": { "image/jpeg": { "schema": { "type": "string", "format": "binary" } } } },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "404": { "$ref": "#/components/responses/NotFound" }
+        }
+      }
+    },
     "/items/{id}/chapters": {
       "get": {
         "operationId": "itemChapters",
@@ -14589,6 +14620,18 @@
           "errors": { "type": "integer", "format": "int64" }
         }
       },
+      "PreviewSheets": {
+        "type": "object",
+        "required": ["interval_ms", "columns", "rows", "width", "height", "sheets"],
+        "properties": {
+          "interval_ms": { "type": "integer" },
+          "columns": { "type": "integer" },
+          "rows": { "type": "integer" },
+          "width": { "type": "integer" },
+          "height": { "type": "integer" },
+          "sheets": { "type": "integer" }
+        }
+      },
       "Invite": {
         "type": "object",
         "required": ["id", "note", "hidden_libraries", "created_by", "created_at", "expires_at"],
@@ -16289,6 +16332,7 @@
           "detect_markers": {
             "type": "boolean"
           },
+          "scrub_previews": { "type": "boolean", "description": "Make scrub-bar previews in the background (ADR 0105). Off by default." },
           "retro_artwork": {
             "type": "boolean",
             "description": "Fetch box art and a screenshot for each identified ROM from libretro-thumbnails (ADR 0073). **Off by default**: it is a network fetch per game. Identifying ROMs is offline and does not depend on it. Turning it on re-queues identified ROMs so their art arrives now."
@@ -16519,6 +16563,7 @@
           "detect_markers": {
             "type": "boolean"
           },
+          "scrub_previews": { "type": "boolean", "description": "Make scrub-bar previews in the background (ADR 0105). Off by default." },
           "retro_artwork": {
             "type": "boolean",
             "description": "Fetch box art and a screenshot for each identified ROM from libretro-thumbnails (ADR 0073). **Off by default**: it is a network fetch per game. Identifying ROMs is offline and does not depend on it. Turning it on re-queues identified ROMs so their art arrives now."

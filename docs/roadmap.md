@@ -191,8 +191,7 @@ is in the [Feature backlog](#feature-backlog) entry it names.*
 - Libraries and media: **audiobooks**, **ebooks** beyond comics (EPUB),
   `.cbr` comics, photo **bursts and RAW**, and **loudness normalisation across a
   music library** (ReplayGain-style).
-- Playback: **preview thumbnails** on the scrub bar (chapters are built),
-  **Chromecast and AirPlay**, and **offline downloads** (the client half).
+- Playback: **Chromecast and AirPlay**, and **offline downloads** (the client half).
 - Social: **Last.fm and Trakt scrobbling**.
 - Operations: **bandwidth** on the dashboard (history is built), **bandwidth limits**, and **granular sharing** by label or
   on a friend's server (confirm somebody needs it first).
@@ -2056,10 +2055,13 @@ group is not priority.
   defaults whatever anyone had chosen, with nothing failing anywhere — the third
   time this project has shipped a feature whose halves were each correct and
   never joined.
-- **Chapters and preview thumbnails on the scrub bar** — **chapters are built**
-  (#949): ffprobe's chapters, cached per file, as ticks on the scrub bar with
-  the name on hover, and Page Up/Down to skip between them. Preview thumbnails
-  are what is left. Two halves
+- ~~**Chapters and preview thumbnails on the scrub bar**~~ — **both built**.
+  Chapters (#949): ffprobe's chapters, cached per file, as ticks on the scrub
+  bar with the name on hover, and Page Up/Down to skip between them. Previews
+  ([ADR 0105](adr/0105-a-preview-is-a-keyframe-every-ten-seconds.md)): a
+  keyframe every 10 s, tiled into JPEG sheets by a background pass that is off
+  until turned on, about 40 s and 2 MB per film, shown above the pointer.
+  Original entry: two halves
   of one control. **Chapters** are already in most MKVs and MP4s; `probe` does
   not ask ffprobe for them, and once it does the scrub bar can mark them and
   skip to them. That half is cheap. **Preview thumbnails** (trickplay) are the

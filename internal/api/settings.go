@@ -87,6 +87,7 @@ func (s *Server) getSettings(w http.ResponseWriter, r *http.Request) {
 			return out
 		}(),
 		"detect_markers": cur.DetectMarkers,
+		"scrub_previews": cur.ScrubPreviews,
 		"retro_artwork":  cur.RetroArtwork,
 		"photo_places":   cur.PhotoPlaces,
 		"login_picker":   cur.LoginPicker,
@@ -136,6 +137,7 @@ func (s *Server) putSettings(w http.ResponseWriter, r *http.Request) {
 		UpdateCheck      *bool    `json:"update_check"`
 		SensitiveMarking *bool    `json:"sensitive_marking"`
 		DetectMarkers    *bool    `json:"detect_markers"`
+		ScrubPreviews    *bool    `json:"scrub_previews"`
 		RetroArtwork     *bool    `json:"retro_artwork"`
 		PhotoPlaces      *bool    `json:"photo_places"`
 		LoginPicker      *bool    `json:"login_picker"`
@@ -213,6 +215,9 @@ func (s *Server) putSettings(w http.ResponseWriter, r *http.Request) {
 	}
 	if req.DetectMarkers != nil {
 		next.DetectMarkers = *req.DetectMarkers
+	}
+	if req.ScrubPreviews != nil {
+		next.ScrubPreviews = *req.ScrubPreviews
 	}
 	if req.LoginPicker != nil {
 		next.LoginPicker = *req.LoginPicker
@@ -469,6 +474,9 @@ func (s *Server) putSettings(w http.ResponseWriter, r *http.Request) {
 	 * Only on the transition on, and only forward: turning it off stops new
 	 * work at the next pass and never discards what was found.
 	 */
+	if next.ScrubPreviews && !prev.ScrubPreviews && s.previewsSoon != nil {
+		s.previewsSoon()
+	}
 	if next.DetectMarkers && !prev.DetectMarkers && s.detectMarkers != nil {
 		s.detectMarkers()
 	}
@@ -521,6 +529,7 @@ func changedSettings(prev, next config.Settings) []string {
 	add("rate_per_sec", prev.RatePerSec != next.RatePerSec)
 	add("write_nfo", prev.WriteNFO != next.WriteNFO)
 	add("sensitive_marking", prev.SensitiveMarking != next.SensitiveMarking)
+	add("scrub_previews", prev.ScrubPreviews != next.ScrubPreviews)
 	add("certification_country", prev.CertificationCountry != next.CertificationCountry)
 	add("max_quality", prev.MaxQuality != next.MaxQuality)
 	add("detect_markers", prev.DetectMarkers != next.DetectMarkers)

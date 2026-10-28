@@ -30,6 +30,7 @@ internal/mpv/      libmpv via syscall: the desktop's own player (ADR 0067)
 internal/rating/   national certificates onto one ladder of ages
 internal/marker/   intro and credit detection
 internal/history/  the dashboard's minute-by-minute record, two days (ADR 0106)
+internal/preview/  scrub-bar previews: keyframe sheets made in the background (ADR 0105)
 internal/subtitle/ discovery, WebVTT conversion
 internal/playlist/ .m3u parsing and import (pure parser + importer)
 internal/livetv/   channel lists and EPG (its own parser, not playlist's)
@@ -53,7 +54,7 @@ cmd/lancast/       LANcast.exe: the app (window + tray) and, by subcommand, the
                    server (ADR 0080). The window itself is internal/clientwindow,
                    internal/webview2 and internal/certpin — not subdirectories
                    of this one, which is only the entrypoint and its bindings.
-docs/adr/          decision records (105 and counting — read before re-deciding)
+docs/adr/          decision records (106 and counting — read before re-deciding)
 ```
 
 ## Rules

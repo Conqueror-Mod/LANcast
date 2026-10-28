@@ -147,6 +147,10 @@ type Deps struct {
 	Probe func()
 	// DetectMarkers triggers a credits-detection pass (ADR 0054).
 	DetectMarkers func()
+	// Previews triggers a scrub-bar previews pass (ADR 0105), and
+	// PreviewsDir is where previews are kept.
+	Previews    func()
+	PreviewsDir string
 	// Cover triggers a background album-art pass, for the same reason.
 	Cover func()
 	// LANBound reports whether the server is actually listening beyond
@@ -230,6 +234,9 @@ type Server struct {
 	probe         func()
 	// detectMarkers kicks a marker pass an operator asked for.
 	detectMarkers func()
+	// previewsSoon kicks a previews pass; previewsDir is where they live.
+	previewsSoon  func()
+	previewsDir   string
 	coversSoon    func()
 	lanBound      bool
 	restartWidens bool
@@ -373,6 +380,7 @@ func New(d Deps) *Server {
 		peerDown:       map[string]time.Time{},
 		rebuild:        d.Rebuild, reloadPlugins: d.ReloadPlugins, enrich: d.Enrich,
 		probe: d.Probe, detectMarkers: d.DetectMarkers, coversSoon: d.Cover,
+		previewsSoon: d.Previews, previewsDir: d.PreviewsDir,
 		retro: d.Retro, retroDB: d.RetroDB, retroSoon: d.RetroSoon, retroInstall: &retroJob{}, webCoreInstall: &webCoreJob{},
 		locations: d.Locations, placesSoon: d.PlacesSoon,
 		lanBound: d.LANBound, restartWidens: d.RestartWidens,
@@ -767,6 +775,9 @@ func (s *Server) Handler() http.Handler {
 
 	// The dashboard's history (ADR 0106).
 	mux.HandleFunc("GET /api/dashboard/history", s.adminOnly(s.dashboardHistory))
+	// Scrub-bar previews (ADR 0105).
+	mux.HandleFunc("GET /api/items/{id}/previews", s.itemPreviews)
+	mux.HandleFunc("GET /api/items/{id}/previews/{n}", s.itemPreviewSheet)
 
 	/*
 	 * Browsing a share, asked for by the friend's own server rather than by

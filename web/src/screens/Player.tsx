@@ -1,6 +1,6 @@
 import { typingInto } from "@/lib/typing";
 import { WINDOW_HIDDEN } from "@/components/TrayBridge";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   useLocation,
   useNavigate,
@@ -40,7 +40,7 @@ import {
 } from "@/components/PlayerGlyphs";
 import { usePlayback, useFullSurface } from "@/playback/PlaybackProvider";
 import { AUTO_SKIP_IDLE, autoSkipStep, skipTarget, type AutoSkipState } from "@/lib/skip";
-import { fetchPreroll, useChapters, usePlaybackPrefs } from "@/api/hooks";
+import { fetchPreroll, useChapters, usePlaybackPrefs, usePreviews } from "@/api/hooks";
 import { PrerollOverlay } from "@/components/PrerollOverlay";
 import { nextChapterStart, previousChapterStart, type ChapterMark } from "@/lib/chapters";
 import { UpNextCard } from "@/components/UpNextCard";
@@ -462,6 +462,17 @@ export function Player() {
   // The file's chapters, for the scrub bar and Page Up / Page Down. A track
   // has none worth asking for; a film or an episode often does.
   const chapters = useChapters(pb.item?.id ?? 0, !pb.isAudio).data?.chapters ?? NO_CHAPTERS;
+  // The file's scrub-bar previews (ADR 0105), once the background pass has
+  // made them. Not for a track: a song has no pictures to preview.
+  const previewItem = pb.item?.id ?? 0;
+  const previewSheets = usePreviews(previewItem, !pb.isAudio).data;
+  const previews = useMemo(
+    () =>
+      previewSheets
+        ? { sheets: previewSheets, url: (n: number) => `/api/items/${previewItem}/previews/${n}` }
+        : null,
+    [previewSheets, previewItem],
+  );
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       // While typing in the subtitle search box, keys are text — not transport.
@@ -837,6 +848,7 @@ export function Player() {
             duration={pb.totalDuration}
             onSeek={pb.seekTo}
             chapters={chapters}
+            previews={previews}
           />
           <div className="player__controls">
             {/* Transport, in the order the hand expects: back through the

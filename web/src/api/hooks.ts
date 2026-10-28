@@ -7,7 +7,8 @@ import {
   keepPreviousData,
   type QueryClient,
 } from "@tanstack/react-query";
-import { apiGet, apiPost, apiSend, apiUpload } from "./client";
+import { ApiFailure, apiGet, apiPost, apiSend, apiUpload } from "./client";
+import type { PreviewSheets } from "@/lib/previews";
 import { addPasskey, signInWithPasskey } from "@/lib/webauthn";
 import type {
   BackupFile,
@@ -3664,6 +3665,24 @@ export function useYearInReview(year?: number) {
  * the player for the scrub bar and the chapter keys. Long-lived: a file's
  * chapters change only when the file does, and the server checks that.
  */
+/*
+ * Scrub-bar previews (ADR 0105): the sheets' shape, or null when the item has
+ * none yet. A 404 is the ordinary answer for most files until the background
+ * pass reaches them, so it is an answer here, not an error to retry.
+ */
+export function usePreviews(itemID: number, enabled = true) {
+  return useQuery({
+    queryKey: ["previews", itemID],
+    queryFn: ({ signal }) =>
+      apiGet<PreviewSheets>(`/api/items/${itemID}/previews`, signal).catch((e) => {
+        if (e instanceof ApiFailure && e.status === 404) return null;
+        throw e;
+      }),
+    enabled: enabled && itemID > 0,
+    retry: false,
+    staleTime: 30 * 60_000,
+  });
+}
 export function useChapters(itemID: number, enabled = true) {
   return useQuery({
     queryKey: ["chapters", itemID],

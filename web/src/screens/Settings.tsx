@@ -1590,6 +1590,21 @@ function AdminSections({ pane }: { pane: string }) {
                 release will be able to skip to. Only files that have been read
                 are examined.
               </p>
+              <label className="set-toggle">
+                <input
+                  type="checkbox"
+                  checked={settings.scrub_previews ?? false}
+                  disabled={!settings.media_tools?.probe_available}
+                  onChange={(e) => update.mutate({ scrub_previews: e.target.checked })}
+                />
+                Show a picture over the scrub bar
+              </label>
+              <p className="set-row__sub">
+                Hover or drag along the bar while a film or episode plays and see the moment you would
+                land on. Off by default because it reads every film and episode once in the background,
+                about 40 seconds each, newest first, and keeps about 2 MB per film beside the database.
+                Turning it off stops the work and keeps what was made.
+              </p>
             </>
           )}
         </section>
