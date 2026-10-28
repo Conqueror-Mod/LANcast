@@ -12,6 +12,7 @@ import (
 	"sync"
 	"time"
 
+	"lancast/internal/childproc"
 	"lancast/internal/photo"
 	"lancast/internal/store"
 )
@@ -247,6 +248,7 @@ func (w *Worker) batch(ctx context.Context, items []store.Item) error {
 	args := []string{"detect", "-models", w.tool.ModelsDir}
 	cmd := exec.CommandContext(ctx, path, args...)
 	cmd.Env = w.tool.env()
+	childproc.Hide(cmd)
 
 	stdin, err := cmd.StdinPipe()
 	if err != nil {

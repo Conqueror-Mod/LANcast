@@ -8,6 +8,8 @@ import (
 	"fmt"
 	"io"
 	"os/exec"
+
+	"lancast/internal/childproc"
 	"strings"
 	"sync"
 	"time"
@@ -217,6 +219,7 @@ func (te *textEmbedder) startLocked() error {
 	cmd := exec.CommandContext(context.Background(), path, "embed-text",
 		"-models", te.tool.ModelsDir)
 	cmd.Env = te.tool.env()
+	childproc.Hide(cmd)
 
 	stdin, err := cmd.StdinPipe()
 	if err != nil {

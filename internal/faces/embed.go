@@ -11,6 +11,7 @@ import (
 	"sync"
 	"time"
 
+	"lancast/internal/childproc"
 	"lancast/internal/store"
 )
 
@@ -331,6 +332,7 @@ func (ix *Indexer) embedProcess(ctx context.Context, paths []string) ([]embedLin
 	}
 	cmd := exec.CommandContext(ctx, path, "embed", "-models", ix.tool.ModelsDir)
 	cmd.Env = ix.tool.env()
+	childproc.Hide(cmd)
 	stdin, err := cmd.StdinPipe()
 	if err != nil {
 		return nil, err
