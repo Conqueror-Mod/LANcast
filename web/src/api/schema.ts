@@ -13,7 +13,7 @@ export interface paths {
         };
         /**
          * What the server was doing, minute by minute (ADR 0106)
-         * @description Administrators only. A sample every `every_seconds` (60): people here watching something, conversions running (re-encoding or only rewrapping), the whole machine's CPU (`-1` where it cannot be read), memory this program holds, and requests and unexpected server errors during that minute. Kept 48 hours, saved beside the database, so a restart keeps it. No bandwidth: the server does not count every response's bytes.
+         * @description Administrators only. A sample every `every_seconds` (60): people here watching something, conversions running (re-encoding or only rewrapping), the whole machine's CPU (`-1` where it cannot be read), memory this program holds, and requests and unexpected server errors during that minute. Kept 48 hours, saved beside the database, so a restart keeps it. Media sent is counted on the media routes (streams, conversions, downloads, extras, pre-roll, live channels, federation), never on the event stream.
          */
         get: operations["getDashboardHistory"];
         put?: never;
@@ -6378,6 +6378,11 @@ export interface components {
             requests: number;
             /** Format: int64 */
             errors: number;
+            /**
+             * Format: int64
+             * @description Bytes of media sent during the minute: streams, conversions, downloads, extras, pre-roll, live channels, and for and through paired servers. 0 in history saved before this was counted.
+             */
+            media_bytes: number;
         };
         PreviewSheets: {
             interval_ms: number;

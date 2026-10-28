@@ -23,7 +23,7 @@ let samples: unknown[];
 const now = Math.floor(Date.now() / 1000);
 const sample = (minAgo: number, extra: Record<string, number> = {}) => ({
   at: now - minAgo * 60, watching: 1, encoding: 1, copying: 2, cpu: -1, memory_mb: 180,
-  requests: 40, errors: 0, ...extra,
+  requests: 40, errors: 0, media_bytes: 75_000_000, ...extra,
 });
 
 beforeEach(() => {
@@ -80,10 +80,12 @@ describe("server activity", () => {
     const titles = [...host.querySelectorAll(".history__title span:first-child")].map((s) => s.textContent);
     expect(titles).toEqual([
       "People watching", "Conversions running", "CPU, whole machine",
-      "Memory, this server", "Requests a minute", "Server errors a minute",
+      "Memory, this server", "Media sent", "Requests a minute", "Server errors a minute",
     ]);
     expect(chart("Conversions running").querySelector(".history__now")?.textContent).toBe("2");
     expect(chart("Memory, this server").querySelector(".history__now")?.textContent).toBe("180 MB");
+    // 75 MB in a minute is 10 Mbit/s on average.
+    expect(chart("Media sent").querySelector(".history__now")?.textContent).toBe("10 Mbit/s");
   });
 
   it("says CPU cannot be read here rather than drawing zeros", async () => {

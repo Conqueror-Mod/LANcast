@@ -16,9 +16,9 @@ import (
  * request counters, and the machine's CPU. Kept 48 hours, in memory, saved
  * beside the database every five minutes and on the way out.
  *
- * No bandwidth. The server counts the bytes conversions hand out and nothing
- * else, and counting every response would mean wrapping the response writer,
- * which ADR 0096 declined because the event stream needs its Flush.
+ * Media sent is counted on the media routes only (mediabytes.go), never by
+ * wrapping every response: ADR 0096 kept the event stream unwrapped because it
+ * needs its Flush, and the event stream is not a media route.
  */
 
 // historySaveEvery is how often the ring is written to disk.
@@ -32,6 +32,7 @@ func (s *Server) RecordHistory(ctx context.Context, dataDir string) {
 	var cpu history.CPU
 	cpu.Percent() // the first reading only sets the baseline
 	lastReq, lastErr := s.counters.requests.Load(), s.counters.serverErrors.Load()
+	lastMedia := s.counters.mediaBytes.Load()
 	tick := time.NewTicker(history.Every)
 	defer tick.Stop()
 	lastSave := time.Now()
@@ -42,8 +43,11 @@ func (s *Server) RecordHistory(ctx context.Context, dataDir string) {
 			return
 		case now := <-tick.C:
 			req, errs := s.counters.requests.Load(), s.counters.serverErrors.Load()
-			s.history.Add(s.sampleNow(now, cpu.Percent(), req-lastReq, errs-lastErr))
-			lastReq, lastErr = req, errs
+			media := s.counters.mediaBytes.Load()
+			smp := s.sampleNow(now, cpu.Percent(), req-lastReq, errs-lastErr)
+			smp.MediaBytes = media - lastMedia
+			s.history.Add(smp)
+			lastReq, lastErr, lastMedia = req, errs, media
 			if now.Sub(lastSave) >= historySaveEvery {
 				if err := s.history.Save(path); err != nil {
 					s.log.Warn("could not save the dashboard history", "error", err)

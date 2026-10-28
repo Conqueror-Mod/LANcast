@@ -5769,7 +5769,8 @@ answers with what happened: `{ "at", "event", "ok", "status", "error",
 ```json
 { "every_seconds": 60,
   "samples": [ { "at": 1793140000, "watching": 2, "encoding": 1, "copying": 0,
-                 "cpu": 37.5, "memory_mb": 182.4, "requests": 310, "errors": 0 } ] }
+                 "cpu": 37.5, "memory_mb": 182.4, "requests": 310, "errors": 0,
+                 "media_bytes": 412000000 } ] }
 ```
 
 A sample every minute, oldest first, for the last `hours`: 1 to 48, default 6. `400` outside that range. Each sample has:
@@ -5778,9 +5779,10 @@ A sample every minute, oldest first, for the last `hours`: 1 to 48, default 6. `
 - conversions running (`encoding` re-encodes the picture; `copying` only rewraps it);
 - the whole machine's CPU, 0–100, or `-1` where it cannot be read;
 - the memory this program holds;
-- requests and unexpected server errors during the minute.
+- requests and unexpected server errors during the minute;
+- media sent during the minute (`media_bytes`): streams, conversions, downloads, extras, pre-roll, live channels, and for and through paired servers. `0` in history saved before it was counted.
 
-It is read from what the server already keeps for `/api/metrics`. It is kept 48 hours, and saved beside the database (`history.json`) every five minutes and at shutdown, so a restart keeps it. **No bandwidth**: the server counts the bytes conversions hand out and nothing else, and counting every response would mean wrapping the response writer, which the event stream cannot have.
+It is read from what the server already keeps for `/api/metrics`. It is kept 48 hours, and saved beside the database (`history.json`) every five minutes and at shutdown, so a restart keeps it. **Media sent is counted on the media routes only**, never by wrapping every response: the event stream needs its `Flush`, and it is not a media route. Pages, artwork and JSON are not counted. The same total is `lancast_http_media_bytes_total` on `/api/metrics`.
 ## Metrics
 
 ### `GET /api/metrics`
@@ -5809,6 +5811,7 @@ Every value is read at scrape time. The families:
 | `lancast_uptime_seconds` | gauge | Since this server started |
 | `lancast_http_requests_total` | counter | Requests received |
 | `lancast_http_server_errors_total` | counter | Answered with an unexpected server error; a caller that went away is not counted |
+| `lancast_http_media_bytes_total` | counter | Bytes of media sent: streams, conversions, downloads, extras, pre-roll, live channels, and for and through paired servers. Counted on those routes only, never on the event stream |
 | `lancast_transcode_sessions{mode}` | gauge | Conversions running; `mode` is `encode` or `copy` |
 | `lancast_transcode_sessions_max` | gauge | `max_transcodes` |
 | `lancast_transcode_served_bytes` | gauge | Bytes the running conversions have handed over |

@@ -42,6 +42,13 @@ const MEASURES: Measure[] = [
     fixedMax: 100,
   },
   { key: "memory", title: "Memory, this server", value: (s) => s.memory_mb, format: (v) => `${Math.round(v)} MB` },
+  {
+    key: "media",
+    title: "Media sent",
+    // A minute's bytes as an average rate, the unit a connection is sold in.
+    value: (s) => ((s.media_bytes ?? 0) * 8) / 60 / 1e6,
+    format: (v) => (v >= 10 ? `${Math.round(v)} Mbit/s` : `${v.toFixed(1)} Mbit/s`),
+  },
   { key: "requests", title: "Requests a minute", value: (s) => s.requests, format: whole },
   { key: "errors", title: "Server errors a minute", value: (s) => s.errors, format: whole },
 ];
@@ -93,7 +100,8 @@ export function ServerHistory() {
           </div>
           <p className="set-row__sub">
             A reading a minute, kept for two days and through restarts. Gaps are when the server was not
-            running. Network use is not shown: the server does not count what it sends.
+            running. Media sent counts streams, conversions, downloads and the like, not pages or
+            pictures.
           </p>
         </>
       )}

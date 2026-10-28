@@ -35,6 +35,10 @@ type Sample struct {
 	// answered with an unexpected server error, during the minute.
 	Requests int64 `json:"requests"`
 	Errors   int64 `json:"errors"`
+	// MediaBytes is media sent during the minute: streams, conversions,
+	// downloads and the rest of the media routes. Zero in history saved by a
+	// build from before it was counted.
+	MediaBytes int64 `json:"media_bytes"`
 }
 
 // Ring is the samples, oldest first.

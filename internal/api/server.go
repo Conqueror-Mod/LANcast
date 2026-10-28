@@ -1055,6 +1055,10 @@ func (s *Server) Handler() http.Handler {
 func (s *Server) countRequests(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		s.counters.requests.Add(1)
+		// Media routes only, never the event stream (mediabytes.go).
+		if r.Method == http.MethodGet && isMediaPath(r.URL.Path) {
+			w = mediaMeter{ResponseWriter: w, n: &s.counters.mediaBytes}
+		}
 		next.ServeHTTP(w, r)
 	})
 }
