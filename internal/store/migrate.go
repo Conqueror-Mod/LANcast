@@ -6,7 +6,7 @@ import (
 )
 
 // CurrentSchemaVersion is the revision this build expects.
-const CurrentSchemaVersion = 84
+const CurrentSchemaVersion = 85
 
 // migration is one forward step. There are deliberately no down migrations:
 // rolling a media library's schema backwards loses data that a rescan cannot
@@ -163,6 +163,9 @@ var migrations = []migration{
 	}},
 	{version: 83, sql: schemaRevision83},
 	{version: 84, sql: schemaRevision84},
+	// Scrub-bar previews (ADR 0105): the file a pass last looked at, as
+	// "size:mtime:rev". Null until one has.
+	{version: 85, columns: []column{{"media_item", "preview_key", "TEXT"}}},
 }
 
 // migrate brings the database up to CurrentSchemaVersion.

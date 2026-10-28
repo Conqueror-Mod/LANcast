@@ -2489,6 +2489,15 @@ off seasons rather than off the show — the obvious call returns the seasons, a
 every client would otherwise reimplement the walk and get the loose-episode case
 wrong.
 
+### `GET /api/items/{id}/previews` and `GET /api/items/{id}/previews/{n}`
+
+The frames shown over the scrub bar ([ADR 0105](adr/0105-a-preview-is-a-keyframe-every-ten-seconds.md)):
+
+```json
+{ "interval_ms": 10000, "columns": 10, "rows": 10, "width": 240, "height": 136, "sheets": 6 }
+```
+
+A frame every `interval_ms`, tiled `columns` × `rows` to a JPEG sheet, fetched by number from `/previews/{n}`, counting from 0. Frame *i* is on sheet `floor(i / (columns·rows))`, at column `i mod columns` and row `floor((i mod (columns·rows)) / columns)`. The last sheet is padded with black past the file's end. **`404` is the ordinary answer** until the background pass reaches a file: previews are made only while the `scrub_previews` setting is on, which it is not by default. It is also `404` for a file replaced since its previews were made, and for a title kept from the caller. The frames are the file's keyframes, so a frame can be a few seconds from the moment it stands for.
 ### `GET /api/items/{id}/chapters`
 
 The chapters the file carries, for the scrub bar and the chapter keys:
@@ -5317,6 +5326,7 @@ to "have I watched this".
 | `empty_trash_on_scan` | `false` | — | When true, a finished scan removes the library's rows whose files are gone. **About rows, not files**: it destroys the record — watch history, positions, ratings — of media that has already left the disk, which is why it is off by default. A scan that failed, that could not read one of its locations, or that saw **no files at all** leaves them alone whatever this says; those are the shapes an unmounted drive takes, and *"scanning marks missing, never deletes"* is not relaxed by this setting. Audited like `allow_media_deletion` |
 | `scan_interval_hours` | `0` | 0–168 | Rescan every library on a timer. **0 is off**, the default. Takes effect without a restart; a library already scanning is skipped rather than queued |
 | `detect_markers` | `false` | — | Run the credits detector over the library (ADR 0054). **Off by default, and the default is the decision**: it decodes the last quarter of every film and episode — a second full pass over media that probing only read the header of — and nothing yet reads a marker to make a decision, so leaving it on would spend hours of CPU populating a table that changes nothing anyone can see. Turning it off does not delete what was already found, the same shape `sensitive_marking` has. Only **probed** items are examined: detection needs the file's real duration, and before v0.8.51 `duration_ms` was the provider's runtime. **Switching it on starts a pass immediately** rather than waiting for the next scan — it did wait, and a setting whose effect arrives hours later cannot be told apart from one that does nothing |
+| `scrub_previews` | `false` | — | Make scrub-bar previews in the background ([ADR 0105](adr/0105-a-preview-is-a-keyframe-every-ten-seconds.md)): every film and episode is read once, keyframes only, about 40 s and 2 MB each, newest first. **Off by default** for that cost. Turning it on starts a pass; turning it off stops the pass and keeps what was made |
 | `retro_artwork` | `false` | — | Fetch box art and a screenshot for each identified ROM from libretro-thumbnails (ADR 0073). **Off by default**: it is a network fetch per game, and no phone-home has no convenience exception. Identifying ROMs is offline and does not depend on it. **Switching it on re-queues identified ROMs** so their pictures arrive now, by lookup against hashes already stored rather than by reading every file again |
 | `photo_places` | `false` | — | Read where photographs were taken and group picture libraries by town (ADR 0078). **Off by default.** Turning it on starts the location pass at once. **Turning it off deletes every location and place read** — not hides them — so off means nothing is held, as before the feature existed. Reading again costs seconds: the pass reads only the start of each file |
 | `login_picker` | `true` | boolean | Show the accounts on the sign-in page, as names to pick from, to devices on the home network only (`GET /api/auth/accounts`). Audited |

@@ -362,6 +362,48 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/items/{id}/previews": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The shape of an item's scrub-bar preview sheets (ADR 0105)
+         * @description Frames shown over the scrub bar: one every `interval_ms`, `width` × `height` each, tiled `columns` × `rows` to a JPEG sheet, `sheets` of them, fetched from `/api/items/{id}/previews/{n}`. Frame *i* is on sheet `floor(i / (columns·rows))`, at column `i mod columns` and row `floor((i mod (columns·rows)) / columns)` of it. The last sheet is padded with black past the file's end.
+         *
+         *     Made in the background by the `scrub_previews` setting, **off by default**, so `404` is the ordinary answer until the pass reaches a file, for a file replaced since, and for a title kept from the caller.
+         */
+        get: operations["getItemPreviews"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/items/{id}/previews/{n}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * One scrub-bar preview sheet, from 0
+         * @description A JPEG. Addressed by number, never by name. Revalidated against the sheet's modification time.
+         */
+        get: operations["getItemPreviewSheet"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/items/{id}/chapters": {
         parameters: {
             query?: never;
@@ -6298,6 +6340,14 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        PreviewSheets: {
+            interval_ms: number;
+            columns: number;
+            rows: number;
+            width: number;
+            height: number;
+            sheets: number;
+        };
         Invite: {
             id: string;
             note: string;
@@ -7011,6 +7061,8 @@ export interface components {
             /** @description Whether picture folders and photos can be marked sensitive (ADR 0051). */
             sensitive_marking: boolean;
             detect_markers: boolean;
+            /** @description Make scrub-bar previews in the background (ADR 0105). Off by default. */
+            scrub_previews?: boolean;
             /** @description Fetch box art and a screenshot for each identified ROM from libretro-thumbnails (ADR 0073). **Off by default**: it is a network fetch per game. Identifying ROMs is offline and does not depend on it. Turning it on re-queues identified ROMs so their art arrives now. */
             retro_artwork: boolean;
             /** @description Read where photographs were taken and group picture libraries by town (ADR 0078). **Off by default.** Turning it on starts the location pass at once; **turning it off deletes every location and place read**, rather than hiding them. */
@@ -7145,6 +7197,8 @@ export interface components {
             update_check?: boolean;
             sensitive_marking?: boolean;
             detect_markers?: boolean;
+            /** @description Make scrub-bar previews in the background (ADR 0105). Off by default. */
+            scrub_previews?: boolean;
             /** @description Fetch box art and a screenshot for each identified ROM from libretro-thumbnails (ADR 0073). **Off by default**: it is a network fetch per game. Identifying ROMs is offline and does not depend on it. Turning it on re-queues identified ROMs so their art arrives now. */
             retro_artwork?: boolean;
             /** @description Read where photographs were taken and group picture libraries by town (ADR 0078). **Off by default.** Turning it on starts the location pass at once; **turning it off deletes every location and place read**, rather than hiding them. */
@@ -10301,6 +10355,55 @@ export interface operations {
                 };
             };
             401: components["responses"]["Unauthorized"];
+        };
+    };
+    getItemPreviews: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The sheets. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PreviewSheets"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    getItemPreviewSheet: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+                n: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The sheet. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "image/jpeg": string;
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
         };
     };
     itemChapters: {

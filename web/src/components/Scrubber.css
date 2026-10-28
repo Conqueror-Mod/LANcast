@@ -75,3 +75,19 @@
   text-overflow: ellipsis;
   pointer-events: none;
 }
+
+/* The frame under the pointer (ADR 0105), above the chapter name's place so
+   the two never overlap. A neutral hairline, not gold: gold is where you are,
+   and this is where you might go. */
+.scrubber__preview {
+  position: absolute;
+  bottom: calc(100% + 28px);
+  transform: translateX(-50%);
+  border-radius: 4px;
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  background-color: #000;
+  background-repeat: no-repeat;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.55);
+  pointer-events: none;
+  z-index: 2;
+}

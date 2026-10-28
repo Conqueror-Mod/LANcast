@@ -1,5 +1,6 @@
 import { useRef, useState } from "react";
 import { chapterAt, type ChapterMark } from "@/lib/chapters";
+import { frameAt, type PreviewSheets } from "@/lib/previews";
 import "./Scrubber.css";
 
 interface Props {
@@ -8,6 +9,11 @@ interface Props {
   onSeek: (seconds: number) => void;
   /** The file's chapters, drawn as ticks and named under the pointer. */
   chapters?: ChapterMark[];
+  /**
+   * The file's preview sheets (ADR 0105) and where sheet n is, shown as the
+   * frame under the pointer. Absent until the background pass has made them.
+   */
+  previews?: { sheets: PreviewSheets; url: (sheet: number) => string } | null;
 }
 
 // A hairline that thickens on hover, filled gold. Seeking commits on release
@@ -16,7 +22,7 @@ interface Props {
 //
 // Chapter ticks are a neutral white, never gold: gold says where you are, and a
 // row of gold marks would say it in twenty places at once.
-export function Scrubber({ current, duration, onSeek, chapters = [] }: Props) {
+export function Scrubber({ current, duration, onSeek, chapters = [], previews }: Props) {
   const trackRef = useRef<HTMLDivElement>(null);
   const [dragging, setDragging] = useState(false);
   const [preview, setPreview] = useState(0);
@@ -40,6 +46,18 @@ export function Scrubber({ current, duration, onSeek, chapters = [] }: Props) {
       ? chapterAt(chapters, pointerRatio * duration)
       : undefined;
   const playing = duration > 0 ? chapterAt(chapters, current) : undefined;
+  // The frame under the pointer, while there is a pointer and sheets to
+  // take it from. Half size on a phone, where the bar is the screen's width.
+  const frame =
+    previews && duration > 0 && pointerRatio !== null
+      ? frameAt(previews.sheets, pointerRatio * duration, duration)
+      : null;
+  const scale =
+    previews && typeof window !== "undefined" && window.innerWidth < 600
+      ? Math.min(1, 160 / previews.sheets.width)
+      : 1;
+  const frameW = previews ? Math.round(previews.sheets.width * scale) : 0;
+  const frameH = previews ? Math.round(previews.sheets.height * scale) : 0;
 
   return (
     <div
@@ -83,6 +101,24 @@ export function Scrubber({ current, duration, onSeek, chapters = [] }: Props) {
             ))}
         <div className="scrubber__knob" style={{ left: `${pct}%` }} />
       </div>
+      {frame && previews && pointerRatio !== null && (
+        // Clamped like the label, by half the frame, so neither end hangs off
+        // the screen. A window onto a sheet already loaded: moving the
+        // pointer moves the window, it does not fetch an image per pixel.
+        <div
+          className="scrubber__preview"
+          data-testid="scrub-preview"
+          aria-hidden="true"
+          style={{
+            left: `clamp(${frameW / 2}px, ${pointerRatio * 100}%, calc(100% - ${frameW / 2}px))`,
+            width: frameW,
+            height: frameH,
+            backgroundImage: `url("${previews.url(frame.sheet)}")`,
+            backgroundPosition: `-${frame.x * scale}px -${frame.y * scale}px`,
+            backgroundSize: `${previews.sheets.columns * frameW}px ${previews.sheets.rows * frameH}px`,
+          }}
+        />
+      )}
       {named && pointerRatio !== null && (
         // Clamped so a label near either end does not hang off the screen.
         <div
