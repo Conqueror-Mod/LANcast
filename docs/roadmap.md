@@ -181,7 +181,7 @@ is in the [Feature backlog](#feature-backlog) entry it names.*
 
 **Feature backlog, not yet planned.**
 - Libraries and media: **audiobooks**, **ebooks** beyond comics (EPUB),
-  `.cbr` comics, photo **bursts and RAW**, and **loudness normalisation across a
+  `.cbr` comics, photo **bursts**, and **loudness normalisation across a
   music library** (ReplayGain-style).
 - Playback: **Chromecast and AirPlay**, and **offline downloads** (the client half).
 - Social: **Last.fm and Trakt scrobbling**.
@@ -1031,7 +1031,10 @@ group is not priority.
   semantic search ([ADR 0060](adr/0060-semantic-photo-search-is-a-second-model-in-the-sidecar.md)),
   the Timeline, exact duplicates and near copies (v0.9.63), and **places**
   (v0.9.74, [ADR 0078](adr/0078-a-place-is-the-town-a-photo-was-taken-in.md)).
-  **Still open:** bursts and RAW, described below. The original entry
+  **RAW is built** (2026-10-28,
+  [ADR 0107](adr/0107-a-raw-photo-shows-the-cameras-own-jpeg.md)): a RAW shows
+  the full-size JPEG the camera stored inside it, never developed, and a RAW+JPEG
+  pair shows once. **Still open:** bursts, described below. The original entry
   follows, starting with people. Face grouping is the
   feature Google Photos used to justify reading every family album ever uploaded,
   which makes doing it **entirely on the box** the sharpest available statement

@@ -27,6 +27,8 @@ import (
 	_ "golang.org/x/image/bmp"
 	_ "golang.org/x/image/tiff"
 	_ "golang.org/x/image/webp"
+
+	"lancast/internal/media"
 )
 
 // ErrUnsupported is returned for a file no decoder here can read. It is a
@@ -92,6 +94,18 @@ func (d *Decoder) Read(ctx context.Context, path string) (image.Image, Meta, err
 		meta.TakenAt = readHEIFCaptureTime(raw)
 	}
 
+	// A camera RAW shows the JPEG the camera stored inside it (ADR 0107),
+	// and is never handed to image.Decode: the TIFF decoder would read the
+	// first image it finds, which in a NEF is a 160 × 120 thumbnail, and
+	// report success.
+	if media.IsRAW(path) {
+		img, err := rawPreview(raw)
+		if err != nil {
+			return nil, meta, fmt.Errorf("%s: %w", filepath.Base(path), err)
+		}
+		return img, withDimensions(img, meta), nil
+	}
+
 	img, _, err := image.Decode(bytes.NewReader(raw))
 	if err != nil {
 		// ffmpeg is tried for anything the in-process decoders refuse, not for a
@@ -124,6 +138,11 @@ func (d *Decoder) Read(ctx context.Context, path string) (image.Image, Meta, err
 		}
 	}
 
+	return img, withDimensions(img, meta), nil
+}
+
+// withDimensions records a picture's size as it will be seen.
+func withDimensions(img image.Image, meta Meta) Meta {
 	b := img.Bounds()
 	meta.Width, meta.Height = b.Dx(), b.Dy()
 	// Dimensions describe the picture as it will be seen. A quarter turn swaps
@@ -133,7 +152,7 @@ func (d *Decoder) Read(ctx context.Context, path string) (image.Image, Meta, err
 	if meta.Orientation >= 5 && meta.Orientation <= 8 {
 		meta.Width, meta.Height = meta.Height, meta.Width
 	}
-	return img, meta, nil
+	return meta
 }
 
 // JPEG re-encodes an image, which is what the artwork cache stores and resizes.

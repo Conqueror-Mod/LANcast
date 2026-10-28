@@ -1381,6 +1381,8 @@ the thumbnail worker made, and until that worker has reached the file the
 endpoint answers `503` with a plain reason rather than serving bytes nothing can
 draw.
 
+**Camera RAW files** (`.cr2`, `.cr3`, `.nef`, `.arw`, `.dng`, `.raf`, `.orf`, `.rw2` and a few more) are pictures too ([ADR 0107](adr/0107-a-raw-photo-shows-the-cameras-own-jpeg.md)), and are served the same way as HEIC: as the rendition, made from the full-size JPEG the camera stores inside the RAW. The sensor data is never developed. A RAW with a JPEG or HEIC of the same name in the same folder is skipped at scan, so a photograph taken in RAW+JPEG is one item.
+
 Like `/api/stream/{id}`, this handler turns a database row into filesystem
 access, so it **re-verifies containment** within the owning library root after
 resolving the path. A row pointing outside its library is `404`, not a file.

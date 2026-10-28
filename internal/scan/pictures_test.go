@@ -2,6 +2,7 @@ package scan
 
 import (
 	"context"
+	"path/filepath"
 	"testing"
 
 	"lancast/internal/store"
@@ -82,5 +83,38 @@ func TestGalleryInASecondLocationGroups(t *testing.T) {
 	}
 	if len(galleries) != 1 || galleries[0].Title != "Wedding" {
 		t.Fatalf("galleries = %v, want one named Wedding", galleries)
+	}
+}
+
+// RAW files are pictures, and a RAW beside a JPEG of the same name is that
+// photograph twice: it shows once, as the JPEG (ADR 0107).
+func TestRAWFilesAndTheirJPEGTwins(t *testing.T) {
+	sc, st := newScanner(t)
+	lib, root := pictureFixture(t, st)
+	writeFile(t, root, "Trip/IMG_0001.CR2", 10)
+	writeFile(t, root, "Trip/IMG_0001.JPG", 10) // RAW+JPEG
+	writeFile(t, root, "Trip/DSC_0002.nef", 10) // RAW alone
+	writeFile(t, root, "Trip/PXL_0003.dng", 10)
+	writeFile(t, root, "Trip/PXL_0003.heic", 10) // a phone's pair
+
+	scanAndWait(t, sc, lib)
+
+	items, _, err := st.ListItems(context.Background(),
+		store.ItemFilter{LibraryID: lib.ID, Kind: "photo"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := map[string]bool{}
+	for _, it := range items {
+		got[filepath.Base(it.Path)] = true
+	}
+	for name, want := range map[string]bool{
+		"IMG_0001.JPG": true, "IMG_0001.CR2": false,
+		"DSC_0002.nef":  true,
+		"PXL_0003.heic": true, "PXL_0003.dng": false,
+	} {
+		if got[name] != want {
+			t.Errorf("%s indexed = %v, want %v (got %v)", name, got[name], want, got)
+		}
 	}
 }
