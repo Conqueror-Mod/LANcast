@@ -28,6 +28,7 @@ import (
 	"lancast/internal/events"
 	"lancast/internal/faces"
 	"lancast/internal/guestticket"
+	"lancast/internal/history"
 	"lancast/internal/identity"
 	"lancast/internal/marker"
 	"lancast/internal/meta"
@@ -339,6 +340,9 @@ type Server struct {
 	push *rosterPush
 	// inviteThrottle counts failed invite lookups per address (ADR 0104).
 	inviteThrottle *auth.Throttle
+	// history is the dashboard's minute-by-minute record (ADR 0106), filled
+	// by RecordHistory; empty until it runs.
+	history *history.Ring
 }
 
 func New(d Deps) *Server {
@@ -361,6 +365,7 @@ func New(d Deps) *Server {
 		rosterAt:       map[string]time.Time{},
 		push:           newRosterPush(),
 		inviteThrottle: auth.NewThrottle(),
+		history:        &history.Ring{},
 		peerTitles:     map[string]peerTitleEntry{},
 		goodAddr:       map[string]string{},
 		cookieSent:     map[string]time.Time{},
@@ -759,6 +764,9 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("DELETE /api/invites/{id}", s.adminOnly(s.deleteInvite))
 	mux.HandleFunc("POST /api/invites/check", s.checkInvite)
 	mux.HandleFunc("POST /api/invites/redeem", s.redeemInvite)
+
+	// The dashboard's history (ADR 0106).
+	mux.HandleFunc("GET /api/dashboard/history", s.adminOnly(s.dashboardHistory))
 
 	/*
 	 * Browsing a share, asked for by the friend's own server rather than by

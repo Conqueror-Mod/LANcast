@@ -4,6 +4,26 @@
  */
 
 export interface paths {
+    "/dashboard/history": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * What the server was doing, minute by minute (ADR 0106)
+         * @description Administrators only. A sample every `every_seconds` (60): people here watching something, conversions running (re-encoding or only rewrapping), the whole machine's CPU (`-1` where it cannot be read), memory this program holds, and requests and unexpected server errors during that minute. Kept 48 hours, saved beside the database, so a restart keeps it. No bandwidth: the server does not count every response's bytes.
+         */
+        get: operations["getDashboardHistory"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/invites": {
         parameters: {
             query?: never;
@@ -6298,6 +6318,23 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        HistorySample: {
+            /**
+             * Format: int64
+             * @description Unix seconds, the end of the minute.
+             */
+            at: number;
+            watching: number;
+            encoding: number;
+            copying: number;
+            /** @description 0–100, or -1 where it cannot be read. */
+            cpu: number;
+            memory_mb: number;
+            /** Format: int64 */
+            requests: number;
+            /** Format: int64 */
+            errors: number;
+        };
         Invite: {
             id: string;
             note: string;
@@ -9707,6 +9744,42 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    getDashboardHistory: {
+        parameters: {
+            query?: {
+                hours?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Oldest first. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        every_seconds: number;
+                        samples: components["schemas"]["HistorySample"][];
+                    };
+                };
+            };
+            /** @description `hours` outside 1 to 48. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
     listInvites: {
         parameters: {
             query?: never;

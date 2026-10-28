@@ -123,6 +123,27 @@
     }
   ],
   "paths": {
+    "/dashboard/history": {
+      "get": {
+        "operationId": "getDashboardHistory",
+        "tags": ["operations"],
+        "summary": "What the server was doing, minute by minute (ADR 0106)",
+        "description": "Administrators only. A sample every `every_seconds` (60): people here watching something, conversions running (re-encoding or only rewrapping), the whole machine's CPU (`-1` where it cannot be read), memory this program holds, and requests and unexpected server errors during that minute. Kept 48 hours, saved beside the database, so a restart keeps it. No bandwidth: the server does not count every response's bytes.",
+        "parameters": [{ "name": "hours", "in": "query", "schema": { "type": "integer", "minimum": 1, "maximum": 48, "default": 6 } }],
+        "responses": {
+          "200": { "description": "Oldest first.", "content": { "application/json": { "schema": {
+            "type": "object", "required": ["every_seconds", "samples"],
+            "properties": {
+              "every_seconds": { "type": "integer" },
+              "samples": { "type": "array", "items": { "$ref": "#/components/schemas/HistorySample" } }
+            }
+          } } } },
+          "400": { "description": "`hours` outside 1 to 48.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorEnvelope" } } } },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" }
+        }
+      }
+    },
     "/invites": {
       "get": {
         "operationId": "listInvites",
@@ -14554,6 +14575,20 @@
       }
     },
     "schemas": {
+      "HistorySample": {
+        "type": "object",
+        "required": ["at", "watching", "encoding", "copying", "cpu", "memory_mb", "requests", "errors"],
+        "properties": {
+          "at": { "type": "integer", "format": "int64", "description": "Unix seconds, the end of the minute." },
+          "watching": { "type": "integer" },
+          "encoding": { "type": "integer" },
+          "copying": { "type": "integer" },
+          "cpu": { "type": "number", "description": "0–100, or -1 where it cannot be read." },
+          "memory_mb": { "type": "number" },
+          "requests": { "type": "integer", "format": "int64" },
+          "errors": { "type": "integer", "format": "int64" }
+        }
+      },
       "Invite": {
         "type": "object",
         "required": ["id", "note", "hidden_libraries", "created_by", "created_at", "expires_at"],

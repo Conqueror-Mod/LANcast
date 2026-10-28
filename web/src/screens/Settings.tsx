@@ -6,6 +6,7 @@ import { useEffect, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { RATING_RUNGS } from "@/lib/ratings";
 import { InviteFriend } from "@/components/InviteFriend";
+import { ServerHistory } from "@/components/ServerHistory";
 import { formatBytes } from "@/lib/format";
 import {
   useItem,
@@ -3876,6 +3877,9 @@ export function Settings() {
                     is not.
                   */}
                   <Review />
+                  {/* What the server has been doing, minute by minute (ADR 0106),
+                      above the live list of conversions it puts in context. */}
+                  <ServerHistory />
                   {/*
                     Conversions sits above the audit log because it is the only
                     live reading on the page: everything else here is a record

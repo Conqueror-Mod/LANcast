@@ -194,8 +194,7 @@ is in the [Feature backlog](#feature-backlog) entry it names.*
 - Playback: **preview thumbnails** on the scrub bar (chapters are built),
   **Chromecast and AirPlay**, and **offline downloads** (the client half).
 - Social: **Last.fm and Trakt scrobbling**.
-- Operations: a **server dashboard** with history (the metrics endpoint now
-  has the numbers), **bandwidth limits**, and **granular sharing** by label or
+- Operations: **bandwidth** on the dashboard (history is built), **bandwidth limits**, and **granular sharing** by label or
   on a friend's server (confirm somebody needs it first).
 - Security hardening: **ffmpeg under fewer privileges** than LocalSystem, an
   **update path for the pinned ffmpeg** (check before building), and **OIDC**
@@ -1698,7 +1697,13 @@ group is not priority.
   server reach into the LAN. **Playback events name an account and a title**,
   which ADR 0035 treats as that person's business, so whose viewing a webhook
   may report is a consent question before it is an HTTP one.
-- **A server dashboard** (Plex Dash) — partly built. Settings → Activity
+- **A server dashboard** (Plex Dash) — **history is built**
+  ([ADR 0106](adr/0106-the-dashboard-remembers-two-days.md)): Settings ›
+  Dashboard shows people watching, conversions, whole-machine CPU, memory,
+  requests and server errors, a reading a minute for 48 hours, kept through
+  restarts in a file rather than a table. **Bandwidth is what is left**: the
+  server does not count what it sends, and counting it means counting at each
+  streaming route. Original entry: partly built. Settings → Activity
   already shows what the server is doing *now*: its sessions, idle-first and
   administrator-only (v0.9.22, `GET /api/transcodes`). What Plex Dash adds is
   **history**, and a view that works on a phone: streams and bandwidth over

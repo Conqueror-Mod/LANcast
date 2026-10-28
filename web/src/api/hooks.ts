@@ -11,6 +11,7 @@ import { apiGet, apiPost, apiSend, apiUpload } from "./client";
 import { addPasskey, signInWithPasskey } from "@/lib/webauthn";
 import type {
   BackupFile,
+  HistorySample,
   Invite,
   PrerollAnswer,
   ChapterList,
@@ -378,6 +379,17 @@ export function useCreateUser() {
  * they make or withdraw one, so both refresh it; the secret comes back once,
  * from the mutation, and is never in the list.
  */
+// The dashboard's history (ADR 0106). A reading arrives each minute, so the
+// page asks again each minute while it is open.
+export function useDashboardHistory(hours: number) {
+  return useQuery({
+    queryKey: ["dashboard-history", hours],
+    queryFn: ({ signal }) =>
+      apiGet<{ every_seconds: number; samples: HistorySample[] }>(`/api/dashboard/history?hours=${hours}`, signal),
+    refetchInterval: 60_000,
+  });
+}
+
 export function useInvites() {
   return useQuery({
     queryKey: ["invites"],

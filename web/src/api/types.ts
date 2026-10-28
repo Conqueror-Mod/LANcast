@@ -316,6 +316,8 @@ export type PeerPerson = components["schemas"]["PeerPerson"];
 export type PeerPresence = components["schemas"]["PeerPresence"];
 // An outstanding invite, as an administrator sees it (ADR 0104). Never the secret.
 export type Invite = components["schemas"]["Invite"];
+// One minute of the server, for the dashboard (ADR 0106).
+export type HistorySample = components["schemas"]["HistorySample"];
 
 /*
  * A paired server as this one records it, and the invite that introduces one.
