@@ -64,3 +64,7 @@ the rest of the dashboard.
 - A server that runs for under a minute records nothing, and says so.
 - Bandwidth would need its own decision: counting bytes at each streaming
   route, not wrapping the writer.
+
+## Amendment, 2026-10-28: media sent
+
+The dashboard now has a **Media sent** chart, and `/api/metrics` has `lancast_http_media_bytes_total`. Bytes are counted **on the media routes only**: direct streams, conversions and their segments, downloads, extras, pre-roll clips, live channels, and the same for and through paired servers. They're counted by a wrapper the outermost handler applies to those paths and no others (`mediabytes.go`). The event stream is never one of them, which keeps ADR 0096's reason intact. The wrapper passes `Flush`, `ReadFrom` (so `http.ServeContent` keeps its fast copy) and `Unwrap` through. Pages, artwork, comic pages, preview sheets and JSON are not counted. They're small, and counting them would mean wrapping routes that gain nothing from it. The chart shows each minute as an average rate in Mbit/s, the unit a connection is sold in. History saved before this reads 0.

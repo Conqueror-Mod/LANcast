@@ -128,7 +128,7 @@
         "operationId": "getDashboardHistory",
         "tags": ["operations"],
         "summary": "What the server was doing, minute by minute (ADR 0106)",
-        "description": "Administrators only. A sample every `every_seconds` (60): people here watching something, conversions running (re-encoding or only rewrapping), the whole machine's CPU (`-1` where it cannot be read), memory this program holds, and requests and unexpected server errors during that minute. Kept 48 hours, saved beside the database, so a restart keeps it. No bandwidth: the server does not count every response's bytes.",
+        "description": "Administrators only. A sample every `every_seconds` (60): people here watching something, conversions running (re-encoding or only rewrapping), the whole machine's CPU (`-1` where it cannot be read), memory this program holds, and requests and unexpected server errors during that minute. Kept 48 hours, saved beside the database, so a restart keeps it. Media sent is counted on the media routes (streams, conversions, downloads, extras, pre-roll, live channels, federation), never on the event stream.",
         "parameters": [{ "name": "hours", "in": "query", "schema": { "type": "integer", "minimum": 1, "maximum": 48, "default": 6 } }],
         "responses": {
           "200": { "description": "Oldest first.", "content": { "application/json": { "schema": {
@@ -14608,7 +14608,7 @@
     "schemas": {
       "HistorySample": {
         "type": "object",
-        "required": ["at", "watching", "encoding", "copying", "cpu", "memory_mb", "requests", "errors"],
+        "required": ["at", "watching", "encoding", "copying", "cpu", "memory_mb", "requests", "errors", "media_bytes"],
         "properties": {
           "at": { "type": "integer", "format": "int64", "description": "Unix seconds, the end of the minute." },
           "watching": { "type": "integer" },
@@ -14617,7 +14617,8 @@
           "cpu": { "type": "number", "description": "0–100, or -1 where it cannot be read." },
           "memory_mb": { "type": "number" },
           "requests": { "type": "integer", "format": "int64" },
-          "errors": { "type": "integer", "format": "int64" }
+          "errors": { "type": "integer", "format": "int64" },
+          "media_bytes": { "type": "integer", "format": "int64", "description": "Bytes of media sent during the minute: streams, conversions, downloads, extras, pre-roll, live channels, and for and through paired servers. 0 in history saved before this was counted." }
         }
       },
       "PreviewSheets": {

@@ -185,7 +185,7 @@ is in the [Feature backlog](#feature-backlog) entry it names.*
   music library** (ReplayGain-style).
 - Playback: **Chromecast and AirPlay**, and **offline downloads** (the client half).
 - Social: **Last.fm and Trakt scrobbling**.
-- Operations: **bandwidth** on the dashboard (history is built), **bandwidth limits**, and **granular sharing** by label or
+- Operations: **bandwidth limits**, and **granular sharing** by label or
   on a friend's server (confirm somebody needs it first).
 - Security hardening: **ffmpeg under fewer privileges** than LocalSystem, an
   **update path for the pinned ffmpeg** (check before building), and **OIDC**
@@ -1693,9 +1693,9 @@ group is not priority.
   ([ADR 0106](adr/0106-the-dashboard-remembers-two-days.md)): Settings ›
   Dashboard shows people watching, conversions, whole-machine CPU, memory,
   requests and server errors, a reading a minute for 48 hours, kept through
-  restarts in a file rather than a table. **Bandwidth is what is left**: the
-  server does not count what it sends, and counting it means counting at each
-  streaming route. Original entry: partly built. Settings → Activity
+  restarts in a file rather than a table. **Media sent followed** (2026-10-28):
+  bytes counted on the media routes only, never the event stream, drawn as
+  Mbit/s and exported as `lancast_http_media_bytes_total`. Original entry: partly built. Settings → Activity
   already shows what the server is doing *now*: its sessions, idle-first and
   administrator-only (v0.9.22, `GET /api/transcodes`). What Plex Dash adds is
   **history**, and a view that works on a phone: streams and bandwidth over
