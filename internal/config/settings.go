@@ -96,6 +96,14 @@ type Settings struct {
 	DetectMarkers bool `json:"detect_markers"`
 
 	/*
+	 * ScrubPreviews makes the frames shown over the scrub bar (ADR 0105).
+	 * Off by default: it reads every film once (about 40 s each) and keeps
+	 * about 2 MB per film beside the database. Turning it off stops the work
+	 * and keeps what was made, as DetectMarkers does.
+	 */
+	ScrubPreviews bool `json:"scrub_previews"`
+
+	/*
 	 * RetroArtwork fetches box art and a screenshot for each identified ROM
 	 * from libretro-thumbnails (ADR 0073).
 	 *
