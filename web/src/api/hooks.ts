@@ -3671,17 +3671,26 @@ export function useYearInReview(year?: number) {
  * pass reaches them, so it is an answer here, not an error to retry.
  */
 export function usePreviews(itemID: number, enabled = true) {
-  return useQuery({
+  const query = useQuery({
     queryKey: ["previews", itemID],
-    queryFn: ({ signal }) =>
+    queryFn: ({ signal }): Promise<PreviewSheets | "queued" | null> =>
       apiGet<PreviewSheets>(`/api/items/${itemID}/previews`, signal).catch((e) => {
-        if (e instanceof ApiFailure && e.status === 404) return null;
+        // "queued": the server has just put this film at the front of the
+        // queue because it was opened. Worth asking again shortly.
+        if (e instanceof ApiFailure && e.status === 404) return e.code === "queued" ? "queued" : null;
         throw e;
       }),
     enabled: enabled && itemID > 0,
     retry: false,
     staleTime: 30 * 60_000,
+    // While queued, ask every 20 s so the frames appear during the film; give
+    // up after ten minutes, which is far past one film's turn.
+    refetchInterval: (q) =>
+      q.state.data === "queued" && q.state.dataUpdateCount < 30 ? 20_000 : false,
   });
+  const raw = query.data as PreviewSheets | "queued" | null | undefined;
+  const data: PreviewSheets | null | undefined = raw === "queued" ? null : raw;
+  return { ...query, data, queued: raw === "queued" };
 }
 export function useChapters(itemID: number, enabled = true) {
   return useQuery({

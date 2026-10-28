@@ -957,8 +957,14 @@ func run(ctx context.Context, addr, dataDir string, log *slog.Logger) error {
 		DetectMarkers: markerSoon,
 		Previews:      previewSoon,
 		PreviewsDir:   previewsDir,
-		Cover:         coverSoon,
-		Tasks:         board,
+		// Opened in the player with no previews yet: next in the queue, and
+		// a pass started if none is running (it is a no-op when one is).
+		PreviewsWant: func(id int64) {
+			previews.Want(id)
+			previewSoon()
+		},
+		Cover: coverSoon,
+		Tasks: board,
 	})
 
 	registerTasks(board, taskDeps{

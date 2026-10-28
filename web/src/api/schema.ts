@@ -394,6 +394,8 @@ export interface paths {
          * @description Frames shown over the scrub bar: one every `interval_ms`, `width` × `height` each, tiled `columns` × `rows` to a JPEG sheet, `sheets` of them, fetched from `/api/items/{id}/previews/{n}`. Frame *i* is on sheet `floor(i / (columns·rows))`, at column `i mod columns` and row `floor((i mod (columns·rows)) / columns)` of it. The last sheet is padded with black past the file's end.
          *
          *     Made in the background by the `scrub_previews` setting, **off by default**, so `404` is the ordinary answer until the pass reaches a file, for a file replaced since, and for a title kept from the caller.
+         *
+         *     **A film or episode opened before its previews exist** answers `404` with error code `queued`: asking puts it at the front of the queue (a pass starts if none is running), so it is made next. Worth asking again shortly. Only while `scrub_previews` is on.
          */
         get: operations["getItemPreviews"];
         put?: never;

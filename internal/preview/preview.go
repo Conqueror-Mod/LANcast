@@ -81,6 +81,8 @@ type Store interface {
 	PendingPreviews(ctx context.Context, rev, limit int) ([]store.Item, error)
 	SetPreviewKey(ctx context.Context, itemID int64, key string) error
 	ExistingItems(ctx context.Context, ids []int64) (map[int64]bool, error)
+	// PendingPreviewItem is one item, if it still needs previews at rev.
+	PendingPreviewItem(ctx context.Context, id int64, rev int) (*store.Item, error)
 }
 
 /*
@@ -119,6 +121,56 @@ type Worker struct {
 
 	mu      sync.Mutex
 	running bool
+	// wanted is items somebody has opened in the player, most recent first:
+	// made before the rest of the queue (Want). Guarded by mu.
+	wanted []int64
+}
+
+// maxWanted bounds the wanted list. Somebody flicking through ten films has
+// asked for the last few; the rest wait their turn in the ordinary queue.
+const maxWanted = 8
+
+/*
+ * Want puts an item at the front of the queue: somebody has opened it in the
+ * player and it has no previews yet, so it should not wait behind the rest of
+ * the library (2,136 items ahead of one film, the first time this ran on a
+ * real library). The most recent ask goes first; asking again moves it back to
+ * the front. The caller starts a pass if none is running; a running pass picks
+ * it up before its next file.
+ */
+func (w *Worker) Want(id int64) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	next := []int64{id}
+	for _, x := range w.wanted {
+		if x != id && len(next) < maxWanted {
+			next = append(next, x)
+		}
+	}
+	w.wanted = next
+}
+
+// Wanted reports whether an item is waiting at the front of the queue.
+func (w *Worker) Wanted(id int64) bool {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	for _, x := range w.wanted {
+		if x == id {
+			return true
+		}
+	}
+	return false
+}
+
+func (w *Worker) popWanted() (int64, bool) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if len(w.wanted) == 0 {
+		return 0, false
+	}
+	id := w.wanted[0]
+	w.wanted = w.wanted[1:]
+	return id, true
 }
 
 // NewWorker makes a worker writing under root.
@@ -164,6 +216,31 @@ func (w *Worker) Run(ctx context.Context) error {
 	}
 	w.prune(ctx)
 	made, failed := 0, 0
+	// Items made this pass because somebody wanted them, so a batch already
+	// read does not make them a second time.
+	done := map[int64]bool{}
+	// drain makes every wanted item that still needs previews.
+	drain := func() error {
+		for {
+			id, ok := w.popWanted()
+			if !ok {
+				return nil
+			}
+			if err := ctx.Err(); err != nil {
+				return err
+			}
+			it, err := w.st.PendingPreviewItem(ctx, id, Rev)
+			if err != nil || it == nil {
+				continue // gone, already made, or not a film: nothing to do
+			}
+			if w.one(ctx, *it) {
+				made++
+			} else if ctx.Err() == nil {
+				failed++
+			}
+			done[id] = true
+		}
+	}
 	defer func() {
 		if made+failed > 0 {
 			w.log.Info("scrub-bar previews pass", "made", made, "failed", failed)
@@ -172,6 +249,9 @@ func (w *Worker) Run(ctx context.Context) error {
 	for {
 		if w.Enabled != nil && !w.Enabled() {
 			return nil
+		}
+		if err := drain(); err != nil {
+			return err
 		}
 		items, err := w.st.PendingPreviews(ctx, Rev, 25)
 		if err != nil {
@@ -186,6 +266,13 @@ func (w *Worker) Run(ctx context.Context) error {
 			}
 			if w.Enabled != nil && !w.Enabled() {
 				return nil
+			}
+			// Somebody opened a film while this batch was running: theirs first.
+			if err := drain(); err != nil {
+				return err
+			}
+			if done[it.ID] {
+				continue
 			}
 			if w.one(ctx, it) {
 				made++
