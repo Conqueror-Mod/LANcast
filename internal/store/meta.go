@@ -225,7 +225,11 @@ func (s *Store) ItemRatings(ctx context.Context, itemID int64) ([]ItemRating, er
 // file, by its own worker, and no provider in the registry can search for one.
 //
 // A comic is the fourth (ADR 0101): no provider in the registry knows comics.
-const enrichableKinds = `kind NOT IN ('track', 'album', 'artist', 'photo', 'gallery', 'rom', 'comic')`
+const enrichableKinds = `kind NOT IN (` + unmatchableKinds + `)`
+
+// unmatchableKinds are the kinds no provider can ever answer for, as an SQL
+// list: the one list enrichment, the review queue and re-parsing all exclude.
+const unmatchableKinds = `'track', 'album', 'artist', 'photo', 'gallery', 'rom', 'comic'`
 
 // PendingEnrichment returns items awaiting metadata. The queue is a query
 // rather than a table, which makes it restart-safe by construction.
@@ -347,7 +351,10 @@ func (s *Store) ReparseTargets(ctx context.Context, libraryID int64, force bool)
 	// nothing better to offer than "S02 480p Bluray" — and re-parsing one
 	// clears its metadata stamp, which is what puts a row nothing should be
 	// searching for back into the enrichment queue.
-	where := ` WHERE i.missing = 0 AND i.kind != 'season' AND i.match_state IN ('review','unmatched')`
+	// Nor anything no provider matches: re-parsing guesses a *video*
+	// filename, and a comic or a photo has no such guess to improve.
+	where := ` WHERE i.missing = 0 AND i.kind != 'season' AND i.kind NOT IN (` + unmatchableKinds + `)
+		AND i.match_state IN ('review','unmatched')`
 
 	// A row that has already been re-parsed is not offered again, and this is
 	// what makes re-running the action free.
@@ -500,7 +507,19 @@ func (s *Store) ApplyGuess(ctx context.Context, itemID int64, g Guess) (bool, er
  * match on one is worth correcting, and a person can do it — which is the test
  * for belonging here.
  */
-const notReviewable = `kind != 'season'`
+const notReviewable = `kind != 'season' AND ` + enrichableKinds
+
+/*
+ * And nothing no provider can match: a comic, a photo, a track, a game.
+ *
+ * They are never enriched, so they never reached the queue, until a person
+ * edited one. An edit goes through UpdateItemMetadata, which stamps
+ * metadata_updated_at, and the row is still 'unmatched' because nothing ever
+ * could match it. So locking a comic's content rating put that comic in
+ * review, with a Fix button that searches film and TV providers and no way to
+ * clear it (2026-10-31, a real library). The test is the season one again:
+ * can a person resolve it here? For these, no.
+ */
 
 // ReviewQueue returns items whose identity is uncertain. Applying a
 // low-confidence match is a good default, but it is recorded as uncertain
