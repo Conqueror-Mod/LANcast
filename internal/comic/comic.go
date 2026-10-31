@@ -37,10 +37,16 @@ func ContentType(name string) string {
 // isPage reports whether a zip entry is a page: an image, not a directory, not
 // macOS's resource-fork shadow folder, not a hidden file.
 func isPage(f *zip.File) bool {
-	if f.FileInfo().IsDir() || ContentType(f.Name) == "" {
+	return isPageName(f.Name, f.FileInfo().IsDir())
+}
+
+// isPageName is isPage for any archive's entry, by name: a .cb7's entries are
+// judged by the same rules as a .cbz's.
+func isPageName(name string, dir bool) bool {
+	if dir || ContentType(name) == "" {
 		return false
 	}
-	name := strings.ReplaceAll(f.Name, "\\", "/")
+	name = strings.ReplaceAll(name, "\\", "/")
 	if strings.HasPrefix(name, "__MACOSX/") || strings.Contains(name, "/__MACOSX/") {
 		return false
 	}

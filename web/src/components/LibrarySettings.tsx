@@ -383,7 +383,7 @@ export function LibraryRow({ library }: { library: Library }) {
             <div className="set-row__note">
               {skippedKind.toLocaleString()} comic file
               {skippedKind === 1 ? "" : "s"} ignored — a comics library reads
-              .cbz and .pdf, not .cbr, .cb7 or ebooks.
+              .cbz, .cb7 and .pdf, not .cbr or ebooks.
             </div>
           )}
           {!running && skippedKind > 0 && library.kind !== "comics" && (
