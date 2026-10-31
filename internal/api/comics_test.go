@@ -277,3 +277,46 @@ func TestAPDFComicsPages(t *testing.T) {
 		t.Fatalf("the text page: %d %s", resp.StatusCode, body)
 	}
 }
+
+// A .cb7 serves its pages in reading order, through the same routes, and the
+// archive the reader keeps open between pages does not stop the library's
+// folder being removed afterwards (ADR 0101, amended).
+func TestACB7ComicsPages(t *testing.T) {
+	h := newHarness(t)
+	dir := t.TempDir()
+	lib, err := h.st.CreateLibrary(context.Background(), "Comics", "comics", dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw, err := os.ReadFile("../comic/testdata/twelve.cb7")
+	if err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(dir, "Bone 001.cb7")
+	if err := os.WriteFile(path, raw, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	id := upsertComic(t, h, lib.ID, path)
+
+	if a := readPages(t, h, id); a.Pages != 12 {
+		t.Fatalf("pages = %+v", a)
+	}
+	for _, n := range []int{0, 1, 11, 2} {
+		resp := h.do(t, "GET", fmt.Sprintf("/api/items/%d/pages/%d", id, n), nil)
+		body, _ := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		if resp.StatusCode != http.StatusOK || resp.Header.Get("Content-Type") != "image/png" {
+			t.Fatalf("page %d: %d %s", n, resp.StatusCode, resp.Header.Get("Content-Type"))
+		}
+		img, _, err := image.Decode(bytes.NewReader(body))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if r, _, _, _ := img.At(0, 0).RGBA(); int(r>>8) != n+1 {
+			t.Fatalf("page %d is p%d.png", n, r>>8)
+		}
+	}
+	if err := os.Remove(path); err != nil {
+		t.Fatalf("a comic just read cannot be deleted: %v", err)
+	}
+}

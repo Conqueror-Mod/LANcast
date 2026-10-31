@@ -58,3 +58,17 @@ goes. Nothing about a comic goes to the desktop's mpv.
   DLNA: a friend's server and a television have no reader for it.
 - No two-page spreads, right-to-left reading or `ComicInfo.xml` metadata yet.
   Each is additive.
+
+## Amendment, 2026-10-28: `.cb7`
+
+A comics library now reads **`.cb7`**, a 7-Zip archive of page images. Its pages are found, filtered and ordered by the same rules as a `.cbz`'s (`isPageName`, `naturalLess`), and the reader is `github.com/bodgit/sevenzip`, already in the build for the retro cores, so it adds no dependency. `.cbr` stays unread: RAR has no reader here.
+
+7-Zip archives are usually **solid**: every file is compressed as one stream, so a page can only be reached by decompressing everything stored before it. Opened afresh per request, as a `.cbz` is, a real 44-page, 48 MB issue repacked solid served page 0 in 71 ms, page 22 in 2.2 s and page 43 in 4.4 s. So a `.cb7` is **kept open between requests**:
+
+- the two most recently read stay open, each closed after five idle minutes, or at once when its file changes (size or modification time) and nobody is reading it;
+- a page is read under the archive's lock, so one request can't move the stream out from under another;
+- pages the stream passes on its way to the one asked for are held, up to 96 MB, because the stored order need not be the reading order (`p10` is stored before `p2`).
+
+On the same issue, one request per page, page 43 now takes 116 ms, and all 44 pages take 4.3 s together. Going back to the start restarts the stream, which costs the pages before the one wanted (84 ms for page 0). Jumping straight to the last page of an archive nobody has opened still decodes the whole stream once, about 4 s on that issue; the shelf makes every page after that cheap, it can't make the first long jump cheap.
+
+On Windows the file is opened with `FILE_SHARE_DELETE`, which `os.Open` leaves out. Without it, a comic someone had read in the last five minutes couldn't be deleted or replaced in Explorer.

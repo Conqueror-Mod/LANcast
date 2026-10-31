@@ -1055,7 +1055,7 @@ the body. Scans are never queued.
 
 **`kind` is permanent.** It decides which files are scanned at all — a `music`
 library indexes audio, a `picture` library images, a `retro` library ROMs and
-disc images, a `comics` library `.cbz` and `.pdf` comics, everything else video — and
+disc images, a `comics` library `.cbz`, `.cb7` and `.pdf` comics, everything else video — and
 it biases matching between films and TV. There is no endpoint to change it:
 altering it would mean a rescan re-litigating identity for an entire library,
 which is what field locking exists to prevent. Remove the library and add it
@@ -1338,7 +1338,7 @@ person does with the download, which is how *no phone-home* survives an export.
 ### Comics
 
 A `comics` library ([ADR 0101](adr/0101-a-comic-is-read-out-of-its-archive.md))
-indexes `.cbz` and `.pdf` files ([ADR 0102](adr/0102-a-pdf-comic-is-its-pictures.md)), each a `comic` item. Its title and year come from the
+indexes `.cbz`, `.cb7` and `.pdf` files ([ADR 0102](adr/0102-a-pdf-comic-is-its-pictures.md); `.cb7` in [ADR 0101](adr/0101-a-comic-is-read-out-of-its-archive.md)'s amendment), each a `comic` item. Its title and year come from the
 filename (`Saga 012 (2014) (Digital).cbz` is *Saga 012*, 2014), its `series` is
 the folder it sits in when that is not the library's root, and its poster is its
 first page. No metadata provider and no ffprobe ever see one. `.cbr` (RAR) and

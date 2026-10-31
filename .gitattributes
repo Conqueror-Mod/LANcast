@@ -44,6 +44,8 @@
 *.otf binary
 *.pdf binary
 *.zip binary
+*.cb7 binary
+*.7z binary
 *.gz binary
 *.exe binary
 *.dll binary
