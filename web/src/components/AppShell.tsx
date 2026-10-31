@@ -41,7 +41,7 @@ import {
   ReportIcon,
   SignOutIcon,
 } from "./LibraryIcon";
-import { reportIssueHref } from "@/lib/contact";
+import { ReportIssue } from "./ReportIssue";
 import "./AppShell.css";
 
 // The shell: a vertical rail of places, and a top bar of state.
@@ -107,6 +107,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   const location = useLocation();
   const isAdmin = useIsAdmin();
   const { data: health } = useHealth();
+  const [reporting, setReporting] = useState(false);
 
   /*
    * The Review screen holds two queues, so its way in has to count both.
@@ -359,20 +360,24 @@ export function AppShell({ children }: { children: ReactNode }) {
               icons with everything else — the labels use the same class, so
               they appear and disappear on the same hover. */}
           <div className="app-shell__foot">
-            {/* Report an issue: a mail link to the developer, never a request
-                from this program (lib/contact.ts says why). An action, not a
-                place, so it is an <a> with no active state. */}
-            <a
-              href={reportIssueHref(health?.version)}
+            {/* Report an issue: a form in the app, sent only when its Send is
+                pressed (ADR 0109). An action, not a place, so a button with no
+                active state. */}
+            <button
+              type="button"
               title="Report an issue"
               className="app-shell__lib"
-              onClick={releaseRail}
+              onClick={(e) => {
+                releaseRail(e);
+                setReporting(true);
+              }}
             >
               <ReportIcon />
               <span className="app-shell__lib-name app-shell__label">
                 Report an issue
               </span>
-            </a>
+            </button>
+            {reporting && <ReportIssue version={health?.version} onClose={() => setReporting(false)} />}
             <NavLink
               to="/settings"
               title="Settings"

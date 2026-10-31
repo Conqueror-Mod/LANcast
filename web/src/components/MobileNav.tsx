@@ -9,7 +9,7 @@ import {
   useIsAdmin,
   useHealth,
 } from "@/api/hooks";
-import { reportIssueHref } from "@/lib/contact";
+import { ReportIssue } from "./ReportIssue";
 import { gamesSupported } from "@/lib/games";
 import { railOrder } from "@/lib/railOrder";
 import { GAME_HUB_PATH, hubOffered, insideHub } from "@/lib/gameHub";
@@ -56,6 +56,7 @@ export function MobileNav() {
   const { data: health } = useHealth();
   const location = useLocation();
   const [sheet, setSheet] = useState<Sheet>(null);
+  const [reporting, setReporting] = useState(false);
   const opener = useRef<HTMLButtonElement | null>(null);
   const panel = useRef<HTMLDivElement | null>(null);
 
@@ -164,11 +165,12 @@ export function MobileNav() {
                 <DownloadIcon />
                 <span>Downloads</span>
               </NavLink>
-              {/* A mail link, as on the rail (lib/contact.ts). */}
-              <a href={reportIssueHref(health?.version)} className="mnav__row">
+              {/* The report form, as on the rail (ADR 0109). */}
+              <button type="button" className="mnav__row" onClick={() => setReporting(true)}>
                 <ReportIcon />
                 <span>Report an issue</span>
-              </a>
+              </button>
+              {reporting && <ReportIssue version={health?.version} onClose={() => setReporting(false)} />}
               <NavLink to="/settings" className={({ isActive }) => row(isActive)}>
                 <SettingsIcon />
                 <span>Settings</span>

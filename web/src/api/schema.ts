@@ -2604,6 +2604,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/report": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Whether a problem report can be sent from here
+         * @description Any signed-in account (ADR 0109). `can_send` is false in a build with no destination for reports (any local or self-built one); the form then offers to copy the report instead. `can_attach_log` is true for an administrator only: the server log names paths, addresses and other people's accounts. An API key is refused.
+         */
+        get: operations["getReportInfo"];
+        put?: never;
+        /**
+         * Send a problem report to the developer
+         * @description The one request LANcast makes to its developer, and only this one, made when a person presses Send (ADR 0109). The server posts the report to the webhook its release build carries, with LANcast's version, the server's operating system, the client named in the request and whether the sender is an administrator. Never a name or an address. `include_log` attaches the last 2,000 lines of the server log (at most 1 MB) and is allowed for an administrator only. Five reports an hour for the whole server, one every 20 seconds. Audited as `report.send`.
+         */
+        post: operations["sendReport"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/logs": {
         parameters: {
             query?: never;
@@ -8811,6 +8835,28 @@ export interface components {
              */
             subtitle_mode: "off" | "foreign" | "always";
         };
+        ReportInfo: {
+            /** @description Whether this build has somewhere to send reports. */
+            can_send: boolean;
+            /** @description Whether this account may attach the server log: administrators only. */
+            can_attach_log: boolean;
+        };
+        ReportRequest: {
+            /** @description What happened. Required. */
+            what: string;
+            expected?: string;
+            steps?: string;
+            /** @description How to reach the sender, if they want a reply. */
+            contact?: string;
+            /** @description Which client this is, as the client says ("desktop window", "browser"). */
+            client?: string;
+            /** @description Attach the end of the server log. Administrators only. */
+            include_log?: boolean;
+        };
+        ReportSent: {
+            sent: boolean;
+            log_included: boolean;
+        };
         /** @description A track's ReplayGain, as its tagger measured it (ADR 0108). Attached by `GET /api/items/{id}` to a track whose file carries any; absent otherwise. Every field is present only when tagged: absent is "not measured", never 0 dB. The server reports it and never applies it. */
         Loudness: {
             /** @description The gain in dB that brings this track to ReplayGain 2's reference (-18 LUFS). An Opus file's R128 gain is converted to the same scale. */
@@ -14642,6 +14688,82 @@ export interface operations {
                 };
             };
             401: components["responses"]["Unauthorized"];
+        };
+    };
+    getReportInfo: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description What this account can do here. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReportInfo"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    sendReport: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReportRequest"];
+            };
+        };
+        responses: {
+            /** @description Sent. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReportSent"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            /** @description A report was sent a moment ago, or five this hour (`rate_limited`). */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description The destination refused it or could not be reached (`not_sent`); nothing was sent. */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description This build cannot send reports (`unavailable`). */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
         };
     };
     getServerLog: {

@@ -26,7 +26,7 @@ builds:
     # The GUI subsystem is what stops a double-click showing a console; the
     # icon comes from the committed cmd/lancast/lancast_windows.syso.
     ldflags:
-      - -s -w -X main.Version={{ .Version }} -X lancast/internal/api.Version={{ .Version }} -H=windowsgui
+      - -s -w -X main.Version={{ .Version }} -X lancast/internal/api.Version={{ .Version }} -X lancast/internal/report.WebhookURL={{ index .Env "LANCAST_REPORT_WEBHOOK" }} -H=windowsgui
 
   # Headless on Linux: `lancast serve` is what systemd runs.
   - id: lancast-unix
@@ -36,7 +36,7 @@ builds:
     goos: [linux]
     goarch: [amd64, arm64]
     ldflags:
-      - -s -w -X main.Version={{ .Version }} -X lancast/internal/api.Version={{ .Version }}
+      - -s -w -X main.Version={{ .Version }} -X lancast/internal/api.Version={{ .Version }} -X lancast/internal/report.WebhookURL={{ index .Env "LANCAST_REPORT_WEBHOOK" }}
 
   # ---- lancast-faces (ADR 0052) --------------------------------------------
   #

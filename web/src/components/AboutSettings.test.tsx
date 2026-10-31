@@ -94,13 +94,16 @@ describe("the About pane", () => {
     expect(requested.every((u) => u.startsWith("/api/"))).toBe(true);
   });
 
-  it("names the developer, and reports by mail with the version filled in", async () => {
+  it("names the developer, and reports through the in-app form", async () => {
     stub(base);
     await render();
     const links = [...host.querySelectorAll<HTMLAnchorElement>("a")];
-    const report = links.find((a) => a.textContent === "Report an issue");
-    expect(report?.href.startsWith("mailto:conqueror.conqueredtime@gmail.com?")).toBe(true);
-    expect(decodeURIComponent(report!.href)).toContain("LANcast version: 0.9.79");
+    // Report an issue opens the in-app form (ADR 0109): a button, and no
+    // mail link anywhere on the pane.
+    const report = [...host.querySelectorAll("button")].find((b) => b.textContent === "Report an issue");
+    expect(report).toBeDefined();
+    expect(links.some((a) => a.href.startsWith("mailto:"))).toBe(false);
+    expect(host.textContent).toContain("conqueror.conqueredtime@gmail.com");
     const kofi = links.find((a) => a.textContent === "Support on Ko-fi");
     expect(kofi?.getAttribute("href")).toBe("https://ko-fi.com/christheconqueror");
     // Links the person follows; the pane itself still asks only this server.
