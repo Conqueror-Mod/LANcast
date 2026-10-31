@@ -181,8 +181,9 @@ is in the [Feature backlog](#feature-backlog) entry it names.*
 
 **Feature backlog, not yet planned.**
 - Libraries and media: **audiobooks**, **ebooks** beyond comics (EPUB),
-  `.cbr` comics, photo **bursts**, and **loudness normalisation across a
-  music library** (ReplayGain-style).
+  `.cbr` comics, and photo **bursts**. Loudness levelling from ReplayGain tags
+  is built ([ADR 0108](adr/0108-music-is-levelled-by-its-own-replaygain.md));
+  measuring untagged tracks is not.
 - Playback: **Chromecast and AirPlay**, and **offline downloads** (the client half).
 - Social: **Last.fm and Trakt scrobbling**.
 - Operations: **bandwidth limits**, and **granular sharing** by label or
@@ -1998,8 +1999,10 @@ group is not priority.
   directly played 5.1 soundtrack is never folded down without saying so.
   Dialogue boost stays the desktop's. **Phase 3, the equaliser, is built for
   music** (v0.9.74, #818): presets and five bands. Films keep night mode and
-  dialogue boost, by choice. Loudness normalisation across a library
-  (ReplayGain-style) is outside this entry and has no plan yet.
+  dialogue boost, by choice. Loudness levelling across a library is built
+  from ReplayGain tags (2026-10-28,
+  [ADR 0108](adr/0108-music-is-levelled-by-its-own-replaygain.md)), off by
+  default, per device.
 
   The original entry follows.
 

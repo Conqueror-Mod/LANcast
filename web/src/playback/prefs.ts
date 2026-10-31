@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import type { TrailId } from "./trailMath";
+import type { LevelMode } from "@/lib/loudness";
 
 /*
  * Playback preferences, per device.
@@ -103,6 +104,12 @@ export interface Prefs {
    * into a live or continuous recording (docs/gapless-plan.md, decided).
    */
   crossfade: number;
+  /**
+   * Evening out loudness from each track's ReplayGain (lib/loudness.ts, ADR
+   * 0108). Off by default: it only turns loud records down, so switching it on
+   * makes most music quieter, and that should be a person's choice.
+   */
+  loudness: LevelMode;
   /** Decibels per equaliser band, music only (elementAudio.ts EQ_BANDS). */
   eq: number[];
   /** Which preset the bands came from, or "custom" once a slider moved. */
@@ -229,6 +236,7 @@ export const DEFAULTS: Prefs = {
   nightMusic: false,
   taper: true,
   crossfade: 0,
+  loudness: "off",
   eq: [0, 0, 0, 0, 0],
   eqPreset: "flat",
   stage: "cover",

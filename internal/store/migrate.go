@@ -6,7 +6,7 @@ import (
 )
 
 // CurrentSchemaVersion is the revision this build expects.
-const CurrentSchemaVersion = 85
+const CurrentSchemaVersion = 86
 
 // migration is one forward step. There are deliberately no down migrations:
 // rolling a media library's schema backwards loses data that a rescan cannot
@@ -166,6 +166,18 @@ var migrations = []migration{
 	// Scrub-bar previews (ADR 0105): the file a pass last looked at, as
 	// "size:mtime:rev". Null until one has.
 	{version: 85, columns: []column{{"media_item", "preview_key", "TEXT"}}},
+	// Loudness levelling (ADR 0108): a track's ReplayGain, as tagged. Null
+	// is "not tagged". The stored grouping keys are dropped so the next scan
+	// of each music library reads every file's tags once and finds the gain;
+	// an unchanged library otherwise never opens a file again (ADR 0056).
+	{version: 86, sql: `UPDATE media_item SET group_artist = NULL, group_album = NULL,
+		group_dir = NULL, group_album_from_folder = NULL, group_album_at_root = NULL
+		WHERE kind = 'track'`, columns: []column{
+		{"media_item", "rg_track_gain", "REAL"},
+		{"media_item", "rg_track_peak", "REAL"},
+		{"media_item", "rg_album_gain", "REAL"},
+		{"media_item", "rg_album_peak", "REAL"},
+	}},
 }
 
 // migrate brings the database up to CurrentSchemaVersion.

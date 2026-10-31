@@ -2324,6 +2324,20 @@ it before treating `unmatched` as "no match found" — it is the default value,
 so a freshly scanned item carries it before anything has looked at the item at
 all. Reporting those as match failures buries the real ones.
 
+A track whose file carries ReplayGain also has a `loudness` block
+([ADR 0108](adr/0108-music-is-levelled-by-its-own-replaygain.md)):
+
+```json
+"loudness": { "track_gain_db": -7.89, "track_peak": 0.988525,
+              "album_gain_db": -8.4, "album_peak": 1.0 }
+```
+
+Gains are in dB against ReplayGain 2's reference (-18 LUFS); an Opus file's
+R128 gain is reported on the same scale. Peaks are linear, 1 at full scale.
+Each field is present only when tagged, and the block is absent from a track
+with none and from anything that is not a track. The server never applies the
+gain: the music player does, per device, when its levelling setting is on.
+
 ### `PUT /api/items/{id}/progress`
 
 ```json

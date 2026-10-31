@@ -15627,6 +15627,9 @@
           "track_choice": {
             "$ref": "#/components/schemas/TrackChoice"
           },
+          "loudness": {
+            "$ref": "#/components/schemas/Loudness"
+          },
           "file_name": {
             "type": "string",
             "description": "The **base name** of the file, detail responses only.\n\nThe full path stays private — it would disclose the server's filesystem layout — but the name alone is what identifies a title whose metadata is wrong. Without it a mis-scanned file (`01 Magnetic Rose`) cannot be told apart from its siblings well enough to correct it."
@@ -20578,6 +20581,28 @@
               "always"
             ],
             "description": "When to show subtitles at all.\n\n`off` never does, and is what every account that has never set this behaves as. `foreign` shows them when the audio that ends up **playing** is not in the preferred language — judged on what plays rather than on what the file contains, so a foreign film whose English track was chosen gets none. `always` shows them whenever a track exists in the preferred subtitle language.\n\n`foreign` with no `preferred_audio_lang` set never fires: there is nothing for the audio to be foreign *to*, and guessing would mean deciding what language the account considers its own."
+          }
+        }
+      },
+      "Loudness": {
+        "type": "object",
+        "description": "A track's ReplayGain, as its tagger measured it (ADR 0108). Attached by `GET /api/items/{id}` to a track whose file carries any; absent otherwise. Every field is present only when tagged: absent is \"not measured\", never 0 dB. The server reports it and never applies it.",
+        "properties": {
+          "track_gain_db": {
+            "type": "number",
+            "description": "The gain in dB that brings this track to ReplayGain 2's reference (-18 LUFS). An Opus file's R128 gain is converted to the same scale."
+          },
+          "track_peak": {
+            "type": "number",
+            "description": "The track's loudest sample, linear, 1 at full scale."
+          },
+          "album_gain_db": {
+            "type": "number",
+            "description": "The same for the whole album the track was measured with."
+          },
+          "album_peak": {
+            "type": "number",
+            "description": "The album's loudest sample, linear."
           }
         }
       },

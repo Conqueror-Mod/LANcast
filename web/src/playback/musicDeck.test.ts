@@ -313,3 +313,51 @@ describe("without a plan, the deck is the element", () => {
     expect(b.src).toBe("");
   });
 });
+
+describe("each track at its own loudness (ADR 0108)", () => {
+  it("multiplies the person's volume by the sounding track's gain", () => {
+    startA();
+    deck.volume = 0.8;
+    deck.trackGain = 0.5;
+    expect(a.volume).toBeCloseTo(0.4);
+    expect(deck.volume).toBe(0.8); // the slider is not changed by it
+    deck.volume = 0.6;
+    expect(a.volume).toBeCloseTo(0.3);
+  });
+
+  it("carries the next track's gain across a gapless join, and ignores the old one's during adoption", () => {
+    startA();
+    deck.trackGain = 0.5;
+    run(5000);
+    deck.queue({ url: B, overlap: GAPLESS_OVERLAP_S, gain: 0.25 });
+    run(26_000);
+    expect(b.volume).toBeCloseTo(0.25);
+    // The provider still shows A until it adopts B: its value is not B's.
+    deck.trackGain = 0.5;
+    expect(b.volume).toBeCloseTo(0.25);
+    providerAdvancesTo(B);
+    deck.trackGain = 0.25;
+    expect(b.volume).toBeCloseTo(0.25);
+  });
+
+  it("fades each element at its own gain", () => {
+    startA();
+    deck.trackGain = 0.5;
+    run(5000);
+    deck.queue({ url: B, overlap: 4, gain: 1 });
+    run(23_000); // two seconds into a four-second fade
+    expect(a.volume).toBeCloseTo(0.5 * fadeOutGain(0.5), 1);
+    expect(b.volume).toBeCloseTo(fadeInGain(0.5), 1);
+  });
+
+  it("takes a new gain for the queued track without loading it again", () => {
+    startA();
+    run(5000);
+    deck.queue({ url: B, overlap: GAPLESS_OVERLAP_S, gain: 1 });
+    const loads = b.loads;
+    deck.queue({ url: B, overlap: GAPLESS_OVERLAP_S, gain: 0.5 });
+    expect(b.loads).toBe(loads);
+    run(26_000);
+    expect(b.volume).toBeCloseTo(0.5);
+  });
+});

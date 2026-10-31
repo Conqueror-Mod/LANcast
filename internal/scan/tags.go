@@ -90,9 +90,18 @@ func (s *Scanner) applyTrackTags(ctx context.Context, lib store.Library, p *Prog
 	 * library, or change anything in it, and the pass runs.
 	 */
 	if lib.ScannedAt != nil && p != nil && p.ItemsChanged == 0 && p.ItemsMissing == 0 {
-		s.log.Debug("skipping tag pass; nothing changed since the last scan",
-			"library", lib.ID)
-		return nil
+		// Unless some track has no stored key, which is a track nobody has
+		// read: after a migration drops the keys so a new tag can be found
+		// (revision 86, ADR 0108), every track is one.
+		unkeyed, err := s.st.UnkeyedTracks(ctx, lib.ID)
+		if err != nil {
+			return err
+		}
+		if unkeyed == 0 {
+			s.log.Debug("skipping tag pass; nothing changed since the last scan",
+				"library", lib.ID)
+			return nil
+		}
 	}
 
 	/*
@@ -445,6 +454,12 @@ func trackTagsFrom(t probe.Tags) store.TrackTags {
 		Disc:      t.Disc,
 		Track:     t.Track,
 		Year:      t.Year,
+		Loudness: store.Loudness{
+			TrackGain: t.Loudness.TrackGain,
+			TrackPeak: t.Loudness.TrackPeak,
+			AlbumGain: t.Loudness.AlbumGain,
+			AlbumPeak: t.Loudness.AlbumPeak,
+		},
 	}
 }
 

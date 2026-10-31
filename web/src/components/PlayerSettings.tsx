@@ -1,4 +1,5 @@
 import { usePrefs, QUALITIES, DEFAULTS, DIALOGUE_LEVELS, CROSSFADES, STAGES, type Stage, type SubFont } from "@/playback/prefs";
+import { LEVEL_MODES, type LevelMode } from "@/lib/loudness";
 import { webgl2Supported } from "@/playback/trails";
 import { EQ_PRESETS } from "@/playback/elementAudio";
 import { FONTS } from "@/playback/cueVars";
@@ -130,6 +131,25 @@ export function PlayerSettings() {
             ))}
           </select>
         </label>
+        <label className="set-row">
+          <span>Even out loudness</span>
+          <select
+            className="set-input"
+            value={prefs.loudness}
+            onChange={(e) => setPrefs({ loudness: e.target.value as LevelMode })}
+          >
+            {LEVEL_MODES.map((m) => (
+              <option key={m.id} value={m.id}>
+                {m.label}
+              </option>
+            ))}
+          </select>
+        </label>
+        <p className="set-row__sub">
+          Uses the ReplayGain your tagger measured, so loud records play nearer the level of quiet
+          ones. It only turns music down, and a track without the tag plays as it is. By album
+          keeps an album&rsquo;s quiet songs quieter than its loud ones.
+        </p>
         <label className="set-toggle">
           <input
             type="checkbox"

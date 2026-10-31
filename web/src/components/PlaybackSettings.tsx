@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { outputsWithheld, routableOutputs } from "./audioOutputs";
 import { usePlayback } from "@/playback/PlaybackProvider";
 import { QUALITIES, DEFAULTS, DIALOGUE_LEVELS, CROSSFADES, type SubFont } from "@/playback/prefs";
+import { LEVEL_MODES, type LevelMode } from "@/lib/loudness";
 import {
   canBoostDialogue,
   canNightFilm,
@@ -430,6 +431,23 @@ export function PlaybackSettings({ onClose }: { onClose: () => void }) {
         )}
         {pb.isAudio && prefs.crossfade > 0 && (
           <p className="pbset__note">Tracks from the same album always play straight through.</p>
+        )}
+
+        {/* Evening out loudness from ReplayGain tags (ADR 0108). */}
+        {pb.isAudio && (
+          <Row label="Even out loudness">
+            <select
+              className="pbset__select"
+              value={prefs.loudness}
+              onChange={(e) => setPrefs({ loudness: e.target.value as LevelMode })}
+            >
+              {LEVEL_MODES.map((m) => (
+                <option key={m.id} value={m.id}>
+                  {m.label}
+                </option>
+              ))}
+            </select>
+          </Row>
         )}
 
         {/* The stage's visualizer at half the motion (now-playing-plan.md). */}
