@@ -2,6 +2,7 @@ package scan
 
 import (
 	"context"
+	"os"
 	"path/filepath"
 	"testing"
 
@@ -9,8 +10,8 @@ import (
 	"lancast/internal/store"
 )
 
-// A comics library takes .cbz and .pdf files as comics, titled from the
-// filename, and nothing else (ADR 0101, ADR 0102).
+// A comics library takes .cbz, .cb7 and .pdf files as comics, titled from
+// the filename, and nothing else (ADR 0101, ADR 0102).
 func TestComicsLibraryScansCBZAndPDF(t *testing.T) {
 	sc, st := newScanner(t)
 	root := t.TempDir()
@@ -21,6 +22,13 @@ func TestComicsLibraryScansCBZAndPDF(t *testing.T) {
 	comictest.Write(t, filepath.Join(root, "Saga", "Saga 001 (2012) (Digital).cbz"), 3)
 	comictest.Write(t, filepath.Join(root, "Watchmen.cbz"), 2)
 	comictest.WritePDF(t, filepath.Join(root, "Star Courier", "Star Courier 001 (2024).pdf"), 4, comictest.PDFOptions{})
+	cb7, err := os.ReadFile("../comic/testdata/twelve.cb7")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "Bone 001 (1991).cb7"), cb7, 0o644); err != nil {
+		t.Fatal(err)
+	}
 	// Not comics: a RAR archive, a readme, and a film somebody left here. The
 	// S01E02 name is the trap: no comic is an episode.
 	writeFile(t, root, "Bone.cbr", 10)
@@ -28,8 +36,8 @@ func TestComicsLibraryScansCBZAndPDF(t *testing.T) {
 	writeFile(t, root, "Show S01E02.mkv", 10)
 
 	p := scanAndWait(t, sc, *lib)
-	if p.FilesSeen != 3 {
-		t.Errorf("FilesSeen = %d, want 3", p.FilesSeen)
+	if p.FilesSeen != 4 {
+		t.Errorf("FilesSeen = %d, want 4", p.FilesSeen)
 	}
 	// The .cbr and the film are counted, so a library of either says why it
 	// is empty; the readme is not.
@@ -54,8 +62,11 @@ func TestComicsLibraryScansCBZAndPDF(t *testing.T) {
 	if saga.Series == nil || *saga.Series != "Saga" {
 		t.Errorf("saga series: %v", saga.Series)
 	}
-	if len(items) != 3 {
-		t.Errorf("%d items, want 3", len(items))
+	if len(items) != 4 {
+		t.Errorf("%d items, want 4", len(items))
+	}
+	if bone := byName["Bone 001 (1991).cb7"]; bone.Title != "Bone 001" || bone.Year == nil || *bone.Year != 1991 {
+		t.Errorf("cb7: %q %v", bone.Title, bone.Year)
 	}
 	star := byName["Star Courier 001 (2024).pdf"]
 	if star.Title != "Star Courier 001" || star.Series == nil || *star.Series != "Star Courier" {
@@ -82,7 +93,7 @@ func TestComicsLibraryScansCBZAndPDF(t *testing.T) {
 		}
 	}
 	covers, err := st.PendingComicCovers(context.Background(), 100)
-	if err != nil || len(covers) != 3 {
+	if err != nil || len(covers) != 4 {
 		t.Errorf("covers pending: %d %v", len(covers), err)
 	}
 }

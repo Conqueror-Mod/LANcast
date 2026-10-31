@@ -29,7 +29,7 @@ func TestComicTitleDropsTheTagsAndKeepsTheYear(t *testing.T) {
 
 func TestCBZAndPDFAreComics(t *testing.T) {
 	for name, want := range map[string]bool{
-		"a.cbz": true, "a.CBZ": true, "a.pdf": true, "a.PDF": true, "a.cbr": false, "a.zip": false,
+		"a.cbz": true, "a.CBZ": true, "a.pdf": true, "a.PDF": true, "a.cb7": true, "a.CB7": true, "a.cbr": false, "a.zip": false,
 	} {
 		if IsComic(name) != want {
 			t.Errorf("%s: %v", name, !want)
@@ -41,7 +41,7 @@ func TestCBZAndPDFAreComics(t *testing.T) {
 // comic it reads, and a file that is no comic at all, are not.
 func TestUnreadComicFormats(t *testing.T) {
 	for name, want := range map[string]bool{
-		"a.cbr": true, "a.CB7": true, "a.epub": true, "a.cbz": false, "a.pdf": false, "a.txt": false, "a.jpg": false,
+		"a.cbr": true, "a.CB7": false, "a.epub": true, "a.cbz": false, "a.pdf": false, "a.txt": false, "a.jpg": false,
 	} {
 		if IsUnreadComic(name) != want {
 			t.Errorf("%s: %v", name, !want)

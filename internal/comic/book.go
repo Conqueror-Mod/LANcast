@@ -11,9 +11,9 @@ import (
 )
 
 /*
- * A Book is a comic opened for reading, whichever file it is: a .cbz, whose
- * pages are the archive's images, or a .pdf, whose pages are the one picture
- * each page shows (ADR 0102). Everything past this point — the page routes,
+ * A Book is a comic opened for reading, whichever file it is: a .cbz or a
+ * .cb7, whose pages are the archive's images, or a .pdf, whose pages are the
+ * one picture each page shows (ADR 0102). Everything past this point — the page routes,
  * the cover worker — asks for a page by its number and gets image bytes and
  * their type, and does not know which it had.
  */
@@ -35,8 +35,11 @@ func (e UnreadablePage) Error() string { return string(e) }
 
 // OpenBook opens the comic at path by its extension.
 func OpenBook(path string) (Book, error) {
-	if strings.EqualFold(filepath.Ext(path), ".pdf") {
+	switch strings.ToLower(filepath.Ext(path)) {
+	case ".pdf":
 		return openPDF(path)
+	case ".cb7":
+		return openCB7(path)
 	}
 	zr, err := Open(path)
 	if err != nil {
