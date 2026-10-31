@@ -282,17 +282,26 @@ From `%APPDATA%\LANcast\client\mpv.log` and the Windows audio endpoints:
 - **Audio goes to `SteelSeries Sonar - Media`**, a virtual mixer, because it is
   Windows' default device. mpv asked for 5.1, and Sonar accepted 7.1 at 96 kHz.
   What Sonar does with it next depends on Sonar's own output, not on LANcast.
-- **There is no active HDMI audio endpoint.** The real outputs are `SK80`
-  (USB, which Windows sees as 2-channel 44.1 kHz), Realtek speakers and an
-  Arctis headset. The Roku TV (display 3) has HDR but shows no audio device.
+- **The home theater is on the onboard Realtek analog line-out**, and Windows
+  has that endpoint set to **quadraphonic** (speaker mask `0x33`: front and
+  rear, no centre, no LFE). One cable in the green jack carries only front
+  left and right. Rear would come out of the black jack, and centre and sub
+  have no channels at all. `SK80` is the mic interface's USB device, not the
+  home theater.
+- **There's an unused `Realtek Digital Output`** (S/PDIF), and no active HDMI
+  audio endpoint. The Roku TV (display 3) has HDR but shows no audio device.
 
-This explains *"it usually doesn't use all speakers"* better than any LANcast
-setting would. If the home theater is the SK80, Windows is feeding it stereo
-over USB. Either way the path runs through Sonar, which is a mixer built for
-headsets. A USB audio device generally can't carry a TrueHD or DTS bitstream
-at all, so **PR 3 only helps once audio reaches the home theater over HDMI**
-(PC → receiver, or PC → TV → eARC). That's a wiring question, not code, and
-it comes before PR 3.
+That accounts for *"it usually doesn't use all speakers"*, and none of it is a
+LANcast setting. Getting 5.1 means one of:
+
+- three analog cables (green front, black rear, orange centre/sub) with the
+  endpoint set to 5.1, if the system has 5.1 direct inputs. That's PCM with
+  every LANcast control still working, and needs no code;
+- S/PDIF, which carries Dolby Digital and DTS 5.1 **only as a bitstream**
+  (PCM over S/PDIF is stereo). That makes PR 3 the fix, limited to `ac3`,
+  `eac3` (sent as AC-3) and DTS core. TrueHD and DTS-HD need HDMI.
+
+Which one applies depends on the system's inputs, so it's settled before PR 3.
 
 **Also for PR 3:** passthrough must name its output device, not follow
 Windows' default. Following the default would send a bitstream into Sonar, and
@@ -301,9 +310,9 @@ listed from `audio-device-list`), saved per device like the rest.
 
 ## Open questions
 
-1. **What is the SK80, and how is the home theater connected?** USB, optical,
-   or HDMI? If it can only take USB, surround from a PC means its own driver
-   (if it has a 5.1 mode) or a different cable. Bitstreaming is ruled out.
+1. **Which inputs does the home theater system have?** 5.1 analog (three
+   3.5 mm or six RCA), optical/coax, or HDMI? That decides whether PR 3 is the
+   fix or not needed at all.
 2. **HDR switch, a or b?** This plan recommends a (tell the person) first.
 3. **Settle default.** 2 s is a guess. The first evening's logs will say
    whether it's right for the TV in question.
