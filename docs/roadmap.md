@@ -19,27 +19,7 @@ behind: the Releases table stopped at v0.9.78, and three backlog entries still
 listed work that had shipped as open. The release-by-release record is the
 [Releases](#releases) table, and what remains is [What is left](#what-is-left).*
 
-**Built and unreleased on `main`** (the third unattended batch, 2026-10-28,
-each checked on a dev server, none yet as the installed service):
-- **No console windows** from the credits and faces workers (#965). A guard
-  test now fails any new `exec.Command` that skips `childproc.Hide`, and the
-  credits setting says what it drives.
-- **Media sent** on the dashboard and in `/api/metrics` (#966, ADR 0106
-  amended): bytes on the media routes only, shown in Mbit/s.
-- **RAW photos** (#967, [ADR 0107](adr/0107-a-raw-photo-shows-the-cameras-own-jpeg.md)):
-  shown from the camera's own embedded JPEG, and a RAW beside a JPEG of the
-  same name is skipped. Photos also left the ffprobe pass, which had been
-  overwriting their dimensions.
-- **Loudness levelling** (#968, [ADR 0108](adr/0108-music-is-levelled-by-its-own-replaygain.md),
-  schema 86): ReplayGain tags read at scan, applied by the player per device,
-  off by default. Each music library rereads its tags once at its next scan.
-- **`.cb7` comics** (#969, ADR 0101 amended), kept open between pages so a
-  solid archive's last page costs about 120 ms rather than 4 s.
-
-Schema 86 is one-way: a v0.9.98 executable will not open a database this has
-touched.
-
-v0.9.98 is the latest release. Since v0.9.78:
+**Nothing sits unreleased.** v0.9.99 is the latest release. Since v0.9.78:
 - **v0.9.79:** one program, `LANcast.exe`, with the tray always present
   ([ADR 0080](adr/0080-one-executable-two-roles.md)), and a scan can be cancelled.
 - **v0.9.80–v0.9.81:** collections continue the way shows do, an About tab,
@@ -69,6 +49,12 @@ v0.9.98 is the latest release. Since v0.9.78:
   ([ADR 0091](adr/0091-milkdrop-presets.md)), and visualizers that fit a phone.
 - **v0.9.94:** a film ends on what to watch next, and running as a service is
   a choice ([ADR 0092](adr/0092-the-library-moves-with-the-server.md)).
+- **v0.9.99:** loudness levelling from ReplayGain
+  ([ADR 0108](adr/0108-music-is-levelled-by-its-own-replaygain.md)), RAW
+  photos ([ADR 0107](adr/0107-a-raw-photo-shows-the-cameras-own-jpeg.md)),
+  `.cb7` comics, Media sent and a dashboard that moves while open, and Report
+  an issue as a form that sends
+  ([ADR 0109](adr/0109-a-report-goes-only-when-sent.md)).
 - **v0.9.98:** comics (CBZ and PDF), chapters and previews on the scrub bar,
   extras, pre-roll, two-factor sign-in, invite links, friends who need not be
   reachable, and the dashboard's history.
@@ -247,6 +233,7 @@ is watching that keeps running.
 
 | Version | Date | What shipped |
 |---|---|---|
+| **v0.9.99** | 2026-10-31 | **Music at one level, RAW photos, and a report that sends.** The third unattended batch and the bugs its test turned up, #965–#974. **Loudness levelling** ([ADR 0108](adr/0108-music-is-levelled-by-its-own-replaygain.md)): ReplayGain and Opus R128 tags read at scan into four columns, applied per device by the player, down only and capped by the peak, off by default; the music deck carries a gain per element so gapless joins and crossfades keep each track's level; revision 86 drops the grouping keys so each library rereads its tags once (9,945 tracks in 77 s as the service). **RAW photos** ([ADR 0107](adr/0107-a-raw-photo-shows-the-cameras-own-jpeg.md)), from the camera's own embedded JPEG; a RAW+JPEG pair shows once, and photos left the ffprobe pass, which had been overwriting their dimensions. **`.cb7` comics** (ADR 0101 amended): a solid archive opened per page served page 43 of a real issue in 4.4 s, so archives stay open on a two-book shelf (116 ms), opened with `FILE_SHARE_DELETE` so a held comic can still be deleted. **Dashboard:** Media sent (ADR 0106 amended), and a live reading of the minute in progress polled every 5 s, after the charts looked frozen on the service. **Report an issue** ([ADR 0109](adr/0109-a-report-goes-only-when-sent.md)): an in-app form the server posts to a Discord webhook stamped from an Actions secret, never committed; the log for administrators only. **Fixes:** `childproc.Hide` on the credits and faces workers, with a guard test; an edited comic, photo, track or game no longer lands in Review. Checked as the service: the migration, the tag pass, levelling by ear, Review, the form, the live dashboard. **Not seen working:** a worker starting a process (none had work), real RAW and `.cb7` files, a real send to Discord before the release. Schema 85 → 86, one-way |
 | **v0.9.98** | 2026-10-28 | **Comics, friends who cannot be reached, and a picture over the scrub bar.** Two unattended batches and the lighter join, #949–#962. **Comics** ([ADR 0101](adr/0101-a-comic-is-read-out-of-its-archive.md), [ADR 0102](adr/0102-a-pdf-comic-is-its-pictures.md)): a `comics` library of `.cbz` and `.pdf`, a reader that keeps your place in its own table, the first page as the cover; a PDF page is the picture it shows, never rendered, byte-identical to pypdf on five real issues. **Watching:** chapters on the scrub bar (#949), extras on the detail page (ADR 0098), pre-roll (ADR 0099), and scrub-bar previews ([ADR 0105](adr/0105-a-preview-is-a-keyframe-every-ten-seconds.md)), a keyframe every 10 s off by default; the first service pass looked broken because the film tried had 2,136 items ahead of it, so a film you open now goes first (#962). **Friends:** a server pushes its roster ([ADR 0103](adr/0103-a-friend-who-cannot-be-reached-says-who-is-there.md)), so only the host must be reachable, and invite links make a member account once ([ADR 0104](adr/0104-a-friend-is-invited-by-a-link-that-works-once.md)); the dev server found the join page told a brand-new friend they were `already signed in`. **Two-factor** codes (ADR 0100). **Dashboard history** ([ADR 0106](adr/0106-the-dashboard-remembers-two-days.md)), 48 h of minute readings, no bandwidth. Checked as the service: chapters, pre-roll, two-factor, comics, PDF comics, previews. **Not seen working:** extras in the desktop window, an invite link on a phone, the roster push across a real NAT. Schema 80 → 85, one-way |
 | **v0.9.97** | 2026-10-26 | **What a restore restored, and nobody else's cache.** Found testing v0.9.96 as the service: after a restore the rail showed a library under the name the restore had taken away. Two faults (#947). A restart quick enough that no poll saw the server down left the restore screen waiting for its 90 s fallback; the restore ends every session, so the server answering with this one gone now counts as restarted. Meanwhile the app, finding itself signed out, put the sign-in page up over its whole cache and showed it after sign-in. That was wider than restore: a password change, "sign out every other device" or expiry left the previous person's lists for whoever signed in next. Any session that ends now forgets the cache as signing out did. No schema change. |
 | **v0.9.96** | 2026-10-26 | **Restore from Settings, webhooks, metrics, and a backup before every update.** Built in one unattended day (#940–#944) and tested by the owner as the installed service before release. **Restore from Settings (#942):** stages the backup and the server restarts itself, after backing up what it had; the next start applies it before anything opens the database, once, and a failure is reported on the Backup page. **A backup before every migration (#940):** `…-schema<N>-premigrate.db`, newest three kept apart from the schedule (ADR 0058 amended twice). **Webhooks (#944, [ADR 0097](adr/0097-a-webhook-goes-where-the-owner-points-it.md)):** admin-only, none by default, HMAC-signed, three tries, no redirects; playback only for accounts that opted in, and only the work's title. **Metrics (#943, [ADR 0096](adr/0096-metrics-have-their-own-key.md)):** Prometheus text at `/api/metrics`, for an admin or a metrics token that opens that route only. **Trusted proxies (#941, [ADR 0095](adr/0095-a-proxy-is-believed-by-name.md)):** `X-Forwarded-For` from named proxies only, right to left; behind a same-machine proxy the sign-in account picker had been public. **Fix:** the relaunch helper dropped `serve`, so a non-service server finishing an update came back as the window (since v0.9.79). Schema 79 → 80, one way. |
