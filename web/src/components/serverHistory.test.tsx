@@ -19,6 +19,7 @@ let host: HTMLDivElement;
 let root: Root;
 let asked: string[];
 let samples: unknown[];
+let live: unknown;
 
 const now = Math.floor(Date.now() / 1000);
 const sample = (minAgo: number, extra: Record<string, number> = {}) => ({
@@ -32,11 +33,12 @@ beforeEach(() => {
   root = createRoot(host);
   asked = [];
   samples = [sample(30), sample(20, { watching: 3 }), sample(10, { encoding: 2, copying: 0 })];
+  live = undefined;
   vi.stubGlobal(
     "fetch",
     vi.fn(async (url: string) => {
       asked.push(url);
-      return new Response(JSON.stringify({ every_seconds: 60, samples }), {
+      return new Response(JSON.stringify({ every_seconds: 60, samples, now: live }), {
         headers: { "Content-Type": "application/json" },
       });
     }),
@@ -86,6 +88,14 @@ describe("server activity", () => {
     expect(chart("Memory, this server").querySelector(".history__now")?.textContent).toBe("180 MB");
     // 75 MB in a minute is 10 Mbit/s on average.
     expect(chart("Media sent").querySelector(".history__now")?.textContent).toBe("10 Mbit/s");
+  });
+
+  it("shows the minute in progress, not only the last whole minute", async () => {
+    live = sample(0, { watching: 5, media_bytes: 150_000_000 });
+    await mount();
+    expect(chart("People watching").querySelector(".history__now")?.textContent).toBe("5");
+    // 150 MB a minute is 20 Mbit/s.
+    expect(chart("Media sent").querySelector(".history__now")?.textContent).toBe("20 Mbit/s");
   });
 
   it("says CPU cannot be read here rather than drawing zeros", async () => {

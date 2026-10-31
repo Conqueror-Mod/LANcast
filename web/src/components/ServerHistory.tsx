@@ -62,6 +62,8 @@ export function ServerHistory() {
   const [hours, setHours] = useState<(typeof RANGES)[number]>(6);
   const { data, isError } = useDashboardHistory(hours);
   const samples = data?.samples ?? [];
+  // The minute in progress, read live, so each chart moves while it is open.
+  const live = data?.now;
   const to = Math.floor(Date.now() / 1000);
   const from = to - hours * 3600;
   const label = hours > 24 ? dayClock : clock;
@@ -86,7 +88,7 @@ export function ServerHistory() {
       </div>
       {isError ? (
         <p className="set-row__sub">The server's history could not be read.</p>
-      ) : samples.length === 0 ? (
+      ) : samples.length === 0 && !live ? (
         <p className="set-row__sub">
           Nothing recorded yet. The server takes its first reading a minute after it starts, then one a
           minute, and keeps two days of them.
@@ -95,7 +97,7 @@ export function ServerHistory() {
         <>
           <div className="history__grid">
             {MEASURES.map((m) => (
-              <HistoryChart key={m.key} measure={m} samples={samples} from={from} to={to} label={label} />
+              <HistoryChart key={m.key} measure={m} samples={samples} live={live} from={from} to={to} label={label} />
             ))}
           </div>
           <p className="set-row__sub">
@@ -115,12 +117,14 @@ const H = 90;
 function HistoryChart({
   measure,
   samples,
+  live,
   from,
   to,
   label,
 }: {
   measure: Measure;
   samples: HistorySample[];
+  live?: HistorySample;
   from: number;
   to: number;
   label: (t: number) => string;
@@ -133,6 +137,15 @@ function HistoryChart({
     if (v !== null) {
       points.push({ t: s.at, v });
       byT.set(s.at, s);
+    }
+  }
+  // The line ends at now, not at the last whole minute.
+  const lastAt = samples.length ? samples[samples.length - 1].at : 0;
+  if (live && live.at > lastAt) {
+    const v = measure.value(live);
+    if (v !== null) {
+      points.push({ t: live.at, v });
+      byT.set(live.at, live);
     }
   }
   const yMax = niceMax(points.map((p) => p.v), measure.fixedMax);

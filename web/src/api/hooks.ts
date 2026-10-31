@@ -386,8 +386,13 @@ export function useDashboardHistory(hours: number) {
   return useQuery({
     queryKey: ["dashboard-history", hours],
     queryFn: ({ signal }) =>
-      apiGet<{ every_seconds: number; samples: HistorySample[] }>(`/api/dashboard/history?hours=${hours}`, signal),
-    refetchInterval: 60_000,
+      apiGet<{ every_seconds: number; samples: HistorySample[]; now?: HistorySample }>(
+        `/api/dashboard/history?hours=${hours}`,
+        signal,
+      ),
+    // Every five seconds, for the minute in progress (`now`): at sixty the
+    // charts sat still for a minute or two and looked frozen until a reload.
+    refetchInterval: 5_000,
   });
 }
 

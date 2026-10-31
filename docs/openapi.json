@@ -135,7 +135,8 @@
             "type": "object", "required": ["every_seconds", "samples"],
             "properties": {
               "every_seconds": { "type": "integer" },
-              "samples": { "type": "array", "items": { "$ref": "#/components/schemas/HistorySample" } }
+              "samples": { "type": "array", "items": { "$ref": "#/components/schemas/HistorySample" } },
+              "now": { "$ref": "#/components/schemas/HistorySample", "description": "The minute in progress, read at the moment of the request: watching, conversions, memory and CPU as they are now; requests, errors and media sent so far this minute, scaled to a whole minute (the last whole minute's figures for the first ten seconds). Absent until the server has recorded once. Not stored." }
             }
           } } } },
           "400": { "description": "`hours` outside 1 to 48.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorEnvelope" } } } },

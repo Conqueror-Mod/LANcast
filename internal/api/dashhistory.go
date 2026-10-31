@@ -33,6 +33,7 @@ func (s *Server) RecordHistory(ctx context.Context, dataDir string) {
 	cpu.Percent() // the first reading only sets the baseline
 	lastReq, lastErr := s.counters.requests.Load(), s.counters.serverErrors.Load()
 	lastMedia := s.counters.mediaBytes.Load()
+	s.markHistory(time.Now(), lastReq, lastErr, lastMedia)
 	tick := time.NewTicker(history.Every)
 	defer tick.Stop()
 	lastSave := time.Now()
@@ -48,6 +49,7 @@ func (s *Server) RecordHistory(ctx context.Context, dataDir string) {
 			smp.MediaBytes = media - lastMedia
 			s.history.Add(smp)
 			lastReq, lastErr, lastMedia = req, errs, media
+			s.markHistory(now, req, errs, media)
 			if now.Sub(lastSave) >= historySaveEvery {
 				if err := s.history.Save(path); err != nil {
 					s.log.Warn("could not save the dashboard history", "error", err)
@@ -56,6 +58,60 @@ func (s *Server) RecordHistory(ctx context.Context, dataDir string) {
 			}
 		}
 	}
+}
+
+// histMark is the counters where the last recorded minute ended.
+type histMark struct {
+	at               time.Time
+	req, errs, media int64
+}
+
+func (s *Server) markHistory(at time.Time, req, errs, media int64) {
+	s.histMu.Lock()
+	s.histLast = histMark{at: at, req: req, errs: errs, media: media}
+	s.histMu.Unlock()
+}
+
+// liveMinimum is how much of a minute must have passed before its counts are
+// scaled to a per-minute rate; before that, three seconds of requests times
+// twenty is noise, and the last whole minute's figures stand in.
+const liveMinimum = 10 * time.Second
+
+/*
+ * liveSample is the minute in progress, so the dashboard moves while it is
+ * watched rather than once a minute (a real complaint: it looked frozen until
+ * the page was reloaded).
+ *
+ * What is a state is read now: people watching, conversions, memory, and the
+ * CPU since the last live reading. What is a count over the minute (requests,
+ * errors, media sent) is what has accumulated since the last recorded minute,
+ * scaled to a whole minute, so it is in the same units as every sample beside
+ * it. Nil until the recorder has run once.
+ */
+func (s *Server) liveSample(now time.Time) *history.Sample {
+	s.histMu.Lock()
+	last := s.histLast
+	cpu := s.liveCPU.Percent()
+	s.histMu.Unlock()
+	if last.at.IsZero() {
+		return nil
+	}
+	req, errs := s.counters.requests.Load(), s.counters.serverErrors.Load()
+	media := s.counters.mediaBytes.Load()
+	el := now.Sub(last.at)
+	var smp history.Sample
+	if el >= liveMinimum {
+		scale := float64(time.Minute) / float64(el)
+		smp = s.sampleNow(now, cpu, int64(float64(req-last.req)*scale+0.5), int64(float64(errs-last.errs)*scale+0.5))
+		smp.MediaBytes = int64(float64(media-last.media)*scale + 0.5)
+	} else {
+		smp = s.sampleNow(now, cpu, 0, 0)
+		if prev := s.history.Since(last.at.Add(-time.Second)); len(prev) > 0 {
+			p := prev[len(prev)-1]
+			smp.Requests, smp.Errors, smp.MediaBytes = p.Requests, p.Errors, p.MediaBytes
+		}
+	}
+	return &smp
 }
 
 // sampleNow is one minute's sample, read from what the server keeps.
@@ -99,9 +155,14 @@ func (s *Server) dashboardHistory(w http.ResponseWriter, r *http.Request) {
 		}
 		hours = n
 	}
-	samples := s.history.Since(time.Now().Add(-time.Duration(hours) * time.Hour))
-	writeJSON(w, http.StatusOK, map[string]any{
+	now := time.Now()
+	samples := s.history.Since(now.Add(-time.Duration(hours) * time.Hour))
+	out := map[string]any{
 		"every_seconds": int(history.Every / time.Second),
 		"samples":       samples,
-	})
+	}
+	if live := s.liveSample(now); live != nil {
+		out["now"] = live
+	}
+	writeJSON(w, http.StatusOK, out)
 }
