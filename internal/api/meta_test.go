@@ -8,8 +8,10 @@ import (
 	"image/jpeg"
 	"io"
 	"net/http"
+	"path/filepath"
 	"testing"
 
+	"lancast/internal/comic/comictest"
 	"lancast/internal/meta"
 	"lancast/internal/store"
 )
@@ -580,5 +582,42 @@ func TestRatingByHandLeavesTheUnratedList(t *testing.T) {
 	}
 	if n := unrated(); n != 0 {
 		t.Errorf("unrated after rating = %d, want 0", n)
+	}
+}
+
+// An edited comic is not reviewable. The edit stamps it as looked at while it
+// stays 'unmatched', because no provider can match a comic, and it reached the
+// queue with no way out (2026-10-31: locking a comic's content rating did it).
+func TestAnEditedComicIsNotInReview(t *testing.T) {
+	h := newHarness(t)
+	ctx := context.Background()
+	dir := t.TempDir()
+	lib, err := h.st.CreateLibrary(ctx, "Comics", "comics", dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(dir, "Saga 001.cbz")
+	comictest.Write(t, path, 2)
+	comic := upsertComic(t, h, lib.ID, path)
+	film := h.addFile(t, "film.mkv", make([]byte, 16))
+
+	r := "PG"
+	for _, id := range []int64{comic, film} {
+		if err := h.st.UpdateItemMetadata(ctx, id, store.ItemMetadata{ContentRating: &r}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	var body struct {
+		Total int          `json:"total"`
+		Items []store.Item `json:"items"`
+	}
+	decode(t, h.do(t, "GET", "/api/review", nil), &body)
+	if body.Total != 1 || body.Items[0].ID != film {
+		t.Fatalf("review = %+v, want only the unmatched film", body.Items)
+	}
+	// Nor is it offered to re-parsing, whose guesses are about video names.
+	targets, err := h.st.ReparseTargets(ctx, lib.ID, true)
+	if err != nil || len(targets) != 0 {
+		t.Fatalf("re-parse targets in a comics library: %v %v", targets, err)
 	}
 }
