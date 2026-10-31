@@ -52,28 +52,71 @@ once you turn it on) — never a relay you rent.
 
 ## What it does
 
-**Libraries.** Movies, TV shows, music, and pictures, all on one media table
-with no per-type schema ([ADR 0002](docs/adr/0002-one-wide-media-item-table.md),
+**Libraries.** Movies, TV shows, music, pictures, comics and games, all on one
+media table with no per-type schema
+([ADR 0002](docs/adr/0002-one-wide-media-item-table.md),
 [ADR 0024](docs/adr/0024-music-libraries.md),
 [ADR 0028](docs/adr/0028-pictures-library.md)). A library can span several
-roots. Scanning marks missing files, never deletes them.
+roots. Scanning marks missing files, never deletes them, and an unchanged
+library rescans in seconds.
 
 **Metadata that stays corrected.** TMDB and Kodi-style `.nfo` sidecars behind
 one provider contract, with confidence scoring, a review queue, and a match
 score you can read. Edit a field and it locks: no refresh, rescan, or merge
 touches it again ([ADR 0008](docs/adr/0008-field-level-locking.md)).
+Collections fill themselves from the provider and show the films you don't
+have yet ([ADR 0093](docs/adr/0093-a-collection-knows-its-missing-films.md)).
 
 **Playback anywhere.** ffprobe decides direct play, remux, or transcode *and
 states its reason* ([ADR 0012](docs/adr/0012-probe-before-transcode.md)).
 Hardware encoding (NVENC, QSV, AMF, VideoToolbox) is chosen by a real test
 encode rather than a capability list. Clients declare what they decode, and the
 server widens the profile rather than re-encoding what the machine could have
-played.
+played. The desktop window plays through libmpv, so most files never need
+converting at all ([ADR 0067](docs/adr/0067-the-desktop-client-plays-through-libmpv.md)).
 
-**Music and pictures, properly.** Album view with a numbered track list, an
-audio mode in the player, and a docked mini-player that survives leaving the
-page. Embedded tags are the authority for a track, because the file carries the
-answer. Pictures added the case nobody predicted: the file *is* its own artwork.
+**Watching, the details.** Intros and credits are found by listening and
+looking, then skipped for you
+([ADR 0055](docs/adr/0055-an-intro-is-what-every-episode-shares.md),
+[ADR 0083](docs/adr/0083-an-intro-skips-itself.md)); an Up next card and a
+suggestion after the film. Chapters and a picture over the scrub bar
+([ADR 0105](docs/adr/0105-a-preview-is-a-keyframe-every-ten-seconds.md)),
+extras found beside the film
+([ADR 0098](docs/adr/0098-extras-are-found-not-imported.md)), an optional
+pre-roll clip ([ADR 0099](docs/adr/0099-a-preroll-plays-before-a-film-from-the-start.md)),
+a watchlist, optimized copies for weak devices, and DLNA for the television
+that only speaks that ([ADR 0086](docs/adr/0086-a-tv-browses-as-somebody.md)).
+
+**Music, properly.** Album view with a numbered track list, gapless playback
+and crossfades between albums, a docked mini-player that survives leaving the
+page, synced lyrics, night mode and an equaliser, visualizers including
+MilkDrop presets ([ADR 0091](docs/adr/0091-milkdrop-presets.md)), and loudness
+evened out from the ReplayGain your tagger wrote
+([ADR 0108](docs/adr/0108-music-is-levelled-by-its-own-replaygain.md)).
+Embedded tags are the authority for a track, because the file carries the
+answer.
+
+**Pictures.** A timeline by capture date, people found by face
+([ADR 0052](docs/adr/0052-face-grouping-runs-in-a-native-sidecar.md)), search
+by what is in a photo
+([ADR 0060](docs/adr/0060-semantic-photo-search-is-a-second-model-in-the-sidecar.md)),
+places from GPS, off by default
+([ADR 0078](docs/adr/0078-a-place-is-the-town-a-photo-was-taken-in.md)),
+duplicates and near copies, and camera RAW files shown from the camera's own
+picture ([ADR 0107](docs/adr/0107-a-raw-photo-shows-the-cameras-own-jpeg.md)).
+
+**Comics.** `.cbz`, `.cb7` and `.pdf`, read a page at a time, with your place
+kept ([ADR 0101](docs/adr/0101-a-comic-is-read-out-of-its-archive.md),
+[ADR 0102](docs/adr/0102-a-pdf-comic-is-its-pictures.md)).
+
+**Games.** Retro games identified by hash and played in the desktop window or a
+browser, with saves and save states kept by the server
+([ADR 0073](docs/adr/0073-a-retro-game-is-a-file-the-server-owns.md),
+[ADR 0077](docs/adr/0077-a-browser-can-play-a-game.md)), achievements from your
+own RetroAchievements account
+([ADR 0090](docs/adr/0090-retroachievements-are-yours-to-connect.md)), and the
+PC games installed on the machine, launched from the same hub
+([ADR 0066](docs/adr/0066-a-game-belongs-to-the-machine-it-is-installed-on.md)).
 
 **Playlists.** `.m3u` files on disk seed playlists and are not the playlists —
 once a human edits the membership, no rescan may undo it
@@ -92,12 +135,18 @@ by default and shared only by an explicit opt-in
 ([ADR 0035](docs/adr/0035-who-may-see-whose-viewing.md)). An administrator can
 keep a library from a member and set the content rating a member may not exceed
 ([ADR 0084](docs/adr/0084-a-library-can-be-kept-from-an-account.md)), and
-everybody can see and sign out the devices signed in as them.
+everybody can see and sign out the devices signed in as them. A friend joins
+through a link that works once
+([ADR 0104](docs/adr/0104-a-friend-is-invited-by-a-link-that-works-once.md)),
+and anyone can add passkeys or a two-factor code
+([ADR 0100](docs/adr/0100-a-code-after-the-password-for-whoever-wants-one.md)).
 
 **Watch Together.** Synchronised rooms on one server, and paired servers that
 can see each other's presence and admit remote guests under a host-set cap
 ([ADR 0044](docs/adr/0044-server-identity-and-peering.md) through
-[ADR 0047](docs/adr/0047-remote-streaming-is-capped-by-the-host.md)).
+[ADR 0047](docs/adr/0047-remote-streaming-is-capped-by-the-host.md)). Only the host
+needs to be reachable: a friend's server says who is there by itself
+([ADR 0103](docs/adr/0103-a-friend-who-cannot-be-reached-says-who-is-there.md)).
 
 **Plugins.** Signed `.lcplugin` bundles running as WebAssembly under wazero,
 deny-by-default capabilities, and a two-step install that grants them
@@ -105,6 +154,16 @@ explicitly ([ADR 0020](docs/adr/0020-plugin-isolation-boundary.md),
 [ADR 0021](docs/adr/0021-plugin-distribution-and-trust.md)). Writing one is
 [docs/writing-a-plugin.md](docs/writing-a-plugin.md), which is honest about the
 two things a third party still cannot do.
+
+**Running it.** A dashboard of the last two days
+([ADR 0106](docs/adr/0106-the-dashboard-remembers-two-days.md)), metrics for
+Prometheus ([ADR 0096](docs/adr/0096-metrics-have-their-own-key.md)),
+webhooks ([ADR 0097](docs/adr/0097-a-webhook-goes-where-the-owner-points-it.md)),
+scheduled backups with restore from Settings
+([ADR 0058](docs/adr/0058-a-backup-is-the-database.md)), live updates to every
+open screen ([ADR 0079](docs/adr/0079-the-server-says-when-something-changed.md)),
+and **Report an issue**, a form whose report leaves the server only when you
+press Send ([ADR 0109](docs/adr/0109-a-report-goes-only-when-sent.md)).
 
 **Its own window.** `LANcast` opens a WebView2 window rather than handing
 a URL to a browser — which is what lets it pin the server's certificate instead
