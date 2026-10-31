@@ -19,7 +19,27 @@ behind: the Releases table stopped at v0.9.78, and three backlog entries still
 listed work that had shipped as open. The release-by-release record is the
 [Releases](#releases) table, and what remains is [What is left](#what-is-left).*
 
-**Nothing sits unreleased.** v0.9.98 is the latest release. Since v0.9.78:
+**Built and unreleased on `main`** (the third unattended batch, 2026-10-28,
+each checked on a dev server, none yet as the installed service):
+- **No console windows** from the credits and faces workers (#965). A guard
+  test now fails any new `exec.Command` that skips `childproc.Hide`, and the
+  credits setting says what it drives.
+- **Media sent** on the dashboard and in `/api/metrics` (#966, ADR 0106
+  amended): bytes on the media routes only, shown in Mbit/s.
+- **RAW photos** (#967, [ADR 0107](adr/0107-a-raw-photo-shows-the-cameras-own-jpeg.md)):
+  shown from the camera's own embedded JPEG, and a RAW beside a JPEG of the
+  same name is skipped. Photos also left the ffprobe pass, which had been
+  overwriting their dimensions.
+- **Loudness levelling** (#968, [ADR 0108](adr/0108-music-is-levelled-by-its-own-replaygain.md),
+  schema 86): ReplayGain tags read at scan, applied by the player per device,
+  off by default. Each music library rereads its tags once at its next scan.
+- **`.cb7` comics** (#969, ADR 0101 amended), kept open between pages so a
+  solid archive's last page costs about 120 ms rather than 4 s.
+
+Schema 86 is one-way: a v0.9.98 executable will not open a database this has
+touched.
+
+v0.9.98 is the latest release. Since v0.9.78:
 - **v0.9.79:** one program, `LANcast.exe`, with the tray always present
   ([ADR 0080](adr/0080-one-executable-two-roles.md)), and a scan can be cancelled.
 - **v0.9.80–v0.9.81:** collections continue the way shows do, an About tab,
@@ -1065,7 +1085,7 @@ group is not priority.
   bursts sit as close as re-saves. Together with the capture time they selected
   31 extra copies on a real library, none of them a different picture. They are
   shown apart from exact duplicates, with the largest version marked. **Bursts**
-  (picking the best of a run) and **RAW** are unbuilt.
+  (picking the best of a run) are unbuilt. **RAW is built** (see above).
 
   **Date-grouped browsing is built** — a Timeline view on a picture library,
   grouped by EXIF capture time rather than by folder, with each month fetched
