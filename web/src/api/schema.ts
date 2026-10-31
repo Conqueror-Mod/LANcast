@@ -9883,6 +9883,8 @@ export interface operations {
                     "application/json": {
                         every_seconds: number;
                         samples: components["schemas"]["HistorySample"][];
+                        /** @description The minute in progress, read at the moment of the request: watching, conversions, memory and CPU as they are now; requests, errors and media sent so far this minute, scaled to a whole minute (the last whole minute's figures for the first ten seconds). Absent until the server has recorded once. Not stored. */
+                        now?: components["schemas"]["HistorySample"];
                     };
                 };
             };

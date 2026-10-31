@@ -358,6 +358,12 @@ type Server struct {
 	// history is the dashboard's minute-by-minute record (ADR 0106), filled
 	// by RecordHistory; empty until it runs.
 	history *history.Ring
+	// histLast is where the last recorded minute ended, so the minute in
+	// progress can be read live (dashhistory.go); liveCPU is that reading's
+	// own CPU baseline, apart from the recorder's.
+	histMu   sync.Mutex
+	histLast histMark
+	liveCPU  history.CPU
 }
 
 func New(d Deps) *Server {

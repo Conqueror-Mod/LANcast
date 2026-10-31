@@ -54,3 +54,41 @@ func TestASampleReadsTheServerAsItIs(t *testing.T) {
 		t.Fatalf("%+v", s)
 	}
 }
+
+// The minute in progress is read live, and its counts are scaled to a whole
+// minute so they sit in the same units as the samples beside them.
+func TestTheMinuteInProgressIsLive(t *testing.T) {
+	h := newHarness(t)
+	s := h.srvAPI
+	if s.liveSample(time.Now()) != nil {
+		t.Fatal("a live reading before the recorder ran")
+	}
+	start := time.Now()
+	s.history.Add(history.Sample{At: start.Unix(), Requests: 40, MediaBytes: 9_000})
+	s.markHistory(start, 100, 3, 1_000_000)
+	s.counters.requests.Store(130)
+	s.counters.serverErrors.Store(3)
+	s.counters.mediaBytes.Store(1_000_000 + 7_500_000)
+	s.presence.WatchingHere("u1", "Blade Runner")
+
+	// Thirty seconds in: 30 requests and 7.5 MB, which is 60 and 15 MB a minute.
+	live := s.liveSample(start.Add(30 * time.Second))
+	if live == nil || live.Requests != 60 || live.Errors != 0 || live.MediaBytes != 15_000_000 || live.Watching != 1 {
+		t.Fatalf("thirty seconds in: %+v", live)
+	}
+	// Three seconds in, scaling is noise: the last whole minute stands in,
+	// and the states are still read now.
+	live = s.liveSample(start.Add(3 * time.Second))
+	if live.Requests != 40 || live.MediaBytes != 9_000 || live.Watching != 1 {
+		t.Fatalf("three seconds in: %+v", live)
+	}
+
+	// And the endpoint carries it.
+	var got struct {
+		Now *history.Sample `json:"now"`
+	}
+	decode(t, h.authed(t, "GET", "/api/dashboard/history", nil), &got)
+	if got.Now == nil || got.Now.Watching != 1 {
+		t.Fatalf("now: %+v", got.Now)
+	}
+}

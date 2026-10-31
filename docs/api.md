@@ -5836,6 +5836,14 @@ A sample every minute, oldest first, for the last `hours`: 1 to 48, default 6. `
 - requests and unexpected server errors during the minute;
 - media sent during the minute (`media_bytes`): streams, conversions, downloads, extras, pre-roll, live channels, and for and through paired servers. `0` in history saved before it was counted.
 
+The answer also carries `now`, the minute in progress, read at the moment of
+the request so the dashboard moves while it is open. Watching, conversions,
+memory and CPU are read as they are. Requests, errors and media sent are
+what has accumulated this minute, scaled to a whole minute, so they share
+the samples' units; in the first ten seconds of a minute, the last whole
+minute's figures stand in. `now` is never stored, and is absent until the
+server has recorded once. The dashboard asks every five seconds.
+
 It is read from what the server already keeps for `/api/metrics`. It is kept 48 hours, and saved beside the database (`history.json`) every five minutes and at shutdown, so a restart keeps it. **Media sent is counted on the media routes only**, never by wrapping every response: the event stream needs its `Flush`, and it is not a media route. Pages, artwork and JSON are not counted. The same total is `lancast_http_media_bytes_total` on `/api/metrics`.
 ## Metrics
 
