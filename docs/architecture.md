@@ -230,6 +230,117 @@ trust domains.
 log file a service writes because it has no console, the local crash record
 (nothing is sent anywhere), and the icon compiled into the executable.
 
+### Watching, beyond the stream
+
+**`internal/marker`** — finds where a film or an episode stops being itself:
+where the credits begin and where a season's shared intro ends
+([ADR 0054](adr/0054-a-marker-says-where-the-film-stops.md),
+[ADR 0055](adr/0055-an-intro-is-what-every-episode-shares.md)). The decisions
+are pure and tested against fixtures; the worker runs ffmpeg.
+
+**`internal/preview`** — the frames over the scrub bar: a picture every ten
+seconds, tiled into JPEG sheets, made once per file in the background
+([ADR 0105](adr/0105-a-preview-is-a-keyframe-every-ten-seconds.md)).
+
+**`internal/optimize`** — the rules of optimized copies, as pure functions:
+what a copy is, when playback prefers it, how big it will be, and where it may
+live ([ADR 0087](adr/0087-an-optimized-copy-is-converted-once.md)).
+
+**`internal/rating`** — national certificates placed on one ladder of ages, so a
+per-account ceiling can compare a BBFC 15 with a TV-14.
+
+**`internal/mpv`** — libmpv driven through syscalls, the desktop window's own
+player ([ADR 0067](adr/0067-the-desktop-client-plays-through-libmpv.md)), split
+like `probe` into what the player is told and how its events are read.
+
+**`internal/dlna`** — a DLNA/UPnP media server for televisions, browsing as a
+chosen account ([ADR 0086](adr/0086-a-tv-browses-as-somebody.md)). On Windows it
+binds the LAN address, not the wildcard, or SSDP hears nothing.
+
+### Music, pictures, comics and games
+
+**`internal/lyrics`** — words for a track from the disk they are already on: an
+`.lrc` sidecar or the embedded tag. No provider, no network.
+
+**`internal/milkdrop`** — accepts MilkDrop presets for the Now Playing
+visualizer, checks them, and keeps them under the data directory
+([ADR 0091](adr/0091-milkdrop-presets.md)).
+
+**`internal/faces`** / **`internal/faceinstall`** — face grouping and photo
+search, run in the `lancast-faces` sidecar
+([ADR 0052](adr/0052-face-grouping-runs-in-a-native-sidecar.md),
+[ADR 0060](adr/0060-semantic-photo-search-is-a-second-model-in-the-sidecar.md)),
+and the on-request download of its models and runtime, which are not bundled.
+
+**`internal/geo`** — names the town nearest a photo's GPS from a gazetteer built
+into the binary ([ADR 0078](adr/0078-a-place-is-the-town-a-photo-was-taken-in.md)).
+
+**`internal/comic`** — reads comics: a `.cbz` or `.cb7` archive's page images,
+or a `.pdf` whose pages are the one picture each shows
+([ADR 0101](adr/0101-a-comic-is-read-out-of-its-archive.md),
+[ADR 0102](adr/0102-a-pdf-comic-is-its-pictures.md)). A `.cb7` stays open
+between pages, because a solid archive's last page otherwise costs every page
+before it.
+
+**`internal/retro`** — retro games
+([ADR 0073](adr/0073-a-retro-game-is-a-file-the-server-owns.md)): `romhash` and
+`retrodb` identify a dump against pinned DAT files, `identify` is the worker,
+`saves` keeps the server's copies, `libretro` and `host` run a core in the
+desktop window, `webcores` in a browser
+([ADR 0077](adr/0077-a-browser-can-play-a-game.md)), `remote` hands files and
+saves out by ticket, and `ra` is RetroAchievements
+([ADR 0090](adr/0090-retroachievements-are-yours-to-connect.md)).
+
+**`internal/games`** — what the PC game launchers have installed on *this*
+machine, read locally ([ADR 0066](adr/0066-a-game-belongs-to-the-machine-it-is-installed-on.md)).
+
+### Running it, and keeping it safe
+
+**`internal/backup`** — the folder backups live in: names, which ones this
+build can restore, and the containment rule that stops a name in a URL becoming
+a path. The snapshot itself is `store`'s
+([ADR 0058](adr/0058-a-backup-is-the-database.md)).
+
+**`internal/tasks`** — the board behind Status › Scheduled tasks: every
+background job, what sets it off, when it last ran, and a way to run it now.
+
+**`internal/history`** — the dashboard's minute-by-minute record, a ring kept 48
+hours and saved beside the database
+([ADR 0106](adr/0106-the-dashboard-remembers-two-days.md)).
+
+**`internal/events`** — tells open windows that something changed. It carries
+names, never data: a topic means "ask again"
+([ADR 0079](adr/0079-the-server-says-when-something-changed.md)).
+
+**`internal/webhook`** — delivers events to URLs an administrator set, signed
+with each webhook's secret; nothing without one
+([ADR 0097](adr/0097-a-webhook-goes-where-the-owner-points-it.md)).
+
+**`internal/report`** — Report an issue: posts a report only when Send is
+pressed, to the one webhook a release build carries
+([ADR 0109](adr/0109-a-report-goes-only-when-sent.md)).
+
+**`internal/servermode`** — moves a library between the service's folder and the
+person's own, which is what switching between a service and an app actually is
+([ADR 0092](adr/0092-the-library-moves-with-the-server.md)).
+
+**`internal/contain`** — is this path inside that folder, with links followed.
+Every handler that turns a row into a path asks it
+([ADR 0094](adr/0094-containment-follows-links.md)).
+
+**`internal/netguard`** — an HTTP client that will not reach the machine it runs
+on or the network around it: what artwork downloads and plugins fetch through,
+since both reach for URLs a provider or a plugin chose.
+
+**`internal/secret`** — seals small secrets for the database with AES-256-GCM
+under a key kept outside it.
+
+**`internal/guestticket`** / **`internal/knownserver`** — the short-lived
+credential that admits somebody from a paired server
+([ADR 0046](adr/0046-remote-guests.md)), and the desktop client's record of
+which servers it trusts, and by which key
+([ADR 0070](adr/0070-the-desktop-client-can-trust-a-server-it-did-not-install.md)).
+
 ## Request lifecycle
 
 1. `net/http` matches the method-and-pattern route.
