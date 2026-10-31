@@ -301,7 +301,14 @@ LANcast setting. Getting 5.1 means one of:
   (PCM over S/PDIF is stereo). That makes PR 3 the fix, limited to `ac3`,
   `eac3` (sent as AC-3) and DTS core. TrueHD and DTS-HD need HDMI.
 
-Which one applies depends on the system's inputs, so it's settled before PR 3.
+Which one applies depends on the system's inputs. **Answered: the system is a
+GPX HT219B**, a 5.1 DVD home-theater-in-a-box. Going by its manual, the only
+way in from outside is one stereo "Auxiliary Input". The coaxial jack is a
+digital *output*, and there are no 5.1 analog or HDMI inputs. So nothing from
+the PC, LANcast included, can give it discrete 5.1. The useful change is to set
+the Realtek endpoint to **Stereo**, so the rear channels are folded into the
+two that reach the box rather than going to an empty black jack. **PR 3 goes to
+the back** until the room has a receiver that takes HDMI or S/PDIF.
 
 **Also for PR 3:** passthrough must name its output device, not follow
 Windows' default. Following the default would send a bitstream into Sonar, and
@@ -310,9 +317,8 @@ listed from `audio-device-list`), saved per device like the rest.
 
 ## Open questions
 
-1. **Which inputs does the home theater system have?** 5.1 analog (three
-   3.5 mm or six RCA), optical/coax, or HDMI? That decides whether PR 3 is the
-   fix or not needed at all.
+1. ~~Which inputs does the home theater system have?~~ One stereo aux input
+   (above). PR 3 waits for a receiver.
 2. **HDR switch, a or b?** This plan recommends a (tell the person) first.
 3. **Settle default.** 2 s is a guess. The first evening's logs will say
    whether it's right for the TV in question.
