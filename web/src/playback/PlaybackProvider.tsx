@@ -2,6 +2,7 @@ import { clientNote } from "@/lib/clientNote";
 import { WINDOW_HIDDEN } from "@/components/TrayBridge";
 import { TrackGapMeter } from "@/lib/trackGap";
 import { taperGain, TAPER_IN_MS } from "@/lib/taper";
+import { levelGain } from "@/lib/loudness";
 import {
   createContext,
   useCallback,
@@ -623,6 +624,10 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
   // records one image per record rather than the same bytes once per song.
   const isAudio = item?.kind === "track";
   const { data: album } = useItem(isAudio ? (item?.parent_id ?? 0) : 0);
+  // This track's loudness gain (ADR 0108); 1 for anything else, and with
+  // levelling off.
+  const trackLevel = isAudio ? levelGain(item?.loudness, prefs.loudness) : 1;
+  const trackLevelRef = useRef(trackLevel);
   const cover = artworkURL(
     album?.artwork?.poster ?? item?.artwork?.poster,
     "poster2x",
@@ -1312,7 +1317,7 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
   // mode's graph (elementEngine.ts); the deck and mpv take it directly.
   const applyLevel = useCallback((v: MediaBackend, level: number) => {
     if (v === videoRef.current) {
-      setElementVolume(videoRef.current, level);
+      setElementVolume(videoRef.current, level * trackLevelRef.current);
       return;
     }
     // A routed deck: the level is the shared gain after night mode's graph,
@@ -1323,8 +1328,26 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
       v.volume = 1;
       return;
     }
-    v.volume = level;
+    // The deck applies each track's loudness itself, per element, because a
+    // handover sounds two tracks at once (musicDeck.ts). Anything else plays
+    // one source, so the factor goes on here.
+    v.volume = v === sharedDeck ? level : level * trackLevelRef.current;
   }, []);
+
+  /*
+   * A new track, or the levelling setting changed: the deck is told the
+   * track's own gain, and anything else has its level written again with it.
+   */
+  useEffect(() => {
+    trackLevelRef.current = trackLevel;
+    if (deckRef.current) {
+      musicDeck().trackGain = trackLevel;
+      return;
+    }
+    const m = media();
+    if (m && isAudio) applyLevel(m, volumeRef.current * taperNow(m));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [trackLevel]);
 
   // advanceQueue is what the *end of a track* calls. Repeat "one" is handled by
   // the caller, which reseeks rather than reloading the same source.
@@ -1739,7 +1762,8 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
         const fade = prefsRef.current.crossfade;
         const sameAlbum = next.parent_id != null && next.parent_id === albumOfRef.current;
         const overlap = fade > 0 && !sameAlbum ? fade : GAPLESS_OVERLAP_S;
-        deck.queue(direct ? { url: `/api/stream/${nextItemID}`, overlap } : null);
+        const gain = levelGain(next.loudness, prefsRef.current.loudness);
+        deck.queue(direct ? { url: `/api/stream/${nextItemID}`, overlap, gain } : null);
         clientNote("info", "playback", direct ? `deck queued ${nextItemID}` : "deck not queued: next is converted");
       } catch (e) {
         if (!cancelled) {
@@ -1752,7 +1776,7 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [nearEnd, nextItemID, repeat, itemID, prefs.crossfade]);
+  }, [nearEnd, nextItemID, repeat, itemID, prefs.crossfade, prefs.loudness]);
 
   /*
    * The silence between two tracks, written to the desktop log (lib/trackGap.ts).
@@ -2066,6 +2090,12 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
         deckRef.current = useDeck;
       }
       if (useDeck) v = musicDeck();
+      // The track's loudness goes with its source: the deck is only chosen
+      // here, after the effect that follows the item has already run.
+      if (item.kind === "track") {
+        trackLevelRef.current = levelGain(item.loudness, prefsRef.current.loudness);
+        if (useDeck) musicDeck().trackGain = trackLevelRef.current;
+      }
       if (item.kind === "track") {
         // Which path a track took, and why not the deck: the first question
         // when a join is not gapless.

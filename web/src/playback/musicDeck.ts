@@ -87,7 +87,11 @@ export function fadeInGain(t: number): number {
   return Math.sin((Math.min(1, Math.max(0, t)) * Math.PI) / 2);
 }
 
-type Queued = { url: string; overlap: number };
+/**
+ * The next track: its URL, how far to overlap it, and its own loudness gain
+ * (lib/loudness.ts), 1 when levelling is off or the track is untagged.
+ */
+type Queued = { url: string; overlap: number; gain?: number };
 
 export class MusicDeck extends EventTarget implements MediaBackend {
   private active: DeckElement;
@@ -101,6 +105,12 @@ export class MusicDeck extends EventTarget implements MediaBackend {
   private adoptTimer: number | null = null;
   private adoptSrcSet = false;
   private level = 1;
+  /*
+   * Each element's loudness gain (ADR 0108), multiplied into everything the
+   * deck writes to that element's volume. Per element rather than one value,
+   * because during a handover two tracks sound at once and each has its own.
+   */
+  private gains = new Map<DeckElement, number>();
   private readonly clock: DeckClock;
   /** Called when the provider adopts a track that was already playing. */
   onAdopt?: (overlapS: number) => void;
@@ -135,10 +145,16 @@ export class MusicDeck extends EventTarget implements MediaBackend {
    */
   queue(next: Queued | null): void {
     if (this.started || this.adopting) return; // a handover is under way
-    if (next && this.queued && next.url === this.queued.url && next.overlap === this.queued.overlap) return;
+    if (next && this.queued && next.url === this.queued.url && next.overlap === this.queued.overlap) {
+      // Only the levelling changed: the loaded track keeps its place.
+      this.queued = next;
+      this.gains.set(this.standby, next.gain ?? 1);
+      return;
+    }
     this.cancelQueued();
     if (!next) return;
     this.queued = next;
+    this.gains.set(this.standby, next.gain ?? 1);
     this.standby.src = next.url;
     this.standby.load();
     this.standbyLoaded = true;
@@ -186,7 +202,7 @@ export class MusicDeck extends EventTarget implements MediaBackend {
     s.currentTime = 0;
     s.muted = this.active.muted;
     s.playbackRate = 1;
-    s.volume = overlap > GAPLESS_OVERLAP_S ? 0 : this.level;
+    this.setVol(s, overlap > GAPLESS_OVERLAP_S ? 0 : this.level);
     void s.play().catch(() => {});
     if (overlap > GAPLESS_OVERLAP_S) this.crossfade(overlap);
   }
@@ -199,8 +215,8 @@ export class MusicDeck extends EventTarget implements MediaBackend {
     this.fadeTimer = this.clock.setInterval(() => {
       i++;
       const t = i / steps;
-      out.volume = this.level * fadeOutGain(t);
-      into.volume = this.level * fadeInGain(t);
+      this.setVol(out, this.level * fadeOutGain(t));
+      this.setVol(into, this.level * fadeInGain(t));
       if (i >= steps && this.fadeTimer !== null) {
         this.clock.clearInterval(this.fadeTimer);
         this.fadeTimer = null;
@@ -241,7 +257,7 @@ export class MusicDeck extends EventTarget implements MediaBackend {
     const old = this.active;
     this.active = this.standby;
     this.standby = old;
-    this.active.volume = this.level;
+    this.setVol(this.active, this.level);
     this.queued = null;
     this.started = false;
     this.standbyLoaded = false;
@@ -342,7 +358,23 @@ export class MusicDeck extends EventTarget implements MediaBackend {
   }
   set volume(v: number) {
     this.level = v;
-    if (this.fadeTimer === null) this.active.volume = v;
+    if (this.fadeTimer === null) this.setVol(this.active, v);
+  }
+  /** The loudness gain of the track sounding now (ADR 0108). */
+  get trackGain(): number {
+    return this.gains.get(this.active) ?? 1;
+  }
+  set trackGain(g: number) {
+    // While adopting, the active element is the next track and already
+    // carries the gain it was queued with; the provider's value for the
+    // track it is still showing would be the wrong one.
+    if (this.adopting) return;
+    this.gains.set(this.active, g);
+    if (this.fadeTimer === null) this.setVol(this.active, this.level);
+  }
+
+  private setVol(el: DeckElement, v: number): void {
+    el.volume = Math.min(1, Math.max(0, v * (this.gains.get(el) ?? 1)));
   }
   get muted(): boolean {
     return this.active.muted;

@@ -830,3 +830,64 @@ func TestOnlyChangedTracksAreRead(t *testing.T) {
 		t.Errorf("the record holds %d tracks, want 4 — a track whose key was reused must still be in it", len(kids))
 	}
 }
+
+/*
+ * ReplayGain reaches the track (ADR 0108), and revision 86's backfill works:
+ * with every stored key dropped, as the migration drops them, an unchanged
+ * library still reads its files once, and then stops.
+ */
+func TestLoudnessIsReadAndBackfilled(t *testing.T) {
+	sc, st := newScanner(t)
+	lib, root := musicFixture(t, st)
+	writeFile(t, root, "Portishead/Dummy/01 Mysterons.mp3", 10)
+	ctx := context.Background()
+
+	gain, peak := -7.5, 0.9
+	tags := &fakeTags{byName: map[string]probe.Tags{
+		"01 Mysterons.mp3": {Title: "Mysterons", Artist: "Portishead", Album: "Dummy"},
+	}}
+	sc.SetTagReader(tags)
+	scanAndWait(t, sc, lib)
+	id := trackByPath(t, st, lib.ID, "01 Mysterons.mp3").ID
+	if l, err := st.ItemLoudness(ctx, id); err != nil || l != nil {
+		t.Fatalf("untagged loudness: %+v %v", l, err)
+	}
+
+	// The file gains a measurement without changing size or mtime, which is
+	// the state an upgrade finds every library in.
+	tags.byName["01 Mysterons.mp3"] = probe.Tags{Title: "Mysterons", Artist: "Portishead", Album: "Dummy",
+		Loudness: probe.Loudness{TrackGain: &gain, TrackPeak: &peak}}
+	reload := func() store.Library {
+		l, err := st.GetLibrary(ctx, lib.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return *l
+	}
+	before := tags.calls
+	scanAndWait(t, sc, reload())
+	if tags.calls != before {
+		t.Fatalf("an unchanged library read %d files", tags.calls-before)
+	}
+
+	if _, err := st.ClearGroupKeys(ctx, lib.ID); err != nil { // what revision 86 does
+		t.Fatal(err)
+	}
+	scanAndWait(t, sc, reload())
+	if tags.calls != before+1 {
+		t.Fatalf("after the keys were dropped, %d files read, want 1", tags.calls-before)
+	}
+	l, err := st.ItemLoudness(ctx, id)
+	if err != nil || l == nil || l.TrackGain == nil || *l.TrackGain != gain || *l.TrackPeak != peak || l.AlbumGain != nil {
+		t.Fatalf("loudness after the backfill: %+v %v", l, err)
+	}
+	if got := trackByPath(t, st, lib.ID, "01 Mysterons.mp3"); got.ParentID == nil {
+		t.Fatal("the track lost its album")
+	}
+
+	// And then it is free again.
+	scanAndWait(t, sc, reload())
+	if tags.calls != before+1 {
+		t.Fatalf("the backfill repeated: %d reads", tags.calls-before)
+	}
+}

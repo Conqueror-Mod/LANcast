@@ -583,6 +583,10 @@ type Item struct {
 	 */
 	TrackChoice *TrackChoice `json:"track_choice,omitempty"`
 
+	// Loudness is a track's ReplayGain (ADR 0108), attached by
+	// GET /api/items/{id} when the file carries any, and nil everywhere else.
+	Loudness *Loudness `json:"loudness,omitempty"`
+
 	/*
 	 * Markers are the detected intro and credits ranges, carried on the item
 	 * rather than fetched separately (ADR 0054).
@@ -3326,6 +3330,10 @@ type TrackTags struct {
 	Disc      int
 	Track     int
 	Year      int
+	// Loudness is written as read, absent values included: a gain removed
+	// from the file is removed here. It is a measurement of the file, not
+	// metadata a person edits, so no lock applies.
+	Loudness Loudness
 }
 
 // ApplyTrackTags writes tag-derived metadata onto a track.
@@ -3365,6 +3373,13 @@ func (s *Store) ApplyTrackTags(ctx context.Context, itemID int64, t TrackTags) e
 	add("season", t.Disc, t.Disc == 0)
 	add("episode", t.Track, t.Track == 0)
 	add("year", t.Year, t.Year == 0)
+
+	l := t.Loudness
+	if _, err := s.db.ExecContext(ctx, `UPDATE media_item SET rg_track_gain = ?, rg_track_peak = ?,
+		rg_album_gain = ?, rg_album_peak = ? WHERE id = ?`,
+		l.TrackGain, l.TrackPeak, l.AlbumGain, l.AlbumPeak, itemID); err != nil {
+		return fmt.Errorf("apply track loudness: %w", err)
+	}
 
 	if len(set) == 0 {
 		return nil

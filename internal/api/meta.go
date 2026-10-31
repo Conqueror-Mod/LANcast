@@ -624,6 +624,15 @@ func (s *Server) respondItem(w http.ResponseWriter, r *http.Request, id int64) {
 		})
 		it.TrackChoice = &choice
 	}
+	// A track's ReplayGain, for the player's levelling (ADR 0108).
+	if it.Kind == "track" {
+		l, err := s.st.ItemLoudness(r.Context(), id)
+		if err != nil {
+			s.writeInternal(w, err, "load loudness")
+			return
+		}
+		it.Loudness = l
+	}
 	// Attach the child count so the detail page can render a container (its
 	// seasons, films, or parts) rather than a dead-end Play (ADR 0017).
 	counted := []store.Item{*it}

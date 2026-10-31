@@ -96,6 +96,20 @@ type Tags struct {
 	Track       int
 	Disc        int
 	Year        int
+
+	// Loudness is the file's ReplayGain, if a tagger measured it (ADR 0108).
+	// Not part of Empty: a file carrying only gain tags still has no title.
+	Loudness Loudness
+}
+
+// Loudness is ReplayGain as tagged: the gain in dB that brings a track (or
+// its whole album) to the reference loudness, and the highest sample, where 1
+// is full scale. Nil is "not tagged", which is not the same as 0 dB.
+type Loudness struct {
+	TrackGain *float64
+	TrackPeak *float64
+	AlbumGain *float64
+	AlbumPeak *float64
 }
 
 // Empty reports whether nothing useful was tagged, which is what sends the
@@ -589,7 +603,53 @@ func parseTags(raw map[string]string) Tags {
 	t.Track = leadingNumber(first("track", "tracknumber"))
 	t.Disc = leadingNumber(first("disc", "discnumber", "disk"))
 	t.Year = leadingYear(first("date", "year", "originaldate", "originalyear"))
+	t.Loudness = Loudness{
+		TrackGain: gainDB(first("replaygaintrackgain"), first("r128trackgain")),
+		TrackPeak: peak(first("replaygaintrackpeak")),
+		AlbumGain: gainDB(first("replaygainalbumgain"), first("r128albumgain")),
+		AlbumPeak: peak(first("replaygainalbumpeak")),
+	}
 	return t
+}
+
+/*
+ * gainDB reads a ReplayGain gain ("-7.89 dB", "+1.2 dB", "-7.89"), or failing
+ * that an Opus R128 gain.
+ *
+ * R128_*_GAIN is a Q7.8 integer (256ths of a dB) relative to -23 LUFS, where
+ * ReplayGain 2 is relative to -18 LUFS: the same track is 5 dB louder by
+ * ReplayGain's reference, so 5 is added to put both on one scale (RFC 7845
+ * 5.2.1 and the ReplayGain 2.0 specification).
+ *
+ * Anything outside ±60 dB is a broken tag, not a measurement.
+ */
+func gainDB(rg, r128 string) *float64 {
+	if v := strings.TrimSpace(rg); v != "" {
+		v = strings.TrimSpace(strings.TrimSuffix(strings.TrimSuffix(v, "dB"), "db"))
+		v = strings.TrimPrefix(v, "+")
+		if g, err := strconv.ParseFloat(v, 64); err == nil && g >= -60 && g <= 60 {
+			return &g
+		}
+	}
+	if v := strings.TrimSpace(r128); v != "" {
+		if q, err := strconv.Atoi(v); err == nil {
+			g := float64(q)/256 + 5
+			if g >= -60 && g <= 60 {
+				return &g
+			}
+		}
+	}
+	return nil
+}
+
+// peak reads a ReplayGain peak: a positive linear amplitude, 1 at full scale.
+// A float file can exceed 1, so up to 10 is believed.
+func peak(v string) *float64 {
+	p, err := strconv.ParseFloat(strings.TrimSpace(v), 64)
+	if err != nil || !(p > 0) || p > 10 {
+		return nil
+	}
+	return &p
 }
 
 // normalizeTagKey lowercases and drops the separators taggers disagree about,

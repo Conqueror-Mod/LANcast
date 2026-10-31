@@ -6834,6 +6834,7 @@ export interface components {
             /** @description The full track list including alternate audio. **Detail responses only**, which is why the player reads it from the item it fetched rather than from the grid row that opened it. */
             streams?: components["schemas"]["MediaStream"][];
             track_choice?: components["schemas"]["TrackChoice"];
+            loudness?: components["schemas"]["Loudness"];
             /**
              * @description The **base name** of the file, detail responses only.
              *
@@ -8809,6 +8810,17 @@ export interface components {
              * @enum {string}
              */
             subtitle_mode: "off" | "foreign" | "always";
+        };
+        /** @description A track's ReplayGain, as its tagger measured it (ADR 0108). Attached by `GET /api/items/{id}` to a track whose file carries any; absent otherwise. Every field is present only when tagged: absent is "not measured", never 0 dB. The server reports it and never applies it. */
+        Loudness: {
+            /** @description The gain in dB that brings this track to ReplayGain 2's reference (-18 LUFS). An Opus file's R128 gain is converted to the same scale. */
+            track_gain_db?: number;
+            /** @description The track's loudest sample, linear, 1 at full scale. */
+            track_peak?: number;
+            /** @description The same for the whole album the track was measured with. */
+            album_gain_db?: number;
+            /** @description The album's loudest sample, linear. */
+            album_peak?: number;
         };
         /**
          * @description Which audio and subtitle track this account's language preferences select for one item. Attached by `GET /api/items/{id}` only — a grid tile has no use for it.

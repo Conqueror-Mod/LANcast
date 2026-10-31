@@ -113,6 +113,9 @@ const track = (id: number) => ({
   duration_ms: (lengths[`/api/stream/${id}`] ?? 30) * 1000,
   progress: { position_ms: 0, watched: false },
   streams: [{ index: 0, kind: "audio", codec: "mp3", channels: 2 }],
+  // Track 1 asks to be halved and track 2 quartered (ADR 0108); only heard
+  // with levelling on, which is off by default.
+  loudness: { track_gain_db: 20 * Math.log10(id === 1 ? 0.5 : 0.25), track_peak: 0.5 },
 });
 
 beforeEach(() => {
@@ -210,6 +213,50 @@ describe("an album played through the deck", () => {
     expect(two!.loads, "the advance loaded track 2 again").toBe(1);
     expect(two!.plays, "track 2 was started again").toBe(1);
     expect(notes.some((n) => n.startsWith("track join gapless"))).toBe(true);
+  });
+});
+
+describe("levelling loudness", () => {
+  it("plays each track at its own gain, across a gapless join, and stops when switched off", async () => {
+    setPrefs({ taper: false, loudness: "track" });
+    try {
+      await render();
+      await act(async () => pb.play(1, [1, 2]));
+      await settle(80);
+      const one = playingOn("/api/stream/1")!;
+      expect(one.volume).toBeCloseTo(0.5, 2);
+
+      await act(async () => one.at(15));
+      await settle(80);
+      await act(async () => one.at(29.7));
+      await settle(400);
+      const two = playingOn("/api/stream/2")!;
+      expect(two.paused).toBe(false);
+      expect(two.volume, "track 2 started at track 1's gain").toBeCloseTo(0.25, 2);
+
+      await act(async () => one.end());
+      await settle(120);
+      expect(pb.itemID).toBe(2);
+      expect(two.volume).toBeCloseTo(0.25, 2);
+
+      await act(async () => setPrefs({ loudness: "off" }));
+      await settle(40);
+      expect(two.volume).toBeCloseTo(1, 2);
+    } finally {
+      resetPrefs();
+    }
+  });
+
+  it("leaves every track at the slider's level by default", async () => {
+    setPrefs({ taper: false });
+    try {
+      await render();
+      await act(async () => pb.play(1, [1, 2]));
+      await settle(80);
+      expect(playingOn("/api/stream/1")!.volume).toBeCloseTo(1, 2);
+    } finally {
+      resetPrefs();
+    }
   });
 });
 
