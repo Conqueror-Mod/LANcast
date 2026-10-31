@@ -72,6 +72,10 @@ jobs:
           args: release --clean
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Where Report an issue sends (ADR 0109). A secret, never in the
+          # repository: Discord revokes webhook URLs pushed to public repos.
+          # Unset, the release still builds; its form offers copy, not Send.
+          LANCAST_REPORT_WEBHOOK: ${{ secrets.LANCAST_REPORT_WEBHOOK }}
           # Absent until the maintainer generates a keypair. Without it the
           # release is published unsigned and the updater will offer it for a
           # manual install but never install it automatically.

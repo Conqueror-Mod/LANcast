@@ -170,6 +170,10 @@ type Deps struct {
 type Server struct {
 	// chapters caches each file's chapter marks (chapters.go).
 	chapters chapterCache
+	// reports are problem reports sent this hour (reportissue.go), and
+	// reportURL replaces the build's webhook in tests.
+	reports   reportLimiter
+	reportURL func() string
 	// webhooks delivers events to the URLs in settings (ADR 0097); nil
 	// where nothing runs it. webhookMu serialises edits to the list.
 	webhooks  *webhook.Dispatcher
@@ -941,6 +945,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/tasks/{id}/run", s.adminOnly(s.runTask))
 	mux.HandleFunc("DELETE /api/transcodes/{id}", s.adminOnly(s.stopTranscode))
 	mux.HandleFunc("GET /api/logs", s.adminOnly(s.serverLog))
+	mux.HandleFunc("GET /api/report", s.reportInfo)
+	mux.HandleFunc("POST /api/report", s.sendReport)
 	mux.HandleFunc("GET /api/crashes", s.adminOnly(s.listCrashes))
 	mux.HandleFunc("DELETE /api/crashes", s.adminOnly(s.clearCrashes))
 	mux.HandleFunc("GET /api/audit", s.adminOnly(s.listAudit))

@@ -1,0 +1,87 @@
+/* Report an issue: the playlist dialog's language, taller, with a form. */
+.addpl.report {
+  max-width: 600px;
+  gap: 12px;
+  max-height: min(90vh, 900px);
+  overflow-y: auto;
+}
+.report__field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--text-secondary);
+  flex-shrink: 0;
+}
+.report__text {
+  flex: none;
+  width: 100%;
+  box-sizing: border-box;
+  resize: vertical;
+  font-family: inherit;
+  line-height: 1.5;
+}
+.report__log {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex-shrink: 0;
+}
+.report__check {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+.report__note {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+.report__link {
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--text-secondary);
+  font: inherit;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.report__link:hover,
+.report__link:focus-visible {
+  outline: none;
+  color: var(--text-primary);
+}
+.report__logview {
+  margin: 0;
+  max-height: 220px;
+  overflow: auto;
+  padding: 10px;
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.35);
+  font-size: 11px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  word-break: break-all;
+  color: var(--text-secondary);
+  flex-shrink: 0;
+}
+.report__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-shrink: 0;
+}
+.report__copy {
+  color: var(--text-secondary);
+}
+.report__done {
+  margin: 4px 0;
+  font-size: 14px;
+  color: var(--text-primary);
+}

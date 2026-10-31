@@ -3321,6 +3321,46 @@ was previously nothing anybody could do from the app — the remedy was waiting 
 minutes or restarting the server, which is not an answer to "I can see the thing
 that is blocking me".
 
+### `GET` and `POST /api/report`
+
+Report an issue ([ADR 0109](adr/0109-a-report-goes-only-when-sent.md)). The
+one request LANcast makes to its developer, and only when a person presses
+Send in the app's form.
+
+`GET` says what this account can do here:
+
+```json
+{ "can_send": true, "can_attach_log": true }
+```
+
+`can_send` is `false` in a build with no destination for reports (any local or
+self-built one), and the form offers to copy the report instead.
+`can_attach_log` is `true` for an administrator only, because the log names
+paths, addresses and other people's accounts.
+
+`POST` sends one:
+
+```json
+{ "what": "The reader shows a blank page", "expected": "", "steps": "Open it, press End",
+  "contact": "", "client": "desktop window", "include_log": true }
+```
+
+`what` is required, and each text field holds up to 4,000 characters. The
+server posts the report to the webhook its release build carries. It adds
+LANcast's version, the server's OS and architecture, the client named here,
+and whether the sender is an administrator, but never a name or address.
+With `include_log`, which is administrators only (`403` otherwise), it also
+attaches the last 2,000 lines of the server log, at most 1 MB.
+
+The answer is `{ "sent": true, "log_included": true }`. The errors are:
+
+- `429 rate_limited`: one every 20 seconds, five an hour for the whole server;
+- `502 not_sent`: the destination refused or couldn't be reached;
+- `503 unavailable`: this build can't send.
+
+Signed-in accounts only; an API key is refused. Each send is audited as
+`report.send`.
+
 ### `GET /api/logs`
 
 The tail of `lancastd.log`. **Admin only.**

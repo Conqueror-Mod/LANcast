@@ -3,12 +3,8 @@ import { useQuery } from "@tanstack/react-query";
 import { apiGet } from "@/api/client";
 import type { components } from "@/api/schema";
 import type { DesktopVersion } from "@/lib/clientVersion";
-import {
-  DEVELOPER_EMAIL,
-  DEVELOPER_NAME,
-  DONATE_URL,
-  reportIssueHref,
-} from "@/lib/contact";
+import { DEVELOPER_EMAIL, DEVELOPER_NAME, DONATE_URL } from "@/lib/contact";
+import { ReportIssue } from "./ReportIssue";
 import "./AboutSettings.css";
 
 type About = components["schemas"]["About"];
@@ -34,6 +30,7 @@ export function AboutSettings() {
     staleTime: Infinity,
   });
   const windowVersion = useWindowVersion();
+  const [reporting, setReporting] = useState(false);
 
   if (isError) {
     return (
@@ -98,10 +95,10 @@ export function AboutSettings() {
       </section>
 
       {/*
-        Who made it, and the two ways to reach them: a problem report, which
-        opens the mail program with the version already filled in, and a
-        donation page. Both are links the person follows; neither is a request
-        this program makes on its own (lib/contact.ts).
+        Who made it, and the two ways to reach them: a problem report, the
+        form the rail opens (ADR 0109), and a donation page. The address is
+        text to copy, not a mail link: in the desktop window a mailto opened
+        Windows' "pick an app" box and went nowhere.
       */}
       <section className="about__panel">
         <span className="section-label">Developer</span>
@@ -114,15 +111,16 @@ export function AboutSettings() {
             <tr>
               <th scope="row">Contact</th>
               <td>
-                <a href={`mailto:${DEVELOPER_EMAIL}`}>{DEVELOPER_EMAIL}</a>
+                <span className="about__email">{DEVELOPER_EMAIL}</span>
               </td>
             </tr>
           </tbody>
         </table>
         <div className="about__contact-actions">
-          <a className="set-btn" href={reportIssueHref(about.version)}>
+          <button type="button" className="set-btn" onClick={() => setReporting(true)}>
             Report an issue
-          </a>
+          </button>
+          {reporting && <ReportIssue version={about.version} onClose={() => setReporting(false)} />}
           <a
             className="set-btn"
             href={DONATE_URL}
