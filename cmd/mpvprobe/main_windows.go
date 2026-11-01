@@ -118,10 +118,11 @@ func run(file, screen, dll string, start float64, seconds int, hdr bool) error {
 			fmt.Printf("set %s=%s: %v\n", o[0], o[1], err)
 		}
 	}
+	// Load opens paused (as LANcast's player does); unpaused once the window
+	// is placed, since a pause=no sent now is undone when the file opens.
 	if err := p.Load(file, start); err != nil {
 		return err
 	}
-	_ = p.Set("pause", "no")
 
 	// The window mpv made, once it exists, decides which monitor to match.
 	var hwnd uintptr
@@ -149,6 +150,9 @@ func run(file, screen, dll string, start float64, seconds int, hdr bool) error {
 	var got rect
 	_, _, _ = procGetWindowRect.Call(hwnd, uintptr(unsafe.Pointer(&got)))
 	fmt.Printf("mpv window %+v, %s is %+v\n", got, screen, rc)
+	if err := p.Set("pause", "no"); err != nil {
+		return fmt.Errorf("unpausing: %w", err)
+	}
 	fps, _ := p.Double("container-fps")
 	sw := displaymode.NewSwitcher(dir)
 	defer func() {
