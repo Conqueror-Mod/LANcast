@@ -15,6 +15,8 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"runtime"
+	"strings"
 	"syscall"
 	"time"
 	"unsafe"
@@ -27,11 +29,51 @@ import (
 )
 
 var (
-	user32          = windows.NewLazySystemDLL("user32.dll")
-	procFindWindowW = user32.NewProc("FindWindowW")
+	user32                  = windows.NewLazySystemDLL("user32.dll")
+	procFindWindowW         = user32.NewProc("FindWindowW")
+	procSetWindowPos        = user32.NewProc("SetWindowPos")
+	procGetWindowRect       = user32.NewProc("GetWindowRect")
+	procEnumDisplayMonitors = user32.NewProc("EnumDisplayMonitors")
+	procGetMonitorInfoW     = user32.NewProc("GetMonitorInfoW")
+	procSetDpiContext       = user32.NewProc("SetThreadDpiAwarenessContext")
 )
 
+const swpNoZOrder = 0x0004
+
+type rect struct{ Left, Top, Right, Bottom int32 }
+
+type monitorInfoEx struct {
+	cbSize  uint32
+	monitor rect
+	work    rect
+	flags   uint32
+	device  [32]uint16
+}
+
+// monitorRect finds a monitor by its Windows name ("DISPLAY3" or
+// "\\.\DISPLAY3"), in physical pixels.
+func monitorRect(name string) (rect, bool) {
+	// Physical pixels, as the window is placed in them.
+	_, _, _ = procSetDpiContext.Call(^uintptr(3)) // PER_MONITOR_AWARE_V2 (-4)
+	want := strings.TrimPrefix(strings.ToUpper(name), `\\.\`)
+	var found rect
+	var ok bool
+	cb := windows.NewCallback(func(hmon, _, _, _ uintptr) uintptr {
+		mi := monitorInfoEx{cbSize: uint32(unsafe.Sizeof(monitorInfoEx{}))}
+		_, _, _ = procGetMonitorInfoW.Call(hmon, uintptr(unsafe.Pointer(&mi)))
+		if strings.TrimPrefix(strings.ToUpper(windows.UTF16ToString(mi.device[:])), `\\.\`) == want {
+			found, ok = mi.monitor, true
+			return 0
+		}
+		return 1
+	})
+	_, _, _ = procEnumDisplayMonitors.Call(0, 0, cb, 0)
+	return found, ok
+}
+
 func main() {
+	// One OS thread, so the DPI context set for placing the window holds.
+	runtime.LockOSThread()
 	file := flag.String("file", "", "film to play")
 	screen := flag.String("screen", "DISPLAY3", "monitor to play on, as Windows names it")
 	start := flag.Float64("start", 600, "seconds into the film to start")
@@ -65,9 +107,11 @@ func run(file, screen, dll string, start float64, seconds int, hdr bool) error {
 		return err
 	}
 	defer p.Close()
+	// Fullscreen on whichever monitor the window is on: the window is moved
+	// onto the screen asked for below, since mpv's own screen options landed
+	// it on the main display.
 	for _, o := range [][2]string{
-		{"fullscreen", "yes"},
-		{"fs-screen-name", screen},
+		{"fs-screen", "current"},
 		{"target-colorspace-hint", mpv.HDRHint(hdr)},
 	} {
 		if err := p.Set(o[0], o[1]); err != nil {
@@ -89,6 +133,22 @@ func run(file, screen, dll string, start float64, seconds int, hdr bool) error {
 	if hwnd == 0 {
 		return fmt.Errorf("mpv never made a window")
 	}
+	rc, ok := monitorRect(screen)
+	if !ok {
+		return fmt.Errorf("no monitor named %s", screen)
+	}
+	// Into the middle of that monitor, then fullscreen there.
+	w, h := (rc.Right-rc.Left)/2, (rc.Bottom-rc.Top)/2
+	_, _, _ = procSetWindowPos.Call(hwnd, 0, uintptr(rc.Left+w/2), uintptr(rc.Top+h/2),
+		uintptr(w), uintptr(h), swpNoZOrder)
+	time.Sleep(300 * time.Millisecond)
+	if err := p.Set("fullscreen", "yes"); err != nil {
+		return fmt.Errorf("fullscreen: %w", err)
+	}
+	time.Sleep(time.Second)
+	var got rect
+	_, _, _ = procGetWindowRect.Call(hwnd, uintptr(unsafe.Pointer(&got)))
+	fmt.Printf("mpv window %+v, %s is %+v\n", got, screen, rc)
 	fps, _ := p.Double("container-fps")
 	sw := displaymode.NewSwitcher(dir)
 	defer func() {
