@@ -107,6 +107,8 @@ export interface Prefs {
   matchRate: boolean;
   /** Seconds to wait after a switch before the film starts (MATCH_SETTLES). */
   matchSettle: number;
+  /** Hand an HDR film to the display as HDR instead of tone mapping it. */
+  hdrOut: boolean;
   /** Fade a listening session in, and the queue's last track out (lib/taper.ts). */
   taper: boolean;
   /**
@@ -250,6 +252,7 @@ export const DEFAULTS: Prefs = {
   nightMusic: false,
   matchRate: false,
   matchSettle: 3,
+  hdrOut: false,
   taper: true,
   crossfade: 0,
   loudness: "off",

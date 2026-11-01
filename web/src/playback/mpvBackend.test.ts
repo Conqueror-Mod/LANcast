@@ -360,26 +360,26 @@ describe("MpvBackend refresh-rate matching", () => {
   }
 
   it("sends the settings before it opens the file", async () => {
-    setPrefs({ matchRate: true, matchSettle: 3 });
+    setPrefs({ matchRate: true, matchSettle: 5, hdrOut: true });
     // The window's shared backend (an earlier test made it) hears that change
     // too; let it finish talking before this film's commands are counted.
-    await flush();
+    for (let i = 0; i < 3; i++) await flush();
     log = [];
     await openFilm();
-    expect(log.slice(0, 3)).toEqual(["match-settle=3", "match-rate=1", "open"]);
+    expect(log.slice(0, 4)).toEqual(["match-settle=5", "match-rate=1", "hdr=1", "open"]);
   });
 
-  it("sends matching off, not nothing, when it is off", async () => {
+  it("sends them off, not nothing, when they are off", async () => {
     // A client that matched the last film keeps doing it until told otherwise.
     await openFilm();
-    expect(log.slice(0, 3)).toEqual(["match-settle=3", "match-rate=0", "open"]);
+    expect(log.slice(0, 4)).toEqual(["match-settle=3", "match-rate=0", "hdr=0", "open"]);
   });
 
-  it("tells the client at once when matching is switched off, film or no film", async () => {
+  it("tells the client at once when a setting changes, film or no film", async () => {
     const b = new MpvBackend();
     b.prefsChanged({ ...getPrefs(), matchRate: false });
-    await flush();
-    expect(log).toEqual(["match-settle=3", "match-rate=0"]);
+    for (let i = 0; i < 3; i++) await flush();
+    expect(log).toEqual(["match-settle=3", "match-rate=0", "hdr=0"]);
   });
 });
 

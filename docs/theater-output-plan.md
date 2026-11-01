@@ -290,6 +290,11 @@ From `%APPDATA%\LANcast\client\mpv.log` and the Windows audio endpoints:
   home theater.
 - **There's an unused `Realtek Digital Output`** (S/PDIF), and no active HDMI
   audio endpoint. The Roku TV (display 3) has HDR but shows no audio device.
+- **Windows' own HDR state** (`DisplayConfigGetDeviceInfo`, advanced colour):
+  all three screens report HDR *supported*, and "Use HDR" is *off* on all of
+  them, the Roku included. So PR 2's hint can only reach the TV once that
+  switch is on for display 3, which is why the player logs it beside every
+  film.
 
 That accounts for *"it usually doesn't use all speakers"*, and none of it is a
 LANcast setting. Getting 5.1 means one of:

@@ -97,3 +97,33 @@ describe("Theater output", () => {
     expect(getPrefs().matchSettle).toBe(5);
   });
 });
+
+const hdrBox = () =>
+  [...host.querySelectorAll("label")]
+    .find((l) => l.textContent?.includes("Send HDR to the display"))
+    ?.querySelector("input");
+
+describe("Theater output › HDR", () => {
+  it("is offered only by a player that can hint HDR", async () => {
+    window.lancastMpvFeatures = vi.fn(async () => ["refresh"]);
+    await render();
+    expect(hdrBox()).toBeUndefined();
+    expect(matchBox()).toBeDefined();
+  });
+
+  it("stands on its own: a player with HDR but no matching shows just HDR", async () => {
+    window.lancastMpvFeatures = vi.fn(async () => ["hdr"]);
+    await render();
+    expect(host.textContent).toContain("Theater output");
+    expect(matchBox()).toBeUndefined();
+    expect(hdrBox()?.checked).toBe(false);
+  });
+
+  it("says Windows' own switch is needed, and saves the choice", async () => {
+    window.lancastMpvFeatures = vi.fn(async () => ["refresh", "hdr"]);
+    await render();
+    expect(host.textContent).toContain("Use HDR");
+    await act(async () => hdrBox()!.click());
+    expect(getPrefs().hdrOut).toBe(true);
+  });
+});
