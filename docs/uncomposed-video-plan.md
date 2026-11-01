@@ -134,7 +134,32 @@ Two lessons:
   it's composed too, the desktop is (mixed rates or HDR across monitors), and
   phase 3 (MPO) or "the TV alone" is what's left.
 
+**The control, 2026-11-01.** `cmd/mpvprobe` ran LANcast's own libmpv, options and
+rate matching in a fullscreen top-level window mpv made itself, DPI aware,
+drawing 3840 × 2160 (an earlier DPI-unaware run drew 2560 × 1440 stretched by
+Windows and doesn't count).
+
+| | Present mode | Never shown | GPU per frame, median / max |
+|---|---|---|---|
+| mpvprobe, 4K | `Composed: Flip` | **0 of 2,879** | 9.6 / 26.8 ms |
+| LANcast runs above | `Composed: Flip` | 1–281 | 13.7–24.1 / up to 51.7 ms |
+
+- **The desktop composes any window on the TV**, LANcast's or not. Phase 2
+  (a top-level host) can't change that, so it's dropped. MPO (phase 3) is
+  the only route to an uncomposed picture with other monitors on.
+- **Composition alone doesn't lose frames.** The same mpv, film and desktop
+  lose none outside LANcast. So the lost frames come from something LANcast
+  adds, and that's the problem to chase first. The candidates, from the two
+  mpv logs: the stream over HTTP from the local server, the night-mode audio
+  filter, mpv embedded in LANcast's video window, and the WebView2 page
+  sharing the GPU. LANcast's GPU time per frame is also higher.
+- **The smeared display intervals** (33–50 ms around 41.7) appear in the
+  clean probe run too. So they're how PresentMon reads a composed flip, not a
+  visible fault. "Never shown" is the number that matters.
+
 ### 2. Spike, only if 1 fails on the child window
+
+**Dropped 2026-11-01:** a top-level mpv window is composed too (see above).
 
 Have mpv's swapchain belong to a window Windows treats as top-level. mpv's
 `--wid` handling, and whether a borderless top-level video window can host it
