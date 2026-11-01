@@ -64,7 +64,8 @@ showing a periodic irregularity on the busy desk and none with the TV alone.
   run is one command he pastes.
 - No measuring, no spike: every phase below is judged by this CSV.
 
-**Baseline, recorded 2026-11-01** (v0.10.0, a 24p film fullscreen on the TV
+**Baseline, recorded 2026-11-01** (the HDR test build, v0.10.0 + #980 at
+5e8cf3bf, a 24p film fullscreen on the TV
 at 23.976 Hz, all three monitors on, controls hidden, 120 s):
 
 | | |
