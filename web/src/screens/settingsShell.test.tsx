@@ -424,3 +424,57 @@ describe("the clear watch history row", () => {
     expect((btn as HTMLButtonElement).disabled).toBe(true);
   });
 });
+
+/*
+ * Searching for one setting (2026-11-01): there are enough now that "which
+ * pane was it in" is the usual question. These prove the box is wired: what
+ * is typed filters, choosing opens the pane, and the row is found and marked.
+ */
+describe("searching settings", () => {
+  function search(text: string) {
+    const box = host.querySelector<HTMLInputElement>('input[aria-label="Search settings"]');
+    if (!box) throw new Error("no settings search box");
+    const set = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")!.set!;
+    act(() => {
+      set.call(box, text);
+      box.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    return box;
+  }
+  function results(): string[] {
+    return [...host.querySelectorAll(".settings__result-label")].map((r) => r.textContent ?? "");
+  }
+
+  it("replaces the categories with what matched, and puts them back when cleared", () => {
+    render();
+    search("dialogue");
+    expect(results()).toEqual(["Dialogue boost"]);
+    expect(host.querySelector(".settings__navgroup > .section-label")).toBeNull();
+    search("");
+    expect(navItems().map((b) => b.textContent)).toContain("Profile");
+  });
+
+  it("says so when nothing matches", () => {
+    render();
+    search("zzqx");
+    expect(host.textContent).toContain("No setting matches");
+  });
+
+  it("opens the pane on Enter and marks the setting", () => {
+    render("/settings?pane=profile");
+    const box = search("dialogue boost");
+    act(() => {
+      box.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+    });
+    expect(activeItem()).toBe("Player");
+    const marked = host.querySelector(".is-found");
+    expect(marked?.textContent).toContain("Dialogue boost");
+    expect(box.value).toBe("");
+  });
+
+  it("does not offer an administrator's settings to somebody who is not one", () => {
+    render();
+    search("video encoder");
+    expect(results()).toEqual([]);
+  });
+});

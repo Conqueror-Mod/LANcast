@@ -3,7 +3,7 @@ import { ScheduledTasks } from "@/components/ScheduledTasks";
 import { PlayerSettings, SubtitleStyleSettings } from "@/components/PlayerSettings";
 import { AboutSettings } from "@/components/AboutSettings";
 import { ProviderKeys } from "@/components/ProviderKeys";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type RefObject } from "react";
 import { useSearchParams } from "react-router-dom";
 import { RATING_RUNGS } from "@/lib/ratings";
 import { InviteFriend } from "@/components/InviteFriend";
@@ -132,6 +132,16 @@ import { LibraryRow, AddLibrary } from "@/components/LibrarySettings";
 import { answersWithin, goTo, urlAtPort } from "@/lib/portMove";
 import { usePlaybackIfAny } from "@/playback/PlaybackProvider";
 import { useQueryClient } from "@tanstack/react-query";
+import {
+  ACCOUNT_PANES,
+  DEVICE_PANES,
+  SERVER_PANES,
+  STATUS_PANES,
+  normalize,
+  searchSettings,
+  type Pane,
+  type SettingMatch,
+} from "./settingsIndex";
 import "./Settings.css";
 
 // The rungs, shared with the peer-sharing screen so the two cannot drift
@@ -3598,100 +3608,6 @@ function UpdateCheckSection() {
  * affects nobody else. That distinction is the one that actually matters when
  * two people use the same server, and it is invisible in a flat list.
  */
-interface Pane {
-  id: string;
-  label: string;
-  admin?: boolean;
-}
-
-/*
- * Four groups (docs/settings-plan.md, decided 2026-10-12): Status is what the
- * server is doing, Server is how it is configured, Your account follows the
- * person to any device, This device stays on this screen. Panes from the plan
- * that have nothing in them yet are not listed until they do — a heading that
- * leads to an empty column is the fault DESKTOP_ONLY exists to avoid.
- */
-const STATUS_PANES: Pane[] = [
-  // First, for an administrator: what is happening, before how it is set up.
-  { id: "dashboard", label: "Dashboard", admin: true },
-  { id: "tasks", label: "Scheduled tasks", admin: true },
-  // Optimized copies converting and done (ADR 0087).
-  { id: "conversions", label: "Conversions", admin: true },
-  { id: "troubleshooting", label: "Troubleshooting", admin: true },
-];
-
-const SERVER_PANES: Pane[] = [
-  { id: "general", label: "General", admin: true },
-  // This machine and the LAN. Remote access is the outside world.
-  { id: "network", label: "Network", admin: true },
-  { id: "remote", label: "Remote access", admin: true },
-  { id: "users", label: "Users & access", admin: true },
-  { id: "libraries", label: "Libraries", admin: true },
-  { id: "metadata", label: "Metadata", admin: true },
-  { id: "transcoding", label: "Transcoding", admin: true },
-  { id: "quality", label: "Quality", admin: true },
-  { id: "progress", label: "Playback & progress", admin: true },
-  { id: "livetv", label: "Live TV", admin: true },
-  /*
-   * Pictures has its own pane rather than a corner of Libraries: sensitive
-   * marking, face grouping and places each have a download, a state or a
-   * switch of their own.
-   */
-  { id: "pictures", label: "Pictures", admin: true },
-  // Retro games (ADR 0073), for the reason Pictures has one: an optional
-  // download and a network switch that would be lost in a general pane.
-  { id: "retro", label: "Retro games", admin: true },
-  /*
-   * Other servers beside Users & access because both answer who may do what
-   * here. Its own pane because a peer is not an account and must never come
-   * to look like one — pairing grants nothing, where adding a user grants the
-   * whole library.
-   */
-  { id: "peers", label: "Other servers", admin: true },
-  // TVs and consoles on the network, with no LANcast app (ADR 0086).
-  { id: "dlna", label: "DLNA", admin: true },
-  // Outbound messages to addresses an administrator chose (ADR 0097).
-  { id: "webhooks", label: "Webhooks", admin: true },
-  /*
-   * MilkDrop presets (ADR 0091): uploads every signed-in browser will run,
-   * so an administrator's pane, and its own, because what is uploaded here
-   * is drawn on everyone's screen and an upload's refusal needs room to say
-   * why.
-   */
-  { id: "visualizers", label: "Visualizers", admin: true },
-  { id: "addons", label: "Add-ons", admin: true },
-  /*
-   * Backup apart from Troubleshooting's maintenance, which throws away what
-   * the server can make again; this protects what it never can.
-   */
-  { id: "backup", label: "Backup & storage", admin: true },
-];
-
-const ACCOUNT_PANES: Pane[] = [
-  { id: "profile", label: "Profile" },
-  { id: "security", label: "Security" },
-  { id: "languages", label: "Languages & subtitles" },
-  { id: "privacy", label: "Privacy" },
-];
-
-const DEVICE_PANES: Pane[] = [
-  { id: "player", label: "Player" },
-  { id: "display", label: "Display & home" },
-  { id: "keyboard", label: "Keyboard" },
-  { id: "app", label: "This app" },
-  /*
-   * Games has a pane of its own rather than a row inside "This app".
-   *
-   * It was a row there, and the first person to look for it did not find it:
-   * nothing on that path says the word "games", so a feature that had shipped
-   * and worked was reported as having no interface at all. Off by default is
-   * the right decision (ADR 0066) and undiscoverable is not the same thing.
-   */
-  { id: "games", label: "PC Games" },
-  // Last, where every app keeps it, and for everyone: nothing in it is an
-  // administrator's, and the licence is anybody's business.
-  { id: "about", label: "About" },
-];
 
 /*
  * Where a pane that was renamed or split now lives.
@@ -3726,6 +3642,71 @@ function desktopAvailable(): boolean {
   );
 }
 
+/*
+ * The row in a pane that carries a setting's label, or null.
+ *
+ * The deepest element whose text holds the label, then the row around it, so
+ * what is scrolled to and marked is the whole setting — the switch, its name
+ * and the sentence under it — rather than the one word that matched.
+ */
+export function findSettingRow(pane: HTMLElement, label: string): HTMLElement | null {
+  const want = normalize(label);
+  let best: HTMLElement | null = null;
+  for (const el of pane.querySelectorAll<HTMLElement>("*")) {
+    if (!normalize(el.textContent ?? "").includes(want)) continue;
+    // Deeper matches come later in document order and replace their ancestors.
+    if (!best || best.contains(el)) best = el;
+  }
+  if (!best) return null;
+  return (
+    best.closest<HTMLElement>(".set-row, .set-toggle, .set-lib, .set-add, label") ??
+    best.closest<HTMLElement>(".settings__section") ??
+    best
+  );
+}
+
+/*
+ * After a search result opens its pane, scroll to the setting and mark it.
+ *
+ * Most panes draw nothing until the server has answered, so the row is waited
+ * for rather than looked for once, and given up on after a few seconds: the
+ * pane is open either way, which is most of the answer.
+ */
+function useFoundSetting(
+  paneRef: RefObject<HTMLDivElement | null>,
+  found: { label: string; at: number } | null,
+) {
+  useEffect(() => {
+    const pane = paneRef.current;
+    if (!found || !pane) return;
+    let marked: HTMLElement | null = null;
+    let unmark: ReturnType<typeof setTimeout> | undefined;
+    const attempt = () => {
+      const row = findSettingRow(pane, found.label);
+      if (!row) return false;
+      marked = row;
+      row.classList.add("is-found");
+      row.scrollIntoView?.({ block: "center", behavior: "smooth" });
+      // Focus the control itself, so a keyboard or a remote is already on it.
+      row.querySelector<HTMLElement>("input, select, textarea, button")?.focus({ preventScroll: true });
+      unmark = setTimeout(() => row.classList.remove("is-found"), 2400);
+      return true;
+    };
+    if (attempt()) return () => clearTimeout(unmark);
+    const observer = new MutationObserver(() => {
+      if (attempt()) observer.disconnect();
+    });
+    observer.observe(pane, { childList: true, subtree: true, characterData: true });
+    const giveUp = setTimeout(() => observer.disconnect(), 5000);
+    return () => {
+      observer.disconnect();
+      clearTimeout(giveUp);
+      clearTimeout(unmark);
+      (marked as HTMLElement | null)?.classList.remove("is-found");
+    };
+  }, [paneRef, found]);
+}
+
 export function Settings() {
   const isAdmin = useIsAdmin();
   const [params, setParams] = useSearchParams();
@@ -3756,6 +3737,22 @@ export function Settings() {
       { replace: true },
     );
 
+  const [query, setQuery] = useState("");
+  const [found, setFound] = useState<{ label: string; at: number } | null>(null);
+  const paneRef = useRef<HTMLDivElement>(null);
+  const searchRef = useRef<HTMLInputElement>(null);
+  const resultsRef = useRef<HTMLDivElement>(null);
+  const matches = searchSettings(query, new Set(all.map((x) => x.id)));
+
+  const choose = (m: SettingMatch) => {
+    setQuery("");
+    go(m.pane);
+    // A pane's own name opens the pane and no more; a setting is looked for.
+    setFound(m.label === m.paneLabel ? null : { label: m.label, at: Date.now() });
+  };
+
+  useFoundSetting(paneRef, found);
+
   const navGroup = (label: string, panes: Pane[]) =>
     panes.length > 0 && (
       <div className="settings__navgroup">
@@ -3781,13 +3778,82 @@ export function Settings() {
 
       <div className="settings__layout">
         <nav className="settings__nav" aria-label="Settings categories">
-          {navGroup("Status", status)}
-          {navGroup("Server", server)}
-          {navGroup("Your account", account)}
-          {navGroup("This device", device)}
+          <input
+            ref={searchRef}
+            className="set-input settings__search"
+            type="search"
+            placeholder="Search settings"
+            aria-label="Search settings"
+            aria-controls="settings-search-results"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && matches[0]) {
+                e.preventDefault();
+                choose(matches[0]);
+              } else if (e.key === "Escape" && query) {
+                // Clears the box rather than leaving the page.
+                e.preventDefault();
+                e.stopPropagation();
+                setQuery("");
+              } else if (e.key === "ArrowDown" && matches[0]) {
+                e.preventDefault();
+                e.stopPropagation();
+                resultsRef.current?.querySelector<HTMLButtonElement>("button")?.focus();
+              }
+            }}
+          />
+          {query.trim() !== "" ? (
+            <div
+              ref={resultsRef}
+              id="settings-search-results"
+              className="settings__navgroup settings__results"
+              role="list"
+              aria-label="Matching settings"
+              onKeyDown={(e) => {
+                if (e.key !== "ArrowDown" && e.key !== "ArrowUp" && e.key !== "Escape") return;
+                e.preventDefault();
+                e.stopPropagation();
+                if (e.key === "Escape") {
+                  searchRef.current?.focus();
+                  return;
+                }
+                const items = [...(resultsRef.current?.querySelectorAll<HTMLButtonElement>("button") ?? [])];
+                const at = items.indexOf(document.activeElement as HTMLButtonElement);
+                const next = e.key === "ArrowDown" ? at + 1 : at - 1;
+                if (next < 0) searchRef.current?.focus();
+                else items[Math.min(next, items.length - 1)]?.focus();
+              }}
+            >
+              {matches.length === 0 ? (
+                <p className="settings__noresult">No setting matches &ldquo;{query.trim()}&rdquo;.</p>
+              ) : (
+                matches.map((m) => (
+                  <button
+                    key={m.pane + m.label}
+                    role="listitem"
+                    className="settings__navitem settings__result"
+                    onClick={() => choose(m)}
+                  >
+                    <span className="settings__result-label">{m.label}</span>
+                    <span className="settings__result-where">
+                      {m.label === m.paneLabel ? m.group : `${m.group} · ${m.paneLabel}`}
+                    </span>
+                  </button>
+                ))
+              )}
+            </div>
+          ) : (
+            <>
+              {navGroup("Status", status)}
+              {navGroup("Server", server)}
+              {navGroup("Your account", account)}
+              {navGroup("This device", device)}
+            </>
+          )}
         </nav>
 
-        <div className="settings__pane">
+        <div className="settings__pane" ref={paneRef}>
           {isAdmin && (
             <>
               {pane === "general" && <GeneralSection />}

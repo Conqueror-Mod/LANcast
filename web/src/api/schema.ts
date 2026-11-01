@@ -2619,7 +2619,7 @@ export interface paths {
         put?: never;
         /**
          * Send a problem report to the developer
-         * @description The one request LANcast makes to its developer, and only this one, made when a person presses Send (ADR 0109). The server posts the report to the webhook its release build carries, with LANcast's version, the server's operating system, the client named in the request and whether the sender is an administrator. Never a name or an address. `include_log` attaches the last 2,000 lines of the server log (at most 1 MB) and is allowed for an administrator only. Five reports an hour for the whole server, one every 20 seconds. Audited as `report.send`.
+         * @description The one request LANcast makes to its developer, and only this one, made when a person presses Send (ADR 0109). The server posts the report to the webhook its release build carries, with LANcast's version, the server's operating system, the client named in the request and whether the sender is an administrator. Never a name or an address. `include_log` attaches the last 2,000 lines of the server log (at most 1 MB) and is allowed for an administrator only. Anyone who may send may attach up to four pictures (`images`). Five reports an hour for the whole server, one every 20 seconds. Audited as `report.send`.
          */
         post: operations["sendReport"];
         delete?: never;
@@ -8878,6 +8878,8 @@ export interface components {
             client?: string;
             /** @description Attach the end of the server log. Administrators only. */
             include_log?: boolean;
+            /** @description Pictures to attach, a screenshot mostly. The server decodes each and encodes it again, at most 2560 pixels on its long edge, which drops any metadata it carried (a phone photo's location among it). A file that is not a picture is refused with `400` before anything is sent. */
+            images?: string[];
         };
         ReportSent: {
             sent: boolean;

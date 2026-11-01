@@ -64,3 +64,18 @@ as `report.send`.
 - The developer's contact address stays on Settings › About as text to copy,
   not a link.
 - A reply goes only to whatever contact the sender chose to type.
+
+## Amendment, 2026-11-01: pictures
+
+A report may carry up to four pictures, chosen or pasted into the form and
+shown there before Send. Anyone who may send may attach them: unlike the log,
+a picture is something the sender chose and has seen.
+
+The server never forwards a picture as it arrived. It decodes each one (PNG,
+JPEG, GIF or WebP, at most 6 MB, refusing a header that claims more than 50
+million pixels) and encodes it again, at most 2,560 pixels on its long edge
+and 2 MB. That proves it is a picture, and it drops metadata: a phone photo
+records where it was taken, and attaching it to a bug report is not consent
+to send that location. Four pictures and a full log stay under the 10 MB
+Discord takes in one message. A picture that will not open is refused before
+the rate limit counts the send.
