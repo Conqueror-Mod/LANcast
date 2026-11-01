@@ -552,6 +552,66 @@
   min-width: 0;
 }
 
+/* Search sits above the categories and, while something is typed, replaces
+   them with what matched. */
+.settings__search {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.settings__results {
+  gap: 2px;
+}
+
+.settings__result {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+.settings__result-label {
+  color: var(--text-primary);
+}
+
+.settings__result-where {
+  font-size: 11px;
+  color: var(--text-faint);
+}
+
+.settings__noresult {
+  font-size: 13px;
+  color: var(--text-muted);
+  margin: 4px 10px;
+}
+
+/* The setting a search result led to. Blue, not gold: gold is the focus, and
+   the focus has already moved onto this setting's control. This only says
+   which row it belongs to, and fades. */
+.is-found {
+  border-radius: 8px;
+  animation: settings-found 2.4s ease-out;
+}
+
+@keyframes settings-found {
+  0%,
+  40% {
+    background-color: rgba(38, 88, 168, 0.28);
+    box-shadow: 0 0 0 6px rgba(38, 88, 168, 0.28);
+  }
+  100% {
+    background-color: transparent;
+    box-shadow: 0 0 0 6px transparent;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .is-found {
+    animation: none;
+    background-color: rgba(38, 88, 168, 0.22);
+  }
+}
+
 /* The pane owns the spacing between its sections now that there is usually one
    of them; the old stacked page relied on the section's own margin. */
 .settings__pane .settings__section:first-child {
@@ -584,6 +644,15 @@
   .settings__navitem.is-active {
     border-left-color: transparent;
     border-bottom-color: var(--gold);
+  }
+  /* Results stay a column: a wrapped row of long setting names is unreadable. */
+  .settings__results {
+    flex-direction: column;
+    align-items: stretch;
+    width: 100%;
+  }
+  .settings__result {
+    border-bottom: none;
   }
 }
 
