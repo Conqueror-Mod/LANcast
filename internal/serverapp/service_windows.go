@@ -47,6 +47,14 @@ func serviceRun(dataDir, addr string) error {
 		log.Info("logging to file", "path", lf.Path())
 	}
 
+	// A fatal error goes to stderr, which the SCM discards with everything
+	// else; this keeps its own words beside the log (applog/crash.go).
+	if earlier, err := applog.CaptureCrashes(dataDir, applog.ServerCrashFileName); err != nil {
+		log.Warn("crash reports will not be kept", "error", err)
+	} else if earlier != nil {
+		log.Warn("the last run crashed", "at", earlier.At, "cause", earlier.Cause, "report", earlier.Path)
+	}
+
 	// Every exit goes through the log on its way out.
 	//
 	// Returning the reason as an error alone is not enough: main prints it to a
