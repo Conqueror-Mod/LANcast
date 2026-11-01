@@ -659,6 +659,40 @@ export function Player() {
   const { rollOn } = pb;
   const rollOnUnattended = useCallback(() => rollOn(false), [rollOn]);
 
+  /*
+   * SPIKE (docs/uncomposed-video-plan.md, phase 1): with nothing on screen
+   * over a native film, the window takes the page's overlay off the screen,
+   * so Windows may show the film without composing it. Subtitles, the skip
+   * and up-next cards, the stats panel and a paused film all keep it.
+   */
+  const overlayIdle =
+    pb.native &&
+    !chromeVisible &&
+    !pb.isAudio &&
+    pb.playing &&
+    !pb.loading &&
+    !pb.activeSub &&
+    !skip &&
+    !showUpNext &&
+    !showIntroSkipped &&
+    !showStats &&
+    !pb.stillWatching;
+  useEffect(() => {
+    void window.lancastMpvOverlayIdle?.(overlayIdle).catch(() => {});
+  }, [overlayIdle]);
+  useEffect(
+    () => () => {
+      void window.lancastMpvOverlayIdle?.(false).catch(() => {});
+    },
+    [],
+  );
+  useEffect(() => {
+    window.__lancastNativeWake = wakeChrome;
+    return () => {
+      if (window.__lancastNativeWake === wakeChrome) delete window.__lancastNativeWake;
+    };
+  }, [wakeChrome]);
+
   return (
     <div
       className={

@@ -442,5 +442,17 @@ func (n *nativePlayer) mpvBindings() map[string]any {
 			win.SetVideoLayout(layout, int(x), int(y), int(w), int(h))
 			return nil
 		},
+		// SPIKE (uncomposed-video plan, phase 1): the page has nothing to show
+		// over a full-size film, so its overlay can leave the screen.
+		"lancastMpvOverlayIdle": func(idle bool) error {
+			n.mu.Lock()
+			win := n.window
+			n.mu.Unlock()
+			if win == nil {
+				return errors.New("no window")
+			}
+			win.SetOverlayIdle(idle)
+			return nil
+		},
 	}
 }

@@ -49,6 +49,9 @@ type WebView interface {
 	// shows it under the page or hides it (ADR 0076, overlay.go).
 	GameWindow() (uintptr, error)
 	SetGameLayout(on bool) error
+	// SetOverlayIdle hides the page overlay while a full-size film has nothing
+	// over it (SPIKE, overlay_idle.go).
+	SetOverlayIdle(idle bool) error
 
 	// Destroy destroys a webview and closes the native window.
 	Destroy()
