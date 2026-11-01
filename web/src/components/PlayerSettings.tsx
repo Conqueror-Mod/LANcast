@@ -232,8 +232,9 @@ function TheaterOutput() {
         changes, and only while a film plays. A screen that offers no matching rate is left alone.
       </p>
       <p className="set-row__sub">
-        Smoothest with the TV as the only display. With other monitors on at different rates,
-        Windows paces the picture to one of them, and some stutter remains.
+        Smoothest with the TV as the main display, in Windows&rsquo; display settings. Windows then
+        sends the film straight to the TV once the controls fade. With another screen as the main
+        one, it paces the picture to that screen&rsquo;s clock, and some stutter remains.
       </p>
       {prefs.matchRate && (
         <>
@@ -255,6 +256,19 @@ function TheaterOutput() {
             A TV goes black for a moment while it changes rate. The film starts after this
             long, so its opening is not lost to the black screen. Make it longer if the first
             seconds are still missing.
+          </p>
+          <label className="set-toggle">
+            <input
+              type="checkbox"
+              checked={prefs.fullscreenFilms}
+              onChange={(e) => setPrefs({ fullscreenFilms: e.target.checked })}
+            />
+            Open films fullscreen
+          </label>
+          <p className="set-row__sub">
+            Windows can send a film straight to the TV only when it fills the whole screen. In a
+            window, even a maximized one, some stutter remains. F or Escape leaves fullscreen as
+            usual.
           </p>
         </>
       )}

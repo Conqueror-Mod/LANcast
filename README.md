@@ -277,7 +277,7 @@ a change to the installer itself needs the installer.
 | [docs/metadata.md](docs/metadata.md) | Providers, matching, locking, artwork |
 | [docs/security.md](docs/security.md) | What is protected, what is not — **read before exposing it** |
 | [docs/roadmap.md](docs/roadmap.md) | Every release, every area's status, and what each pass taught |
-| [docs/adr/](docs/adr/) | 110 decision records — why things are the way they are |
+| [docs/adr/](docs/adr/) | 111 decision records — why things are the way they are |
 
 The `*-plan.md` files in `docs/` are the plans particular areas were built
 from. They are kept as written rather than revised, so they record what was

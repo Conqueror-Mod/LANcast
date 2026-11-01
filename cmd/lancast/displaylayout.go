@@ -53,3 +53,29 @@ func monitorList(active []clientwindow.Monitor) string {
 	}
 	return strings.Join(names, ", ")
 }
+
+// uncomposedFix says what would let Windows show the film on device without
+// composing it (ADR 0111), or "" when nothing needs changing. The driver on
+// the theater PC gives overlay planes to the primary display only, so with
+// the TV secondary every frame was composed on another monitor's clock, and
+// with it primary, other monitors on, none was. LANcast does not move the
+// primary display itself: that is the person's desktop.
+func uncomposedFix(active []clientwindow.Monitor, device string) string {
+	if len(active) < 2 {
+		return ""
+	}
+	for _, m := range active {
+		if m.Device != device {
+			continue
+		}
+		if m.Primary {
+			return ""
+		}
+		n := m.Name
+		if n == "" {
+			n = m.Device
+		}
+		return "make " + n + " the main display (Windows Settings, System, Display) for the smoothest picture"
+	}
+	return ""
+}

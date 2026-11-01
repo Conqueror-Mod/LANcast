@@ -442,5 +442,31 @@ func (n *nativePlayer) mpvBindings() map[string]any {
 			win.SetVideoLayout(layout, int(x), int(y), int(w), int(h))
 			return nil
 		},
+		// Nothing is on screen over a full-size film, so the page's overlay
+		// can leave the screen and Windows can flip the film straight to the
+		// TV (ADR 0111). keptBy is the page's reason when it can't, for the
+		// log: "controls", "subtitles" and so on.
+		"lancastMpvOverlayIdle": func(idle bool, keptBy string) error {
+			n.mu.Lock()
+			win, p := n.window, n.player
+			n.mu.Unlock()
+			slog.Debug("native video: page overlay asked", "idle", idle, "kept_by", keptBy)
+			if win == nil {
+				return errors.New("no window")
+			}
+			// The page's cursor: none goes with the page, so mpv hides the
+			// pointer over the picture itself while the page is away.
+			if p != nil {
+				hide := "no"
+				if idle {
+					hide = "always"
+				}
+				if err := p.Set("cursor-autohide", hide); err != nil {
+					slog.Warn("could not hide the pointer over the film", "error", err)
+				}
+			}
+			win.SetOverlayIdle(idle)
+			return nil
+		},
 	}
 }

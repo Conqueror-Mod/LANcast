@@ -126,6 +126,13 @@ func open(o Options) error {
 	o.Bindings["lancastToggleFullscreen"] = func() bool {
 		return fs.Toggle(uintptr(w.Window()))
 	}
+	// A film opening on the TV. Windows sends a film straight to the screen
+	// only when the picture covers all of it, and a maximized window's title
+	// bar and the taskbar's edge kept every frame composed (ADR 0111). Enter
+	// only, so a film opening in an already fullscreen window leaves it be.
+	o.Bindings["lancastEnterFullscreen"] = func() bool {
+		return fs.Enter(uintptr(w.Window()))
+	}
 
 	/*
 	 * Media keys and Win+arrow (winkeys_windows.go). The page says when
@@ -340,6 +347,10 @@ func (c *controller) GameWindow() uintptr {
 
 func (c *controller) SetGameLayout(on bool) {
 	c.w.Dispatch(func() { _ = c.w.SetGameLayout(on) })
+}
+
+func (c *controller) SetOverlayIdle(idle bool) {
+	c.w.Dispatch(func() { _ = c.w.SetOverlayIdle(idle) })
 }
 
 func (c *controller) Eval(js string) {

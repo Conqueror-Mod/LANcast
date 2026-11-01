@@ -14,6 +14,7 @@
 import { apiPost } from "@/api/client";
 import type { MediaBackend } from "./backend";
 import { getPrefs, subscribePrefs, type Prefs } from "./prefs";
+import type { WakeKey } from "./overlayIdle";
 
 interface MpvEvent {
   events: string[];
@@ -40,6 +41,10 @@ declare global {
       height: number,
     ) => Promise<void>;
     __lancastMpvEvent?: (e: MpvEvent) => void;
+    /** Nothing is over the film, so the window may take the page away (ADR 0111). */
+    lancastMpvOverlayIdle?: (idle: boolean, keptBy: string) => Promise<void>;
+    /** The window brought the page back, for a move over the picture or a key. */
+    __lancastNativeWake?: (key: WakeKey | null) => void;
   }
 }
 
