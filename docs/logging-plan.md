@@ -15,6 +15,13 @@ without making it noisier.
   (`lancast-tray.log`) and the desktop window (`lancast-client.log`) each own
   a file, because two processes rotating one file corrupts it. Size is not a
   problem to solve. *Signal* is.
+- **Crash reports** (2026-11-01). A Go fatal error writes its reason and stacks
+  to stderr, which neither the service nor the `-H=windowsgui` window has, and
+  Windows logs no Application Error for it (Go handles the exception itself).
+  `applog.CaptureCrashes` sends that text to `lancastd-crash.log` and
+  `lancast-client-crash.log`, beside each log. The next start moves a report
+  to `.1` and logs `the last run crashed` with its cause. Added after the
+  window died mid-film and left no trace anywhere.
 - **A viewer.** Settings shows the tail of the server log and of this window's
   log, so nobody has to be told where the files are.
 - **Levels with a switch.** The server runs at Info with a Debug switch
