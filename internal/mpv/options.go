@@ -53,6 +53,12 @@ func Options(wid uint64, logFile string) []Option {
 		// Named, not chosen at random by mpv's probing order: d3d11 is what
 		// the Phase 0 spike proved composites under the overlay.
 		{Name: "gpu-api", Value: "d3d11"},
+		// Named for the same reason. gpu-next is what mpv 0.41 already chose
+		// on its own (mpv.log: "VO: [gpu-next] … d3d11"), and it is the output
+		// that can hint HDR to the display (target-colorspace-hint, HDRHint).
+		// Left to choose, a future mpv could pick another and HDR would stop
+		// with nothing to say why.
+		{Name: "vo", Value: "gpu-next"},
 		{Name: "hwdec", Value: "auto-safe"},
 		// Subtitles are the page's to draw (web/src/playback/nativeTracks.ts):
 		// one renderer for both backends, so a track chosen in the player is
