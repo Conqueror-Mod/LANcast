@@ -232,8 +232,9 @@ function TheaterOutput() {
         changes, and only while a film plays. A screen that offers no matching rate is left alone.
       </p>
       <p className="set-row__sub">
-        Smoothest with the TV as the only display. With other monitors on at different rates,
-        Windows paces the picture to one of them, and some stutter remains.
+        Smoothest with the TV as the main display, in Windows&rsquo; display settings. Windows then
+        sends the film straight to the TV once the controls fade. With another screen as the main
+        one, it paces the picture to that screen&rsquo;s clock, and some stutter remains.
       </p>
       {prefs.matchRate && (
         <>

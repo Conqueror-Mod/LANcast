@@ -46,6 +46,7 @@ import { nextChapterStart, previousChapterStart, type ChapterMark } from "@/lib/
 import { UpNextCard } from "@/components/UpNextCard";
 import { AfterFilm } from "@/components/AfterFilm";
 import { DEFAULTS, DIALOGUE_LEVELS } from "@/playback/prefs";
+import { nativeWake, overlayKeptBy } from "@/playback/overlayIdle";
 import {
   canBoostDialogue,
   canNightFilm,
@@ -436,6 +437,23 @@ export function Player() {
     if (pb.stillWatching) wakeChrome();
   }, [pb.stillWatching, wakeChrome]);
 
+  /*
+   * The hide clock starts again when the film starts playing.
+   *
+   * The timer reads `pb.playing` from when it was armed, and only hides a
+   * playing film. Frame-rate matching holds a film's start for a few seconds
+   * while the TV changes mode, so the clock armed on opening ran out before
+   * playback began, and the controls then stayed over the film until somebody
+   * moved the mouse. With the page leaving the screen once they fade
+   * (ADR 0111), that left every matched film composed.
+   */
+  const wasPlaying = useRef(pb.playing);
+  useEffect(() => {
+    const started = pb.playing && !wasPlaying.current;
+    wasPlaying.current = pb.playing;
+    if (started && chromeVisible) wakeChrome();
+  }, [pb.playing, chromeVisible, wakeChrome]);
+
   useEffect(
     () => () => {
       window.clearTimeout(idleTimer.current);
@@ -656,6 +674,44 @@ export function Player() {
     !pb.playing &&
     !pb.isAudio &&
     item?.kind === "movie";
+  /*
+   * With nothing on screen over a native film, the window takes the page off
+   * the screen, so Windows can send the film to the TV without composing it
+   * (ADR 0111). Only while a native film is up, so browsing sends nothing.
+   */
+  const overlayAsk = pb.native
+    ? overlayKeptBy({
+        native: pb.native,
+        chromeVisible,
+        isAudio: pb.isAudio,
+        playing: pb.playing,
+        loading: pb.loading,
+        subtitles: pb.activeSub != null,
+        skipCard: skip != null,
+        upNext: showUpNext,
+        introSkipped: showIntroSkipped,
+        stats: showStats,
+        stillWatching: !!pb.stillWatching,
+      })
+    : null;
+  useEffect(() => {
+    if (overlayAsk === null) return;
+    void window.lancastMpvOverlayIdle?.(overlayAsk === "", overlayAsk).catch(() => {});
+  }, [overlayAsk]);
+  useEffect(
+    () => () => {
+      void window.lancastMpvOverlayIdle?.(false, "left the player").catch(() => {});
+    },
+    [],
+  );
+  useEffect(() => {
+    const wake = (key: Parameters<typeof nativeWake>[1]) => nativeWake(wakeChrome, key);
+    window.__lancastNativeWake = wake;
+    return () => {
+      if (window.__lancastNativeWake === wake) delete window.__lancastNativeWake;
+    };
+  }, [wakeChrome]);
+
   const { rollOn } = pb;
   const rollOnUnattended = useCallback(() => rollOn(false), [rollOn]);
 
