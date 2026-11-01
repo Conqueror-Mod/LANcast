@@ -9,6 +9,7 @@ import (
 
 	"lancast/internal/clientwindow"
 	"lancast/internal/displaymode"
+	"lancast/internal/mpv"
 )
 
 /*
@@ -85,6 +86,36 @@ func (n *nativePlayer) matchDisplay(gen int) {
 		slog.Info("display not matched", "film_fps", round3(fps), "monitor", res.Device,
 			"reason", res.Decision.Reason)
 	}
+	// Switched or not, mpv is told the rate the screen is really at: it
+	// cannot hear the change itself (mpv.DisplayTiming says why).
+	if hz, ok := clientwindow.RefreshRate(res.Device); ok && err == nil {
+		applyTiming(p, hz)
+		active := clientwindow.Monitors()
+		if resampleWorthTrying(active) {
+			// Resampling on trial: mpv measures the rate its presents really
+			// run at only while it paces to the display (with audio as the
+			// clock it reports estimated-display-fps 0, measured on the
+			// theater PC). So it paces for the first seconds, and logTiming
+			// keeps that or takes it back once the measurement says whose
+			// clock it is.
+			setAll(p, mpv.Resample)
+			n.mu.Lock()
+			if n.gate.gen == gen {
+				n.timedHz = hz
+			}
+			n.mu.Unlock()
+			slog.Info("display timing given to mpv, resampling on trial", "display_hz", round3(hz))
+		} else {
+			// Another monitor sets the pace, and the trial would only add
+			// fifteen seconds of stutter before losing (it lost every time).
+			slog.Info("display timing given to mpv; other displays are on, so not resampling",
+				"display_hz", round3(hz), "active", monitorList(active),
+				"fix", "make the TV the only display for the smoothest picture")
+		}
+		if disp.Active() {
+			go n.watchLayout(gen, disp, layoutKey(active))
+		}
+	}
 
 	n.mu.Lock()
 	defer n.mu.Unlock()
@@ -151,6 +182,44 @@ func restoreNow(disp *displaymode.Switcher) {
 		return
 	}
 	slog.Info("display restored")
+}
+
+// layoutEvery is how often a switched display's desktop is checked for a
+// layout change. Polled rather than hooked: WM_DISPLAYCHANGE goes to the
+// window's own thread, and two seconds is well inside the time it takes a
+// person to click through Windows' display settings.
+const layoutEvery = 2 * time.Second
+
+/*
+ * watchLayout puts the TV back if the desktop's layout changes while LANcast
+ * holds it at a film's rate (displaylayout.go says why: a monitor
+ * disconnected mid-film turned the TV off and rotated another screen).
+ *
+ * It runs for as long as the switch does, through the grace after a stop,
+ * and gives way to a newer watcher when the next film starts one. The restore
+ * is made without n.mu held, for the reason scheduleRestore gives.
+ */
+func (n *nativePlayer) watchLayout(gen int, disp *displaymode.Switcher, key string) {
+	n.mu.Lock()
+	n.layoutWatch++
+	me := n.layoutWatch
+	n.mu.Unlock()
+	for {
+		time.Sleep(layoutEvery)
+		n.mu.Lock()
+		newer := n.layoutWatch != me
+		n.mu.Unlock()
+		if newer || !disp.Active() {
+			return
+		}
+		active := clientwindow.Monitors()
+		if now := layoutKey(active); now != key {
+			slog.Warn("display layout changed while the TV was switched for a film; putting it back",
+				"film", gen, "active", monitorList(active))
+			restoreNow(disp)
+			return
+		}
+	}
 }
 
 // shutdown runs as the app exits: a display switched for a film goes back

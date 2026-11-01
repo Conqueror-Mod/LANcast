@@ -77,6 +77,12 @@ type nativePlayer struct {
 	gate      matchGate
 	restoreT  *time.Timer
 	wid       uintptr
+	// timedHz is the display rate this film's mpv was told (matchDisplay),
+	// 0 until then; logTiming decides from it whether pacing is earned.
+	timedHz float64
+	// layoutWatch numbers watchLayout's goroutines, so an older one stops
+	// when a newer film starts its own.
+	layoutWatch int
 
 	// retro plays games into the same video window (ADR 0073). Made on
 	// first use, so a client that never opens a game builds nothing.
@@ -265,7 +271,12 @@ func (n *nativePlayer) open(itemID int64, ticket string) error {
 		return err
 	}
 	n.cancelRestore()
-	n.gate.open(n.match)
+	gen := n.gate.open(n.match)
+	// mpv's own timing until matchDisplay knows better: a rate left over from
+	// the last film is exactly the staleness DisplayTiming exists to fix.
+	applyTiming(n.player, 0)
+	n.timedHz = 0
+	go n.logTiming(n.player, gen)
 	slog.Info("native playback", "item", itemID)
 	return n.player.Load(u, 0)
 }
