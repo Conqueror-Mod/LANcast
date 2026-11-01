@@ -80,6 +80,9 @@ type nativePlayer struct {
 	// timedHz is the display rate this film's mpv was told (matchDisplay),
 	// 0 until then; logTiming decides from it whether pacing is earned.
 	timedHz float64
+	// layoutWatch numbers watchLayout's goroutines, so an older one stops
+	// when a newer film starts its own.
+	layoutWatch int
 
 	// Theater output, step 2: hdr is the page's "Send HDR to the display",
 	// applied to each film as it opens. reported is set once this film's
