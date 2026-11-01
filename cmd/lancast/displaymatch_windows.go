@@ -30,10 +30,13 @@ import (
 // measured; more would read as a film that will not start.
 const maxSettle = 10 * time.Second
 
-// defaultSettle applies until the page sends its setting. A guess at a typical
-// TV's HDMI resync; the plan says the first evening's logs decide whether it
-// is right.
-const defaultSettle = 2 * time.Second
+/*
+ * defaultSettle applies until the page sends its setting (prefs.ts holds the
+ * same number). Measured, not guessed: on the first evening with a Roku
+ * 55R4AX, 2 s lost about half a second of the opening sound to the black
+ * screen and 3 s lost none. The TV needs about 2.5 s to resync at 4K.
+ */
+const defaultSettle = 3 * time.Second
 
 // restoreGrace is how long a stopped film keeps the display's rate. The next
 // film in a queue arrives well inside it, and a film of the same rate then

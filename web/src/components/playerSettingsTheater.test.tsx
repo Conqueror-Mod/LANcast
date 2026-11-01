@@ -89,7 +89,7 @@ describe("Theater output", () => {
     await act(async () => matchBox()!.click());
     expect(getPrefs().matchRate).toBe(true);
     const select = settleRow()?.querySelector("select");
-    expect(select?.value).toBe("2");
+    expect(select?.value).toBe("3");
     await act(async () => {
       select!.value = "5";
       select!.dispatchEvent(new Event("change", { bubbles: true }));

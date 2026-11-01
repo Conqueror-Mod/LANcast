@@ -249,7 +249,7 @@ export const DEFAULTS: Prefs = {
   dialogueVideo: 0,
   nightMusic: false,
   matchRate: false,
-  matchSettle: 2,
+  matchSettle: 3,
   taper: true,
   crossfade: 0,
   loudness: "off",

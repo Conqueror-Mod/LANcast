@@ -372,14 +372,14 @@ describe("MpvBackend refresh-rate matching", () => {
   it("sends matching off, not nothing, when it is off", async () => {
     // A client that matched the last film keeps doing it until told otherwise.
     await openFilm();
-    expect(log.slice(0, 3)).toEqual(["match-settle=2", "match-rate=0", "open"]);
+    expect(log.slice(0, 3)).toEqual(["match-settle=3", "match-rate=0", "open"]);
   });
 
   it("tells the client at once when matching is switched off, film or no film", async () => {
     const b = new MpvBackend();
     b.prefsChanged({ ...getPrefs(), matchRate: false });
     await flush();
-    expect(log).toEqual(["match-settle=2", "match-rate=0"]);
+    expect(log).toEqual(["match-settle=3", "match-rate=0"]);
   });
 });
 
