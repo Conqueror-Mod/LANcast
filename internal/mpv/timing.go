@@ -31,8 +31,11 @@ import (
  *    video-sync=display-resample paces frames to the display's vsync, and is
  *    the smoothest there is when that vsync is the TV's. When it is another
  *    monitor's, resampling to it makes the stutter worse (it did, the first
- *    time). So resampling is earned, not assumed: the player measures the rate
- *    its presents actually run at (PacedByDisplay) and only then turns it on.
+ *    time). So resampling is a trial, not an assumption. mpv only measures
+ *    the rate its presents really run at while it resamples (with audio as
+ *    the clock, estimated-display-fps reads 0), so the player resamples for
+ *    the first seconds of a film, measures, and keeps it only if
+ *    PacedByDisplay agrees.
  */
 
 // DisplayTiming is what to set on mpv for a display measured at hz, or mpv's

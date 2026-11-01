@@ -87,15 +87,16 @@ func (n *nativePlayer) logTiming(p *mpv.Player, gen int) {
 	}
 }
 
-// decidePacing turns on display-resample when mpv's presents really run on
-// the display's clock, and says which monitor's clock they run on when not.
+// decidePacing ends the resampling trial matchDisplay began: kept when mpv's
+// presents really run on the display's clock, taken back (audio as the clock
+// again) when they do not, with the monitor whose clock it is named.
 func decidePacing(p *mpv.Player, displayHz, measured float64) {
 	if mpv.PacedByDisplay(displayHz, measured) {
-		setAll(p, mpv.Resample)
 		slog.Info("frames paced by the display, resampling to it",
 			"display_hz", round3(displayHz), "measured_fps", round3(measured))
 		return
 	}
+	applyTiming(p, displayHz)
 	pacer := ""
 	for _, m := range clientwindow.Monitors() {
 		if r, ok := clientwindow.RefreshRate(m.Device); ok && mpv.PacedByDisplay(r, measured) {
