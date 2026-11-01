@@ -44,15 +44,16 @@ func Webhook() string {
 
 // Report is what the person wrote, and what goes with it.
 type Report struct {
-	What     string // what happened
-	Expected string // what they expected
-	Steps    string // how to make it happen again
-	Contact  string // how to reach them, optional
-	Version  string // LANcast's version
-	Platform string // OS and architecture of the server
-	Client   string // which client they were using, as the client says
-	Account  string // "admin" or "member", never a name
-	Log      []byte // the end of the server log, when they chose to include it
+	What     string  // what happened
+	Expected string  // what they expected
+	Steps    string  // how to make it happen again
+	Contact  string  // how to reach them, optional
+	Version  string  // LANcast's version
+	Platform string  // OS and architecture of the server
+	Client   string  // which client they were using, as the client says
+	Account  string  // "admin" or "member", never a name
+	Log      []byte  // the end of the server log, when they chose to include it
+	Images   []Image // pictures they attached, already made safe by PrepareImage
 }
 
 // Limits on what one report carries. Discord caps a message at 2,000
@@ -87,6 +88,12 @@ func (r Report) Body() string {
 	if len(r.Log) > 0 {
 		b.WriteString(" · log attached")
 	}
+	switch n := len(r.Images); {
+	case n == 1:
+		b.WriteString(" · 1 picture")
+	case n > 1:
+		fmt.Fprintf(&b, " · %d pictures", n)
+	}
 	return b.String()
 }
 
@@ -98,7 +105,7 @@ func or(s, d string) string {
 }
 
 // Send posts the report to url as one Discord message: the text, cut to fit
-// the message, with the full text and the log attached as files.
+// the message, with the full text, the log and any pictures attached as files.
 func Send(ctx context.Context, client *http.Client, url string, r Report) error {
 	if url == "" {
 		return ErrNoWebhook
@@ -137,6 +144,12 @@ func Send(ctx context.Context, client *http.Client, url string, r Report) error 
 	}
 	if len(r.Log) > 0 {
 		if err := attach("lancastd-tail.log", r.Log); err != nil {
+			return err
+		}
+	}
+	// Discord shows an attached picture in the message itself.
+	for _, img := range r.Images {
+		if err := attach(img.Name, img.Data); err != nil {
 			return err
 		}
 	}
