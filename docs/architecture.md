@@ -53,7 +53,9 @@ no logic lives in either `cmd`.
 
 **`internal/config`** — resolves the data directory (platform config dir, or
 `-data`), the listen address, and settings. Creates the data directory if
-absent.
+absent. Holds the TMDB and OpenSubtitles keys a release build carries, and the
+one rule for which key is in use: the person's own, else the built-in one
+([ADR 0110](adr/0110-lancast-carries-its-own-provider-keys.md)).
 
 **`internal/store`** — the only package that speaks SQL. Owns `schema.sql`,
 which is embedded and applied at open; every statement is `IF NOT EXISTS`, so
