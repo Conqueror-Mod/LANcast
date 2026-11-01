@@ -253,7 +253,11 @@ per-account ceiling can compare a BBFC 15 with a TV-14.
 
 **`internal/mpv`** — libmpv driven through syscalls, the desktop window's own
 player ([ADR 0067](adr/0067-the-desktop-client-plays-through-libmpv.md)), split
-like `probe` into what the player is told and how its events are read.
+like `probe` into what the player is told and how its events are read. While
+nothing is over a full-size film, the page's overlay window leaves the screen
+so Windows can show the film without composing it
+([ADR 0111](adr/0111-the-page-leaves-the-screen-over-a-film.md),
+`internal/webview2/overlay_idle.go`).
 
 **`internal/displaymode`** — refresh-rate matching for that player
 ([theater output plan](theater-output-plan.md), step 1): which mode suits a
