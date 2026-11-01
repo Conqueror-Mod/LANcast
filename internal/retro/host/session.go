@@ -102,6 +102,24 @@ type Option struct {
 	Value       string   `json:"value"`
 }
 
+/*
+ * Achievements is RetroAchievements while playing (ADR 0111): evaluated
+ * against the game's memory once per frame the person sees played. Every
+ * method is called on the core's thread. Rewound frames are not reported:
+ * stepping back is not playing.
+ */
+type Achievements interface {
+	// Start loads the game's set, after the core has loaded the game (so its
+	// memory maps are known).
+	Start(core libretro.Core, path string, data []byte) error
+	Frame()
+	// Idle hands over network answers while the game is paused.
+	Idle()
+	Reset()
+	// Stop is called before the core unloads the game.
+	Stop()
+}
+
 // Config is one game session.
 type Config struct {
 	Core      libretro.Core
@@ -132,6 +150,9 @@ type Config struct {
 	// FlushEvery is how often changed save RAM is sent to the server while
 	// playing. Zero means every five seconds.
 	FlushEvery time.Duration
+
+	// Achievements, if set, earns RetroAchievements while playing.
+	Achievements Achievements
 
 	OnEvent func(Event)
 	Log     *slog.Logger
@@ -400,6 +421,12 @@ func (s *Session) run(ctx context.Context) (err error) {
 	}
 	core.SetControllerPortDevice(0, libretro.DeviceJoypad)
 	core.SetControllerPortDevice(1, libretro.DeviceJoypad)
+	if a := s.cfg.Achievements; a != nil {
+		if err := a.Start(core, s.cfg.GamePath, s.cfg.GameData); err != nil {
+			s.cfg.Log.Warn("retro session: achievements unavailable", "error", err)
+			s.cfg.Achievements = nil
+		}
+	}
 
 	if s.cfg.Audio != nil {
 		if err := s.cfg.Audio.Open(int(s.av.SampleRate + 0.5)); err != nil {
@@ -527,6 +554,9 @@ func (s *Session) drain(block bool) {
 				select {
 				case c = <-s.cmds:
 				case <-tick:
+					if a := s.cfg.Achievements; a != nil {
+						a.Idle()
+					}
 					pads, guide := ps.PollPads()
 					for _, move := range s.nav.Update(pads[0], guide, time.Now()) {
 						s.cfg.OnEvent(Event{Kind: "nav", Text: move})
@@ -577,6 +607,9 @@ func (s *Session) handle(c command) {
 	case "reset":
 		core.Reset()
 		s.rewind.clear()
+		if a := s.cfg.Achievements; a != nil {
+			a.Reset()
+		}
 	case "fast-forward":
 		s.fastForward = c.val == "on"
 	case "rewind":
@@ -719,6 +752,9 @@ func (s *Session) finish() {
 	case <-done:
 	case <-time.After(30 * time.Second):
 		s.cfg.Log.Warn("retro session: saves still uploading after 30s; closing anyway")
+	}
+	if a := s.cfg.Achievements; a != nil {
+		a.Stop()
 	}
 	s.cfg.Core.UnloadGame()
 }
@@ -1053,13 +1089,21 @@ func (s *Session) runTick() {
 		for i := 0; i < fastFactor && !s.paused; i++ {
 			s.skipVideo = i < fastFactor-1
 			core.Run()
+			s.achFrame()
 			s.captureRewind()
 		}
 		s.skipVideo, s.muted = false, false
 	default:
 		s.announceSpeed("normal")
 		core.Run()
+		s.achFrame()
 		s.captureRewind()
+	}
+}
+
+func (s *Session) achFrame() {
+	if a := s.cfg.Achievements; a != nil {
+		a.Frame()
 	}
 }
 
