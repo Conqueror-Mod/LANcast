@@ -43,6 +43,7 @@ const (
 	EnvGetSaveDirectory       = 31
 	EnvSetSystemAVInfo        = 32
 	EnvSetControllerInfo      = 35
+	EnvSetMemoryMaps          = 36 | envExperimental
 	EnvSetGeometry            = 37
 	EnvGetUsername            = 38
 	EnvGetLanguage            = 39
@@ -308,6 +309,17 @@ type Core interface {
 type InputDescriptor struct {
 	Port, Device, Index, ID uint32
 	Description             string
+}
+
+/*
+ * MemoryMapper is a Core that can give the memory map a core declared with
+ * SET_MEMORY_MAPS, for RetroAchievements (ADR 0111): the address of a C copy
+ * of its struct retro_memory_map, valid until UnloadGame, or 0 when the core
+ * declared none. Many cores declare none and answer retro_get_memory_data
+ * instead; rcheevos reads either.
+ */
+type MemoryMapper interface {
+	MemoryMap() uintptr
 }
 
 // DescriptorSink is a Frontend that wants a core's input names. Optional:

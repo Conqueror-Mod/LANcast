@@ -165,7 +165,60 @@ type dllCore struct {
 
 	// The core's own hardware-context callbacks, when it asked for one.
 	contextReset, contextDestroy uintptr
+
+	// memMap is a C copy of the memory map the core declared, and its
+	// descriptors; 0 when it declared none. Freed with the game.
+	memMap, memDescs unsafe.Pointer
 }
+
+// retroMemoryDescriptor and retroMemoryMap mirror libretro.h on 64-bit
+// Windows: eight 8-byte fields, and a pointer with a count.
+type retroMemoryDescriptor struct {
+	flags                                  uint64
+	ptr                                    unsafe.Pointer
+	offset, start, sel, disconnect, length uintptr
+	addrspace                              *byte
+}
+
+type retroMemoryMap struct {
+	descriptors unsafe.Pointer
+	num         uint32
+}
+
+// maxMemoryDescriptors bounds what is copied from a core. Real cores declare
+// a handful; this stops a bad count from walking off the end of memory.
+const maxMemoryDescriptors = 256
+
+func (c *dllCore) setMemoryMap(data unsafe.Pointer) bool {
+	c.freeMemoryMap()
+	m := (*retroMemoryMap)(data)
+	if m.descriptors == nil || m.num == 0 || m.num > maxMemoryDescriptors {
+		return false
+	}
+	size := unsafe.Sizeof(retroMemoryDescriptor{})
+	descs := cAlloc(uintptr(m.num) * size)
+	for i := uint32(0); i < m.num; i++ {
+		src := (*retroMemoryDescriptor)(unsafe.Add(m.descriptors, uintptr(i)*size))
+		dst := (*retroMemoryDescriptor)(unsafe.Add(descs, uintptr(i)*size))
+		*dst = *src
+		if src.addrspace != nil {
+			dst.addrspace = (*byte)(c.cstr(goString(src.addrspace)))
+		}
+	}
+	mm := cAlloc(unsafe.Sizeof(retroMemoryMap{}))
+	*(*retroMemoryMap)(mm) = retroMemoryMap{descriptors: descs, num: m.num}
+	c.memMap, c.memDescs = mm, descs
+	return true
+}
+
+func (c *dllCore) freeMemoryMap() {
+	cFree(c.memMap)
+	cFree(c.memDescs)
+	c.memMap, c.memDescs = nil, nil
+}
+
+// MemoryMap is the map the core declared, or 0 (MemoryMapper).
+func (c *dllCore) MemoryMap() uintptr { return uintptr(c.memMap) }
 
 var coreFuncs = []string{
 	"retro_set_environment", "retro_set_video_refresh", "retro_set_audio_sample",
@@ -338,6 +391,7 @@ func (c *dllCore) UnloadGame() {
 		c.loaded = false
 	}
 	c.freeGame()
+	c.freeMemoryMap()
 }
 
 func (c *dllCore) Close() {
@@ -400,6 +454,10 @@ func environmentCB(cmd, data uintptr) uintptr {
 func (c *dllCore) environment(cmd uint32, data unsafe.Pointer) bool {
 	fe := c.fe
 	switch cmd {
+	case EnvSetMemoryMaps:
+		// Kept for RetroAchievements (ADR 0111), which reads a game's memory
+		// through it on cores that describe their memory this way.
+		return data != nil && c.setMemoryMap(data)
 	case EnvGetCanDupe:
 		if data != nil {
 			*(*bool)(data) = true

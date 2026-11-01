@@ -210,9 +210,21 @@ LRC_API void lrc_load_game(uint32_t console_id, const char* path, const uint8_t*
   rc_client_begin_identify_and_load_game(g_client, console_id, path, data, size, done_load, NULL);
 }
 
+/*
+ * One last frame before unloading, while the core's memory is still there.
+ * rcheevos v12.5 raises any event still pending while it unloads, after it
+ * has cleared client->game, and rc_client_raise_mastery_event reads
+ * client->game->subsets: quitting in the moment between the award that
+ * completes a set and the next frame crashed the player. A frame raises the
+ * pending events while the game is still loaded. Found by
+ * cheevos_windows_test.go; not patched in rcheevos.
+ */
 LRC_API void lrc_unload_game(void) {
-  if (g_client)
-    rc_client_unload_game(g_client);
+  if (!g_client)
+    return;
+  if (rc_client_is_game_loaded(g_client))
+    rc_client_do_frame(g_client);
+  rc_client_unload_game(g_client);
 }
 
 LRC_API void lrc_do_frame(void) {
