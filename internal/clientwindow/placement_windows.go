@@ -44,26 +44,51 @@ const (
 	swpNoActivate = 0x0010
 )
 
+/*
+ * One callback for the life of the process, never one per call.
+ *
+ * Go can make about 2,000 callbacks (syscall.NewCallback) and never frees one,
+ * and every closure is a new one. Monitors used to make a closure each call.
+ * From v0.10.0 a film polls it every 2 s to notice the desk changing
+ * (cmd/lancast watchLayout), so 66 minutes of film used up the lot and the
+ * window died with "fatal error: too many callback functions". It took two
+ * crashes and a crash report (applog.CaptureCrashes) to see it, because the
+ * first crash left no trace at all.
+ *
+ * EnumDisplayMonitors calls back on the calling thread before it returns, so
+ * a package-level list behind a mutex carries the results out.
+ */
+var (
+	monitorsMu   sync.Mutex
+	monitorsSeen []Monitor
+	monitorsCB   = sync.OnceValue(func() uintptr {
+		return syscall.NewCallback(func(hMonitor, hdc, lprc, lparam uintptr) uintptr {
+			var mi monitorInfoEx
+			mi.CbSize = uint32(unsafe.Sizeof(mi))
+			if ok, _, _ := procGetMonitorInfoW.Call(hMonitor,
+				uintptr(unsafe.Pointer(&mi))); ok == 0 {
+				// Skip it rather than abandoning the enumeration: one monitor
+				// that will not describe itself should not hide the others.
+				return 1
+			}
+			monitorsSeen = append(monitorsSeen, Monitor{
+				Device:  syscall.UTF16ToString(mi.SzDevice[:]),
+				Work:    toRect(mi.RcWork),
+				Primary: mi.DwFlags&monitorInfoPrimary != 0,
+			})
+			return 1 // keep enumerating
+		})
+	})
+)
+
 // Monitors lists the displays currently attached.
 func Monitors() []Monitor {
-	var out []Monitor
-	cb := syscall.NewCallback(func(hMonitor, hdc, lprc, lparam uintptr) uintptr {
-		var mi monitorInfoEx
-		mi.CbSize = uint32(unsafe.Sizeof(mi))
-		if ok, _, _ := procGetMonitorInfoW.Call(hMonitor,
-			uintptr(unsafe.Pointer(&mi))); ok == 0 {
-			// Skip it rather than abandoning the enumeration: one monitor that
-			// will not describe itself should not hide the others.
-			return 1
-		}
-		out = append(out, Monitor{
-			Device:  syscall.UTF16ToString(mi.SzDevice[:]),
-			Work:    toRect(mi.RcWork),
-			Primary: mi.DwFlags&monitorInfoPrimary != 0,
-		})
-		return 1 // keep enumerating
-	})
-	_, _, _ = procEnumDisplayMonitors.Call(0, 0, cb, 0)
+	monitorsMu.Lock()
+	monitorsSeen = nil
+	_, _, _ = procEnumDisplayMonitors.Call(0, 0, monitorsCB(), 0)
+	out := monitorsSeen
+	monitorsSeen = nil
+	monitorsMu.Unlock()
 	names := monitorNames()
 	for i := range out {
 		if n, ok := names[out[i].Device]; ok {
