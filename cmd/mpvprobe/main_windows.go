@@ -90,6 +90,7 @@ func main() {
 	night := flag.Bool("night", false, "LANcast's night mode, the af it builds (mpv.AudioFilter)")
 	af := flag.String("af", "", "an af value of your own instead of -night")
 	flag.Var(&extraProps, "set", "name=value set once playing; repeatable (e.g. -set audio-delay=0.010)")
+	flag.BoolVar(&embed, "embed", false, "LANcast's windows: mpv inside an owned popup over a borderless main window")
 	flag.Float64Var(&afAfter, "af-after", 0, "seconds of playing before the af goes on, as switching night mode on mid-film does")
 	flag.Parse()
 	switch {
@@ -115,6 +116,7 @@ var (
 	audioFilter string
 	extraProps  propList
 	afAfter     float64
+	embed       bool
 )
 
 type propList [][2]string
@@ -140,7 +142,19 @@ func run(file, screen, dll string, start float64, seconds int, hdr bool) error {
 	// A crash in an earlier run left the TV at the film's rate.
 	_, _, _ = displaymode.Recover(dir)
 
-	p, err := mpv.New(mpv.OwnWindow, filepath.Join(dir, "mpv.log"), func(mpv.State, []string) {})
+	rc, ok := monitorRect(screen)
+	if !ok {
+		return fmt.Errorf("no monitor named %s", screen)
+	}
+	wid := mpv.OwnWindow
+	if embed {
+		host, err := createHost(rc)
+		if err != nil {
+			return err
+		}
+		wid = uint64(host)
+	}
+	p, err := mpv.New(wid, filepath.Join(dir, "mpv.log"), func(mpv.State, []string) {})
 	if err != nil {
 		return err
 	}
@@ -162,29 +176,31 @@ func run(file, screen, dll string, start float64, seconds int, hdr bool) error {
 		return err
 	}
 
-	// The window mpv made, once it exists, decides which monitor to match.
+	// The window that decides which monitor to match: the picture window
+	// embedded, or the one mpv made itself.
 	var hwnd uintptr
-	class, _ := windows.UTF16PtrFromString("mpv")
-	for i := 0; i < 100 && hwnd == 0; i++ {
-		time.Sleep(100 * time.Millisecond)
-		hwnd, _, _ = procFindWindowW.Call(uintptr(unsafe.Pointer(class)), 0)
+	if embed {
+		hwnd = uintptr(wid)
+		pump(1500 * time.Millisecond) // mpv opens the file and makes its child
+	} else {
+		class, _ := windows.UTF16PtrFromString("mpv")
+		for i := 0; i < 100 && hwnd == 0; i++ {
+			pump(100 * time.Millisecond)
+			hwnd, _, _ = procFindWindowW.Call(uintptr(unsafe.Pointer(class)), 0)
+		}
+		if hwnd == 0 {
+			return fmt.Errorf("mpv never made a window")
+		}
+		// Into the middle of that monitor, then fullscreen there.
+		w, h := (rc.Right-rc.Left)/2, (rc.Bottom-rc.Top)/2
+		_, _, _ = procSetWindowPos.Call(hwnd, 0, uintptr(rc.Left+w/2), uintptr(rc.Top+h/2),
+			uintptr(w), uintptr(h), swpNoZOrder)
+		pump(300 * time.Millisecond)
+		if err := p.Set("fullscreen", "yes"); err != nil {
+			return fmt.Errorf("fullscreen: %w", err)
+		}
+		pump(time.Second)
 	}
-	if hwnd == 0 {
-		return fmt.Errorf("mpv never made a window")
-	}
-	rc, ok := monitorRect(screen)
-	if !ok {
-		return fmt.Errorf("no monitor named %s", screen)
-	}
-	// Into the middle of that monitor, then fullscreen there.
-	w, h := (rc.Right-rc.Left)/2, (rc.Bottom-rc.Top)/2
-	_, _, _ = procSetWindowPos.Call(hwnd, 0, uintptr(rc.Left+w/2), uintptr(rc.Top+h/2),
-		uintptr(w), uintptr(h), swpNoZOrder)
-	time.Sleep(300 * time.Millisecond)
-	if err := p.Set("fullscreen", "yes"); err != nil {
-		return fmt.Errorf("fullscreen: %w", err)
-	}
-	time.Sleep(time.Second)
 	var got rect
 	_, _, _ = procGetWindowRect.Call(hwnd, uintptr(unsafe.Pointer(&got)))
 	fmt.Printf("mpv window %+v, %s is %+v\n", got, screen, rc)
@@ -226,7 +242,7 @@ func run(file, screen, dll string, start float64, seconds int, hdr bool) error {
 		return err
 	}
 	fmt.Printf("film %.3f fps on %s: %s -> %+v\n", fps, res.Device, res.From, res.Decision)
-	time.Sleep(3 * time.Second)
+	pump(3 * time.Second)
 	if hz, ok := clientwindow.RefreshRate(res.Device); ok {
 		for _, o := range mpv.DisplayTiming(hz) {
 			_ = p.Set(o.Name, o.Value)
@@ -237,9 +253,15 @@ func run(file, screen, dll string, start float64, seconds int, hdr bool) error {
 	fmt.Printf("playing for %d s. Start the capture now; Ctrl+C stops early.\n", seconds)
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
-	select {
-	case <-time.After(time.Duration(seconds) * time.Second):
-	case <-stop:
+	// Pumping rather than waiting: the host windows are this thread's.
+	end := time.Now().Add(time.Duration(seconds) * time.Second)
+	for running := true; running && time.Now().Before(end); {
+		select {
+		case <-stop:
+			running = false
+		default:
+			pump(100 * time.Millisecond)
+		}
 	}
 	dropped, _ := p.Int64("frame-drop-count")
 	delayed, _ := p.Int64("vo-delayed-frame-count")
