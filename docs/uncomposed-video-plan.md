@@ -110,6 +110,30 @@ first mouse move or key. Then measure.
   show one glitched frame each way. If it does, it happens when someone has
   just touched the mouse, which is the best moment for it.
 
+**Result, 2026-11-01: hiding the overlay is not enough.** Branch
+`spike/hide-overlay`. The overlay hid as designed (the log says so, and
+PresentMon saw no overlay presents while it was hidden), with LANcast truly
+fullscreen: the video window and mpv's window both exactly cover the TV's
+3840 × 2160. Every film present was still `Composed: Flip`, and 281 of 2,878
+frames (10%) were never shown.
+
+| Run (120 s, War Machine, TV at 24 Hz) | Overlay | Window | Never shown |
+|---|---|---|---|
+| baseline | up | maximized | 203 |
+| spike 1 (the page never asked) | up | maximized | 1 |
+| spike 2 | hidden | maximized (23 px short) | 20 |
+| spike, fullscreen | hidden for ~117 s | fullscreen | 281 |
+
+Two lessons:
+- **Runs of the same setup differ tenfold.** One capture can't judge a change.
+  A comparison needs several runs each way, or it means nothing.
+- **Something other than the overlay keeps the video composed.** The control
+  is `cmd/mpvprobe` on the same branch. It runs LANcast's own libmpv, options
+  and rate matching, but in a fullscreen window mpv makes itself. If that one
+  gets an independent flip, LANcast's embedding is the blocker (phase 2). If
+  it's composed too, the desktop is (mixed rates or HDR across monitors), and
+  phase 3 (MPO) or "the TV alone" is what's left.
+
 ### 2. Spike, only if 1 fails on the child window
 
 Have mpv's swapchain belong to a window Windows treats as top-level. mpv's
