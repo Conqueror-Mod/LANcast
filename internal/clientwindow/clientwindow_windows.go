@@ -342,6 +342,10 @@ func (c *controller) SetGameLayout(on bool) {
 	c.w.Dispatch(func() { _ = c.w.SetGameLayout(on) })
 }
 
+func (c *controller) SetOverlayIdle(idle bool) {
+	c.w.Dispatch(func() { _ = c.w.SetOverlayIdle(idle) })
+}
+
 func (c *controller) Eval(js string) {
 	c.w.Dispatch(func() { c.w.Eval(js) })
 }

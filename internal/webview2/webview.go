@@ -89,6 +89,12 @@ type webview struct {
 	// title bar, buttons or borders) while the page is in the overlay, and
 	// read by the activation that press causes. See overlayMessage.
 	framePress bool
+	// ADR 0111 (overlay_idle.go): idleAsked is the page saying it has nothing to
+	// show over the film, idleHidden that the overlay is off the screen for
+	// it, and idleCursor where the pointer was when it went.
+	idleAsked  bool
+	idleHidden bool
+	idleCursor w32.Point
 }
 
 type WindowOptions struct {
@@ -315,7 +321,9 @@ func wndproc(hwnd, msg, wp, lp uintptr) uintptr {
 			if wp == w32.WAInactive {
 				break
 			}
-			if w.autofocus {
+			// Not into the hidden overlay: the keyboard stays on this window
+			// until the page is back (overlay_idle.go).
+			if w.autofocus && !w.idleHidden {
 				w.browser.Focus()
 			}
 		case w32.WMClose:

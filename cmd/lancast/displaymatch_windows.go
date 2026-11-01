@@ -108,9 +108,13 @@ func (n *nativePlayer) matchDisplay(gen int) {
 		} else {
 			// Another monitor sets the pace, and the trial would only add
 			// fifteen seconds of stutter before losing (it lost every time).
-			slog.Info("display timing given to mpv; other displays are on, so not resampling",
-				"display_hz", round3(hz), "active", monitorList(active),
-				"fix", "make the TV the only display for the smoothest picture")
+			// What still helps is the film going uncomposed, which needs its
+			// screen to be the primary one (ADR 0111).
+			attrs := []any{"display_hz", round3(hz), "active", monitorList(active)}
+			if fix := uncomposedFix(active, res.Device); fix != "" {
+				attrs = append(attrs, "fix", fix)
+			}
+			slog.Info("display timing given to mpv; other displays are on, so not resampling", attrs...)
 		}
 		if disp.Active() {
 			go n.watchLayout(gen, disp, layoutKey(active))
