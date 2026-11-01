@@ -4,7 +4,7 @@ A self-hosted media server and library service. Plex's streamlined
 functionality, Kodi's customizability and versatility, and neither one's
 compromises.
 
-> **Status: v0.9.99 · M0–M4 built and released.** Point it at a folder and it
+> **Status: v0.10.0 · M0–M4 built and released.** Point it at a folder and it
 > scans, identifies, and plays — direct play, remux, or transcode, with working
 > seek and resume and hardware encoding. Films, TV, **music**, **pictures** and
 > **comics** are all first-class. Real metadata, artwork, ratings, subtitles,
