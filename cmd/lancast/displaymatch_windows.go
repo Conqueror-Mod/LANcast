@@ -9,6 +9,7 @@ import (
 
 	"lancast/internal/clientwindow"
 	"lancast/internal/displaymode"
+	"lancast/internal/mpv"
 )
 
 /*
@@ -89,14 +90,18 @@ func (n *nativePlayer) matchDisplay(gen int) {
 	// cannot hear the change itself (mpv.DisplayTiming says why).
 	if hz, ok := clientwindow.RefreshRate(res.Device); ok && err == nil {
 		applyTiming(p, hz)
+		// Resampling on trial: mpv measures the rate its presents really run
+		// at only while it paces to the display (with audio as the clock it
+		// reports estimated-display-fps 0, measured on the theater PC). So it
+		// paces for the first seconds, and logTiming keeps that or takes it
+		// back once the measurement says whose clock it is.
+		setAll(p, mpv.Resample)
 		n.mu.Lock()
 		if n.gate.gen == gen {
-			// logTiming checks, once frames are moving, whether this is
-			// really the clock mpv's frames run on before pacing to it.
 			n.timedHz = hz
 		}
 		n.mu.Unlock()
-		slog.Info("display timing given to mpv", "display_hz", round3(hz))
+		slog.Info("display timing given to mpv, resampling on trial", "display_hz", round3(hz))
 	}
 
 	n.mu.Lock()
