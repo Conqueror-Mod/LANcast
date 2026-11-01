@@ -3352,6 +3352,13 @@ and whether the sender is an administrator, but never a name or address.
 With `include_log`, which is administrators only (`403` otherwise), it also
 attaches the last 2,000 lines of the server log, at most 1 MB.
 
+`images` attaches up to four pictures, each base64 in the JSON and at most
+6 MB: PNG, JPEG, GIF or WebP. Anyone who may send may attach them. The server
+decodes each one and encodes it again, at most 2,560 pixels on its long edge,
+so what goes is a picture and nothing else: a phone photo's location and other
+metadata are dropped. A file that is not a picture is a `400`, refused before
+the rate limit is touched.
+
 The answer is `{ "sent": true, "log_included": true }`. The errors are:
 
 - `429 rate_limited`: one every 20 seconds, five an hour for the whole server;

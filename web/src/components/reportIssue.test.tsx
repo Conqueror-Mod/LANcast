@@ -133,3 +133,66 @@ describe("report an issue", () => {
     expect(button("Copied")).toBeDefined();
   });
 });
+
+/*
+ * Pictures with a report (2026-11-01): chosen or pasted, shown, removable, and
+ * sent as base64 beside the text.
+ */
+describe("pictures with a report", () => {
+  const png = (body: string) => new File([body], "shot.png", { type: "image/png" });
+
+  async function choose(files: File[]) {
+    const input = host.querySelector<HTMLInputElement>('input[type="file"]')!;
+    Object.defineProperty(input, "files", { value: files, configurable: true });
+    await act(async () => {
+      input.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+    await settle();
+  }
+  const thumbs = () => host.querySelectorAll(".report__thumb").length;
+
+  it("sends the pictures chosen, and not the one taken off again", async () => {
+    await mount();
+    await choose([png("first"), png("second")]);
+    expect(thumbs()).toBe(2);
+    await act(async () => host.querySelector<HTMLButtonElement>('[aria-label="Remove picture 1"]')!.click());
+    expect(thumbs()).toBe(1);
+    await act(async () => type(host.querySelector("textarea")!, "Poster is cut off"));
+    await act(async () => button("Send")!.click());
+    await settle();
+    expect(posted).toEqual([expect.objectContaining({ images: [btoa("second")] })]);
+  });
+
+  it("refuses a file that is not a picture, and a fifth picture", async () => {
+    await mount();
+    await choose([new File(["x"], "notes.txt", { type: "text/plain" })]);
+    expect(thumbs()).toBe(0);
+    expect(host.textContent).toContain("Only pictures can be attached");
+    await choose([png("1"), png("2"), png("3"), png("4"), png("5")]);
+    expect(thumbs()).toBe(4);
+    expect(host.textContent).toContain("At most 4 pictures");
+    expect(button("Add pictures")!.disabled).toBe(true);
+  });
+
+  it("attaches a screenshot pasted into the form", async () => {
+    await mount();
+    const shot = png("pasted");
+    const paste = new Event("paste", { bubbles: true, cancelable: true });
+    Object.defineProperty(paste, "clipboardData", {
+      value: { items: [{ kind: "file", type: "image/png", getAsFile: () => shot }] },
+    });
+    await act(async () => {
+      host.querySelector("textarea")!.dispatchEvent(paste);
+    });
+    await settle();
+    expect(thumbs()).toBe(1);
+  });
+
+  it("sends no pictures when none were added", async () => {
+    await mount();
+    await act(async () => type(host.querySelector("textarea")!, "x"));
+    await act(async () => button("Send")!.click());
+    await settle();
+    expect(posted).toEqual([expect.objectContaining({ images: [] })]);
+  });
+});

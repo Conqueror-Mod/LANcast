@@ -3,6 +3,7 @@ package api
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"runtime"
 	"strings"
@@ -21,6 +22,10 @@ import (
  * Anyone signed in may send one; only an administrator may attach the server
  * log, which names paths, library roots, addresses and other people's
  * accounts. The server's log is the server operator's to share.
+ *
+ * Anyone who may send may attach up to four pictures. Each is decoded and
+ * encoded again by internal/report before it goes, which proves it is a
+ * picture and drops what a phone photo says about where it was taken.
  *
  * Limited to five an hour for the whole server and one every 20 seconds, so
  * a stuck button or a script cannot turn one person's channel into a flood.
@@ -100,7 +105,13 @@ type reportRequest struct {
 	Contact    string `json:"contact"`
 	Client     string `json:"client"`
 	IncludeLog bool   `json:"include_log"`
+	// Images are the pictures' bytes, base64 in JSON, at most four.
+	Images [][]byte `json:"images"`
 }
+
+// reportBodyLimit is the text fields with room to spare, and four pictures
+// at their largest, base64 making each a third bigger.
+const reportBodyLimit = 64<<10 + report.MaxImages*(report.MaxImageBytes*4/3+4)
 
 // sendReport answers POST /api/report.
 func (s *Server) sendReport(w http.ResponseWriter, r *http.Request) {
@@ -110,7 +121,7 @@ func (s *Server) sendReport(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req reportRequest
-	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 64<<10)).Decode(&req); err != nil {
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, reportBodyLimit)).Decode(&req); err != nil {
 		writeError(w, http.StatusBadRequest, "bad_request", "that is not a report")
 		return
 	}
@@ -132,11 +143,31 @@ func (s *Server) sendReport(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusForbidden, "forbidden", "only an administrator can attach the server log")
 		return
 	}
+	if len(req.Images) > report.MaxImages {
+		writeError(w, http.StatusBadRequest, "bad_request", "attach at most four pictures")
+		return
+	}
 	url := s.reportWebhook()
 	if url == "" {
 		writeError(w, http.StatusServiceUnavailable, "unavailable",
 			"this build of LANcast cannot send reports; copy the report instead")
 		return
+	}
+	// Before the limiter, so a picture that will not open does not use up
+	// somebody's turn.
+	images := make([]report.Image, 0, len(req.Images))
+	for i, data := range req.Images {
+		if len(data) > report.MaxImageBytes {
+			writeError(w, http.StatusBadRequest, "bad_request", fmt.Sprintf("picture %d is too large", i+1))
+			return
+		}
+		img, err := report.PrepareImage(data, i+1)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, "bad_request",
+				fmt.Sprintf("picture %d could not be read; attach a PNG, JPEG, GIF or WebP", i+1))
+			return
+		}
+		images = append(images, img)
 	}
 	if allowed, wait := s.reports.take(time.Now()); !allowed {
 		writeError(w, http.StatusTooManyRequests, "rate_limited",
@@ -148,6 +179,7 @@ func (s *Server) sendReport(w http.ResponseWriter, r *http.Request) {
 		What: req.What, Expected: req.Expected, Steps: req.Steps, Contact: req.Contact,
 		Version: Version, Platform: runtime.GOOS + "/" + runtime.GOARCH, Client: req.Client,
 		Account: map[bool]string{true: "admin", false: "member"}[admin],
+		Images:  images,
 	}
 	if req.IncludeLog {
 		lines, _, err := applog.Tail(s.dataDir, reportLogLines)
@@ -175,6 +207,6 @@ func (s *Server) sendReport(w http.ResponseWriter, r *http.Request) {
 	// a terminal has no file, and says so rather than claiming one went.
 	attached := len(rep.Log) > 0
 	s.audit(r, "report.send", "server", "", "Sent a problem report to the developer",
-		map[string]any{"log_included": attached})
+		map[string]any{"log_included": attached, "pictures": len(images)})
 	writeJSON(w, http.StatusOK, map[string]any{"sent": true, "log_included": attached})
 }
