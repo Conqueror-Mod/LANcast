@@ -89,7 +89,14 @@ func (n *nativePlayer) matchDisplay(gen int) {
 	// cannot hear the change itself (mpv.DisplayTiming says why).
 	if hz, ok := clientwindow.RefreshRate(res.Device); ok && err == nil {
 		applyTiming(p, hz)
-		slog.Info("display timing given to mpv", "display_hz", round3(hz), "video_sync", "display-resample")
+		n.mu.Lock()
+		if n.gate.gen == gen {
+			// logTiming checks, once frames are moving, whether this is
+			// really the clock mpv's frames run on before pacing to it.
+			n.timedHz = hz
+		}
+		n.mu.Unlock()
+		slog.Info("display timing given to mpv", "display_hz", round3(hz))
 	}
 
 	n.mu.Lock()
