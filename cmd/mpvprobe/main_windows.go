@@ -87,7 +87,18 @@ func main() {
 	seconds := flag.Int("seconds", 150, "how long to play")
 	hdr := flag.Bool("hdr", true, "hint HDR to the display, as LANcast does with 'Send HDR' on")
 	dll := flag.String("dll", `C:\Program Files\LANcast\libmpv-2.dll`, "libmpv to load")
+	night := flag.Bool("night", false, "LANcast's night mode, the af it builds (mpv.AudioFilter)")
+	af := flag.String("af", "", "an af value of your own instead of -night")
+	flag.Var(&extraProps, "set", "name=value set once playing; repeatable (e.g. -set audio-delay=0.010)")
 	flag.Parse()
+	switch {
+	case *af != "":
+		audioFilter = *af
+	case *night:
+		// Six channels: what the films under test carry. Night mode does not
+		// depend on the count; dialogue boost would.
+		audioFilter = mpv.AudioFilter(mpv.AudioFX{Night: true}, 6)
+	}
 	if *file == "" {
 		fmt.Println("usage: mpvprobe -file <film>")
 		os.Exit(2)
@@ -96,6 +107,24 @@ func main() {
 		fmt.Println("mpvprobe:", err)
 		os.Exit(1)
 	}
+}
+
+// audioFilter and extraProps are what -night/-af and -set asked for.
+var (
+	audioFilter string
+	extraProps  propList
+)
+
+type propList [][2]string
+
+func (l *propList) String() string { return fmt.Sprint(*l) }
+func (l *propList) Set(v string) error {
+	name, value, ok := strings.Cut(v, "=")
+	if !ok {
+		return fmt.Errorf("want name=value, got %q", v)
+	}
+	*l = append(*l, [2]string{name, value})
+	return nil
 }
 
 func run(file, screen, dll string, start float64, seconds int, hdr bool) error {
@@ -159,6 +188,19 @@ func run(file, screen, dll string, start float64, seconds int, hdr bool) error {
 	fmt.Printf("mpv window %+v, %s is %+v\n", got, screen, rc)
 	if err := p.Set("pause", "no"); err != nil {
 		return fmt.Errorf("unpausing: %w", err)
+	}
+	// After the film opens, as LANcast sets af once mpv reports the channels.
+	if audioFilter != "" {
+		if err := p.Set("af", audioFilter); err != nil {
+			return fmt.Errorf("af %q: %w", audioFilter, err)
+		}
+		fmt.Println("af:", audioFilter)
+	}
+	for _, kv := range extraProps {
+		if err := p.Set(kv[0], kv[1]); err != nil {
+			return fmt.Errorf("set %s=%s: %w", kv[0], kv[1], err)
+		}
+		fmt.Printf("set %s=%s\n", kv[0], kv[1])
 	}
 	fps, _ := p.Double("container-fps")
 	sw := displaymode.NewSwitcher(dir)
