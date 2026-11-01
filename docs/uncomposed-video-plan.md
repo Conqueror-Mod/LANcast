@@ -64,6 +64,32 @@ showing a periodic irregularity on the busy desk and none with the TV alone.
   run is one command he pastes.
 - No measuring, no spike: every phase below is judged by this CSV.
 
+**Baseline, recorded 2026-11-01** (v0.10.0, a 24p film fullscreen on the TV
+at 23.976 Hz, all three monitors on, controls hidden, 120 s):
+
+| | |
+|---|---|
+| Present mode | `Composed: Flip` for every present, video and overlay |
+| mpv's presents | 2,878, every 41.67 ms on average (38.9–44.7): on time |
+| Never shown | **203 (7%)**, replaced in the compositor before reaching the TV |
+| Shown for two TV frames (83 ms) | 220 |
+| Shown for some other odd length | 157 |
+| Shown for exactly one TV frame | 2,298 (86% of shown) |
+
+- The faults are steady, 1–3 a second through the whole run. It isn't a
+  once-a-minute slip. The "occasional hitch" is how 7% lost frames reads on
+  slow-moving pictures.
+- Each dropped frame comes with a neighbour held twice, which is the
+  signature of a frame queued on one clock and taken on another.
+- **The overlay redraws about every 276 ms while the controls are hidden**
+  (435 presents in 120 s). Its redraws don't line up with the drops (15% of
+  dropped and 15% of shown frames fall within 20 ms of one), so they aren't
+  the cause, but something in the page is still painting with nothing
+  visible. Phase 1 should find what, since a hidden window that repaints is
+  wasted work either way.
+- The CSV is kept outside the repo, in
+  `LANcast-test-builds\presentmon-runs\baseline-20261101-004614.csv`.
+
 ### 1. Spike: hide the overlay while the controls are hidden
 
 The player already hides its controls after 2.5 s without input
