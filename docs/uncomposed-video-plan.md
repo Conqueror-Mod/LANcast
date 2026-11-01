@@ -167,6 +167,23 @@ night-mode correlation was most likely chance. What's left to test is what the
 probe doesn't share with LANcast: mpv embedded in LANcast's video window,
 WebView2 drawing on the same GPU, and the film arriving over HTTP.
 
+**Embedding, ruled out; the lottery (2026-11-01).** `mpvprobe -embed` builds
+LANcast's three windows: a borderless main window, an owned picture popup,
+and mpv's child inside it. 17 interleaved runs:
+
+| Probe | Runs | Lost frames per run |
+|---|---|---|
+| mpv's own window | 10 | 0, 0, 0, 5, 0, 3, 1, 0, 38, 0 |
+| embedded as in LANcast | 7 | 37, 0, 0, 0, 34, 0, 0 |
+
+Plain mpv on this desk loses frames in some sessions and not others, with or
+without LANcast's windows. How a session's presents land against the
+compositor's clock (another monitor's) is chance, drawn again at each start.
+LANcast's bad sessions are worse than the probe's (124–281 against at most
+38), so something LANcast adds may amplify a bad draw, but it doesn't cause
+one. That leaves two fixes that remove the lottery: the TV as the only active
+display, or the picture on its own hardware plane (phase 3, MPO).
+
 ### 2. Spike, only if 1 fails on the child window
 
 **Dropped 2026-11-01:** a top-level mpv window is composed too (see above).
