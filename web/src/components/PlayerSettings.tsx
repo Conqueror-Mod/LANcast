@@ -260,6 +260,10 @@ function RateRows({ prefs, setPrefs }: { prefs: PrefsHook[0]; setPrefs: PrefsHoo
         films, so slow pans do not judder, and puts it back when the film stops. Only that screen
         changes, and only while a film plays. A screen that offers no matching rate is left alone.
       </p>
+      <p className="set-row__sub">
+        Smoothest with the TV as the only display. With other monitors on at different rates,
+        Windows paces the picture to one of them, and some stutter remains.
+      </p>
       {prefs.matchRate && (
         <>
           <label className="set-row">

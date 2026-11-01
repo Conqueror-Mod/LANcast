@@ -77,6 +77,9 @@ type nativePlayer struct {
 	gate      matchGate
 	restoreT  *time.Timer
 	wid       uintptr
+	// timedHz is the display rate this film's mpv was told (matchDisplay),
+	// 0 until then; logTiming decides from it whether pacing is earned.
+	timedHz float64
 
 	// Theater output, step 2: hdr is the page's "Send HDR to the display",
 	// applied to each film as it opens. reported is set once this film's
@@ -281,6 +284,7 @@ func (n *nativePlayer) open(itemID int64, ticket string) error {
 	// mpv's own timing until matchDisplay knows better: a rate left over from
 	// the last film is exactly the staleness DisplayTiming exists to fix.
 	applyTiming(n.player, 0)
+	n.timedHz = 0
 	go n.logTiming(n.player, gen)
 	// Per film, before it opens, so the first frame is already drawn for
 	// the right colour space. A refusal is logged, never fatal: the film
