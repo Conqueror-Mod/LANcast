@@ -119,31 +119,10 @@ type monitorName struct {
  */
 func monitorNames() map[string]monitorName {
 	out := map[string]monitorName{}
-	var paths []displayConfigPathInfo
-	for attempt := 0; attempt < displayConfigQueryAttempts; attempt++ {
-		var nPath, nMode uint32
-		if r, _, _ := procGetDisplayConfigBufferSizes.Call(qdcOnlyActivePaths,
-			uintptr(unsafe.Pointer(&nPath)), uintptr(unsafe.Pointer(&nMode))); r != 0 || nPath == 0 {
-			return out
-		}
-		paths = make([]displayConfigPathInfo, nPath)
-		if nMode == 0 {
-			nMode = 1
-		}
-		modes := make([]displayConfigModeInfo, nMode)
-		r, _, _ := procQueryDisplayConfig.Call(qdcOnlyActivePaths,
-			uintptr(unsafe.Pointer(&nPath)), uintptr(unsafe.Pointer(&paths[0])),
-			uintptr(unsafe.Pointer(&nMode)), uintptr(unsafe.Pointer(&modes[0])), 0)
-		if r == errorInsufficientBuffer {
-			continue
-		}
-		if r != 0 {
-			return out
-		}
-		paths = paths[:nPath]
-		break
+	paths, ok := activePaths()
+	if !ok {
+		return out
 	}
-
 	for _, p := range paths {
 		src := displayConfigSourceName{Header: displayConfigHeader{
 			Type: displayConfigGetSourceName, Size: uint32(unsafe.Sizeof(displayConfigSourceName{})),
@@ -174,4 +153,65 @@ func monitorNames() map[string]monitorName {
 		}
 	}
 	return out
+}
+
+// activePaths is QueryDisplayConfig's list of active paths.
+func activePaths() ([]displayConfigPathInfo, bool) {
+	var paths []displayConfigPathInfo
+	for attempt := 0; attempt < displayConfigQueryAttempts; attempt++ {
+		var nPath, nMode uint32
+		if r, _, _ := procGetDisplayConfigBufferSizes.Call(qdcOnlyActivePaths,
+			uintptr(unsafe.Pointer(&nPath)), uintptr(unsafe.Pointer(&nMode))); r != 0 || nPath == 0 {
+			return nil, false
+		}
+		paths = make([]displayConfigPathInfo, nPath)
+		if nMode == 0 {
+			nMode = 1
+		}
+		modes := make([]displayConfigModeInfo, nMode)
+		r, _, _ := procQueryDisplayConfig.Call(qdcOnlyActivePaths,
+			uintptr(unsafe.Pointer(&nPath)), uintptr(unsafe.Pointer(&paths[0])),
+			uintptr(unsafe.Pointer(&nMode)), uintptr(unsafe.Pointer(&modes[0])), 0)
+		if r == errorInsufficientBuffer {
+			continue
+		}
+		if r != 0 {
+			return nil, false
+		}
+		paths = paths[:nPath]
+		break
+	}
+	return paths, paths != nil
+}
+
+// sourceName is the GDI name (\\.\DISPLAY3) of a path's source.
+func sourceName(p displayConfigPathInfo) string {
+	src := displayConfigSourceName{Header: displayConfigHeader{
+		Type: displayConfigGetSourceName, Size: uint32(unsafe.Sizeof(displayConfigSourceName{})),
+		AdapterID: p.SourceAdapter, ID: p.SourceID,
+	}}
+	if r, _, _ := procDisplayConfigGetDeviceInfo.Call(uintptr(unsafe.Pointer(&src))); r != 0 {
+		return ""
+	}
+	return syscall.UTF16ToString(src.GDIName[:])
+}
+
+/*
+ * RefreshRate is the rate a monitor is really running at, as the rational the
+ * display configuration holds: 24000/1001, not the "23" that EnumDisplaySettings
+ * reports. The theater player logs it after a switch (internal/displaymode),
+ * because the integer is a driver convention and this is the evidence.
+ */
+func RefreshRate(gdi string) (float64, bool) {
+	paths, ok := activePaths()
+	if !ok {
+		return 0, false
+	}
+	for _, p := range paths {
+		if sourceName(p) != gdi || p.RefreshRate.Den == 0 {
+			continue
+		}
+		return float64(p.RefreshRate.Num) / float64(p.RefreshRate.Den), true
+	}
+	return 0, false
 }
