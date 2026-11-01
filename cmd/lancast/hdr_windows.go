@@ -4,6 +4,7 @@ package main
 
 import (
 	"log/slog"
+	"time"
 
 	"lancast/internal/clientwindow"
 	"lancast/internal/displaymode"
@@ -18,6 +19,13 @@ import (
  * isn't showing HDR" then has its answer in the log, and the answer names
  * which of the three switches is off (mpv.VideoReport.Verdict).
  */
+// reportTries × reportWait is how long reportVideo waits for mpv to know the
+// picture: ten seconds, past any first frame seen, short of a long hang.
+const (
+	reportTries = 20
+	reportWait  = 500 * time.Millisecond
+)
+
 func (n *nativePlayer) reportVideo(p *mpv.Player, wid uintptr, hint bool) {
 	if p == nil {
 		return
@@ -26,9 +34,22 @@ func (n *nativePlayer) reportVideo(p *mpv.Player, wid uintptr, hint bool) {
 		s, _ := p.String(name)
 		return s
 	}
-	r := mpv.VideoReport{
-		FilmGamma: read("video-params/gamma"), FilmPrimaries: read("video-params/primaries"),
-		TargetGamma: read("video-target-params/gamma"), TargetPrimaries: read("video-target-params/primaries"),
+	/*
+	 * Asked until mpv knows. "playing" can arrive before the first frame
+	 * reaches the output, and video-target-params is empty until it does:
+	 * War Machine, the first HDR film tried, got no line at all because the
+	 * question was asked once and too early.
+	 */
+	var r mpv.VideoReport
+	for try := 0; try < reportTries; try++ {
+		r = mpv.VideoReport{
+			FilmGamma: read("video-params/gamma"), FilmPrimaries: read("video-params/primaries"),
+			TargetGamma: read("video-target-params/gamma"), TargetPrimaries: read("video-target-params/primaries"),
+		}
+		if r.FilmGamma != "" && r.TargetGamma != "" {
+			break
+		}
+		time.Sleep(reportWait)
 	}
 	if r.FilmGamma == "" {
 		return // music, or a file with no picture: nothing to say
