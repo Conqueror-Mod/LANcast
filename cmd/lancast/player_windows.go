@@ -80,6 +80,9 @@ type nativePlayer struct {
 	// timedHz is the display rate this film's mpv was told (matchDisplay),
 	// 0 until then; logTiming decides from it whether pacing is earned.
 	timedHz float64
+	// layoutWatch numbers watchLayout's goroutines, so an older one stops
+	// when a newer film starts its own.
+	layoutWatch int
 
 	// retro plays games into the same video window (ADR 0073). Made on
 	// first use, so a client that never opens a game builds nothing.
