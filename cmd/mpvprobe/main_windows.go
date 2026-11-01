@@ -29,13 +29,14 @@ import (
 )
 
 var (
-	user32                  = windows.NewLazySystemDLL("user32.dll")
-	procFindWindowW         = user32.NewProc("FindWindowW")
-	procSetWindowPos        = user32.NewProc("SetWindowPos")
-	procGetWindowRect       = user32.NewProc("GetWindowRect")
-	procEnumDisplayMonitors = user32.NewProc("EnumDisplayMonitors")
-	procGetMonitorInfoW     = user32.NewProc("GetMonitorInfoW")
-	procSetDpiContext       = user32.NewProc("SetThreadDpiAwarenessContext")
+	user32                   = windows.NewLazySystemDLL("user32.dll")
+	procFindWindowW          = user32.NewProc("FindWindowW")
+	procSetWindowPos         = user32.NewProc("SetWindowPos")
+	procGetWindowRect        = user32.NewProc("GetWindowRect")
+	procEnumDisplayMonitors  = user32.NewProc("EnumDisplayMonitors")
+	procGetMonitorInfoW      = user32.NewProc("GetMonitorInfoW")
+	procSetDpiContext        = user32.NewProc("SetThreadDpiAwarenessContext")
+	procSetProcessDpiContext = user32.NewProc("SetProcessDpiAwarenessContext")
 )
 
 const swpNoZOrder = 0x0004
@@ -74,6 +75,12 @@ func monitorRect(name string) (rect, bool) {
 func main() {
 	// One OS thread, so the DPI context set for placing the window holds.
 	runtime.LockOSThread()
+	// Per-monitor DPI aware, as LANcast.exe is (clientwindow/dpi_windows.go).
+	// Without it the TV at 150% got a 2560x1440 picture stretched by Windows:
+	// always composed, and a third of the pixels to draw, so not a control.
+	if r, _, err := procSetProcessDpiContext.Call(^uintptr(3)); r == 0 {
+		fmt.Println("could not become DPI aware:", err)
+	}
 	file := flag.String("file", "", "film to play")
 	screen := flag.String("screen", "DISPLAY3", "monitor to play on, as Windows names it")
 	start := flag.Float64("start", 600, "seconds into the film to start")
