@@ -202,7 +202,9 @@ type Server struct {
 	// subtitleBaseURL points subtitle search at another host. Tests only: it
 	// is never set outside them, and the client defaults to OpenSubtitles.
 	subtitleBaseURL string
-	faceModelJob    *faceJob
+	// osLogin holds the opensubtitles.com login token, when one is set.
+	osLogin      osLoginCache
+	faceModelJob *faceJob
 	// A second job, not a second flag on the first: two optional downloads can
 	// be in flight at once, and one byte count cannot describe both.
 	semanticModelJob *faceJob

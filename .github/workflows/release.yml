@@ -66,6 +66,18 @@ jobs:
       - name: fetch libmpv
         run: third_party/libmpv/fetch.sh
 
+      # The built-in provider keys (ADR 0110). Fatal when missing, for the
+      # reason an unsigned release is: a release without them builds and runs,
+      # and every new install quietly has no metadata or subtitle search while
+      # the notes promise it works with no sign-up.
+      - name: check the built-in provider keys are set
+        env:
+          LANCAST_TMDB_KEY: ${{ secrets.LANCAST_TMDB_KEY }}
+          LANCAST_OPENSUBTITLES_KEY: ${{ secrets.LANCAST_OPENSUBTITLES_KEY }}
+        run: |
+          test -n "$LANCAST_TMDB_KEY" || { echo "LANCAST_TMDB_KEY is not set; refusing to build a release without its TMDB key"; exit 1; }
+          test -n "$LANCAST_OPENSUBTITLES_KEY" || { echo "LANCAST_OPENSUBTITLES_KEY is not set; refusing to build a release without its OpenSubtitles key"; exit 1; }
+
       - uses: goreleaser/goreleaser-action@v6
         with:
           version: "~> v2"
@@ -76,6 +88,10 @@ jobs:
           # repository: Discord revokes webhook URLs pushed to public repos.
           # Unset, the release still builds; its form offers copy, not Send.
           LANCAST_REPORT_WEBHOOK: ${{ secrets.LANCAST_REPORT_WEBHOOK }}
+          # The built-in TMDB and OpenSubtitles keys (ADR 0110), linked into
+          # internal/config. Secrets, never in the repository.
+          LANCAST_TMDB_KEY: ${{ secrets.LANCAST_TMDB_KEY }}
+          LANCAST_OPENSUBTITLES_KEY: ${{ secrets.LANCAST_OPENSUBTITLES_KEY }}
           # Absent until the maintainer generates a keypair. Without it the
           # release is published unsigned and the updater will offer it for a
           # manual install but never install it automatically.

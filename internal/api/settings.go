@@ -20,12 +20,25 @@ import (
 func (s *Server) getSettings(w http.ResponseWriter, r *http.Request) {
 	cur := s.settings.Get()
 	writeJSON(w, http.StatusOK, map[string]any{
+		/*
+		 * `configured` is whether the person entered a key of their own;
+		 * `source` is which key the provider is actually using — theirs, the
+		 * one this release carries, or none (ADR 0110). Two fields because
+		 * they answer two questions: "have I set one" and "is this working".
+		 */
 		"tmdb": map[string]any{
 			"configured": cur.TMDBKey != "",
+			"source":     cur.TMDBKeySource(),
+			"built_in":   config.BuiltinTMDBKey != "",
 		},
 		"opensubtitles": map[string]any{
 			"configured": cur.OpenSubtitlesKey != "",
+			"source":     cur.OpenSubtitlesKeySource(),
+			"built_in":   config.BuiltinOpenSubtitlesKey != "",
+			// The login's username, never its password. "" when none is set.
+			"username": cur.OpenSubtitlesUser,
 		},
+		"builtin_keys_off": cur.BuiltinKeysOff,
 		"omdb": map[string]any{
 			"configured": cur.OMDbKey != "",
 		},
@@ -130,6 +143,9 @@ func (s *Server) putSettings(w http.ResponseWriter, r *http.Request) {
 		TMDBKey          *string  `json:"tmdb_key"`
 		OpenSubtitlesKey *string  `json:"opensubtitles_key"`
 		OMDbKey          *string  `json:"omdb_key"`
+		BuiltinKeysOff   *bool    `json:"builtin_keys_off"`
+		OSUser           *string  `json:"opensubtitles_username"`
+		OSPassword       *string  `json:"opensubtitles_password"`
 		FFmpegDir        *string  `json:"ffmpeg_dir"`
 		RatePerSec       *float64 `json:"rate_per_sec"`
 		WriteNFO         *bool    `json:"write_nfo"`
@@ -193,6 +209,27 @@ func (s *Server) putSettings(w http.ResponseWriter, r *http.Request) {
 	}
 	if req.OMDbKey != nil {
 		next.OMDbKey = strings.TrimSpace(*req.OMDbKey)
+	}
+	if req.BuiltinKeysOff != nil {
+		next.BuiltinKeysOff = *req.BuiltinKeysOff
+	}
+	if req.OSUser != nil {
+		next.OpenSubtitlesUser = strings.TrimSpace(*req.OSUser)
+		// A login with no username is no login: clearing the name clears the
+		// password with it, so no orphaned secret stays on disk.
+		if next.OpenSubtitlesUser == "" {
+			next.OpenSubtitlesPassword = ""
+		}
+	}
+	if req.OSPassword != nil {
+		// Not trimmed: a password may begin or end with a space.
+		next.OpenSubtitlesPassword = *req.OSPassword
+	}
+	if (next.OpenSubtitlesUser == "") != (next.OpenSubtitlesPassword == "") &&
+		(req.OSUser != nil || req.OSPassword != nil) {
+		writeError(w, http.StatusBadRequest, "bad_request",
+			"an OpenSubtitles login needs both a username and a password")
+		return
 	}
 	if req.FFmpegDir != nil {
 		next.FFmpegDir = strings.TrimSpace(*req.FFmpegDir)
@@ -525,6 +562,9 @@ func changedSettings(prev, next config.Settings) []string {
 	add("tmdb_key", prev.TMDBKey != next.TMDBKey)
 	add("opensubtitles_key", prev.OpenSubtitlesKey != next.OpenSubtitlesKey)
 	add("omdb_key", prev.OMDbKey != next.OMDbKey)
+	add("builtin_keys_off", prev.BuiltinKeysOff != next.BuiltinKeysOff)
+	add("opensubtitles_username", prev.OpenSubtitlesUser != next.OpenSubtitlesUser)
+	add("opensubtitles_password", prev.OpenSubtitlesPassword != next.OpenSubtitlesPassword)
 	add("ffmpeg_dir", prev.FFmpegDir != next.FFmpegDir)
 	add("rate_per_sec", prev.RatePerSec != next.RatePerSec)
 	add("write_nfo", prev.WriteNFO != next.WriteNFO)
