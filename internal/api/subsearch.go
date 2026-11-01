@@ -117,6 +117,12 @@ func (s *Server) downloadSubtitle(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// The download is what spends the allowance, so it is the one call that
+	// carries the account's login when there is one.
+	if err := s.attachLogin(r.Context(), client, s.settings.Get().OpenSubtitlesKeyInUse()); err != nil {
+		s.log.Warn("opensubtitles login failed; downloading on the anonymous allowance", "error", err)
+	}
+
 	link, name, err := client.DownloadLink(r.Context(), req.FileID)
 	if err != nil {
 		s.writeSubtitleError(w, err)
@@ -242,9 +248,10 @@ func (s *Server) writeSubtitleError(w http.ResponseWriter, err error) {
 }
 
 // subtitleClient builds a client from current settings, so a newly entered key
-// works without a restart.
+// works without a restart. The key is the person's, else the one this release
+// carries (ADR 0110).
 func (s *Server) subtitleClient() *subtitle.OpenSubtitles {
-	key := s.settings.Get().OpenSubtitlesKey
+	key := s.settings.Get().OpenSubtitlesKeyInUse()
 	if key == "" {
 		return nil
 	}

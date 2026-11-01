@@ -29,6 +29,15 @@ type Settings struct {
 	// OMDb, ADR 0019). Optional and write-only like the other keys; without it
 	// the rating pass never runs and nothing leaves the machine.
 	OMDbKey string `json:"omdb_key,omitempty"`
+	// BuiltinKeysOff stops the server using the TMDB and OpenSubtitles keys a
+	// release carries (ADR 0110). Off by default, so the zero value is "use
+	// them"; a key of the person's own is used either way.
+	BuiltinKeysOff bool `json:"builtin_keys_off,omitempty"`
+	// OpenSubtitlesUser and OpenSubtitlesPassword are an optional
+	// opensubtitles.com login, which raises the daily download allowance.
+	// Write-only, like the keys.
+	OpenSubtitlesUser     string `json:"opensubtitles_user,omitempty"`
+	OpenSubtitlesPassword string `json:"opensubtitles_password,omitempty"`
 	/*
 	 * CertificationCountry is whose certificate to prefer on films and
 	 * programmes — an ISO 3166-1 alpha-2 code, or empty for the default
@@ -583,6 +592,10 @@ func (s *SettingsStore) Path() string { return s.path }
  * two call sites — the host's secret resolver and the Add-ons page's "is this
  * configured" check — and a second copy that disagreed with the first would
  * show an operator a plugin as configured while the plugin read nothing.
+ *
+ * Only a key the person entered, never the one a release carries (ADR 0110):
+ * that key was issued to LANcast for its own requests, and a plugin spending
+ * it could get it revoked for every install.
  */
 func (s Settings) BuiltinSecret(name string) string {
 	switch name {
