@@ -265,7 +265,11 @@ func (n *nativePlayer) open(itemID int64, ticket string) error {
 		return err
 	}
 	n.cancelRestore()
-	n.gate.open(n.match)
+	gen := n.gate.open(n.match)
+	// mpv's own timing until matchDisplay knows better: a rate left over from
+	// the last film is exactly the staleness DisplayTiming exists to fix.
+	applyTiming(n.player, 0)
+	go n.logTiming(n.player, gen)
 	slog.Info("native playback", "item", itemID)
 	return n.player.Load(u, 0)
 }
