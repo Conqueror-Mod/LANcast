@@ -277,7 +277,11 @@ func (n *nativePlayer) open(itemID int64, ticket string) error {
 		return err
 	}
 	n.cancelRestore()
-	n.gate.open(n.match)
+	gen := n.gate.open(n.match)
+	// mpv's own timing until matchDisplay knows better: a rate left over from
+	// the last film is exactly the staleness DisplayTiming exists to fix.
+	applyTiming(n.player, 0)
+	go n.logTiming(n.player, gen)
 	// Per film, before it opens, so the first frame is already drawn for
 	// the right colour space. A refusal is logged, never fatal: the film
 	// plays tone mapped, as it always has.

@@ -85,6 +85,12 @@ func (n *nativePlayer) matchDisplay(gen int) {
 		slog.Info("display not matched", "film_fps", round3(fps), "monitor", res.Device,
 			"reason", res.Decision.Reason)
 	}
+	// Switched or not, mpv is told the rate the screen is really at: it
+	// cannot hear the change itself (mpv.DisplayTiming says why).
+	if hz, ok := clientwindow.RefreshRate(res.Device); ok && err == nil {
+		applyTiming(p, hz)
+		slog.Info("display timing given to mpv", "display_hz", round3(hz), "video_sync", "display-resample")
+	}
 
 	n.mu.Lock()
 	defer n.mu.Unlock()

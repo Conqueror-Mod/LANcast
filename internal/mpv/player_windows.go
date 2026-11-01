@@ -39,6 +39,7 @@ const (
 
 	formatNone   = 0
 	formatFlag   = 3
+	formatInt64  = 4
 	formatDouble = 5
 )
 
@@ -181,6 +182,20 @@ func (p *Player) Command(args ...string) error {
 // Set sets a property from its string form.
 func (p *Player) Set(name, value string) error {
 	return p.check("set "+name, callStr2(loaded.setPropString, p.h, name, value))
+}
+
+// Int64 reads an integer property now, in its own format: the frame counters
+// are int64 in mpv, and asking for them as doubles leans on a conversion the
+// client API does not promise.
+func (p *Player) Int64(name string) (int64, error) {
+	var v int64
+	n := cstr(name)
+	rc, _, _ := loaded.getProperty.Call(p.h, uintptr(unsafe.Pointer(n)), formatInt64, uintptr(unsafe.Pointer(&v)))
+	runtime.KeepAlive(n)
+	if err := p.check("get "+name, rc); err != nil {
+		return 0, err
+	}
+	return v, nil
 }
 
 // Double reads a numeric property now, rather than waiting for it to change.
