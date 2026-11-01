@@ -4,6 +4,7 @@ package main
 
 import (
 	"log/slog"
+	"math"
 	"time"
 
 	"lancast/internal/clientwindow"
@@ -26,6 +27,11 @@ func setAll(p *mpv.Player, opts []mpv.Option) {
 		}
 	}
 }
+
+// namingTolerance is how near a monitor's rate must be to the measured pace
+// for the warning to name it: 3%, wide enough for mpv's estimate, narrow
+// enough that a 60 Hz and a 72 Hz monitor are never confused.
+const namingTolerance = 0.03
 
 const (
 	// timingFirst is when a film's frame timing is first looked at: past the
@@ -97,14 +103,17 @@ func decidePacing(p *mpv.Player, displayHz, measured float64) {
 		return
 	}
 	applyTiming(p, displayHz)
-	pacer := ""
+	// Naming the monitor only needs the nearest rate, not the strict match
+	// pacing does: the theater PC measured 71.538 against a monitor at 71.91,
+	// 0.5% apart, and the first warning named nobody.
+	pacer, nearest := "", namingTolerance
 	for _, m := range clientwindow.Monitors() {
-		if r, ok := clientwindow.RefreshRate(m.Device); ok && mpv.PacedByDisplay(r, measured) {
+		if r, ok := clientwindow.RefreshRate(m.Device); ok && r > 0 && math.Abs(measured-r)/r < nearest {
+			nearest = math.Abs(measured-r) / r
 			pacer = m.Name
 			if pacer == "" {
 				pacer = m.Device
 			}
-			break
 		}
 	}
 	slog.Warn("frames paced by another clock, not resampling; expect some stutter",
