@@ -110,6 +110,13 @@ archives:
       - src: third_party/webview2/x64/WebView2Loader.dll
         dst: WebView2Loader.dll
 
+      # rcheevos, which earns RetroAchievements in the desktop player
+      # (ADR 0112). Committed, as the loader above is, with its MIT licence.
+      - src: third_party/rcheevos/x64/rcheevos.dll
+        dst: rcheevos.dll
+      - src: third_party/rcheevos/LICENSE
+        dst: rcheevos-LICENSE.txt
+
       # libmpv, the desktop client's player (ADR 0067/0069). The release
       # workflow fetches it and checks its hash before this runs; it is not in
       # git. Beside it goes its licence, because the LGPL asks that the terms

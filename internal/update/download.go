@@ -37,6 +37,9 @@ var installFiles = map[string]bool{
 	// The desktop player (ADR 0067/0069). Absent from an older archive, which
 	// is fine: the map filters what the zip holds rather than demanding it.
 	"libmpv-2.dll": true,
+	// RetroAchievements in the desktop player (ADR 0112); likewise absent
+	// from older archives.
+	"rcheevos.dll": true,
 	"lancast":      true,
 }
 

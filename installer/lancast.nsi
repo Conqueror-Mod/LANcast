@@ -320,6 +320,10 @@ Section "LANcast"
   ; Most installs never do, and pay nothing for it.
   File "lancast-faces.exe"
   File "..\third_party\webview2\x64\WebView2Loader.dll"
+  ; rcheevos, which earns RetroAchievements in the desktop player (ADR 0112).
+  ; MIT, committed, and its licence travels with it.
+  File "..\third_party\rcheevos\x64\rcheevos.dll"
+  File /oname=rcheevos-LICENSE.txt "..\third_party\rcheevos\LICENSE"
 
   ; libmpv, the desktop client's player (ADR 0067). LGPL, built by this project
   ; rather than taken from mpv's own Windows builds, which are GPL and so cannot
@@ -415,6 +419,8 @@ Section "Uninstall"
   Delete "$INSTDIR\LANcast-Client.exe"
   Delete "$INSTDIR\lancast-faces.exe"
   Delete "$INSTDIR\WebView2Loader.dll"
+  Delete "$INSTDIR\rcheevos.dll"
+  Delete "$INSTDIR\rcheevos-LICENSE.txt"
   Delete "$INSTDIR\libmpv-2.dll"
   Delete "$INSTDIR\libmpv-LICENSE.txt"
   Delete "$INSTDIR\README.md"

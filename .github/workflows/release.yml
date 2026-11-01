@@ -133,6 +133,13 @@ jobs:
           # client falling back to the browser with no obvious cause.
           test -f third_party/webview2/x64/WebView2Loader.dll \
             || { echo "WebView2Loader.dll is missing from third_party/"; exit 1; }
+          # rcheevos is committed too (ADR 0112), and checked against the hash
+          # its PROVENANCE.md records: the build is reproducible, so another
+          # hash means another file.
+          want="$(grep -o '[0-9a-f]\{64\}' third_party/rcheevos/PROVENANCE.md | head -1)"
+          have="$(sha256sum third_party/rcheevos/x64/rcheevos.dll | cut -d' ' -f1)"
+          test "$have" = "$want" \
+            || { echo "rcheevos.dll hashes $have, PROVENANCE.md records $want"; exit 1; }
           # libmpv is optional in the same way it is optional at runtime: the
           # .nsi compiles it in only when the file is there (!if /FileExists).
           if [ -f third_party/libmpv/out/libmpv-2.dll ]; then
