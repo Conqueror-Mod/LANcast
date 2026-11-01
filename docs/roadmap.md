@@ -182,8 +182,11 @@ is in the [Feature backlog](#feature-backlog) entry it names.*
   Settings › Users & access › **Invite a friend** makes a link that creates one
   member account, once, for 7 days, with its limits set before anything is
   seen. Schema 84.
-- **In-play RetroAchievements** — unlocks while you play (rcheevos), which needs
-  its own ADR. The profile half shipped in v0.9.88.
+- **In-play RetroAchievements** — unlocks while you play (rcheevos). **Built,
+  unreleased** (PR #989, [ADR 0112](adr/0112-achievements-are-earned-in-the-desktop-player.md)):
+  softcore, in the desktop player, through the server, which holds the token
+  and keeps unlocks that cannot be sent yet. Schema 87. A real-account test in
+  the installed app is owed. The profile half shipped in v0.9.88.
 
 **Feature backlog, not yet planned.**
 - Libraries and media: **audiobooks**, **ebooks** beyond comics (EPUB),
@@ -963,7 +966,7 @@ group is not priority.
   PlayStation stay desktop-only, SNES because its only web core forbids
   commercial use. **Built since, in v0.9.95:** numbered states in a browser,
   each saying which player made it (#928), and on-screen controls for phones
-  (#929). **Still open:** in-play achievements (rcheevos, its own ADR), and
+  (#929). In-play achievements are built (ADR 0112, PR #989). **Still open:**
   Game Boy, Game Boy Color and Master System played on real dumps.
 
   Original entry, kept for the reasoning: the request was to play old

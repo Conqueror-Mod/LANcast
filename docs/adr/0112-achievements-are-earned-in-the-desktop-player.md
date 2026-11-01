@@ -57,9 +57,15 @@ theirs awards or misses achievements wrongly. LANcast uses the real library.
 - `third_party/rcheevos/build.sh` cross-compiles a pinned rcheevos release
   tag, with `RC_CLIENT_SUPPORTS_HASH`, into `rcheevos.dll` for Windows x86_64
   with mingw-w64, from Linux. It is the ADR 0069 recipe: pinned source,
-  nothing patched, published as a release asset, and fetched by
-  `fetch.sh` against a recorded SHA-256. `PROVENANCE.md` says what was built
+  nothing patched, and a recorded SHA-256. `PROVENANCE.md` says what was built
   from what.
+- *Amended while building, 2026-11-01:* the DLL is **committed**
+  (`third_party/rcheevos/x64/rcheevos.dll`) rather than published as a
+  release asset and fetched. It is 337 KB, smaller than the WebView2 loader
+  already committed beside it, and the build is reproducible — the linker
+  strips it and writes no timestamp — so the committed file is checked rather
+  than trusted: the release job refuses one whose hash is not the one
+  `PROVENANCE.md` records, and anyone can rebuild it and compare.
 - A small C file beside it (`lancast_rc.c`, in the DLL) holds what is awkward
   across a syscall boundary: the memory regions, read directly from pointers
   rather than through a Go callback per byte, and the libretro memory map
