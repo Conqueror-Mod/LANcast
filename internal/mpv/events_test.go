@@ -24,6 +24,11 @@ func TestOptionsKeepTheNoPhoneHomeRule(t *testing.T) {
 			t.Errorf("%s = %q, want %q", k, got[k], v)
 		}
 	}
+	// Theater output, step 2: HDR needs gpu-next, so the output is named,
+	// never left to mpv's probing order.
+	if got["vo"] != "gpu-next" || got["gpu-api"] != "d3d11" {
+		t.Errorf("vo = %q, gpu-api = %q; want gpu-next on d3d11", got["vo"], got["gpu-api"])
+	}
 	if got["sid"] != "no" {
 		t.Error("mpv would draw the file's default subtitles over the page's own")
 	}

@@ -107,6 +107,8 @@ export interface Prefs {
   matchRate: boolean;
   /** Seconds to wait after a switch before the film starts (MATCH_SETTLES). */
   matchSettle: number;
+  /** Hand an HDR film to the display as HDR instead of tone mapping it. */
+  hdrOut: boolean;
   /**
    * Open films fullscreen while matching is on. Windows sends a film straight
    * to the TV only when the picture covers the whole screen; a maximized
@@ -256,6 +258,7 @@ export const DEFAULTS: Prefs = {
   nightMusic: false,
   matchRate: false,
   matchSettle: 3,
+  hdrOut: false,
   fullscreenFilms: true,
   taper: true,
   crossfade: 0,

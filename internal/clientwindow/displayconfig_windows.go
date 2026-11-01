@@ -215,3 +215,44 @@ func RefreshRate(gdi string) (float64, bool) {
 	}
 	return 0, false
 }
+
+// displayConfigGetAdvancedColorInfo is DISPLAYCONFIG_DEVICE_INFO_GET_ADVANCED_COLOR_INFO.
+const displayConfigGetAdvancedColorInfo = 9
+
+// displayConfigAdvancedColor is DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO: 32 bytes.
+// Value's low bits are advancedColorSupported (0) and advancedColorEnabled (1).
+type displayConfigAdvancedColor struct {
+	Header        displayConfigHeader
+	Value         uint32
+	ColorEncoding uint32
+	BitsPerColor  uint32
+}
+
+/*
+ * HDRState is what Windows says about a screen and HDR: whether it can, and
+ * whether "Use HDR" is on for it now. ok is false when Windows would not say.
+ *
+ * The theater player logs it beside the film's own colour space, because mpv
+ * can ask for HDR but only Windows' switch puts the desktop in it, and "my TV
+ * doesn't show HDR" has a different fix depending on which one is off.
+ */
+func HDRState(gdi string) (supported, enabled, ok bool) {
+	paths, found := activePaths()
+	if !found {
+		return false, false, false
+	}
+	for _, p := range paths {
+		if sourceName(p) != gdi {
+			continue
+		}
+		info := displayConfigAdvancedColor{Header: displayConfigHeader{
+			Type: displayConfigGetAdvancedColorInfo, Size: uint32(unsafe.Sizeof(displayConfigAdvancedColor{})),
+			AdapterID: p.TargetAdapter, ID: p.TargetID,
+		}}
+		if r, _, _ := procDisplayConfigGetDeviceInfo.Call(uintptr(unsafe.Pointer(&info))); r != 0 {
+			return false, false, false
+		}
+		return info.Value&1 != 0, info.Value&2 != 0, true
+	}
+	return false, false, false
+}
