@@ -178,7 +178,7 @@ var migrations = []migration{
 		{"media_item", "rg_album_gain", "REAL"},
 		{"media_item", "rg_album_peak", "REAL"},
 	}},
-	// Achievements earned while playing (ADR 0111): the sealed login token,
+	// Achievements earned while playing (ADR 0112): the sealed login token,
 	// and unlocks kept while RetroAchievements cannot be reached.
 	{version: 87, sql: schemaRevision87, columns: []column{{"retro_account", "token_sealed", "BLOB"}}},
 }
@@ -2509,7 +2509,7 @@ CREATE TABLE IF NOT EXISTS comic_place (
 );
 `
 
-// Revision 87 — unlocks waiting to be sent (ADR 0111 §5).
+// Revision 87 — unlocks waiting to be sent (ADR 0112 §5).
 //
 // An award the server could not hand to RetroAchievements, kept until it
 // answers. body is the request as the player sent it, with the token's field

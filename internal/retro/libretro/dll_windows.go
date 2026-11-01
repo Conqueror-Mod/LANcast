@@ -455,7 +455,7 @@ func (c *dllCore) environment(cmd uint32, data unsafe.Pointer) bool {
 	fe := c.fe
 	switch cmd {
 	case EnvSetMemoryMaps:
-		// Kept for RetroAchievements (ADR 0111), which reads a game's memory
+		// Kept for RetroAchievements (ADR 0112), which reads a game's memory
 		// through it on cores that describe their memory this way.
 		return data != nil && c.setMemoryMap(data)
 	case EnvGetCanDupe:

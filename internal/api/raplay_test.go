@@ -17,7 +17,7 @@ import (
 )
 
 /*
- * Earning achievements while playing (ADR 0111), against a fake
+ * Earning achievements while playing (ADR 0112), against a fake
  * RetroAchievements. What matters most: the password is used once and not
  * kept, the token never reaches the player, only softcore requests for the
  * person's own account go through, and an unlock made while

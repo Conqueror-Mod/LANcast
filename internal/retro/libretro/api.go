@@ -313,7 +313,7 @@ type InputDescriptor struct {
 
 /*
  * MemoryMapper is a Core that can give the memory map a core declared with
- * SET_MEMORY_MAPS, for RetroAchievements (ADR 0111): the address of a C copy
+ * SET_MEMORY_MAPS, for RetroAchievements (ADR 0112): the address of a C copy
  * of its struct retro_memory_map, valid until UnloadGame, or 0 when the core
  * declared none. Many cores declare none and answer retro_get_memory_data
  * instead; rcheevos reads either.

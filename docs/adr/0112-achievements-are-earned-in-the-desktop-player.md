@@ -1,4 +1,4 @@
-# ADR 0111 — Achievements are earned in the desktop player
+# ADR 0112 — Achievements are earned in the desktop player
 
 Date: 2026-11-01 · Status: **accepted** 2026-11-01 · Follows [ADR 0090](0090-retroachievements-are-yours-to-connect.md)
 

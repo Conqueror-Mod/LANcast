@@ -16,7 +16,7 @@ import (
 )
 
 /*
- * The connect API (ADR 0111): what an emulator uses to log in, load a game's
+ * The connect API (ADR 0112): what an emulator uses to log in, load a game's
  * achievements and award them. Its credential is a login token, not the Web
  * API key the rest of this package uses, and the two cannot stand in for
  * each other.

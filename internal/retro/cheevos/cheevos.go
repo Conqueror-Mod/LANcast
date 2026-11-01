@@ -1,5 +1,5 @@
 // Package cheevos is the desktop player's RetroAchievements runtime
-// (ADR 0111): rcheevos, RetroAchievements' own library, loaded as
+// (ADR 0112): rcheevos, RetroAchievements' own library, loaded as
 // rcheevos.dll, evaluating a game's achievements against its memory every
 // frame.
 //

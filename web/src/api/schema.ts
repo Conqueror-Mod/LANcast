@@ -1457,7 +1457,7 @@ export interface paths {
         get?: never;
         /**
          * Earn achievements while playing
-         * @description ADR 0111. Takes your RetroAchievements password once, exchanges it with RetroAchievements for a login token, seals the token as the API key is sealed, and discards the password. Needs a connected account; a token for a different RetroAchievements user than the one connected is refused. Softcore only.
+         * @description ADR 0112. Takes your RetroAchievements password once, exchanges it with RetroAchievements for a login token, seals the token as the API key is sealed, and discards the password. Needs a connected account; a token for a different RetroAchievements user than the one connected is refused. Softcore only.
          */
         put: operations["startEarningRetroAchievements"];
         post?: never;
@@ -1482,7 +1482,7 @@ export interface paths {
         put?: never;
         /**
          * Send one of the player's RetroAchievements requests
-         * @description ADR 0111. The desktop player's rcheevos builds every RetroAchievements request and posts it here with the game's stream ticket (`Authorization: Ticket …`) or a session. The server accepts only `login2`, `gameid`, `achievementsets`, `startsession`, `ping` and `awardachievement`, for the caller's connected RetroAchievements account, softcore (`h` absent or `0`) and carrying no password; puts the caller's token in place of the player's placeholder; sends it to RetroAchievements; and returns the answer with any `Token` replaced by the placeholder. An award made while RetroAchievements cannot be reached is kept and sent later with the time it waited added, and the player is told it unlocked (`queued`).
+         * @description ADR 0112. The desktop player's rcheevos builds every RetroAchievements request and posts it here with the game's stream ticket (`Authorization: Ticket …`) or a session. The server accepts only `login2`, `gameid`, `achievementsets`, `startsession`, `ping` and `awardachievement`, for the caller's connected RetroAchievements account, softcore (`h` absent or `0`) and carrying no password; puts the caller's token in place of the player's placeholder; sends it to RetroAchievements; and returns the answer with any `Token` replaced by the placeholder. An award made while RetroAchievements cannot be reached is kept and sent later with the time it waited added, and the player is told it unlocked (`queued`).
          */
         post: operations["sendRetroAchievementsRequest"];
         delete?: never;
@@ -9696,7 +9696,7 @@ export interface components {
             points: number;
             softcore_points: number;
             true_points: number;
-            /** @description Earning achievements while playing is on (ADR 0111). */
+            /** @description Earning achievements while playing is on (ADR 0112). */
             earning: boolean;
             /** @description Unlocks kept while RetroAchievements could not be reached, waiting to be sent. */
             unlocks_waiting: number;

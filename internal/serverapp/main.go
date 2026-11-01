@@ -1078,7 +1078,7 @@ func run(ctx context.Context, addr, dataDir string, log *slog.Logger) error {
 	// Optimized copies, one at a time, behind live playback (ADR 0087).
 	go apiSrv.RunOptimizer(ctx)
 
-	// Unlocks kept while RetroAchievements could not be reached (ADR 0111).
+	// Unlocks kept while RetroAchievements could not be reached (ADR 0112).
 	go apiSrv.RunRetroUnlockQueue(ctx)
 
 	// Clears leftover scratch from a previous run and starts reaping idle

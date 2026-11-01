@@ -1,5 +1,5 @@
 /*
- * lancast_rc.c — the desktop player's door into rcheevos (ADR 0111).
+ * lancast_rc.c — the desktop player's door into rcheevos (ADR 0112).
  *
  * rcheevos' rc_client is the whole emulator side of RetroAchievements: it
  * hashes the game, evaluates achievements against memory each frame, and
@@ -103,7 +103,7 @@ static void RC_CCONV event_handler(const rc_client_event_t* event, rc_client_t* 
     default:
       /* Game completed, disconnected, reconnected, a progress indicator
          hidden: the type alone says it. Leaderboards are hardcore-only and
-         never start in softcore (ADR 0111 §4). */
+         never start in softcore (ADR 0112 §4). */
       g_event(event->type, 0, "", "", "", 0, "");
       break;
   }

@@ -81,7 +81,7 @@ type raView struct {
 	Games          []raGame   `json:"games"`
 	FetchedAt      int64      `json:"fetched_at,omitempty"`
 	// Earning is on when the person has turned on earning while playing
-	// (ADR 0111); UnlocksWaiting counts awards kept to send later.
+	// (ADR 0112); UnlocksWaiting counts awards kept to send later.
 	Earning        bool `json:"earning"`
 	UnlocksWaiting int  `json:"unlocks_waiting"`
 }

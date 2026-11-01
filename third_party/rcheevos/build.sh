@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
 # Build LANcast's rcheevos.dll: RetroAchievements' own library, MIT, for
-# Windows x86_64, cross-compiled from Linux (ADR 0111).
+# Windows x86_64, cross-compiled from Linux (ADR 0112).
 #
 #   ./build.sh [output-dir]      default: ./out
 #

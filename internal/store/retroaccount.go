@@ -11,7 +11,7 @@ import (
 // RetroAccount is a LANcast account's connected RetroAchievements account
 // (ADR 0090). APIKeySealed is sealed by internal/secret; the store never sees
 // the key itself. TokenSealed is the login token that lets the player earn
-// achievements (ADR 0111), sealed the same way; nil while earning is off.
+// achievements (ADR 0112), sealed the same way; nil while earning is off.
 type RetroAccount struct {
 	UserID       string
 	RAUser       string
@@ -96,7 +96,7 @@ func (s *Store) DeleteRetroAccount(ctx context.Context, userID string) error {
 	return tx.Commit()
 }
 
-// RetroUnlock is an award waiting to reach RetroAchievements (ADR 0111 §5).
+// RetroUnlock is an award waiting to reach RetroAchievements (ADR 0112 §5).
 // Body is the player's request with its token field empty.
 type RetroUnlock struct {
 	ID       int64

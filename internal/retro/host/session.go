@@ -103,7 +103,7 @@ type Option struct {
 }
 
 /*
- * Achievements is RetroAchievements while playing (ADR 0111): evaluated
+ * Achievements is RetroAchievements while playing (ADR 0112): evaluated
  * against the game's memory once per frame the person sees played. Every
  * method is called on the core's thread. Rewound frames are not reported:
  * stepping back is not playing.
