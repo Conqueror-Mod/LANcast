@@ -45,7 +45,7 @@ import { PrerollOverlay } from "@/components/PrerollOverlay";
 import { nextChapterStart, previousChapterStart, type ChapterMark } from "@/lib/chapters";
 import { UpNextCard } from "@/components/UpNextCard";
 import { AfterFilm } from "@/components/AfterFilm";
-import { DEFAULTS, DIALOGUE_LEVELS } from "@/playback/prefs";
+import { DEFAULTS, DIALOGUE_LEVELS, getPrefs } from "@/playback/prefs";
 import { nativeWake, overlayKeptBy } from "@/playback/overlayIdle";
 import {
   canBoostDialogue,
@@ -447,6 +447,29 @@ export function Player() {
    * moved the mouse. With the page leaving the screen once they fade
    * (ADR 0111), that left every matched film composed.
    */
+  /*
+   * A film on the TV opens fullscreen (ADR 0111). Windows sends a film
+   * straight to the screen only when the picture covers all of it, and a
+   * maximized window's title bar and the taskbar's edge kept every frame
+   * composed: the judder came back on the first film after a restart, because
+   * nobody had pressed F. Once per film, so leaving fullscreen mid-film sticks
+   * until the next one.
+   */
+  const { enterFullscreen } = pb;
+  const fullscreenedFor = useRef<number | null>(null);
+  // The kind, not isAudio: that reads false until a track's details arrive,
+  // and a song would have taken the screen for that moment.
+  const filmID =
+    pb.item && pb.item.id === pb.itemID && (pb.item.kind === "movie" || pb.item.kind === "episode")
+      ? pb.item.id
+      : null;
+  useEffect(() => {
+    if (!pb.native || filmID == null || fullscreenedFor.current === filmID) return;
+    fullscreenedFor.current = filmID;
+    const p = getPrefs();
+    if (p.matchRate && p.fullscreenFilms) enterFullscreen();
+  }, [pb.native, filmID, enterFullscreen]);
+
   const wasPlaying = useRef(pb.playing);
   useEffect(() => {
     const started = pb.playing && !wasPlaying.current;

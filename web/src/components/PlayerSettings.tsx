@@ -257,6 +257,19 @@ function TheaterOutput() {
             long, so its opening is not lost to the black screen. Make it longer if the first
             seconds are still missing.
           </p>
+          <label className="set-toggle">
+            <input
+              type="checkbox"
+              checked={prefs.fullscreenFilms}
+              onChange={(e) => setPrefs({ fullscreenFilms: e.target.checked })}
+            />
+            Open films fullscreen
+          </label>
+          <p className="set-row__sub">
+            Windows can send a film straight to the TV only when it fills the whole screen. In a
+            window, even a maximized one, some stutter remains. F or Escape leaves fullscreen as
+            usual.
+          </p>
         </>
       )}
     </section>

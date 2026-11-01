@@ -386,6 +386,11 @@ interface PlaybackState {
   setVizFull: (on: boolean) => void;
   /** Leave fullscreen if we are in it, by whichever mechanism put us there. */
   exitFullscreen: () => void;
+  /**
+   * Into the window's fullscreen, never out of it, for a film opening on the
+   * TV (ADR 0111). Nothing in a browser or a client without the binding.
+   */
+  enterFullscreen: () => void;
   cycleSub: (dir: 1 | -1) => void;
   selectSub: (key: string | null) => void;
   selectAudio: (index: number | null) => void;
@@ -2669,6 +2674,16 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
       void document.exitFullscreen().catch(() => {});
   }, [fullscreen]);
 
+  const enterFullscreen = useCallback(() => {
+    const host = (
+      window as { lancastEnterFullscreen?: () => Promise<boolean> }
+    ).lancastEnterFullscreen;
+    // No Fullscreen API fallback: a browser refuses it without a click, and an
+    // older client has only the toggle, which could take a fullscreen window
+    // out of fullscreen.
+    if (host) void host().then((on) => setFullscreen(Boolean(on)));
+  }, []);
+
   const toggleFullscreen = useCallback(() => {
     /*
      * In the LANcast window, fullscreen is the *window's* job.
@@ -3026,6 +3041,7 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
     toggleFullscreen,
     fullscreen,
     exitFullscreen,
+    enterFullscreen,
     vizFull,
     setVizFull,
     cycleSub,

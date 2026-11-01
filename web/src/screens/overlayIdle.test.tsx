@@ -7,6 +7,9 @@
  * clock, armed while it was paused, used to run out before playback began, so
  * the controls stayed up and the film stayed composed until the mouse moved.
  *
+ * The other half is that a film opens fullscreen with matching on: a
+ * maximized window's title bar kept every frame composed.
+ *
  * jsdom has no windows, so what is asserted is what the page tells the
  * client; the client's half is internal/webview2 (overlay_wake_windows_test.go)
  * and the TV.
@@ -19,7 +22,7 @@ import { MemoryRouter } from "react-router-dom";
 import { FocusProvider } from "@/focus/FocusController";
 import { PlaybackProvider, usePlayback } from "@/playback/PlaybackProvider";
 import { resetNativePlaybackAvailability, mpvBackend } from "@/playback/mpvBackend";
-import { resetPrefs } from "@/playback/prefs";
+import { resetPrefs, setPrefs } from "@/playback/prefs";
 import { Player } from "./Player";
 
 declare global {
@@ -39,6 +42,7 @@ let host: HTMLDivElement;
 let root: Root;
 let pb: ReturnType<typeof usePlayback>;
 let asks: [boolean, string][];
+let entered: number;
 
 function Probe() {
   pb = usePlayback();
@@ -47,6 +51,7 @@ function Probe() {
 
 beforeEach(() => {
   asks = [];
+  entered = 0;
   localStorage.clear();
   resetPrefs();
   resetNativePlaybackAvailability();
@@ -57,6 +62,12 @@ beforeEach(() => {
   window.lancastMpvCommand = vi.fn(async () => {});
   window.lancastMpvStop = vi.fn(async () => {});
   window.lancastMpvLayout = vi.fn(async () => {});
+  (window as { lancastEnterFullscreen?: () => Promise<boolean> }).lancastEnterFullscreen = vi.fn(
+    async () => {
+      entered++;
+      return true;
+    },
+  );
   window.lancastMpvOverlayIdle = vi.fn(async (idle: boolean, keptBy: string) => {
     asks.push([idle, keptBy]);
   });
@@ -111,6 +122,7 @@ afterEach(() => {
   delete window.lancastMpvStop;
   delete window.lancastMpvLayout;
   delete window.lancastMpvOverlayIdle;
+  delete (window as { lancastEnterFullscreen?: unknown }).lancastEnterFullscreen;
   resetNativePlaybackAvailability();
   resetPrefs();
   localStorage.clear();
@@ -209,4 +221,28 @@ describe("the page leaving the screen over a native film", () => {
     root = createRoot(host);
     expect(asks.at(-1)).toEqual([false, "left the player"]);
   }, 10_000);
+});
+
+describe("a film opening fullscreen", () => {
+  it("asks the window for fullscreen once per film while matching is on", async () => {
+    setPrefs({ matchRate: true });
+    await openHeld();
+    await report(false, 0.1);
+    await report(false, 5);
+    await settle(30);
+    expect(entered).toBe(1);
+  });
+
+  it("leaves the window alone with matching off", async () => {
+    await openHeld();
+    await report(false, 0.1);
+    expect(entered).toBe(0);
+  });
+
+  it("leaves the window alone when the person turned it off", async () => {
+    setPrefs({ matchRate: true, fullscreenFilms: false });
+    await openHeld();
+    await report(false, 0.1);
+    expect(entered).toBe(0);
+  });
 });

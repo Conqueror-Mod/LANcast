@@ -107,6 +107,12 @@ export interface Prefs {
   matchRate: boolean;
   /** Seconds to wait after a switch before the film starts (MATCH_SETTLES). */
   matchSettle: number;
+  /**
+   * Open films fullscreen while matching is on. Windows sends a film straight
+   * to the TV only when the picture covers the whole screen; a maximized
+   * window's title bar kept every frame composed (ADR 0111).
+   */
+  fullscreenFilms: boolean;
   /** Fade a listening session in, and the queue's last track out (lib/taper.ts). */
   taper: boolean;
   /**
@@ -250,6 +256,7 @@ export const DEFAULTS: Prefs = {
   nightMusic: false,
   matchRate: false,
   matchSettle: 3,
+  fullscreenFilms: true,
   taper: true,
   crossfade: 0,
   loudness: "off",

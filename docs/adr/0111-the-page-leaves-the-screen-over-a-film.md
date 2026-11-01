@@ -78,6 +78,14 @@ anyway; its only effect was to force composition.
   - Media keys go through `winkeys` as before.
 - **mpv hides the cursor** over the picture while the page is away, since the
   page's `cursor: none` went with it.
+- **A film opens fullscreen while frame-rate matching is on** (Theater output,
+  *Open films fullscreen*, on by default under matching). The first film
+  after a restart opened maximized, as it always had, and two minutes of it
+  were every frame composed: the title bar and the taskbar's edge were over
+  the picture. The window binding `lancastEnterFullscreen` only ever enters,
+  so a film opening in a fullscreen window leaves it so, and a client without
+  it changes nothing. Once per film: leaving fullscreen mid-film holds until
+  the next one.
 
 **LANcast does not change the primary display.** Which screen is primary
 moves the taskbar, the Start menu and where new windows open, and it's the
