@@ -80,6 +80,10 @@ type raView struct {
 	Recent         []raUnlock `json:"recent"`
 	Games          []raGame   `json:"games"`
 	FetchedAt      int64      `json:"fetched_at,omitempty"`
+	// Earning is on when the person has turned on earning while playing
+	// (ADR 0111); UnlocksWaiting counts awards kept to send later.
+	Earning        bool `json:"earning"`
+	UnlocksWaiting int  `json:"unlocks_waiting"`
 }
 
 type raUnlock struct {
@@ -138,7 +142,7 @@ func (s *Server) getRetroAchievements(w http.ResponseWriter, r *http.Request) {
 	age := time.Since(cached.at)
 	refresh := r.URL.Query().Get("refresh") == "1" && age > raRefreshEvery
 	if ok && age < raCacheFor && !refresh {
-		writeJSON(w, http.StatusOK, cached.view)
+		s.writeRAView(w, r, acct, cached.view)
 		return
 	}
 
@@ -146,7 +150,7 @@ func (s *Server) getRetroAchievements(w http.ResponseWriter, r *http.Request) {
 	key, err := s.ra.Sealer.Open(acct.APIKeySealed)
 	if err != nil {
 		view.Problem = "This connection was made on another server or before a restore, so its key can't be read here. Connect again to carry on."
-		writeJSON(w, http.StatusOK, view)
+		s.writeRAView(w, r, acct, view)
 		return
 	}
 	if err := s.fetchRA(r.Context(), acct, string(key), &view); err != nil {
@@ -154,16 +158,27 @@ func (s *Server) getRetroAchievements(w http.ResponseWriter, r *http.Request) {
 		if ok {
 			stale := cached.view
 			stale.Problem = err.Error()
-			writeJSON(w, http.StatusOK, stale)
+			s.writeRAView(w, r, acct, stale)
 			return
 		}
 		view.Problem = err.Error()
-		writeJSON(w, http.StatusOK, view)
+		s.writeRAView(w, r, acct, view)
 		return
 	}
 	s.raCache.mu.Lock()
 	s.raCache.views[user] = raCached{at: time.Now(), view: view}
 	s.raCache.mu.Unlock()
+	s.writeRAView(w, r, acct, view)
+}
+
+// writeRAView answers with view, and with the earning state, which is read
+// fresh every time rather than cached with the rest: it changes when the
+// person flips it or an unlock is kept, not when RetroAchievements does.
+func (s *Server) writeRAView(w http.ResponseWriter, r *http.Request, acct *store.RetroAccount, view raView) {
+	view.Earning = len(acct.TokenSealed) > 0
+	if n, err := s.st.CountRetroUnlocks(r.Context(), acct.UserID); err == nil {
+		view.UnlocksWaiting = n
+	}
 	writeJSON(w, http.StatusOK, view)
 }
 

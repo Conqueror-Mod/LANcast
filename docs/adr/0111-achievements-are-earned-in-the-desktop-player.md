@@ -1,6 +1,6 @@
 # ADR 0111 — Achievements are earned in the desktop player
 
-Date: 2026-11-01 · Status: **proposed** · Follows [ADR 0090](0090-retroachievements-are-yours-to-connect.md)
+Date: 2026-11-01 · Status: **accepted** 2026-11-01 · Follows [ADR 0090](0090-retroachievements-are-yours-to-connect.md)
 
 ADR 0090 let a person *read* their RetroAchievements progress on their profile
 and left *earning* it for a record of its own. This is that record.
@@ -85,18 +85,21 @@ token.**
 
 **3. The player's requests go to the server, which adds the token.**
 
-- `server_call` in the client posts rcheevos' request (its URL, form body and
-  content type) to `POST /api/retroachievements/connect` on the person's own
-  server, with their ordinary session.
+- `server_call` in the client posts rcheevos' request (its form body) to
+  `POST /api/items/{id}/retroachievements` on the person's own server, with
+  the stream ticket the page minted for the game, the credential the player
+  already uses for the game's files and saves (ADR 0073).
 - The player logs in with `rc_client_begin_login_with_token` using a
   placeholder token. The server replaces the `t=` field with the real token
   for the calling account, sends the request to
   `https://retroachievements.org/dorequest.php`, and returns the answer with
   any `Token` field removed. The token never reaches the client.
-- The route forwards `dorequest.php` and nothing else, only the request types
-  `rc_client` sends (`login2`, `gameid`, `achievementsets`, `startsession`,
-  `awardachievement`, `ping`, and the others it uses at the pinned version),
-  and only for a caller who has turned earning on. It is not a general proxy.
+- The route forwards to `dorequest.php` and nothing else, only the request
+  types `rc_client` sends for a softcore player at v12.5 (`login2`, `gameid`,
+  `achievementsets`, `startsession`, `ping`, `awardachievement`), only for the
+  RetroAchievements account the caller connected, never with a password in
+  it, and only for a caller who has turned earning on. It is not a general
+  proxy.
 - The `User-Agent` is `LANcast/<version>` followed by the clause rcheevos
   writes for itself (`rc_client_get_user_agent_clause`), which the client
   sends with each request. RetroAchievements requires this format.
@@ -117,7 +120,10 @@ token.**
   the `awardachievement` request in a queue in the database, without the
   token, and answers the player as RetroAchievements would on success. It
   retries the queue with backoff, adding the token at send time, and drops an
-  entry only when RetroAchievements answers it. The person's profile shows
+  entry only when RetroAchievements answers it. The award is sent with the
+  time it waited added to its "seconds since unlock" (`o`) and signed again
+  (rcheevos' signature is an MD5 of public fields, with no secret), so
+  RetroAchievements dates it when it was earned. The person's profile shows
   "N unlocks waiting to send".
 - This means an unlock can be shown in the player before RetroAchievements
   has it. That is what an offline unlock is, and the profile says so.

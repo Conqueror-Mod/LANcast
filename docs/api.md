@@ -1277,7 +1277,47 @@ else's.
   cached for ten minutes; `?refresh=1` asks again, at most once a minute.
   When RetroAchievements cannot be reached, the last answer is shown with
   `problem` saying why it is not newer.
-- `DELETE` disconnects: the name and sealed key are deleted (`204`).
+- `DELETE` disconnects: the name, the sealed key and any token are deleted
+  (`204`), and with them any unlocks still waiting to be sent.
+- `GET` also answers `earning` and `unlocks_waiting` (below).
+
+### `PUT` · `DELETE /api/profile/retroachievements/play`
+
+Earning achievements while playing in the desktop app
+([ADR 0111](adr/0111-achievements-are-earned-in-the-desktop-player.md)).
+Softcore only.
+
+- `PUT {password}` needs a connected account. The server sends your
+  RetroAchievements password to RetroAchievements once (`login2`), keeps the
+  **login token** it returns, sealed as the API key is, and discards the
+  password. A wrong password is `400`; a token for a different
+  RetroAchievements user than the one connected is `409`. Answers the view
+  above, with `earning: true`.
+- `DELETE` turns it off: the token is deleted, and any unlocks still waiting
+  with it (`204`).
+
+### `POST /api/items/{id}/retroachievements`
+
+One RetroAchievements request from the desktop player, for the game it is
+playing. The player runs rcheevos, which builds every request an emulator
+makes, and hands each here instead of sending it: `{body, user_agent_clause}`,
+where `body` is rcheevos' form. Reached with the game's stream ticket
+(`Authorization: Ticket …`) or a session.
+
+The server sends it to RetroAchievements only if it is `login2`, `gameid`,
+`achievementsets`, `startsession`, `ping` or `awardachievement`, for your own
+connected RetroAchievements account, softcore (`h` absent or `0`), with no
+password in it; anything else is `400`. It puts your token in place of the
+player's placeholder (`lancast`), sends it with the User-Agent
+`LANcast/<version> (Windows) <clause>`, and answers `{status, body}`:
+RetroAchievements' own status and answer, with any `Token` replaced by the
+placeholder. The player never holds the token.
+
+An award made while RetroAchievements cannot be reached is kept and answered
+as unlocked, with `queued: true`; the server sends it later, with the time it
+waited added so it is dated when it was earned. Any other request that cannot
+reach RetroAchievements is `502`, which rcheevos retries. Earning off is `409
+earning_off`.
 
 ### `GET /api/retroachievements/media/{dir}/{file}`
 

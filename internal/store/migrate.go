@@ -6,7 +6,7 @@ import (
 )
 
 // CurrentSchemaVersion is the revision this build expects.
-const CurrentSchemaVersion = 86
+const CurrentSchemaVersion = 87
 
 // migration is one forward step. There are deliberately no down migrations:
 // rolling a media library's schema backwards loses data that a rescan cannot
@@ -178,6 +178,9 @@ var migrations = []migration{
 		{"media_item", "rg_album_gain", "REAL"},
 		{"media_item", "rg_album_peak", "REAL"},
 	}},
+	// Achievements earned while playing (ADR 0111): the sealed login token,
+	// and unlocks kept while RetroAchievements cannot be reached.
+	{version: 87, sql: schemaRevision87, columns: []column{{"retro_account", "token_sealed", "BLOB"}}},
 }
 
 // migrate brings the database up to CurrentSchemaVersion.
@@ -2504,6 +2507,26 @@ CREATE TABLE IF NOT EXISTS comic_place (
     updated_at INTEGER NOT NULL,
     PRIMARY KEY (user_id, item_id)
 );
+`
+
+// Revision 87 — unlocks waiting to be sent (ADR 0111 §5).
+//
+// An award the server could not hand to RetroAchievements, kept until it
+// answers. body is the request as the player sent it, with the token's field
+// emptied: the token is added at send time, so this table holds nothing that
+// can award anything by itself. DeleteUser removes the rows, as it does the
+// account they belong to.
+const schemaRevision87 = `
+CREATE TABLE IF NOT EXISTS retro_unlock_queue (
+    id         INTEGER PRIMARY KEY,
+    user_id    TEXT    NOT NULL,
+    body       TEXT    NOT NULL,
+    queued_at  INTEGER NOT NULL,
+    tries      INTEGER NOT NULL DEFAULT 0,
+    next_at    INTEGER NOT NULL DEFAULT 0,
+    last_error TEXT    NOT NULL DEFAULT ''
+);
+CREATE INDEX IF NOT EXISTS idx_retro_unlock_queue_user ON retro_unlock_queue(user_id);
 `
 
 // Revision 84 — invites (ADR 0104): a link that makes one member account,
