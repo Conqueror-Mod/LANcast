@@ -64,13 +64,20 @@ func Options(wid uint64, logFile string) []Option {
 		// one renderer for both backends, so a track chosen in the player is
 		// the only one on screen rather than mpv adding the file's default.
 		{Name: "sid", Value: "no"},
-		{Name: "wid", Value: uitoa(wid)},
+	}
+	// SPIKE (cmd/mpvprobe): OwnWindow lets mpv make a top-level window of its
+	// own, the control for whether embedding is what keeps video composed.
+	if wid != OwnWindow {
+		opts = append(opts, Option{Name: "wid", Value: uitoa(wid)})
 	}
 	if logFile != "" {
 		opts = append(opts, Option{Name: "log-file", Value: logFile})
 	}
 	return opts
 }
+
+// OwnWindow, passed as the wid, sets none: mpv creates its own window.
+const OwnWindow = ^uint64(0)
 
 func uitoa(v uint64) string {
 	if v == 0 {
