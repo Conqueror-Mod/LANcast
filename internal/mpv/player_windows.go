@@ -60,7 +60,7 @@ type cProperty struct {
 
 type lib struct {
 	create, initialize, destroy, setOption, setPropString, command,
-	observe, waitEvent, wakeup, errString, apiVersion *windows.LazyProc
+	observe, waitEvent, wakeup, errString, apiVersion, getProperty *windows.LazyProc
 }
 
 var (
@@ -87,7 +87,8 @@ func Load(path string) error {
 			setPropString: d.NewProc("mpv_set_property_string"), command: d.NewProc("mpv_command"),
 			observe: d.NewProc("mpv_observe_property"), waitEvent: d.NewProc("mpv_wait_event"),
 			wakeup: d.NewProc("mpv_wakeup"), errString: d.NewProc("mpv_error_string"),
-			apiVersion: d.NewProc("mpv_client_api_version"),
+			apiVersion:  d.NewProc("mpv_client_api_version"),
+			getProperty: d.NewProc("mpv_get_property"),
 		}
 		v, _, _ := l.apiVersion.Call()
 		if major := v >> 16; major != 2 {
@@ -177,6 +178,22 @@ func (p *Player) Command(args ...string) error {
 // Set sets a property from its string form.
 func (p *Player) Set(name, value string) error {
 	return p.check("set "+name, callStr2(loaded.setPropString, p.h, name, value))
+}
+
+// Double reads a numeric property now, rather than waiting for it to change.
+//
+// Observing is the wrong tool for a value needed once per file: mpv reports a
+// property only when it changes, so a 23.976 film after a 23.976 film reports
+// no frame rate at all (Reset says the same about the channel count).
+func (p *Player) Double(name string) (float64, error) {
+	var v float64
+	n := cstr(name)
+	rc, _, _ := loaded.getProperty.Call(p.h, uintptr(unsafe.Pointer(n)), formatDouble, uintptr(unsafe.Pointer(&v)))
+	runtime.KeepAlive(n)
+	if err := p.check("get "+name, rc); err != nil {
+		return 0, err
+	}
+	return v, nil
 }
 
 // State is the latest view of the player.

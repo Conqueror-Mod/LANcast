@@ -16,6 +16,7 @@ import (
 
 	"lancast/internal/clientwindow"
 	"lancast/internal/desktop"
+	"lancast/internal/displaymode"
 	"lancast/internal/mpv"
 )
 
@@ -58,6 +59,24 @@ type nativePlayer struct {
 	fx       mpv.AudioFX
 	channels int
 	af       string
+
+	/*
+	 * Theater output, step 1 (docs/theater-output-plan.md): the display
+	 * follows the film's frame rate. match and settle are the page's settings,
+	 * sent before each film opens (settleSet false means the page has not said,
+	 * and defaultSettle applies); gate holds the film's start while the
+	 * display switches; restoreT is the grace before a stop puts the display
+	 * back, cancelled by the next film so a queue does not resync twice per
+	 * film. wid is the video window, kept so the monitor can be found off the
+	 * window's thread.
+	 */
+	match     bool
+	settle    time.Duration
+	settleSet bool
+	disp      *displaymode.Switcher
+	gate      matchGate
+	restoreT  *time.Timer
+	wid       uintptr
 
 	// retro plays games into the same video window (ADR 0073). Made on
 	// first use, so a client that never opens a game builds nothing.
@@ -135,6 +154,7 @@ func (n *nativePlayer) ensure() error {
 	if wid == 0 {
 		return errors.New("no window to play into")
 	}
+	n.wid = wid
 	if n.relay == nil {
 		r, err := mpv.NewRelay(n.origin, n.pin)
 		if err != nil {
@@ -190,6 +210,9 @@ func (n *nativePlayer) emit(s mpv.State, events []string) {
 			return
 		}
 	}
+	if n.gate.pending && slices.Contains(events, "loadedmetadata") {
+		go n.matchDisplay(n.gate.gen)
+	}
 	w := n.window
 	if len(events) == 1 && events[0] == "timeupdate" {
 		if time.Since(n.lastTick) < 250*time.Millisecond {
@@ -241,6 +264,8 @@ func (n *nativePlayer) open(itemID int64, ticket string) error {
 	if err != nil {
 		return err
 	}
+	n.cancelRestore()
+	n.gate.open(n.match)
 	slog.Info("native playback", "item", itemID)
 	return n.player.Load(u, 0)
 }
@@ -251,14 +276,35 @@ func (n *nativePlayer) open(itemID int64, ticket string) error {
 func (n *nativePlayer) command(name string, value float64) error {
 	n.mu.Lock()
 	defer n.mu.Unlock()
+	// Settings, not controls: sent before a film opens, so they cannot wait
+	// for a player to exist.
+	switch name {
+	case "match-rate":
+		n.match = value != 0
+		if !n.match {
+			// Off means off now, not after this film.
+			n.cancelRestore()
+			n.restoreDisplay()
+		}
+		return nil
+	case "match-settle":
+		n.settle = time.Duration(clamp(value, 0, maxSettle.Seconds()) * float64(time.Second))
+		n.settleSet = true
+		return nil
+	}
 	if n.player == nil {
 		return errors.New("nothing is playing")
 	}
 	num := strconv.FormatFloat(value, 'f', -1, 64)
 	switch name {
 	case "play":
+		if !n.gate.play() {
+			// Held until the display has settled (matchDisplay).
+			return nil
+		}
 		return n.player.Set("pause", "no")
 	case "pause":
+		n.gate.pause()
 		return n.player.Set("pause", "yes")
 	case "seek":
 		return n.player.Command("seek", num, "absolute+exact")
@@ -292,6 +338,8 @@ func (n *nativePlayer) stop() {
 	if n.relay != nil {
 		n.relay.Forget()
 	}
+	n.gate.stop()
+	n.scheduleRestore()
 	/*
 	 * The window is left where the page put it.
 	 *
@@ -346,7 +394,7 @@ func trackID(v float64) string {
  * that could not run it. An old client has no such binding at all, which the
  * page reads as "none", so the rows only appear where they work.
  */
-var mpvFeatures = []string{"audiofx"}
+var mpvFeatures = []string{"audiofx", "refresh"}
 
 func (n *nativePlayer) bindings() map[string]any {
 	b := n.mpvBindings()

@@ -80,7 +80,7 @@ of a percent (23.976 film against a "23 Hz" mode that is really 23.9760001).
   When the page's `play` arrives before the switch has finished, the native
   side holds it, switches, waits a settle time, then unpauses. TVs take one to
   three seconds to resync HDMI; without the wait, the first seconds of the
-  film are lost to a black screen. Default 2 s, adjustable in the row (some
+  film are lost to a black screen. Default 3 s, adjustable in the row (some
   TVs need longer). No wait when no switch was needed.
 - **The mode list comes from `EnumDisplaySettingsEx`** on the window's
   monitor. Windows reports 23.976 as `23` and 59.94 as `59`, so an integer
@@ -320,8 +320,11 @@ listed from `audio-device-list`), saved per device like the rest.
 1. ~~Which inputs does the home theater system have?~~ One stereo aux input
    (above). PR 3 waits for a receiver.
 2. **HDR switch, a or b?** This plan recommends a (tell the person) first.
-3. **Settle default.** 2 s is a guess. The first evening's logs will say
-   whether it's right for the TV in question.
+3. ~~Settle default.~~ **Measured 2026-10-31 on a Roku 55R4AX at 4K:** the
+   switch itself took about 1 s (`held_ms=3038` with a 2 s wait), 2 s lost
+   about half a second of opening sound, and 3 s lost none. The default is
+   3 s. The display configuration read back exactly 23.976 Hz after the
+   switch, which confirms Windows' `23` convention on this TV.
 
 ## Rules this has to respect
 

@@ -15,3 +15,8 @@ type nativePlayer struct {
 func (n *nativePlayer) attach(clientwindow.Controller) {}
 
 func (n *nativePlayer) bindings() map[string]any { return nil }
+
+func (n *nativePlayer) shutdown() {}
+
+// recoverDisplay has nothing to undo: only the Windows player switches modes.
+func recoverDisplay() {}

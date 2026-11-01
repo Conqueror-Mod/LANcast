@@ -96,6 +96,17 @@ export interface Prefs {
   dialogueVideo: number;
   /** Night mode on music: evened out, and sitting lower. */
   nightMusic: boolean;
+
+  /*
+   * Theater output (docs/theater-output-plan.md). Per device, because it
+   * describes the screen and the cable, not the person: a server-held setting
+   * would switch a laptop's panel for a TV it is not plugged into. The desktop
+   * player only; the browser's player cannot change a display's mode.
+   */
+  /** Switch the display to the film's frame rate while it plays. */
+  matchRate: boolean;
+  /** Seconds to wait after a switch before the film starts (MATCH_SETTLES). */
+  matchSettle: number;
   /** Fade a listening session in, and the queue's last track out (lib/taper.ts). */
   taper: boolean;
   /**
@@ -219,6 +230,9 @@ export function resolveMilkdrop(wanted: string, stored: string[]): string {
 /** The crossfade lengths offered, in seconds; 0 is Off. */
 export const CROSSFADES = [0, 2, 5, 8, 12] as const;
 
+/** How long a film waits for the display to resync after a rate switch. */
+export const MATCH_SETTLES = [0, 1, 2, 3, 5, 8] as const;
+
 /** The dialogue-boost levels, in order. The index is what the player is sent. */
 export const DIALOGUE_LEVELS = ["Off", "Low", "High"] as const;
 
@@ -234,6 +248,8 @@ export const DEFAULTS: Prefs = {
   nightVideo: false,
   dialogueVideo: 0,
   nightMusic: false,
+  matchRate: false,
+  matchSettle: 3,
   taper: true,
   crossfade: 0,
   loudness: "off",
