@@ -90,6 +90,7 @@ func main() {
 	night := flag.Bool("night", false, "LANcast's night mode, the af it builds (mpv.AudioFilter)")
 	af := flag.String("af", "", "an af value of your own instead of -night")
 	flag.Var(&extraProps, "set", "name=value set once playing; repeatable (e.g. -set audio-delay=0.010)")
+	flag.Float64Var(&afAfter, "af-after", 0, "seconds of playing before the af goes on, as switching night mode on mid-film does")
 	flag.Parse()
 	switch {
 	case *af != "":
@@ -113,6 +114,7 @@ func main() {
 var (
 	audioFilter string
 	extraProps  propList
+	afAfter     float64
 )
 
 type propList [][2]string
@@ -191,10 +193,18 @@ func run(file, screen, dll string, start float64, seconds int, hdr bool) error {
 	}
 	// After the film opens, as LANcast sets af once mpv reports the channels.
 	if audioFilter != "" {
-		if err := p.Set("af", audioFilter); err != nil {
-			return fmt.Errorf("af %q: %w", audioFilter, err)
+		apply := func() {
+			if err := p.Set("af", audioFilter); err != nil {
+				fmt.Printf("af %q: %v\n", audioFilter, err)
+				return
+			}
+			fmt.Printf("af on at %s: %s\n", time.Now().Format("15:04:05.000"), audioFilter)
 		}
-		fmt.Println("af:", audioFilter)
+		if afAfter > 0 {
+			time.AfterFunc(time.Duration(afAfter*float64(time.Second)), apply)
+		} else {
+			apply()
+		}
 	}
 	for _, kv := range extraProps {
 		if err := p.Set(kv[0], kv[1]); err != nil {
