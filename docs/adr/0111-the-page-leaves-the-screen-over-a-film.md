@@ -69,10 +69,12 @@ anyway; its only effect was to force composition.
   - The main window holds activation, so a key reaches it. The key wakes the
     page and is then given to it, so Space pauses rather than only waking.
   - A mouse move wakes the page only when the pointer moves **over the
-    picture** (`pointerWakes`). Moving the mouse on another screen, to type
-    into another window, leaves the film alone. The first build woke on any
+    picture**, and by at least 24 physical pixels from where it rested
+    (`pointerWakes`). Moving the mouse on another screen, to type into
+    another window, leaves the film alone. The first build woke on any
     movement anywhere, and every reach for another window brought the
-    controls up over the film.
+    controls up over the film. The distance is there because every wake has
+    a cost (below), and a bump of the desk should not pay it.
   - Media keys go through `winkeys` as before.
 - **mpv hides the cursor** over the picture while the page is away, since the
   page's `cursor: none` went with it.
@@ -94,9 +96,16 @@ primary display as the thing to change.
   124 ms deep against about 20 ms composed. mpv times the picture to the
   audio, so sound and picture stay together. It shows only as a slightly
   slower response to pause or seek.
-- **Waking costs a recomposition.** Bringing the overlay back switches Windows
-  from independent flip to composed. That happens when somebody has just
-  touched the mouse or a key, the best moment for it.
+- **Every wake costs two stutters.** Bringing the overlay back switches
+  Windows from independent flip to composed, and hiding it again switches
+  back. Measured over three wake-and-fade cycles: each switch held two or
+  three frames for two to three refreshes, and the fade back dropped one, so
+  a wake costs about a tenth of a second of hitch on the way in and again on
+  the way out. While the controls are up, the film is composed again, with
+  the old 1.4/0.6-refresh judder in bursts. None of this can be designed
+  away while the page is a separate window. What LANcast controls is how
+  often it happens: only a deliberate move or a key wakes the page, and a
+  key that does is not wasted, because it also acts.
 - **Nothing changes for anyone whose TV isn't primary**, or who watches in a
   window. The overlay still hides, but Windows composes regardless, as before.
 

@@ -24,8 +24,8 @@ import (
  * While the overlay is hidden the main window holds activation, so a key
  * arrives here; it wakes the page and is then handed to it, so Space pauses
  * rather than only waking. The pointer is over mpv's window, which reports
- * nothing, so a timer watches it, and only movement over the picture counts
- * (pointerWakes).
+ * nothing, so a timer watches it, and only a deliberate move over the
+ * picture counts (pointerWakes).
  */
 
 var (
@@ -125,12 +125,10 @@ func (w *webview) idleMessage(msg, wp uintptr) (uintptr, bool) {
 		_, _, _ = procGetCursorPos.Call(uintptr(unsafe.Pointer(&p)))
 		var picture w32.Rect
 		_, _, _ = procGetWindowRc.Call(w.video, uintptr(unsafe.Pointer(&picture)))
-		if pointerWakes(w.idleCursor, p, picture) {
+		wake, rest := pointerWakes(w.idleCursor, p, picture)
+		w.idleCursor = rest
+		if wake {
 			w.showOverlayAfterIdle(nil, true)
-		} else {
-			// Movement elsewhere is a new resting place, so leaving another
-			// screen for the film's later still counts as a move over it.
-			w.idleCursor = p
 		}
 		return 0, true
 	}

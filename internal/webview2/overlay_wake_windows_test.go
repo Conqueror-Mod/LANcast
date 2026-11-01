@@ -11,26 +11,48 @@ import (
 // The TV, as the primary display at 3840x2160, and a desk monitor to its left.
 var tv = w32.Rect{Left: 0, Top: 0, Right: 3840, Bottom: 2160}
 
-func TestPointerWakesOnlyForMovementOverThePicture(t *testing.T) {
+func TestPointerWakesOnlyForADeliberateMoveOverThePicture(t *testing.T) {
 	for _, c := range []struct {
-		name     string
-		was, now w32.Point
-		want     bool
+		name      string
+		rest, now w32.Point
+		want      bool
+		newRest   w32.Point
 	}{
-		{"moved over the film", w32.Point{X: 100, Y: 100}, w32.Point{X: 120, Y: 100}, true},
-		{"still", w32.Point{X: 100, Y: 100}, w32.Point{X: 100, Y: 100}, false},
+		{"moved over the film", w32.Point{X: 100, Y: 100}, w32.Point{X: 140, Y: 100}, true, w32.Point{X: 140, Y: 100}},
+		{"still", w32.Point{X: 100, Y: 100}, w32.Point{X: 100, Y: 100}, false, w32.Point{X: 100, Y: 100}},
+		// A bump of the desk. Each wake costs two visible stutters as Windows
+		// starts and stops composing the film, so this must not buy them.
+		{"nudged", w32.Point{X: 100, Y: 100}, w32.Point{X: 123, Y: 77}, false, w32.Point{X: 100, Y: 100}},
+		{"just far enough", w32.Point{X: 100, Y: 100}, w32.Point{X: 100, Y: 124}, true, w32.Point{X: 100, Y: 124}},
 		// Reaching for another window on another screen: the reason this rule
 		// exists. The first version brought the controls up for this.
-		{"moved on the desk monitor", w32.Point{X: -900, Y: 400}, w32.Point{X: -700, Y: 420}, false},
-		{"from the desk onto the film", w32.Point{X: -10, Y: 400}, w32.Point{X: 10, Y: 400}, true},
-		{"from the film onto the desk", w32.Point{X: 10, Y: 400}, w32.Point{X: -10, Y: 400}, false},
+		{"moved on the desk monitor", w32.Point{X: -900, Y: 400}, w32.Point{X: -700, Y: 420}, false, w32.Point{X: -700, Y: 420}},
+		{"from the desk well onto the film", w32.Point{X: -10, Y: 400}, w32.Point{X: 40, Y: 400}, true, w32.Point{X: 40, Y: 400}},
+		{"from the film onto the desk", w32.Point{X: 10, Y: 400}, w32.Point{X: -10, Y: 400}, false, w32.Point{X: -10, Y: 400}},
 		// Right and Bottom are outside, as everywhere in Win32.
-		{"right edge is outside", w32.Point{X: 0, Y: 0}, w32.Point{X: 3840, Y: 0}, false},
-		{"last pixel is inside", w32.Point{X: 0, Y: 0}, w32.Point{X: 3839, Y: 2159}, true},
+		{"right edge is outside", w32.Point{X: 3800, Y: 0}, w32.Point{X: 3840, Y: 0}, false, w32.Point{X: 3840, Y: 0}},
+		{"last pixel is inside", w32.Point{X: 3800, Y: 2100}, w32.Point{X: 3839, Y: 2159}, true, w32.Point{X: 3839, Y: 2159}},
 	} {
-		if got := pointerWakes(c.was, c.now, tv); got != c.want {
-			t.Errorf("%s: pointerWakes = %v, want %v", c.name, got, c.want)
+		wake, rest := pointerWakes(c.rest, c.now, tv)
+		if wake != c.want || rest != c.newRest {
+			t.Errorf("%s: pointerWakes = %v, %+v; want %v, %+v", c.name, wake, rest, c.want, c.newRest)
 		}
+	}
+}
+
+// A slow move is still a move: the rest holds while the pointer creeps over
+// the picture, so small steps add up to a wake, as they would by hand.
+func TestPointerWakesForASlowMoveThatAddsUp(t *testing.T) {
+	rest := w32.Point{X: 1000, Y: 1000}
+	for i, step := 0, int32(5); i < 4; i++ {
+		var wake bool
+		wake, rest = pointerWakes(rest, w32.Point{X: 1000 + step*int32(i+1), Y: 1000}, tv)
+		if wake {
+			t.Fatalf("woke after %d px", step*int32(i+1))
+		}
+	}
+	if wake, _ := pointerWakes(rest, w32.Point{X: 1025, Y: 1000}, tv); !wake {
+		t.Error("25 px in five steps did not wake")
 	}
 }
 
