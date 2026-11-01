@@ -45,7 +45,8 @@ import { PrerollOverlay } from "@/components/PrerollOverlay";
 import { nextChapterStart, previousChapterStart, type ChapterMark } from "@/lib/chapters";
 import { UpNextCard } from "@/components/UpNextCard";
 import { AfterFilm } from "@/components/AfterFilm";
-import { DEFAULTS, DIALOGUE_LEVELS } from "@/playback/prefs";
+import { DEFAULTS, DIALOGUE_LEVELS, getPrefs } from "@/playback/prefs";
+import { nativeWake, overlayKeptBy } from "@/playback/overlayIdle";
 import {
   canBoostDialogue,
   canNightFilm,
@@ -436,6 +437,46 @@ export function Player() {
     if (pb.stillWatching) wakeChrome();
   }, [pb.stillWatching, wakeChrome]);
 
+  /*
+   * The hide clock starts again when the film starts playing.
+   *
+   * The timer reads `pb.playing` from when it was armed, and only hides a
+   * playing film. Frame-rate matching holds a film's start for a few seconds
+   * while the TV changes mode, so the clock armed on opening ran out before
+   * playback began, and the controls then stayed over the film until somebody
+   * moved the mouse. With the page leaving the screen once they fade
+   * (ADR 0111), that left every matched film composed.
+   */
+  /*
+   * A film on the TV opens fullscreen (ADR 0111). Windows sends a film
+   * straight to the screen only when the picture covers all of it, and a
+   * maximized window's title bar and the taskbar's edge kept every frame
+   * composed: the judder came back on the first film after a restart, because
+   * nobody had pressed F. Once per film, so leaving fullscreen mid-film sticks
+   * until the next one.
+   */
+  const { enterFullscreen } = pb;
+  const fullscreenedFor = useRef<number | null>(null);
+  // The kind, not isAudio: that reads false until a track's details arrive,
+  // and a song would have taken the screen for that moment.
+  const filmID =
+    pb.item && pb.item.id === pb.itemID && (pb.item.kind === "movie" || pb.item.kind === "episode")
+      ? pb.item.id
+      : null;
+  useEffect(() => {
+    if (!pb.native || filmID == null || fullscreenedFor.current === filmID) return;
+    fullscreenedFor.current = filmID;
+    const p = getPrefs();
+    if (p.matchRate && p.fullscreenFilms) enterFullscreen();
+  }, [pb.native, filmID, enterFullscreen]);
+
+  const wasPlaying = useRef(pb.playing);
+  useEffect(() => {
+    const started = pb.playing && !wasPlaying.current;
+    wasPlaying.current = pb.playing;
+    if (started && chromeVisible) wakeChrome();
+  }, [pb.playing, chromeVisible, wakeChrome]);
+
   useEffect(
     () => () => {
       window.clearTimeout(idleTimer.current);
@@ -656,6 +697,44 @@ export function Player() {
     !pb.playing &&
     !pb.isAudio &&
     item?.kind === "movie";
+  /*
+   * With nothing on screen over a native film, the window takes the page off
+   * the screen, so Windows can send the film to the TV without composing it
+   * (ADR 0111). Only while a native film is up, so browsing sends nothing.
+   */
+  const overlayAsk = pb.native
+    ? overlayKeptBy({
+        native: pb.native,
+        chromeVisible,
+        isAudio: pb.isAudio,
+        playing: pb.playing,
+        loading: pb.loading,
+        subtitles: pb.activeSub != null,
+        skipCard: skip != null,
+        upNext: showUpNext,
+        introSkipped: showIntroSkipped,
+        stats: showStats,
+        stillWatching: !!pb.stillWatching,
+      })
+    : null;
+  useEffect(() => {
+    if (overlayAsk === null) return;
+    void window.lancastMpvOverlayIdle?.(overlayAsk === "", overlayAsk).catch(() => {});
+  }, [overlayAsk]);
+  useEffect(
+    () => () => {
+      void window.lancastMpvOverlayIdle?.(false, "left the player").catch(() => {});
+    },
+    [],
+  );
+  useEffect(() => {
+    const wake = (key: Parameters<typeof nativeWake>[1]) => nativeWake(wakeChrome, key);
+    window.__lancastNativeWake = wake;
+    return () => {
+      if (window.__lancastNativeWake === wake) delete window.__lancastNativeWake;
+    };
+  }, [wakeChrome]);
+
   const { rollOn } = pb;
   const rollOnUnattended = useCallback(() => rollOn(false), [rollOn]);
 

@@ -46,4 +46,14 @@ func startLogging() {
 	 */
 	slog.SetDefault(slog.New(slog.NewTextHandler(applog.Tee(f, os.Stderr), nil)))
 	slog.Info("client started", "version", Version, "browser_mode", browserMode)
+
+	// A fatal error's own words, which stderr would have thrown away
+	// (applog/crash.go), and a line here if the last run ended in one.
+	earlier, err := applog.CaptureCrashes(dir, applog.ClientCrashFileName)
+	if err != nil {
+		slog.Warn("crash reports will not be kept", "error", err)
+	}
+	if earlier != nil {
+		slog.Warn("the last run crashed", "at", earlier.At, "cause", earlier.Cause, "report", earlier.Path)
+	}
 }

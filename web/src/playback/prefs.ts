@@ -109,6 +109,12 @@ export interface Prefs {
   matchSettle: number;
   /** Hand an HDR film to the display as HDR instead of tone mapping it. */
   hdrOut: boolean;
+  /**
+   * Open films fullscreen while matching is on. Windows sends a film straight
+   * to the TV only when the picture covers the whole screen; a maximized
+   * window's title bar kept every frame composed (ADR 0111).
+   */
+  fullscreenFilms: boolean;
   /** Fade a listening session in, and the queue's last track out (lib/taper.ts). */
   taper: boolean;
   /**
@@ -253,6 +259,7 @@ export const DEFAULTS: Prefs = {
   matchRate: false,
   matchSettle: 3,
   hdrOut: false,
+  fullscreenFilms: true,
   taper: true,
   crossfade: 0,
   loudness: "off",

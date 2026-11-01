@@ -118,5 +118,5 @@ func decidePacing(p *mpv.Player, displayHz, measured float64) {
 	}
 	slog.Warn("frames paced by another clock, not resampling; expect some stutter",
 		"display_hz", round3(displayHz), "measured_fps", round3(measured), "paced_by", pacer,
-		"fix", "make the TV the only display, or give every monitor the same rate")
+		"fix", "make the TV the main display, or the only one (ADR 0111)")
 }

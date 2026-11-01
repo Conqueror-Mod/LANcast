@@ -4,6 +4,7 @@ import (
 	"log/slog"
 	"path/filepath"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"syscall"
 	"time"
@@ -331,13 +332,27 @@ func watchDeadline(start, lastMove time.Time) time.Time {
 	return games.WatchDeadline(start, lastMove, watchFor, watchAfterMove, watchCap)
 }
 
-func topLevelWindows() map[uintptr]bool {
-	out := map[uintptr]bool{}
-	cb := syscall.NewCallback(func(hwnd, _ uintptr) uintptr {
-		out[hwnd] = true
-		return 1 // keep enumerating
+// One callback for the life of the process: Go can make only about 2,000 and
+// never frees one, and this runs on a loop while a game is watched. See
+// clientwindow.Monitors, which ran out that way mid-film.
+var (
+	topWindowsMu   sync.Mutex
+	topWindowsSeen map[uintptr]bool
+	topWindowsCB   = sync.OnceValue(func() uintptr {
+		return syscall.NewCallback(func(hwnd, _ uintptr) uintptr {
+			topWindowsSeen[hwnd] = true
+			return 1 // keep enumerating
+		})
 	})
-	_, _, _ = procEnumWindows.Call(cb, 0)
+)
+
+func topLevelWindows() map[uintptr]bool {
+	topWindowsMu.Lock()
+	defer topWindowsMu.Unlock()
+	topWindowsSeen = map[uintptr]bool{}
+	_, _, _ = procEnumWindows.Call(topWindowsCB(), 0)
+	out := topWindowsSeen
+	topWindowsSeen = nil
 	return out
 }
 

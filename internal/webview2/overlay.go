@@ -404,6 +404,8 @@ func (w *webview) applyLayout() error {
 		w.ensureShield()
 	}
 	w.syncVideo()
+	// A layout that no longer allows it brings a hidden overlay back.
+	w.applyIdle()
 	return nil
 }
 
@@ -456,6 +458,8 @@ func (w *webview) leaveOverlay() {
 	}
 	popup := w.overlay
 	w.overlay = 0
+	w.idleHidden = false
+	_, _, _ = procKillTimer.Call(w.hwnd, idleTimer)
 	_, _, _ = procKillTimer.Call(w.hwnd, refocusTimer)
 	_, _, _ = w32.User32DestroyWindow.Call(popup)
 	setWindowContext(popup, nil)
@@ -476,7 +480,7 @@ func (w *webview) syncVideo() {
 
 	if w.overlay != 0 {
 		flags := uintptr(swpNoZOrder | swpNoActivate)
-		if visible != 0 {
+		if visible != 0 && !w.idleHidden {
 			flags |= swpShowWindow
 		}
 		_, _, _ = w32.User32SetWindowPos.Call(w.overlay, 0,
@@ -651,6 +655,9 @@ func (w *webview) overlayWindowMessage(msg, wp, lp uintptr) {
 // overlayMessage handles the main window's messages the extra windows follow.
 // It reports whether it consumed the message and, if so, what to return.
 func (w *webview) overlayMessage(msg, wp, lp uintptr) (uintptr, bool) {
+	if r, done := w.idleMessage(msg, wp); done {
+		return r, true
+	}
 	if msg == wmTimer && wp == refocusTimer {
 		if w.refocusPage() {
 			_, _, _ = procKillTimer.Call(w.hwnd, refocusTimer)
@@ -689,7 +696,7 @@ func (w *webview) overlayMessage(msg, wp, lp uintptr) (uintptr, bool) {
 			}
 			return 0, false
 		}
-		if w.overlay != 0 {
+		if w.overlay != 0 && !w.idleHidden {
 			_, _, _ = w32.User32ShowWindow.Call(w.overlay, swShowNA)
 		}
 		w.syncVideo()
@@ -711,7 +718,9 @@ func (w *webview) overlayMessage(msg, wp, lp uintptr) (uintptr, bool) {
 		w.framePress = w.overlay != 0 && lp&0xFFFF != htClient
 		return 0, false
 	case w32.WMActivate:
-		if w.overlay == 0 {
+		// While the overlay is hidden for idle, activation stays here: handing
+		// it to a hidden window would leave the keyboard nowhere.
+		if w.overlay == 0 || w.idleHidden {
 			break
 		}
 		press := w.framePress

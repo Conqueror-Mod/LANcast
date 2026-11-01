@@ -151,6 +151,9 @@ type Controller interface {
 	// client area beneath the page, or hides it.
 	GameWindow() uintptr
 	SetGameLayout(on bool)
+	// SetOverlayIdle says the page has nothing to show over a full-size film,
+	// so its overlay can leave the screen (ADR 0111).
+	SetOverlayIdle(idle bool)
 	// Eval runs script in the page, on the window's thread.
 	Eval(js string)
 	// ShowHTML replaces the page with one the caller carries -- the server

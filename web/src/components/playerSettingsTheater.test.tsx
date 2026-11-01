@@ -63,7 +63,22 @@ const matchBox = () =>
 const settleRow = () =>
   [...host.querySelectorAll("label")].find((l) => l.textContent?.includes("Wait for the screen"));
 
+const fullscreenBox = () =>
+  [...host.querySelectorAll("label")]
+    .find((l) => l.textContent?.includes("Open films fullscreen"))
+    ?.querySelector("input");
+
 describe("Theater output", () => {
+  it("opens films fullscreen by default once matching is on, and can be turned off", async () => {
+    window.lancastMpvFeatures = vi.fn(async () => ["refresh"]);
+    await render();
+    expect(fullscreenBox()).toBeUndefined();
+    await act(async () => matchBox()!.click());
+    expect(fullscreenBox()?.checked).toBe(true);
+    await act(async () => fullscreenBox()!.click());
+    expect(getPrefs().fullscreenFilms).toBe(false);
+  });
+
   it("is not drawn in a browser, which has no native player", async () => {
     await render();
     expect(host.textContent).not.toContain("Theater output");

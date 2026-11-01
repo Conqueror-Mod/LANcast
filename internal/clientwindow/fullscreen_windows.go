@@ -96,6 +96,19 @@ func (f *fullscreener) Toggle(hwnd uintptr) bool {
 	return true
 }
 
+// Enter fullscreens the window if it is not already, and reports that it is.
+// Never a toggle: the page calls it when a film opens, and a window already
+// fullscreen must stay that way (ADR 0111).
+func (f *fullscreener) Enter(hwnd uintptr) bool {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if !f.on {
+		f.enter(hwnd)
+		f.on = true
+	}
+	return true
+}
+
 func (f *fullscreener) enter(hwnd uintptr) {
 	f.placement.Length = uint32(unsafe.Sizeof(f.placement))
 	_, _, _ = procGetWindowPlacement.Call(hwnd, uintptr(unsafe.Pointer(&f.placement)))

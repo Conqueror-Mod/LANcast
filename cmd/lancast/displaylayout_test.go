@@ -47,3 +47,26 @@ func TestMonitorList(t *testing.T) {
 		t.Errorf("got %q", got)
 	}
 }
+
+// The TV secondary was every frame composed; the TV primary, other screens
+// still on, was none (ADR 0111). The advice names the TV, and only when moving
+// the primary display would change something.
+func TestUncomposedFixNamesTheTVWhenItIsNotPrimary(t *testing.T) {
+	desk := deskMon
+	desk.Primary = true
+	if got, want := uncomposedFix([]clientwindow.Monitor{desk, sideMon, tvMon}, tvMon.Device),
+		"make Roku 55R4AX the main display (Windows Settings, System, Display) for the smoothest picture"; got != want {
+		t.Errorf("TV secondary: %q, want %q", got, want)
+	}
+	tv := tvMon
+	tv.Primary = true
+	if got := uncomposedFix([]clientwindow.Monitor{deskMon, sideMon, tv}, tv.Device); got != "" {
+		t.Errorf("TV primary: nothing to change, got %q", got)
+	}
+	if got := uncomposedFix([]clientwindow.Monitor{tvMon}, tvMon.Device); got != "" {
+		t.Errorf("TV alone: nothing to change, got %q", got)
+	}
+	if got := uncomposedFix([]clientwindow.Monitor{desk, sideMon}, tvMon.Device); got != "" {
+		t.Errorf("film's screen not among the active ones: no guess, got %q", got)
+	}
+}
