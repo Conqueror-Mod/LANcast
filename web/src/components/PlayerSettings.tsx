@@ -204,20 +204,49 @@ export function PlayerSettings() {
  */
 function TheaterOutput() {
   const [prefs, setPrefs] = usePrefs();
-  const [refresh, setRefresh] = useState(false);
+  const [features, setFeatures] = useState<string[]>([]);
   useEffect(() => {
     let live = true;
     void nativeFeatures().then((f) => {
-      if (live) setRefresh(f.includes("refresh"));
+      if (live) setFeatures(f);
     });
     return () => {
       live = false;
     };
   }, []);
-  if (!refresh) return null;
+  const refresh = features.includes("refresh");
+  const hdr = features.includes("hdr");
+  if (!refresh && !hdr) return null;
   return (
     <section className="settings__section">
       <span className="section-label">Theater output</span>
+      {refresh && <RateRows prefs={prefs} setPrefs={setPrefs} />}
+      {hdr && (
+        <>
+          <label className="set-toggle">
+            <input
+              type="checkbox"
+              checked={prefs.hdrOut}
+              onChange={(e) => setPrefs({ hdrOut: e.target.checked })}
+            />
+            Send HDR to the display
+          </label>
+          <p className="set-row__sub">
+            An HDR film reaches the screen as HDR instead of being converted to SDR first. It
+            needs &ldquo;Use HDR&rdquo; turned on for that screen in Windows&rsquo; display
+            settings, and takes effect from the next film.
+          </p>
+        </>
+      )}
+    </section>
+  );
+}
+
+type PrefsHook = ReturnType<typeof usePrefs>;
+
+function RateRows({ prefs, setPrefs }: { prefs: PrefsHook[0]; setPrefs: PrefsHook[1] }) {
+  return (
+    <>
       <label className="set-toggle">
         <input
           type="checkbox"
@@ -254,7 +283,7 @@ function TheaterOutput() {
           </p>
         </>
       )}
-    </section>
+    </>
   );
 }
 

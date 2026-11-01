@@ -60,7 +60,8 @@ type cProperty struct {
 
 type lib struct {
 	create, initialize, destroy, setOption, setPropString, command,
-	observe, waitEvent, wakeup, errString, apiVersion, getProperty *windows.LazyProc
+	observe, waitEvent, wakeup, errString, apiVersion, getProperty,
+	getPropString, free *windows.LazyProc
 }
 
 var (
@@ -87,8 +88,10 @@ func Load(path string) error {
 			setPropString: d.NewProc("mpv_set_property_string"), command: d.NewProc("mpv_command"),
 			observe: d.NewProc("mpv_observe_property"), waitEvent: d.NewProc("mpv_wait_event"),
 			wakeup: d.NewProc("mpv_wakeup"), errString: d.NewProc("mpv_error_string"),
-			apiVersion:  d.NewProc("mpv_client_api_version"),
-			getProperty: d.NewProc("mpv_get_property"),
+			apiVersion:    d.NewProc("mpv_client_api_version"),
+			getProperty:   d.NewProc("mpv_get_property"),
+			getPropString: d.NewProc("mpv_get_property_string"),
+			free:          d.NewProc("mpv_free"),
 		}
 		v, _, _ := l.apiVersion.Call()
 		if major := v >> 16; major != 2 {
@@ -194,6 +197,21 @@ func (p *Player) Double(name string) (float64, error) {
 		return 0, err
 	}
 	return v, nil
+}
+
+// String reads a property in its string form now. ok is false when mpv has
+// no value for it (video-params before the first frame, say). The string is
+// copied out and mpv's own allocation freed with mpv_free, as the API asks.
+func (p *Player) String(name string) (string, bool) {
+	n := cstr(name)
+	r, _, _ := loaded.getPropString.Call(p.h, uintptr(unsafe.Pointer(n)))
+	runtime.KeepAlive(n)
+	if r == 0 {
+		return "", false
+	}
+	s := windows.BytePtrToString((*byte)(cPointer(r)))
+	_, _, _ = loaded.free.Call(r)
+	return s, true
 }
 
 // State is the latest view of the player.

@@ -78,6 +78,12 @@ type nativePlayer struct {
 	restoreT  *time.Timer
 	wid       uintptr
 
+	// Theater output, step 2: hdr is the page's "Send HDR to the display",
+	// applied to each film as it opens. reported is set once this film's
+	// picture has been logged (hdr_windows.go), so it is logged once.
+	hdr      bool
+	reported bool
+
 	// retro plays games into the same video window (ADR 0073). Made on
 	// first use, so a client that never opens a game builds nothing.
 	retroOnce sync.Once
@@ -213,6 +219,12 @@ func (n *nativePlayer) emit(s mpv.State, events []string) {
 	if n.gate.pending && slices.Contains(events, "loadedmetadata") {
 		go n.matchDisplay(n.gate.gen)
 	}
+	// Once frames are moving, mpv knows both the film's colour space and
+	// what it is sending the display; before that, video-params is empty.
+	if !n.reported && slices.Contains(events, "playing") {
+		n.reported = true
+		go n.reportVideo(n.player, n.wid, n.hdr)
+	}
 	w := n.window
 	if len(events) == 1 && events[0] == "timeupdate" {
 		if time.Since(n.lastTick) < 250*time.Millisecond {
@@ -266,6 +278,13 @@ func (n *nativePlayer) open(itemID int64, ticket string) error {
 	}
 	n.cancelRestore()
 	n.gate.open(n.match)
+	// Per film, before it opens, so the first frame is already drawn for
+	// the right colour space. A refusal is logged, never fatal: the film
+	// plays tone mapped, as it always has.
+	if err := n.player.Set("target-colorspace-hint", mpv.HDRHint(n.hdr)); err != nil {
+		slog.Warn("HDR hint not applied", "error", err)
+	}
+	n.reported = false
 	slog.Info("native playback", "item", itemID)
 	return n.player.Load(u, 0)
 }
@@ -290,6 +309,11 @@ func (n *nativePlayer) command(name string, value float64) error {
 	case "match-settle":
 		n.settle = time.Duration(clamp(value, 0, maxSettle.Seconds()) * float64(time.Second))
 		n.settleSet = true
+		return nil
+	case "hdr":
+		// Takes effect from the next film: switching the swapchain's colour
+		// space mid-film would be a flash of the wrong picture for nothing.
+		n.hdr = value != 0
 		return nil
 	}
 	if n.player == nil {
@@ -394,7 +418,7 @@ func trackID(v float64) string {
  * that could not run it. An old client has no such binding at all, which the
  * page reads as "none", so the rows only appear where they work.
  */
-var mpvFeatures = []string{"audiofx", "refresh"}
+var mpvFeatures = []string{"audiofx", "refresh", "hdr"}
 
 func (n *nativePlayer) bindings() map[string]any {
 	b := n.mpvBindings()
