@@ -116,6 +116,12 @@ type Achievements interface {
 	// Idle hands over network answers while the game is paused.
 	Idle()
 	Reset()
+	// Progress is what is counting towards an achievement, kept with a save
+	// state; SetProgress restores it (nil: the state had none).
+	Progress() []byte
+	SetProgress([]byte)
+	// List tells the page the game's set, for the menu.
+	List()
 	// Stop is called before the core unloads the game.
 	Stop()
 }
@@ -306,6 +312,10 @@ func (s *Session) LoadState(slot string) {
 	}()
 }
 
+// ListAchievements asks for the game's achievements, for the menu. They
+// arrive as the page's own event, from Config.Achievements.
+func (s *Session) ListAchievements() { s.send(command{kind: "achievements"}) }
+
 // SetOption changes a core option; the core sees it on its next frame.
 func (s *Session) SetOption(key, value string) {
 	s.send(command{kind: "set-option", key: key, val: value})
@@ -446,12 +456,15 @@ func (s *Session) run(ctx context.Context) (err error) {
 	 * Continue on every N64 game start from the beginning, with only a line
 	 * in the log to say so.
 	 */
-	var resume []byte
+	var resume, resumeProgress []byte
 	resumeSlot, resumeTries, resumed := s.cfg.ResumeState, 0, false
 	if resumeSlot != "" {
 		if data, c, v, err := s.cfg.Saves.LoadState(resumeSlot); err == nil && len(data) > 0 && s.stateMismatch(c, v) == "" {
+			data, resumeProgress = splitProgress(data)
 			if resumed = core.Unserialize(data); !resumed {
 				resume = data
+			} else {
+				s.setProgress(resumeProgress)
 			}
 		}
 	}
@@ -489,6 +502,7 @@ func (s *Session) run(ctx context.Context) (err error) {
 			switch {
 			case core.Unserialize(resume):
 				resume = nil
+				s.setProgress(resumeProgress)
 				s.cfg.Log.Info("retro session: resumed after the core's first frames", "slot", resumeSlot, "frames", resumeTries)
 				s.cfg.OnEvent(Event{Kind: "state-loaded", Slot: resumeSlot})
 			case resumeTries >= resumeFrames:
@@ -632,8 +646,14 @@ func (s *Session) handle(c command) {
 		s.upload(func() error {
 			return s.cfg.Saves.StoreState(c.slot, data, s.info.LibraryName, s.info.LibraryVersion)
 		}, Event{Kind: "state-saved", Slot: c.slot}, "That save did not reach the server.")
+	case "achievements":
+		if a := s.cfg.Achievements; a != nil {
+			a.List()
+		}
 	case "apply-state":
-		if core.Unserialize(c.data) {
+		state, progress := splitProgress(c.data)
+		if core.Unserialize(state) {
+			s.setProgress(progress)
 			s.cfg.OnEvent(Event{Kind: "state-loaded", Slot: c.slot})
 		} else {
 			s.cfg.OnEvent(Event{Kind: "error", Slot: c.slot, Text: "The game refused that save."})
@@ -674,7 +694,17 @@ func (s *Session) serialize() ([]byte, bool) {
 	if !s.cfg.Core.Serialize(data) {
 		return nil, false
 	}
+	if a := s.cfg.Achievements; a != nil {
+		data = withProgress(data, a.Progress())
+	}
 	return data, true
+}
+
+// setProgress hands a loaded state's achievement progress to rcheevos.
+func (s *Session) setProgress(p []byte) {
+	if a := s.cfg.Achievements; a != nil {
+		a.SetProgress(p)
+	}
 }
 
 // upload runs a store in the background, so the network never costs a frame.

@@ -498,7 +498,7 @@ func (r *retroPlayer) achievements(game *remote.Game, platform string) host.Achi
 		return nil
 	}
 	rt := cheevos.New(game.Achievements, func(e cheevos.Event) { r.emit(achievementEvent(e)) }, slog.Default())
-	return &gameAchievements{rt: rt, console: console}
+	return &gameAchievements{rt: rt, console: console, emit: r.emit}
 }
 
 // gameAchievements adapts a cheevos.Runtime to the session, which knows the
@@ -506,6 +506,7 @@ func (r *retroPlayer) achievements(game *remote.Game, platform string) host.Achi
 type gameAchievements struct {
 	rt      *cheevos.Runtime
 	console uint32
+	emit    func(map[string]any)
 }
 
 func (a *gameAchievements) Start(core libretro.Core, path string, data []byte) error {
@@ -515,6 +516,14 @@ func (a *gameAchievements) Frame() { a.rt.Frame() }
 func (a *gameAchievements) Idle()  { a.rt.Idle() }
 func (a *gameAchievements) Reset() { a.rt.Reset() }
 func (a *gameAchievements) Stop()  { a.rt.Stop() }
+
+func (a *gameAchievements) Progress() []byte     { return a.rt.Progress() }
+func (a *gameAchievements) SetProgress(p []byte) { a.rt.SetProgress(p) }
+
+// List sends the menu the game's set, as kind "achievements".
+func (a *gameAchievements) List() {
+	a.emit(map[string]any{"kind": "achievements", "set": a.rt.List()})
+}
 
 // achievementEvent is a runtime event as the page hears it: kind
 // "achievement", with what happened in "event".
@@ -573,6 +582,8 @@ func (r *retroPlayer) command(name, slot string) error {
 		s.Resume()
 	case "reset":
 		s.Reset()
+	case "achievements":
+		s.ListAchievements()
 	case "save-state", "load-state":
 		if !validStateSlot(slot) {
 			return fmt.Errorf("no slot %q", slot)

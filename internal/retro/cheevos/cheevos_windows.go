@@ -178,6 +178,11 @@ type Runtime struct {
 	ready   bool
 	off     bool
 	listing []Achievement
+	// early is progress from a state loaded before the set had (Continue
+	// does this: the state goes in at once, the set arrives over the
+	// network), handed over when it does.
+	early    []byte
+	hasEarly bool
 }
 
 // New prepares a runtime. Nothing is loaded until Start.
@@ -306,6 +311,9 @@ func (r *Runtime) Progress() []byte {
 // none, and rcheevos starts its counting again from that point.
 func (r *Runtime) SetProgress(b []byte) {
 	if !r.ready {
+		if r.started && !r.off {
+			r.early, r.hasEarly = b, true
+		}
 		return
 	}
 	var ptr unsafe.Pointer
@@ -474,6 +482,11 @@ func doneCB(op, result, message uintptr) uintptr {
 			title := make([]byte, 256)
 			call("lrc_game", uintptr(unsafe.Pointer(&title[0])), uintptr(len(title)), 0, 0)
 			r.onEvent(Event{Kind: "ready", Title: cutNUL(title), Total: total, Unlocked: unlocked})
+			if r.hasEarly {
+				r.hasEarly = false
+				r.SetProgress(r.early)
+				r.early = nil
+			}
 		case r.off:
 			// Already said: the sign-in failed, and the load with it.
 		default:
