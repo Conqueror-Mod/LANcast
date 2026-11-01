@@ -40,7 +40,7 @@ declare global {
       height: number,
     ) => Promise<void>;
     // SPIKE (uncomposed-video plan, phase 1): nothing to show over the film.
-    lancastMpvOverlayIdle?: (idle: boolean) => Promise<void>;
+    lancastMpvOverlayIdle?: (idle: boolean, keptBy: string) => Promise<void>;
     // Called by the window when a mouse move or a key brings the overlay back.
     __lancastNativeWake?: () => void;
     __lancastMpvEvent?: (e: MpvEvent) => void;

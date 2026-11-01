@@ -665,24 +665,39 @@ export function Player() {
    * so Windows may show the film without composing it. Subtitles, the skip
    * and up-next cards, the stats panel and a paused film all keep it.
    */
-  const overlayIdle =
-    pb.native &&
-    !chromeVisible &&
-    !pb.isAudio &&
-    pb.playing &&
-    !pb.loading &&
-    !pb.activeSub &&
-    !skip &&
-    !showUpNext &&
-    !showIntroSkipped &&
-    !showStats &&
-    !pb.stillWatching;
+  // The first thing keeping the overlay up, or "" when nothing is.
+  const overlayKeptBy = !pb.native
+    ? "not native"
+    : chromeVisible
+      ? "controls"
+      : pb.isAudio
+        ? "audio"
+        : !pb.playing
+          ? "paused"
+          : pb.loading
+            ? "loading"
+            : pb.activeSub
+              ? "subtitles"
+              : skip
+                ? "skip card"
+                : showUpNext
+                  ? "up next"
+                  : showIntroSkipped
+                    ? "intro skipped"
+                    : showStats
+                      ? "stats"
+                      : pb.stillWatching
+                        ? "still watching"
+                        : "";
+  // Only while a native film is up, so browsing never sends anything.
+  const overlayAsk = pb.native ? overlayKeptBy : null;
   useEffect(() => {
-    void window.lancastMpvOverlayIdle?.(overlayIdle).catch(() => {});
-  }, [overlayIdle]);
+    if (overlayAsk === null) return;
+    void window.lancastMpvOverlayIdle?.(overlayAsk === "", overlayAsk).catch(() => {});
+  }, [overlayAsk]);
   useEffect(
     () => () => {
-      void window.lancastMpvOverlayIdle?.(false).catch(() => {});
+      void window.lancastMpvOverlayIdle?.(false, "left the player").catch(() => {});
     },
     [],
   );
