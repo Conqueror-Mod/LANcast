@@ -184,6 +184,36 @@ LANcast's bad sessions are worse than the probe's (124–281 against at most
 one. That leaves two fixes that remove the lottery: the TV as the only active
 display, or the picture on its own hardware plane (phase 3, MPO).
 
+**Found, 2026-11-01: the TV has to be the primary display.** `dxdiag` gave
+overlay planes (MPO, 4 planes) only to display 1, the primary; display 2 and
+the TV reported none. With the TV made primary:
+
+| Run (TV primary) | Present mode | Lost | Frames shown one refresh |
+|---|---|---|---|
+| mpvprobe, own window | `Hardware: Independent Flip` | 0 | 2,875 / 2,876 |
+| mpvprobe `-embed` (LANcast's windows) | `Hardware: Independent Flip` | 0 | 2,876 / 2,876 |
+| LANcast, maximized | `Composed: Flip` | 13 | (34 px title bar, 2 px of taskbar over it) |
+| **LANcast, fullscreen, overlay hidden** | **`Hardware: Independent Flip`** | **0** | **2,873 / 2,873** |
+
+So phase 1 works, given three conditions together: the TV is the primary
+display, LANcast is fullscreen (maximized leaves the title bar), and nothing
+is over the picture. With the TV primary, `dxdiag` reads "Unknown" for every
+output, so its report can't be used to check this; PresentMon can. Frames
+queue a steady ~124 ms (three deep) in independent flip, against ~20 ms
+composed. That's a fixed delay for picture and sound alike, since mpv times
+video to audio.
+
+Found while testing, for the real build:
+- **The idle timer never fired after a held start.** The controls arm a 2.5 s
+  hide when the player mounts. Frame-rate matching holds the film about 4 s,
+  so the timer finds the film not playing and gives up. Nothing re-arms it
+  until the mouse moves. The fix is to re-arm when playback starts.
+- **The spike's wake is global.** It polls `GetCursorPos`, so moving the mouse
+  on any monitor (to type into another window) brings the controls back. The
+  real build should wake only for movement over the TV's monitor, or the
+  window.
+- **The key that wakes is spent**, and the arrow cursor can show over mpv.
+
 ### 2. Spike, only if 1 fails on the child window
 
 **Dropped 2026-11-01:** a top-level mpv window is composed too (see above).
