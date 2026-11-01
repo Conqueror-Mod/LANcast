@@ -157,6 +157,16 @@ Windows and doesn't count).
   clean probe run too. So they're how PresentMon reads a composed flip, not a
   visible fault. "Never shown" is the number that matters.
 
+**Night mode, ruled out (2026-11-01).** In LANcast, night mode on vs off once
+read 124 against 2 and 4 lost frames. But mpvprobe with night mode's exact
+`af` lost 0–5 across four runs: from the start three times, and switched on
+mid-film once. LANcast's bad runs share a different signature: frames wait
+30–50 ms before showing instead of ~20 ms, meaning one extra frame queued.
+The bad runs come and go between sessions and between audio restarts, so the
+night-mode correlation was most likely chance. What's left to test is what the
+probe doesn't share with LANcast: mpv embedded in LANcast's video window,
+WebView2 drawing on the same GPU, and the film arriving over HTTP.
+
 ### 2. Spike, only if 1 fails on the child window
 
 **Dropped 2026-11-01:** a top-level mpv window is composed too (see above).
