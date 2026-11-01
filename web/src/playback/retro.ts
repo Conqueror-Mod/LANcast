@@ -76,7 +76,11 @@ export interface RetroEvent {
     | "error"
     | "stopped"
     /** A pad move while the menu is open: up, down, left, right, select, back. */
-    | "nav";
+    | "nav"
+    /** RetroAchievements while playing (ADR 0112): what happened is in `event`. */
+    | "achievement"
+    /** The game's set, answering the "achievements" command. */
+    | "achievements";
   slot?: string;
   text?: string;
   done?: number;
@@ -84,6 +88,58 @@ export interface RetroEvent {
   options?: RetroOption[];
   /** On "labels": the core's own names for the first pad's buttons, by Controls target. */
   labels?: Record<string, string>;
+  /**
+   * On "achievement": ready (the set loaded: title, total, unlocked), none,
+   * off (text says why), unlocked, mastered, progress, progress-hide, offline,
+   * online or problem.
+   */
+  event?: AchievementEventKind;
+  id?: number;
+  title?: string;
+  description?: string;
+  badge?: string;
+  points?: number;
+  progress?: string;
+  unlocked?: number;
+  /** On "achievements". */
+  set?: AchievementSet;
+}
+
+export type AchievementEventKind =
+  | "ready"
+  | "none"
+  | "off"
+  | "unlocked"
+  | "mastered"
+  | "progress"
+  | "progress-hide"
+  | "offline"
+  | "online"
+  | "problem";
+
+/** One achievement of the running game, as the client lists it. */
+export interface GameAchievement {
+  id: number;
+  title: string;
+  description: string;
+  badge?: string;
+  points: number;
+  /** "unsupported": the set uses something this core does not provide. */
+  state: "locked" | "unlocked" | "unsupported";
+  progress?: string;
+}
+
+/** The running game's set. Empty (game_id 0) when it has none loaded. */
+export interface AchievementSet {
+  game_id: number;
+  title: string;
+  badge?: string;
+  total: number;
+  unlocked: number;
+  points: number;
+  points_unlocked: number;
+  rich_presence?: string;
+  achievements: GameAchievement[] | null;
 }
 
 declare global {
@@ -172,6 +228,7 @@ export type RetroCommand =
   | "reset"
   | "save-state"
   | "load-state"
+  | "achievements"
   | "stop"
   // The value rides in the second argument, "on" or "off".
   | "fast-forward"

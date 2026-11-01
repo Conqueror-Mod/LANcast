@@ -202,3 +202,11 @@
   height: 100%;
   background: rgba(255, 255, 255, 0.5);
 }
+
+/* Earning while playing (ADR 0112). */
+.ra__earn {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+}
