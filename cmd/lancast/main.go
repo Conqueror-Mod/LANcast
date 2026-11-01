@@ -347,6 +347,9 @@ func runWindow(l *launcher, d *desk) {
 
 	// Native playback (ADR 0067). Built before the window so its bindings are
 	// injected with the rest; it learns the window itself in OnReady.
+	// A display the last run switched for a film and never put back (a crash,
+	// a kill mid-film) is restored before anything else opens on it.
+	recoverDisplay()
 	native := &nativePlayer{origin: url, pin: pin}
 	if l.target.local {
 		native.addr, native.follow = l.addr, service.ConfiguredAddr
@@ -488,6 +491,9 @@ func runWindow(l *launcher, d *desk) {
 			withServerBindings(l.desktopBindings(native), l.serverBindings(windowNow)),
 			trayBindings(d)),
 	})
+	// The window is gone: a display switched for a film goes back before the
+	// process does, rather than waiting for recovery at the next launch.
+	native.shutdown()
 	if err != nil {
 		alert("LANcast", err.Error())
 	}

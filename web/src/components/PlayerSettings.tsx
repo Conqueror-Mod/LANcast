@@ -1,4 +1,6 @@
-import { usePrefs, QUALITIES, DEFAULTS, DIALOGUE_LEVELS, CROSSFADES, STAGES, type Stage, type SubFont } from "@/playback/prefs";
+import { useEffect, useState } from "react";
+import { usePrefs, QUALITIES, DEFAULTS, DIALOGUE_LEVELS, CROSSFADES, MATCH_SETTLES, STAGES, type Stage, type SubFont } from "@/playback/prefs";
+import { nativeFeatures } from "@/playback/mpvBackend";
 import { LEVEL_MODES, type LevelMode } from "@/lib/loudness";
 import { webgl2Supported } from "@/playback/trails";
 import { EQ_PRESETS } from "@/playback/elementAudio";
@@ -82,6 +84,8 @@ export function PlayerSettings() {
         </label>
         <SkipIntrosToggle />
       </section>
+
+      <TheaterOutput />
 
       <section className="settings__section">
         <span className="section-label">Music</span>
@@ -185,6 +189,72 @@ export function PlayerSettings() {
         </label>
       </section>
     </>
+  );
+}
+
+/*
+ * Theater output (docs/theater-output-plan.md): what the desktop player does
+ * to the display and the receiver.
+ *
+ * Shown only where this window's player says it can (nativeFeatures). The
+ * pane comes from the server and the player from the client, and v0.9.44
+ * showed night mode to a client that refused it, which made an evening of
+ * listening test nothing. In a browser there is no native player, and nothing
+ * here would do anything, so the section is not drawn at all.
+ */
+function TheaterOutput() {
+  const [prefs, setPrefs] = usePrefs();
+  const [refresh, setRefresh] = useState(false);
+  useEffect(() => {
+    let live = true;
+    void nativeFeatures().then((f) => {
+      if (live) setRefresh(f.includes("refresh"));
+    });
+    return () => {
+      live = false;
+    };
+  }, []);
+  if (!refresh) return null;
+  return (
+    <section className="settings__section">
+      <span className="section-label">Theater output</span>
+      <label className="set-toggle">
+        <input
+          type="checkbox"
+          checked={prefs.matchRate}
+          onChange={(e) => setPrefs({ matchRate: e.target.checked })}
+        />
+        Match the display to the film&rsquo;s frame rate
+      </label>
+      <p className="set-row__sub">
+        Switches the screen the player is on to the film&rsquo;s own rate, 23.976 Hz for most
+        films, so slow pans do not judder, and puts it back when the film stops. Only that screen
+        changes, and only while a film plays. A screen that offers no matching rate is left alone.
+      </p>
+      {prefs.matchRate && (
+        <>
+          <label className="set-row">
+            <span>Wait for the screen</span>
+            <select
+              className="set-input"
+              value={String(prefs.matchSettle)}
+              onChange={(e) => setPrefs({ matchSettle: Number(e.target.value) })}
+            >
+              {MATCH_SETTLES.map((s) => (
+                <option key={s} value={s}>
+                  {s === 0 ? "Don’t wait" : `${s} s`}
+                </option>
+              ))}
+            </select>
+          </label>
+          <p className="set-row__sub">
+            A TV goes black for a moment while it changes rate. The film starts after this
+            long, so its opening is not lost to the black screen. Make it longer if the first
+            seconds are still missing.
+          </p>
+        </>
+      )}
+    </section>
   );
 }
 

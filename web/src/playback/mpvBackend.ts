@@ -192,6 +192,20 @@ export class MpvBackend extends EventTarget implements MediaBackend {
    */
   prefsChanged(p: Prefs): void {
     if (this.loaded) this.sendAudioFX(p);
+    // Always, film or no film: turning matching off puts a switched display
+    // back at once, and the client keeps both values for the next film.
+    void this.sendMatch(p);
+  }
+
+  /*
+   * Refresh-rate matching (docs/theater-output-plan.md, step 1). Sent before
+   * every open, because the client decides whether to hold the film's start
+   * at the moment it opens. A client without the feature refuses both names,
+   * and command() swallows that, so an older client plays as it always did.
+   */
+  private async sendMatch(p: Prefs): Promise<void> {
+    await this.command("match-settle", p.matchSettle);
+    await this.command("match-rate", p.matchRate ? 1 : 0);
   }
 
   /*
@@ -278,6 +292,7 @@ export class MpvBackend extends EventTarget implements MediaBackend {
         );
         if (gen !== this.generation) return;
         holdNativeVideo("film");
+        await this.sendMatch(getPrefs());
         await window.lancastMpvOpen!(id, t.ticket);
         // play() usually arrives before the player exists, and the client opens
         // files paused; honour the page's intent now there is something to

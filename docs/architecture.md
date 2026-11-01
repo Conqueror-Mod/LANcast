@@ -253,6 +253,12 @@ per-account ceiling can compare a BBFC 15 with a TV-14.
 player ([ADR 0067](adr/0067-the-desktop-client-plays-through-libmpv.md)), split
 like `probe` into what the player is told and how its events are read.
 
+**`internal/displaymode`** — refresh-rate matching for that player
+([theater output plan](theater-output-plan.md), step 1): which mode suits a
+film is pure and table-tested; changing it and putting it back, including after
+a crash, is a thin Win32 layer. Only the monitor the video is on, never the
+primary display.
+
 **`internal/dlna`** — a DLNA/UPnP media server for televisions, browsing as a
 chosen account ([ADR 0086](adr/0086-a-tv-browses-as-somebody.md)). On Windows it
 binds the LAN address, not the wildcard, or SSDP hears nothing.

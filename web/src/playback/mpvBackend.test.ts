@@ -321,6 +321,69 @@ describe("MpvBackend audio settings", () => {
 });
 
 /*
+ * Refresh-rate matching (docs/theater-output-plan.md, step 1). The client
+ * decides whether to hold a film's start at the moment the film opens, so the
+ * settings must be there first, every time, whatever they are.
+ */
+describe("MpvBackend refresh-rate matching", () => {
+  let log: string[];
+
+  beforeEach(() => {
+    log = [];
+    window.lancastMpvOpen = vi.fn(async () => {
+      log.push("open");
+    });
+    window.lancastMpvCommand = vi.fn(async (n: string, v: number) => {
+      log.push(`${n}=${v}`);
+    });
+    window.lancastMpvStop = vi.fn(async () => {});
+    globalThis.fetch = vi.fn(async () =>
+      new Response(JSON.stringify({ ticket: "tk", item_id: 42, expires_at: 0 }), {
+        status: 200,
+      }),
+    ) as typeof fetch;
+  });
+
+  afterEach(() => {
+    resetPrefs();
+    resetNativeVideoHolders();
+    delete window.lancastMpvOpen;
+    delete window.lancastMpvCommand;
+    delete window.lancastMpvStop;
+  });
+
+  async function openFilm(): Promise<void> {
+    const b = new MpvBackend();
+    b.src = "/api/stream/42";
+    b.load();
+    for (let i = 0; i < 3; i++) await flush();
+  }
+
+  it("sends the settings before it opens the file", async () => {
+    setPrefs({ matchRate: true, matchSettle: 3 });
+    // The window's shared backend (an earlier test made it) hears that change
+    // too; let it finish talking before this film's commands are counted.
+    await flush();
+    log = [];
+    await openFilm();
+    expect(log.slice(0, 3)).toEqual(["match-settle=3", "match-rate=1", "open"]);
+  });
+
+  it("sends matching off, not nothing, when it is off", async () => {
+    // A client that matched the last film keeps doing it until told otherwise.
+    await openFilm();
+    expect(log.slice(0, 3)).toEqual(["match-settle=2", "match-rate=0", "open"]);
+  });
+
+  it("tells the client at once when matching is switched off, film or no film", async () => {
+    const b = new MpvBackend();
+    b.prefsChanged({ ...getPrefs(), matchRate: false });
+    await flush();
+    expect(log).toEqual(["match-settle=2", "match-rate=0"]);
+  });
+});
+
+/*
  * Which features the client's player has. The page and the player are
  * different versions often enough that the page must ask: a client without
  * the binding is older than every feature it names.

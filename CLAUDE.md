@@ -27,6 +27,7 @@ internal/contain/  is this path inside that folder, links followed (ADR 0094)
 internal/probe/    ffprobe wrapper + direct-play/remux/transcode decision
 internal/transcode/ ffmpeg pipeline: segmented file output and the live path
 internal/mpv/      libmpv via syscall: the desktop's own player (ADR 0067)
+internal/displaymode/ the player's screen follows the film's frame rate, and goes back
 internal/rating/   national certificates onto one ladder of ages
 internal/marker/   intro and credit detection
 internal/history/  the dashboard's minute-by-minute record, two days (ADR 0106)
