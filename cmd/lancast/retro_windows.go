@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"lancast/internal/clientwindow"
+	"lancast/internal/retro/cheevos"
 	"lancast/internal/retro/cores"
 	"lancast/internal/retro/host"
 	"lancast/internal/retro/libretro"
@@ -435,6 +436,7 @@ func (r *retroPlayer) run(ctx context.Context, game *remote.Game, corePath strin
 		Audio:           &host.WaveOut{},
 		Input:           host.Controllers{HWND: hwnd, Map: &r.maps},
 		Saves:           game,
+		Achievements:    r.achievements(game, platform),
 		Options:         savedOptions(platform),
 		Display:         savedDisplay(platform),
 		ResumeState:     resumeSlot,
@@ -477,6 +479,80 @@ func (r *retroPlayer) run(ctx context.Context, game *remote.Game, corePath strin
 		return fmt.Errorf("%w: %s", err, coreSaid)
 	}
 	return err
+}
+
+/*
+ * achievements is the game's RetroAchievements runtime (ADR 0112), or nil
+ * when there can be none: a console RetroAchievements does not cover, or no
+ * rcheevos.dll beside the app. Whether the person has earning switched on is
+ * the server's to say, at the runtime's first request; an "off" event is how
+ * the page hears it.
+ */
+func (r *retroPlayer) achievements(game *remote.Game, platform string) host.Achievements {
+	console := cheevos.Console(platform)
+	if console == 0 {
+		return nil
+	}
+	if err := loadCheevos(); err != nil {
+		slog.Info("retro: no achievements", "error", err)
+		return nil
+	}
+	rt := cheevos.New(game.Achievements, func(e cheevos.Event) { r.emit(achievementEvent(e)) }, slog.Default())
+	return &gameAchievements{rt: rt, console: console}
+}
+
+// gameAchievements adapts a cheevos.Runtime to the session, which knows the
+// game but not RetroAchievements' number for its console.
+type gameAchievements struct {
+	rt      *cheevos.Runtime
+	console uint32
+}
+
+func (a *gameAchievements) Start(core libretro.Core, path string, data []byte) error {
+	return a.rt.Start(core, a.console, path, data)
+}
+func (a *gameAchievements) Frame() { a.rt.Frame() }
+func (a *gameAchievements) Idle()  { a.rt.Idle() }
+func (a *gameAchievements) Reset() { a.rt.Reset() }
+func (a *gameAchievements) Stop()  { a.rt.Stop() }
+
+// achievementEvent is a runtime event as the page hears it: kind
+// "achievement", with what happened in "event".
+func achievementEvent(e cheevos.Event) map[string]any {
+	out := map[string]any{"kind": "achievement", "event": e.Kind}
+	for k, v := range map[string]string{"title": e.Title, "description": e.Description,
+		"badge": e.Badge, "progress": e.Progress, "text": e.Text} {
+		if v != "" {
+			out[k] = v
+		}
+	}
+	for k, v := range map[string]uint32{"id": e.ID, "points": e.Points} {
+		if v != 0 {
+			out[k] = v
+		}
+	}
+	if e.Kind == "ready" {
+		out["total"], out["unlocked"] = e.Total, e.Unlocked
+	}
+	return out
+}
+
+var (
+	cheevosOnce sync.Once
+	cheevosErr  error
+)
+
+// loadCheevos loads rcheevos.dll from beside the app, once, as libmpv is.
+func loadCheevos() error {
+	cheevosOnce.Do(func() {
+		exe, err := os.Executable()
+		if err != nil {
+			cheevosErr = err
+			return
+		}
+		cheevosErr = cheevos.Load(filepath.Join(filepath.Dir(exe), "rcheevos.dll"))
+	})
+	return cheevosErr
 }
 
 // gameID recovers the item a remote.Game was made for, for the cache path.
