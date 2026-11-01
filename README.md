@@ -4,7 +4,7 @@ A self-hosted media server and library service. Plex's streamlined
 functionality, Kodi's customizability and versatility, and neither one's
 compromises.
 
-> **Status: v0.9.99 · M0–M4 built and released.** Point it at a folder and it
+> **Status: v0.10.0 · M0–M4 built and released.** Point it at a folder and it
 > scans, identifies, and plays — direct play, remux, or transcode, with working
 > seek and resume and hardware encoding. Films, TV, **music**, **pictures** and
 > **comics** are all first-class. Real metadata, artwork, ratings, subtitles,
@@ -213,20 +213,29 @@ rebuilt `dist`.
 
 ### Metadata
 
-Optional. Add a free [TMDB](https://www.themoviedb.org/settings/api) key under
-Settings for posters, synopses, cast, and artwork.
+**Nothing to sign up for.** A release comes with its own
+[TMDB](https://www.themoviedb.org) key, for posters, synopses, cast and artwork,
+and its own [OpenSubtitles](https://www.opensubtitles.com) key, for subtitle
+search ([ADR 0110](docs/adr/0110-lancast-carries-its-own-provider-keys.md)).
+Settings › Metadata says which key each one is using.
 
-**LANcast works without one** — it falls back to filenames and Kodi-style
-`.nfo` sidecars, and never reports the missing key as an error. That is the
-no-phone-home principle being real rather than decorative. The key is stored
-`0600` outside the database and is never readable back through the API.
+**Your own key always wins.** Enter one under Settings and it is used instead.
+For TMDB, use the **API Key (v3 auth)**, the 32-character hex value; the API Read
+Access Token beside it is a v4 bearer JWT and will be rejected. An optional
+opensubtitles.com login raises how many subtitles you can download a day. Keys
+and the login are stored `0600` outside the database and are never readable
+back through the API.
 
-Use the **API Key (v3 auth)** — the 32-character hex value. The API Read Access
-Token beside it is a v4 bearer JWT and will be rejected.
+**You can turn the built-in keys off.** With *Use LANcast's built-in keys* off
+and no key of your own, LANcast falls back to filenames and Kodi-style `.nfo`
+sidecars, contacts neither service, and never reports the missing key as an
+error. That is the no-phone-home principle being real rather than decorative.
+A build from source carries no built-in keys and behaves this way until you
+enter one.
 
 > This product uses the TMDB API but is not endorsed or certified by
 > [TMDB](https://www.themoviedb.org). Attribution is a condition of their free
-> tier and is also shown in the app's settings screen.
+> tier and is also shown in Settings › About.
 
 ### Ratings
 
@@ -268,7 +277,7 @@ a change to the installer itself needs the installer.
 | [docs/metadata.md](docs/metadata.md) | Providers, matching, locking, artwork |
 | [docs/security.md](docs/security.md) | What is protected, what is not — **read before exposing it** |
 | [docs/roadmap.md](docs/roadmap.md) | Every release, every area's status, and what each pass taught |
-| [docs/adr/](docs/adr/) | 109 decision records — why things are the way they are |
+| [docs/adr/](docs/adr/) | 110 decision records — why things are the way they are |
 
 The `*-plan.md` files in `docs/` are the plans particular areas were built
 from. They are kept as written rather than revised, so they record what was

@@ -5175,8 +5175,20 @@ TMDB key, OpenSubtitles key, OMDb key (external ratings, [ADR 0019](adr/0019-ext
 rate limit, and the per-library NFO write toggle.
 
 **Every key is write-only.** `GET` returns each provider's configured flag only —
-`{"tmdb": {"configured": true}, "omdb": {"configured": false}, …}` — never the
-value itself. Keys are stored in the config file at `0600`, never in the
+`{"tmdb": {"configured": true, …}, "omdb": {"configured": false}, …}` — never the
+value itself.
+
+**Built-in keys ([ADR 0110](adr/0110-lancast-carries-its-own-provider-keys.md)).** A release
+build carries its own TMDB and OpenSubtitles keys. `tmdb` and `opensubtitles` each report
+`configured` (the person entered a key of their own), `built_in` (this build carries one)
+and `source` — `own`, `built_in` or `none` — which is the key actually in use. The person's
+own key always wins. `builtin_keys_off: true` on `PUT` stops the built-in keys being used,
+so a server with no key of its own fetches nothing; `GET` reports it back.
+
+**OpenSubtitles login.** `opensubtitles_username` and `opensubtitles_password` on `PUT` set an
+optional opensubtitles.com login, used for downloads to raise the daily allowance. Both or
+neither: one alone is `400`. An empty username clears the login, password included. `GET`
+reports `opensubtitles.username`, never the password. Keys are stored in the config file at `0600`, never in the
 database. Setting `omdb_key` on `PUT` enables the rating pass; clearing it (an
 empty string) turns external ratings off again, and without it the pass never
 runs and nothing is fetched.
@@ -6329,7 +6341,8 @@ value, which is the question a client actually needs answered.
 
 The three names the **server itself** configures — `omdb_key`, `tmdb_key`,
 `opensubtitles_key` — come from Settings and need nothing stored here; a
-plugin granted one reads the same value the built-in provider uses. Anything
+plugin granted one reads the key the person entered in Settings. It never reads
+the key a release carries ([ADR 0110](adr/0110-lancast-carries-its-own-provider-keys.md)). Anything
 else is a plugin's own credential and, until it is set, the plugin reads `""`.
 
 ### `DELETE /api/plugins/{name}/secrets/{secret}`

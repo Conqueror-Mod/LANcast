@@ -136,6 +136,38 @@ export function AboutSettings() {
         </p>
       </section>
 
+      {/*
+        Where library details come from (ADR 0110). TMDB's terms ask for this
+        notice in an app that uses its API, and LANcast now ships a key of its
+        own, so the notice ships with it.
+      */}
+      <section className="about__panel">
+        <span className="section-label">Data sources</span>
+        <table className="about__facts">
+          <tbody>
+            <tr>
+              <th scope="row">Films and shows</th>
+              <td>
+                <a href="https://www.themoviedb.org/" target="_blank" rel="noreferrer noopener">
+                  The Movie Database (TMDB)
+                </a>
+                <div className="about__note">
+                  This product uses the TMDB API but is not endorsed or certified by TMDB.
+                </div>
+              </td>
+            </tr>
+            <tr>
+              <th scope="row">Subtitles</th>
+              <td>
+                <a href="https://www.opensubtitles.com/" target="_blank" rel="noreferrer noopener">
+                  OpenSubtitles.com
+                </a>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
+
       <section className="about__block">
         <span className="section-label">What's new in {about.version}</span>
         {sections.length > 0 ? (

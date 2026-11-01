@@ -282,8 +282,9 @@ if key == "" {
 
 Three names are the **server's own** provider keys — `omdb_key`, `tmdb_key`
 and `opensubtitles_key`. They come from Settings, and a plugin granted one reads
-the same value the built-in provider uses; nothing is stored per-plugin for
-them. Any other name is your own credential, kept against your plugin
+the key the person entered there; nothing is stored per-plugin for them. A
+plugin never reads the key a release carries (ADR 0110): with none entered, it
+reads `""` even while the built-in provider is working. Any other name is your own credential, kept against your plugin
 specifically: two plugins both asking for `api_key` get two different values,
 because a credential is obtained *for* a plugin.
 

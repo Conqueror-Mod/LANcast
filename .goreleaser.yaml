@@ -25,8 +25,10 @@ builds:
     goarch: [amd64]
     # The GUI subsystem is what stops a double-click showing a console; the
     # icon comes from the committed cmd/lancast/lancast_windows.syso.
+    # The provider keys (ADR 0110) come from repository secrets, like the
+    # report webhook: a key in a public repository is scraped within hours.
     ldflags:
-      - -s -w -X main.Version={{ .Version }} -X lancast/internal/api.Version={{ .Version }} -X lancast/internal/report.WebhookURL={{ index .Env "LANCAST_REPORT_WEBHOOK" }} -H=windowsgui
+      - -s -w -X main.Version={{ .Version }} -X lancast/internal/api.Version={{ .Version }} -X lancast/internal/report.WebhookURL={{ index .Env "LANCAST_REPORT_WEBHOOK" }} -X lancast/internal/config.BuiltinTMDBKey={{ index .Env "LANCAST_TMDB_KEY" }} -X lancast/internal/config.BuiltinOpenSubtitlesKey={{ index .Env "LANCAST_OPENSUBTITLES_KEY" }} -H=windowsgui
 
   # Headless on Linux: `lancast serve` is what systemd runs.
   - id: lancast-unix
@@ -36,7 +38,7 @@ builds:
     goos: [linux]
     goarch: [amd64, arm64]
     ldflags:
-      - -s -w -X main.Version={{ .Version }} -X lancast/internal/api.Version={{ .Version }} -X lancast/internal/report.WebhookURL={{ index .Env "LANCAST_REPORT_WEBHOOK" }}
+      - -s -w -X main.Version={{ .Version }} -X lancast/internal/api.Version={{ .Version }} -X lancast/internal/report.WebhookURL={{ index .Env "LANCAST_REPORT_WEBHOOK" }} -X lancast/internal/config.BuiltinTMDBKey={{ index .Env "LANCAST_TMDB_KEY" }} -X lancast/internal/config.BuiltinOpenSubtitlesKey={{ index .Env "LANCAST_OPENSUBTITLES_KEY" }}
 
   # ---- lancast-faces (ADR 0052) --------------------------------------------
   #

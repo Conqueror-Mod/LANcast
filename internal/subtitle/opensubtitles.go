@@ -20,12 +20,16 @@ var ErrNoProvider = errors.New("no subtitle provider is configured")
 // ErrQuotaExhausted is returned when the daily download allowance is spent.
 var ErrQuotaExhausted = errors.New("subtitle download quota exhausted for today")
 
-const (
-	osBaseURL = "https://api.opensubtitles.com/api/v1"
-	// OpenSubtitles requires a descriptive User-Agent and rejects requests
-	// without one.
-	osUserAgent = "LANcast v0.3"
-)
+// ErrLoginRejected is returned when the opensubtitles.com username or password
+// is wrong.
+var ErrLoginRejected = errors.New("the OpenSubtitles username or password was rejected")
+
+const osBaseURL = "https://api.opensubtitles.com/api/v1"
+
+// UserAgent is sent with every request. OpenSubtitles requires a descriptive
+// one, naming the application its key was issued to and its version, and
+// rejects requests without one. The server sets the version at startup.
+var UserAgent = "LANcast v0"
 
 // Candidate is one search result, before or after scoring.
 type Candidate struct {
@@ -68,6 +72,8 @@ type OpenSubtitles struct {
 	token  string // optional JWT from login, raises the download quota
 	http   *http.Client
 	base   string
+	// accountHost is the host Login was told to use for this account.
+	accountHost string
 }
 
 // NewOpenSubtitles builds a client. An empty key yields a client that reports
@@ -204,6 +210,79 @@ func (c *OpenSubtitles) DownloadLink(ctx context.Context, fileID int64) (string,
 	return doc.Link, doc.FileName, nil
 }
 
+/*
+ * Login exchanges an opensubtitles.com username and password for a token,
+ * which SetToken then attaches to every request (ADR 0110). The token is what
+ * moves downloads from the key's anonymous allowance to the account's.
+ *
+ * OpenSubtitles may answer with a different host for this account (VIP
+ * accounts get their own); when it does, and this client is pointed at the
+ * public API rather than at a test server, later requests go there.
+ */
+func (c *OpenSubtitles) Login(ctx context.Context, username, password string) (string, error) {
+	if !c.Configured() {
+		return "", ErrNoProvider
+	}
+	body, err := json.Marshal(map[string]string{"username": username, "password": password})
+	if err != nil {
+		return "", err
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.base+"/login", bytes.NewReader(body))
+	if err != nil {
+		return "", err
+	}
+	c.setHeaders(req)
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := c.http.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("subtitle login: %w", err)
+	}
+	defer resp.Body.Close()
+	raw, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	switch {
+	case resp.StatusCode == http.StatusUnauthorized:
+		return "", ErrLoginRejected
+	case resp.StatusCode == http.StatusTooManyRequests:
+		return "", ErrQuotaExhausted
+	case resp.StatusCode != http.StatusOK:
+		return "", fmt.Errorf("subtitle login: status %d: %s", resp.StatusCode, truncate(string(raw), 200))
+	}
+
+	var doc struct {
+		Token   string `json:"token"`
+		BaseURL string `json:"base_url"`
+	}
+	if err := json.Unmarshal(raw, &doc); err != nil {
+		return "", fmt.Errorf("subtitle login: %w", err)
+	}
+	if doc.Token == "" {
+		return "", fmt.Errorf("subtitle login: no token returned")
+	}
+	c.SetToken(doc.Token)
+	c.useAccountHost(doc.BaseURL)
+	return doc.Token, nil
+}
+
+// AccountHost is the host Login was told to use, "" for the default.
+func (c *OpenSubtitles) AccountHost() string { return c.accountHost }
+
+// SetAccountHost restores a host Login returned earlier, with its token.
+func (c *OpenSubtitles) SetAccountHost(host string) { c.useAccountHost(host) }
+
+func (c *OpenSubtitles) useAccountHost(host string) {
+	host = strings.TrimSpace(host)
+	// A bare host name only: anything else is not what the API documents, and
+	// following it would let a response send the key somewhere else.
+	if host == "" || strings.ContainsAny(host, "/:@?# ") || !strings.HasSuffix(host, ".opensubtitles.com") {
+		return
+	}
+	c.accountHost = host
+	if c.base == osBaseURL {
+		c.base = "https://" + host + "/api/v1"
+	}
+}
+
 // Fetch retrieves the subtitle body from a download link.
 func (c *OpenSubtitles) Fetch(ctx context.Context, link string) ([]byte, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, link, nil)
@@ -252,7 +331,7 @@ func (c *OpenSubtitles) get(ctx context.Context, path string, out any) error {
 
 func (c *OpenSubtitles) setHeaders(req *http.Request) {
 	req.Header.Set("Api-Key", c.apiKey)
-	req.Header.Set("User-Agent", osUserAgent)
+	req.Header.Set("User-Agent", UserAgent)
 	req.Header.Set("Accept", "application/json")
 	if c.token != "" {
 		req.Header.Set("Authorization", "Bearer "+c.token)

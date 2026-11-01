@@ -2,6 +2,7 @@ import { AuthorizedDevices } from "@/components/AuthorizedDevices";
 import { ScheduledTasks } from "@/components/ScheduledTasks";
 import { PlayerSettings, SubtitleStyleSettings } from "@/components/PlayerSettings";
 import { AboutSettings } from "@/components/AboutSettings";
+import { ProviderKeys } from "@/components/ProviderKeys";
 import { useEffect, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { RATING_RUNGS } from "@/lib/ratings";
@@ -132,52 +133,6 @@ import { answersWithin, goTo, urlAtPort } from "@/lib/portMove";
 import { usePlaybackIfAny } from "@/playback/PlaybackProvider";
 import { useQueryClient } from "@tanstack/react-query";
 import "./Settings.css";
-
-function ProviderKey({
-  label,
-  configured,
-  onSave,
-  pending,
-  hint,
-}: {
-  label: string;
-  configured: boolean;
-  onSave: (value: string) => void;
-  pending: boolean;
-  hint?: string;
-}) {
-  const [value, setValue] = useState("");
-  return (
-    <div className="set-row">
-      <div className="set-row__main">
-        <div className="set-row__title">{label}</div>
-        <div className="set-row__sub">
-          {hint ? `${hint} · ` : ""}
-          {configured ? "Key configured" : "Not set"} · stored write-only
-        </div>
-      </div>
-      <div className="set-row__actions">
-        <input
-          className="set-input"
-          type="password"
-          placeholder={configured ? "Replace key" : "Enter key"}
-          value={value}
-          onChange={(e) => setValue(e.target.value)}
-        />
-        <button
-          className="set-btn"
-          disabled={!value || pending}
-          onClick={() => {
-            onSave(value);
-            setValue("");
-          }}
-        >
-          Save
-        </button>
-      </div>
-    </div>
-  );
-}
 
 // The rungs, shared with the peer-sharing screen so the two cannot drift
 // apart (ADR 0071 §6).
@@ -1345,24 +1300,10 @@ function AdminSections({ pane }: { pane: string }) {
           <span className="section-label">Metadata</span>
           {settings && (
             <>
-              <ProviderKey
-                label="TMDB"
-                configured={settings.tmdb.configured}
+              <ProviderKeys
+                settings={settings}
                 pending={update.isPending}
-                onSave={(v) => update.mutate({ tmdb_key: v })}
-              />
-              <ProviderKey
-                label="OpenSubtitles"
-                configured={settings.opensubtitles.configured}
-                pending={update.isPending}
-                onSave={(v) => update.mutate({ opensubtitles_key: v })}
-              />
-              <ProviderKey
-                label="OMDb"
-                hint="Rotten Tomatoes, Metacritic & IMDb ratings"
-                configured={settings.omdb.configured}
-                pending={update.isPending}
-                onSave={(v) => update.mutate({ omdb_key: v })}
+                save={(patch) => update.mutate(patch)}
               />
               {/*
                 Which country's certificate to store.

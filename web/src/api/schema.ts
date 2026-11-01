@@ -7099,18 +7099,38 @@ export interface components {
         };
         /** @description **Every provider key is write-only.** `GET` returns each provider's configured flag only, never the value. Keys are stored in the config file at `0600`, never in the database. */
         Settings: {
-            /** @description Whether a key is set. **The value itself is never returned.** */
+            /** @description Whether a key is set and which one is in use. **No key value is ever returned.** */
             tmdb: {
+                /** @description Whether the person entered a key of their own. */
                 configured: boolean;
+                /**
+                 * @description Which key the provider is using: the person's own, the one this release carries (ADR 0110), or none, which means the provider is off.
+                 * @enum {string}
+                 */
+                source: "own" | "built_in" | "none";
+                /** @description Whether this build carries a key for this provider. False in any build from a checkout. */
+                built_in: boolean;
             };
-            /** @description Whether a key is set. **The value itself is never returned.** */
+            /** @description Whether a key is set, which one is in use, and the optional login. **No key or password is ever returned.** */
             opensubtitles: {
+                /** @description Whether the person entered a key of their own. */
                 configured: boolean;
+                /**
+                 * @description Which key the provider is using: the person's own, the one this release carries (ADR 0110), or none, which means the provider is off.
+                 * @enum {string}
+                 */
+                source: "own" | "built_in" | "none";
+                /** @description Whether this build carries a key for this provider. False in any build from a checkout. */
+                built_in: boolean;
+                /** @description The opensubtitles.com login's username, "" when none is set. The password is never returned. */
+                username: string;
             };
             /** @description External ratings (ADR 0019). Setting `omdb_key` enables the rating pass; clearing it turns external ratings off again, and without it the pass never runs and nothing is fetched. */
             omdb: {
                 configured: boolean;
             };
+            /** @description True when the person has switched off the keys this release carries (ADR 0110). With it on and no key of their own, nothing is fetched from TMDB or OpenSubtitles. */
+            builtin_keys_off: boolean;
             /** @description Whether the server can inspect and convert media. Without these every file is direct-played, and anything the client cannot decode fails silently. */
             media_tools: {
                 probe_available: boolean;
@@ -7259,6 +7279,12 @@ export interface components {
             opensubtitles_key?: string;
             /** @description An empty string clears it and turns external ratings off. */
             omdb_key?: string;
+            /** @description Stop using the keys this release carries (ADR 0110). A key the person entered is used either way. */
+            builtin_keys_off?: boolean;
+            /** @description An opensubtitles.com login, which raises the daily download allowance. An empty string clears the login, password included. */
+            opensubtitles_username?: string;
+            /** @description Write-only. A login needs both a username and a password, or the save is refused with 400. */
+            opensubtitles_password?: string;
             ffmpeg_dir?: string;
             rate_per_sec?: number;
             write_nfo?: boolean;

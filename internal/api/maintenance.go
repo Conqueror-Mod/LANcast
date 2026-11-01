@@ -81,6 +81,11 @@ func (s *Server) resetSettings(w http.ResponseWriter, r *http.Request) {
 	next.TMDBKey = prev.TMDBKey
 	next.OpenSubtitlesKey = prev.OpenSubtitlesKey
 	next.OMDbKey = prev.OMDbKey
+	next.OpenSubtitlesUser = prev.OpenSubtitlesUser
+	next.OpenSubtitlesPassword = prev.OpenSubtitlesPassword
+	// A choice that nothing should reach the outside world: a reset that
+	// quietly turned the built-in keys back on would break it (ADR 0110).
+	next.BuiltinKeysOff = prev.BuiltinKeysOff
 	next.TLSCertFile = prev.TLSCertFile
 	next.TLSKeyFile = prev.TLSKeyFile
 	// The public certificate is HTTPS too (ADR 0081): a reset that quietly

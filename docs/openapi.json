@@ -16337,32 +16337,62 @@
           "optimized_limit_gb",
           "login_picker",
           "trusted_proxies",
-          "metrics_token"
+          "metrics_token",
+          "builtin_keys_off"
         ],
         "properties": {
           "tmdb": {
             "type": "object",
             "required": [
-              "configured"
+              "configured",
+              "source",
+              "built_in"
             ],
             "properties": {
               "configured": {
-                "type": "boolean"
+                "type": "boolean",
+                "description": "Whether the person entered a key of their own."
+              },
+              "source": {
+                "type": "string",
+                "enum": ["own", "built_in", "none"],
+                "description": "Which key the provider is using: the person's own, the one this release carries (ADR 0110), or none, which means the provider is off."
+              },
+              "built_in": {
+                "type": "boolean",
+                "description": "Whether this build carries a key for this provider. False in any build from a checkout."
               }
             },
-            "description": "Whether a key is set. **The value itself is never returned.**"
+            "description": "Whether a key is set and which one is in use. **No key value is ever returned.**"
           },
           "opensubtitles": {
             "type": "object",
             "required": [
-              "configured"
+              "configured",
+              "source",
+              "built_in",
+              "username"
             ],
             "properties": {
               "configured": {
-                "type": "boolean"
+                "type": "boolean",
+                "description": "Whether the person entered a key of their own."
+              },
+              "source": {
+                "type": "string",
+                "enum": ["own", "built_in", "none"],
+                "description": "Which key the provider is using: the person's own, the one this release carries (ADR 0110), or none, which means the provider is off."
+              },
+              "built_in": {
+                "type": "boolean",
+                "description": "Whether this build carries a key for this provider. False in any build from a checkout."
+              },
+              "username": {
+                "type": "string",
+                "description": "The opensubtitles.com login's username, \"\" when none is set. The password is never returned."
               }
             },
-            "description": "Whether a key is set. **The value itself is never returned.**"
+            "description": "Whether a key is set, which one is in use, and the optional login. **No key or password is ever returned.**"
           },
           "omdb": {
             "type": "object",
@@ -16375,6 +16405,10 @@
               }
             },
             "description": "External ratings (ADR 0019). Setting `omdb_key` enables the rating pass; clearing it turns external ratings off again, and without it the pass never runs and nothing is fetched."
+          },
+          "builtin_keys_off": {
+            "type": "boolean",
+            "description": "True when the person has switched off the keys this release carries (ADR 0110). With it on and no key of their own, nothing is fetched from TMDB or OpenSubtitles."
           },
           "media_tools": {
             "type": "object",
@@ -16643,6 +16677,18 @@
           "omdb_key": {
             "type": "string",
             "description": "An empty string clears it and turns external ratings off."
+          },
+          "builtin_keys_off": {
+            "type": "boolean",
+            "description": "Stop using the keys this release carries (ADR 0110). A key the person entered is used either way."
+          },
+          "opensubtitles_username": {
+            "type": "string",
+            "description": "An opensubtitles.com login, which raises the daily download allowance. An empty string clears the login, password included."
+          },
+          "opensubtitles_password": {
+            "type": "string",
+            "description": "Write-only. A login needs both a username and a password, or the save is refused with 400."
           },
           "ffmpeg_dir": {
             "type": "string"

@@ -427,8 +427,9 @@ func run(ctx context.Context, addr, dataDir string, log *slog.Logger) error {
 		// runtime too — otherwise lowering it would bind the native provider
 		// and not the plugins, which reads as the setting being broken.
 		pluginRT.SetRateLimit(s.RatePerSec)
-		if s.TMDBKey != "" {
-			next.AddProvider(tmdb.New(s.TMDBKey,
+		// The person's key, else the one this release carries (ADR 0110).
+		if key := s.TMDBKeyInUse(); key != "" {
+			next.AddProvider(tmdb.New(key,
 				tmdb.WithCache(st),
 				tmdb.WithLimiter(meta.NewLimiter(s.RatePerSec, int(s.RatePerSec)+1)),
 				// Rebuilt on every settings change, so choosing a country takes
@@ -471,7 +472,7 @@ func run(ctx context.Context, addr, dataDir string, log *slog.Logger) error {
 		return fmt.Errorf("load plugins: %w", err)
 	}
 
-	if settings.Get().TMDBKey == "" {
+	if settings.Get().TMDBKeyInUse() == "" {
 		// Not a warning: running without a key is a supported configuration,
 		// and saying so plainly is what makes the no-phone-home promise real.
 		log.Info("no metadata provider configured; using filename and NFO metadata only")
@@ -852,6 +853,8 @@ func run(ctx context.Context, addr, dataDir string, log *slog.Logger) error {
 		}
 	}
 
+	// OpenSubtitles wants the application and its version on every request.
+	subtitle.UserAgent = "LANcast v" + strings.TrimPrefix(api.Version, "v")
 	updates := update.New(api.Version)
 	updates.SetLogger(log)
 	if settings.Get().UpdateCheck {
