@@ -72,7 +72,8 @@ Built by this project and shipped beside the client:
                                       third_party/rcheevos/PROVENANCE.md
 
     v12.5.0, built with LANcast's shim into lancast-cheevos.dll so the
-    desktop player can earn achievements (ADR 0112).
+    desktop player can earn achievements (ADR 0112). Statically linked
+    with mingw-w64's winpthread (MIT), for its clock.
 
 Vendored, with their own licence files beside them:
 

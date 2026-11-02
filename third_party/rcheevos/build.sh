@@ -11,8 +11,14 @@
 # uses plain gcc. Set CC to choose.
 #
 # The DLL is plain C with no dependencies beyond the C runtime and kernel32,
-# linked statically (libgcc, and winpthread where the toolchain uses it) so
-# nothing else has to ship beside it. The check at the end asserts that.
+# linked statically so nothing else has to ship beside it; the check at the
+# end asserts that.
+#
+# -lwinpthread is named because rc_client.c calls clock_gettime, which
+# mingw-w64 declares in <time.h> and implements in winpthread. A posix-threads
+# gcc links it unasked; the win32-threads one CI and the release use does not,
+# and fails with "undefined reference to clock_gettime64". Named, both build
+# the same thing. winpthread is MIT (expat); its clock code is public domain.
 set -euo pipefail
 
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -39,7 +45,8 @@ mkdir -p "$out"
 	-I"$up/include" -I"$up/src" \
 	-static \
 	-o "$out/lancast-cheevos.dll" \
-	"${sources[@]}"
+	"${sources[@]}" \
+	-lwinpthread
 
 # The DLL must export exactly the shim, so a renamed function fails here
 # rather than at a user's first game.

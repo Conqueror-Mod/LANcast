@@ -38,6 +38,11 @@ var (
 
 func buildDLL(t *testing.T) string {
 	t.Helper()
+	// CHEEVOS_DLL tests a DLL built elsewhere instead: the one a release
+	// cross-compiles with mingw on Linux, which is not the gcc found here.
+	if p := os.Getenv("CHEEVOS_DLL"); p != "" {
+		return p
+	}
 	gcc, err := exec.LookPath("gcc")
 	if err != nil {
 		t.Skip("no gcc on the PATH; the binding is tested where one is installed")

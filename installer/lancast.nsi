@@ -342,6 +342,17 @@ Section "LANcast"
     ; would turn "no payload staged" into a red build for the script being right.
     !echo "libmpv-2.dll is absent: this installer ships without the native player"
   !endif
+
+  ; rcheevos, the desktop player's achievements (ADR 0112). MIT, built by the
+  ; release job from third_party/rcheevos. Conditional for the reason libmpv
+  ; is: CI compiles this script with no payload staged. Without it the player
+  ; plays as before and earns nothing.
+  !if /FileExists "..\third_party\rcheevos\out\lancast-cheevos.dll"
+    File "..\third_party\rcheevos\out\lancast-cheevos.dll"
+    File /oname=rcheevos-LICENSE.txt "..\third_party\rcheevos\upstream\LICENSE"
+  !else
+    !echo "lancast-cheevos.dll is absent: this installer ships without achievements"
+  !endif
   File "..\README.md"
   File "..\LICENSE"
 
@@ -417,6 +428,8 @@ Section "Uninstall"
   Delete "$INSTDIR\WebView2Loader.dll"
   Delete "$INSTDIR\libmpv-2.dll"
   Delete "$INSTDIR\libmpv-LICENSE.txt"
+  Delete "$INSTDIR\lancast-cheevos.dll"
+  Delete "$INSTDIR\rcheevos-LICENSE.txt"
   Delete "$INSTDIR\README.md"
   Delete "$INSTDIR\LICENSE"
   Delete "$INSTDIR\uninstall.exe"

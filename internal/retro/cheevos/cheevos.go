@@ -17,7 +17,27 @@
 // runs one game at a time.
 package cheevos
 
-import "errors"
+import (
+	"errors"
+	"os"
+	"path/filepath"
+)
+
+// DLLName is the file the release places beside LANcast.exe.
+const DLLName = "lancast-cheevos.dll"
+
+// DLLPath is the one place the DLL may be loaded from: beside the running
+// executable, by full path. A bare name would be found by the DLL search
+// order, which includes the working directory, so a planted DLL beside a
+// game would run inside the player (the same rule internal/mpv keeps).
+// "" when the executable cannot be found.
+func DLLPath() string {
+	exe, err := os.Executable()
+	if err != nil {
+		return ""
+	}
+	return filepath.Join(filepath.Dir(exe), DLLName)
+}
 
 // InterfaceVersion is the shim's LC_INTERFACE_VERSION. Open refuses a DLL
 // that reports another, so a mismatched DLL fails at load, not mid-game.

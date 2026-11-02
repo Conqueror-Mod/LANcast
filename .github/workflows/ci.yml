@@ -107,6 +107,13 @@ jobs:
           CGO_ENABLED=1 GOOS=windows GOARCH=amd64 CC=x86_64-w64-mingw32-gcc go build -o /tmp/lancast-faces.exe ./cmd/lancast-faces
           file /tmp/lancast-faces.exe
 
+      # lancast-cheevos.dll (ADR 0112), with the same compiler the release
+      # uses, so a change that breaks it goes red here and not on a tag.
+      - name: build lancast-cheevos.dll
+        run: |
+          CC=x86_64-w64-mingw32-gcc third_party/rcheevos/build.sh /tmp/cheevos
+          file /tmp/cheevos/lancast-cheevos.dll
+
       # And the server stays free of it. This is the whole placement decision,
       # asserted rather than trusted: if a future change imports the worker's
       # cgo into lancastd, this fails here rather than in a release.
