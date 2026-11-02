@@ -1077,6 +1077,9 @@ func run(ctx context.Context, addr, dataDir string, log *slog.Logger) error {
 
 	// Optimized copies, one at a time, behind live playback (ADR 0087).
 	go apiSrv.RunOptimizer(ctx)
+	// Unlocks RetroAchievements couldn't take when they were earned (ADR
+	// 0112), sent at boot and then every minute.
+	go apiSrv.RunRetroQueue(ctx)
 
 	// Clears leftover scratch from a previous run and starts reaping idle
 	// sessions. A closed browser tab does not tell the server it has gone.

@@ -6,7 +6,7 @@ import (
 )
 
 // CurrentSchemaVersion is the revision this build expects.
-const CurrentSchemaVersion = 86
+const CurrentSchemaVersion = 87
 
 // migration is one forward step. There are deliberately no down migrations:
 // rolling a media library's schema backwards loses data that a rescan cannot
@@ -178,6 +178,10 @@ var migrations = []migration{
 		{"media_item", "rg_album_gain", "REAL"},
 		{"media_item", "rg_album_peak", "REAL"},
 	}},
+	// Earning achievements (ADR 0112): the sealed Connect token beside the
+	// profile's Web API key, null while earning is off, and the unlocks
+	// RetroAchievements could not take yet, sent in order when it answers.
+	{version: 87, sql: schemaRevision87, columns: []column{{"retro_account", "connect_token_sealed", "BLOB"}}},
 }
 
 // migrate brings the database up to CurrentSchemaVersion.
@@ -2522,4 +2526,26 @@ CREATE TABLE IF NOT EXISTS invite (
     created_at         INTEGER NOT NULL,
     expires_at         INTEGER NOT NULL
 );
+`
+
+// Revision 87 — the RetroAchievements unlock queue (ADR 0112 section 3). One
+// row per award or leaderboard entry RetroAchievements could not take when it
+// was made: the form rcheevos built, without any token (the token is added as
+// it is sent), the player's user agent, which names the core that earned it,
+// and the RetroAchievements user it was made as, so a row never goes out
+// under a different connection. Sent in id order; deleted when
+// RetroAchievements takes it or turns it down for good, and with the account.
+const schemaRevision87 = `
+CREATE TABLE IF NOT EXISTS retro_unlock_queue (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id    TEXT    NOT NULL,
+    ra_user    TEXT    NOT NULL,
+    request    TEXT    NOT NULL,
+    form       TEXT    NOT NULL,
+    user_agent TEXT    NOT NULL,
+    created_at INTEGER NOT NULL,
+    attempts   INTEGER NOT NULL DEFAULT 0,
+    last_error TEXT
+);
+CREATE INDEX IF NOT EXISTS retro_unlock_queue_user ON retro_unlock_queue(user_id, id);
 `

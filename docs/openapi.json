@@ -3625,6 +3625,90 @@
         }
       }
     },
+    "/profile/retroachievements/earning": {
+      "put": {
+        "operationId": "turnOnRetroAchievementsEarning",
+        "tags": [
+          "profile"
+        ],
+        "summary": "Earn achievements in the desktop player",
+        "description": "ADR 0112. Signs in to RetroAchievements once with the account's RetroAchievements password and keeps only the token it returns, sealed like the API key; the password is never stored. Needs the account connected first (PUT /api/profile/retroachievements). Answers the profile view, now earning.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "password"
+                ],
+                "properties": {
+                  "password": {
+                    "type": "string",
+                    "maxLength": 256,
+                    "description": "The RetroAchievements password. Used once, never kept."
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The caller's RetroAchievements, now earning.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RetroAchievementsView"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "409": {
+            "description": "No RetroAchievements account is connected, or the feature is not available on this server.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "RetroAchievements could not be reached.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "operationId": "turnOffRetroAchievementsEarning",
+        "tags": [
+          "profile"
+        ],
+        "summary": "Stop earning achievements",
+        "description": "Deletes the token and anything still queued, so nothing more is sent. The profile connection stays.",
+        "responses": {
+          "204": {
+            "description": "Earning is off."
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      }
+    },
     "/retroachievements/media/{dir}/{file}": {
       "get": {
         "operationId": "retroAchievementsMedia",
@@ -13956,6 +14040,111 @@
         ]
       }
     },
+    "/items/{id}/retroachievements": {
+      "post": {
+        "operationId": "retroAchievementsDoor",
+        "tags": [
+          "retro"
+        ],
+        "summary": "The desktop player's door to RetroAchievements",
+        "description": "ADR 0112. The body is the form rcheevos would send RetroAchievements' dorequest.php; the answer is RetroAchievements' own status and JSON. Only the requests play makes are forwarded (login2, gameid, achievementsets, startsession, ping, awardachievement, submitlbentry). `u` must be the connected account and `t` the placeholder `lancast`; the server puts the real token in, and replaces it in a login reply. Hardcore (`h=1`) is refused until RetroAchievements approves LANcast. The User-Agent must read `LANcast/<version> (Windows <version>) <core>/<version>`, optionally followed by `rcheevos/<version>`, and is forwarded as sent.\n\nAn award or leaderboard entry RetroAchievements can't take is queued on the server and answered 200 with a success rcheevos accepts plus `\"Queued\": true`; later ones queue behind it, and the server sends them in order, dated when they were earned. A game's stream ticket reaches this route.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/x-www-form-urlencoded": {
+              "schema": {
+                "type": "object",
+                "description": "rcheevos' form, unchanged: r, u, t and the request's own fields.",
+                "required": [
+                  "r"
+                ],
+                "properties": {
+                  "r": {
+                    "type": "string"
+                  },
+                  "u": {
+                    "type": "string"
+                  },
+                  "t": {
+                    "type": "string"
+                  }
+                },
+                "additionalProperties": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "RetroAchievements' answer, or the server's success for a queued unlock.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "description": "RetroAchievements' own JSON.",
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "description": "Earning is off for this account, or the feature is not available on this server.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Larger than anything rcheevos sends.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "RetroAchievements could not be reached; rcheevos retries.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/users/{id}/two-factor": {
       "parameters": [
         {
@@ -22816,6 +23005,8 @@
         "required": [
           "available",
           "connected",
+          "earning",
+          "queued",
           "points",
           "softcore_points",
           "true_points",
@@ -22829,6 +23020,14 @@
           },
           "connected": {
             "type": "boolean"
+          },
+          "earning": {
+            "type": "boolean",
+            "description": "Whether this account earns achievements in the desktop player (ADR 0112). Off until turned on with PUT /api/profile/retroachievements/earning."
+          },
+          "queued": {
+            "type": "integer",
+            "description": "Unlocks and leaderboard entries earned that RetroAchievements has not taken yet; the server sends them when it answers."
           },
           "user": {
             "type": "string",

@@ -68,8 +68,13 @@ func (c *raCache) forget(user string) {
 }
 
 type raView struct {
-	Available      bool       `json:"available"`
-	Connected      bool       `json:"connected"`
+	Available bool `json:"available"`
+	Connected bool `json:"connected"`
+	// Earning is whether this account earns achievements in the desktop
+	// player (ADR 0112), and Queued how many it earned that
+	// RetroAchievements hasn't taken yet.
+	Earning        bool       `json:"earning"`
+	Queued         int        `json:"queued"`
 	User           string     `json:"user,omitempty"`
 	Problem        string     `json:"problem,omitempty"`
 	Avatar         string     `json:"avatar,omitempty"`
@@ -131,6 +136,17 @@ func (s *Server) getRetroAchievements(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, raView{Available: true, Recent: []raUnlock{}, Games: []raGame{}})
 		return
 	}
+	// Earning and the queue are read fresh each time; the rest of the view
+	// is RetroAchievements' and cached.
+	queued, err := s.st.RetroQueueCount(r.Context(), user)
+	if err != nil {
+		s.writeInternal(w, err, "count retroachievements queue")
+		return
+	}
+	send := func(v raView) {
+		v.Earning, v.Queued = len(acct.ConnectTokenSealed) > 0, queued
+		writeJSON(w, http.StatusOK, v)
+	}
 
 	s.raCache.mu.Lock()
 	cached, ok := s.raCache.views[user]
@@ -138,7 +154,7 @@ func (s *Server) getRetroAchievements(w http.ResponseWriter, r *http.Request) {
 	age := time.Since(cached.at)
 	refresh := r.URL.Query().Get("refresh") == "1" && age > raRefreshEvery
 	if ok && age < raCacheFor && !refresh {
-		writeJSON(w, http.StatusOK, cached.view)
+		send(cached.view)
 		return
 	}
 
@@ -146,7 +162,7 @@ func (s *Server) getRetroAchievements(w http.ResponseWriter, r *http.Request) {
 	key, err := s.ra.Sealer.Open(acct.APIKeySealed)
 	if err != nil {
 		view.Problem = "This connection was made on another server or before a restore, so its key can't be read here. Connect again to carry on."
-		writeJSON(w, http.StatusOK, view)
+		send(view)
 		return
 	}
 	if err := s.fetchRA(r.Context(), acct, string(key), &view); err != nil {
@@ -154,17 +170,17 @@ func (s *Server) getRetroAchievements(w http.ResponseWriter, r *http.Request) {
 		if ok {
 			stale := cached.view
 			stale.Problem = err.Error()
-			writeJSON(w, http.StatusOK, stale)
+			send(stale)
 			return
 		}
 		view.Problem = err.Error()
-		writeJSON(w, http.StatusOK, view)
+		send(view)
 		return
 	}
 	s.raCache.mu.Lock()
 	s.raCache.views[user] = raCached{at: time.Now(), view: view}
 	s.raCache.mu.Unlock()
-	writeJSON(w, http.StatusOK, view)
+	send(view)
 }
 
 func (s *Server) fetchRA(ctx context.Context, acct *store.RetroAccount, key string, view *raView) error {

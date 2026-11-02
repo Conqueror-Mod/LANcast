@@ -141,6 +141,7 @@ var wireTypes = []struct {
 	{"GET /api/profile", profileResponse{}},
 	{"GET /api/profile · stats", store.ProfileStats{}},
 	{"GET /api/profile · history", store.HistoryEntry{}},
+	{"GET /api/profile/retroachievements", raView{}},
 	{"GET /api/items/{id}/rating", store.Rating{}},
 	{"GET /api/profile/ratings", store.RatedItem{}},
 

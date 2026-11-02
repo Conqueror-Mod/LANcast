@@ -1447,6 +1447,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/profile/retroachievements/earning": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Earn achievements in the desktop player
+         * @description ADR 0112. Signs in to RetroAchievements once with the account's RetroAchievements password and keeps only the token it returns, sealed like the API key; the password is never stored. Needs the account connected first (PUT /api/profile/retroachievements). Answers the profile view, now earning.
+         */
+        put: operations["turnOnRetroAchievementsEarning"];
+        post?: never;
+        /**
+         * Stop earning achievements
+         * @description Deletes the token and anything still queued, so nothing more is sent. The profile connection stays.
+         */
+        delete: operations["turnOffRetroAchievementsEarning"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/retroachievements/media/{dir}/{file}": {
         parameters: {
             query?: never;
@@ -6184,6 +6208,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/items/{id}/retroachievements": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * The desktop player's door to RetroAchievements
+         * @description ADR 0112. The body is the form rcheevos would send RetroAchievements' dorequest.php; the answer is RetroAchievements' own status and JSON. Only the requests play makes are forwarded (login2, gameid, achievementsets, startsession, ping, awardachievement, submitlbentry). `u` must be the connected account and `t` the placeholder `lancast`; the server puts the real token in, and replaces it in a login reply. Hardcore (`h=1`) is refused until RetroAchievements approves LANcast. The User-Agent must read `LANcast/<version> (Windows <version>) <core>/<version>`, optionally followed by `rcheevos/<version>`, and is forwarded as sent.
+         *
+         *     An award or leaderboard entry RetroAchievements can't take is queued on the server and answered 200 with a success rcheevos accepts plus `"Queued": true`; later ones queue behind it, and the server sends them in order, dated when they were earned. A game's stream ticket reaches this route.
+         */
+        post: operations["retroAchievementsDoor"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/users/{id}/two-factor": {
         parameters: {
             query?: never;
@@ -9629,6 +9675,10 @@ export interface components {
             /** @description False when this server could not prepare the feature. */
             available: boolean;
             connected: boolean;
+            /** @description Whether this account earns achievements in the desktop player (ADR 0112). Off until turned on with PUT /api/profile/retroachievements/earning. */
+            earning: boolean;
+            /** @description Unlocks and leaderboard entries earned that RetroAchievements has not taken yet; the server sends them when it answers. */
+            queued: number;
             /** @description The RetroAchievements display name. */
             user?: string;
             /** @description Why what is shown is not current, or why the connection needs redoing. */
@@ -12672,6 +12722,72 @@ export interface operations {
         requestBody?: never;
         responses: {
             /** @description Disconnected. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+        };
+    };
+    turnOnRetroAchievementsEarning: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @description The RetroAchievements password. Used once, never kept. */
+                    password: string;
+                };
+            };
+        };
+        responses: {
+            /** @description The caller's RetroAchievements, now earning. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RetroAchievementsView"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            /** @description No RetroAchievements account is connected, or the feature is not available on this server. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description RetroAchievements could not be reached. */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    turnOffRetroAchievementsEarning: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Earning is off. */
             204: {
                 headers: {
                     [name: string]: unknown;
@@ -19887,6 +20003,71 @@ export interface operations {
             404: components["responses"]["NotFound"];
             /** @description Larger than any core writes. */
             413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    retroAchievementsDoor: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/x-www-form-urlencoded": {
+                    r: string;
+                    u?: string;
+                    t?: string;
+                } & {
+                    [key: string]: string;
+                };
+            };
+        };
+        responses: {
+            /** @description RetroAchievements' answer, or the server's success for a queued unlock. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            /** @description Earning is off for this account, or the feature is not available on this server. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Larger than anything rcheevos sends. */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description RetroAchievements could not be reached; rcheevos retries. */
+            502: {
                 headers: {
                     [name: string]: unknown;
                 };

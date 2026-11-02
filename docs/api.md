@@ -1271,13 +1271,32 @@ else's.
   data folder, outside the database, and is never returned or logged, so a
   database backup alone carries no usable key. A backup restored on another
   machine shows `problem` and asks you to connect again.
-- `GET` answers `{available, connected, user, points, softcore_points,
-  true_points, avatar, recent: [...], games: [...], problem?}`: the last two
+- `GET` answers `{available, connected, earning, queued, user, points,
+  softcore_points, true_points, avatar, recent: [...], games: [...],
+  problem?}`. `earning` and `queued` are the next section's, read fresh each
+  time. The rest is the last two
   weeks of unlocks and your first 100 games' completion. Fetched for you and
   cached for ten minutes; `?refresh=1` asks again, at most once a minute.
   When RetroAchievements cannot be reached, the last answer is shown with
   `problem` saying why it is not newer.
-- `DELETE` disconnects: the name and sealed key are deleted (`204`).
+- `DELETE` disconnects: the name and sealed key are deleted (`204`), and with
+  them the earning token and anything still queued.
+
+### `PUT` · `DELETE /api/profile/retroachievements/earning`
+
+Earning achievements in the desktop player
+([ADR 0112](adr/0112-achievements-are-earned-through-the-server.md)), for the
+connected account above. **Off until you turn it on**, and yours only.
+
+- `PUT {password}` signs in to RetroAchievements **once** with your
+  RetroAchievements password, and keeps only the token RetroAchievements
+  returns, sealed as the API key is. The password is never stored. It answers
+  the profile view above, now with `earning: true`. A wrong password is `400`
+  and nothing is kept. With no account connected it is `409`.
+- `DELETE` turns earning off (`204`): the token is deleted, and so is
+  anything still queued, so nothing more is ever sent. Connecting a
+  different RetroAchievements account turns earning off too; reconnecting the
+  same one with a new API key leaves it on.
 
 ### `GET /api/retroachievements/media/{dir}/{file}`
 
@@ -6191,6 +6210,46 @@ of them, and no ticket reaches another game. This is the only write a ticket can
 make.
 
 Deleting an account deletes its saves.
+
+### `POST /api/items/{id}/retroachievements`
+
+The desktop player's **door to RetroAchievements**
+([ADR 0112](adr/0112-achievements-are-earned-through-the-server.md)). The
+player's rcheevos sends here what it would send RetroAchievements'
+`dorequest.php`: the same form body
+(`application/x-www-form-urlencoded`). The server forwards it and answers with
+RetroAchievements' own status and JSON. The player never contacts
+RetroAchievements itself, and never holds the token. The game's stream ticket
+reaches this route, as it reaches the game's saves.
+
+What the server checks before forwarding anything:
+
+- **Earning is on** for the caller (`409` otherwise), and `{id}` is a game.
+- **Only the requests play makes:** `login2`, `gameid`, `achievementsets`,
+  `startsession`, `ping`, `awardachievement` and `submitlbentry`. Anything
+  else is `403`. This is not a general proxy.
+- **The account is the connected one.** `u` must be its RetroAchievements
+  name (`403`), and `t` must be the placeholder `lancast` or absent (`400`).
+  The server puts the real token in. A `login2` reply has its token replaced
+  with the placeholder, so the player still never sees it. A `p` (a password)
+  is `400`: the password goes only through `PUT …/earning`. A `gameid`
+  lookup carries no account at all.
+- **No hardcore.** `h=1` is `403` until RetroAchievements approves LANcast.
+- **The user agent** is forwarded as the player sent it, and must have the form
+  `LANcast/<version> (Windows <version>) <core>/<version>`, optionally
+  followed by rcheevos' own `rcheevos/<version>`. Anything else is `400`.
+
+**The queue.** An `awardachievement` or `submitlbentry` that RetroAchievements
+can't take (no answer, a `5xx`, a `429`) is kept on the server, in the order
+it was earned. The player is answered `200` with a success rcheevos accepts,
+plus `"Queued": true`. Once an account has anything queued, its new unlocks
+queue behind it, so they reach RetroAchievements in order. The server sends the
+queue at start-up and then every minute, backing off to every fifteen while
+RetroAchievements doesn't answer. Each queued unlock goes out dated when it was
+earned: the wait is added to its `o` and its `v` is signed again. One that
+RetroAchievements turns down for good is dropped, with the reason in the log.
+Any other request RetroAchievements can't answer is `502`, which rcheevos
+retries itself.
 
 ### `GET /api/retro/web-cores` · `POST /api/retro/web-cores/install` · `POST /api/retro/web-cores/install/cancel`
 

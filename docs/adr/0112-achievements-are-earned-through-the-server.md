@@ -247,8 +247,31 @@ decision: ADR 0077 records why snes9x isn't used on the web.
   LANcast ships:** Mesen, bsnes, BlastEm, Gearsystem, mGBA, Mupen64Plus-Next
   and SwanStation. Each needs one achievement seen firing on a real dump
   before it is listed as supported.
-- **The exact Connect parameters** the server forwards and rewrites (the
-  token field, and an offset for delayed unlocks), taken from the pinned
-  rcheevos source when it is built rather than from memory.
 - **Whether RetroArch's web build has achievement support at all.** It
   doesn't matter to this decision: it stays off either way.
+
+## Verified in step 3: the Connect parameters
+
+Read from the pinned rcheevos (v12.5.0, `src/rapi`) on 2026-11-01, as the
+"Not verified yet" list asked:
+
+- **Every request** is a form POST to `/dorequest.php` with `r=<request>`.
+  The signed-in ones carry `u=<username>` and `t=<token>`.
+- **The one exception** is `gameid` (looking a hash up), which `rc_client`
+  sends signed out: `r` and `m` only. The door forwards it with no account
+  added.
+- **`awardachievement` and `submitlbentry` carry `v`**, an MD5 signature over
+  the achievement or leaderboard id, the username, hardcore or the score, and
+  the delay. **The token is not in it**, so swapping the placeholder for the
+  real token leaves it valid.
+- **A delayed unlock says how long ago in `o`**, which *is* in the signature.
+  The queue adds its wait to `o` and signs again. Both are tested against
+  eight requests rcheevos' own test suite built, including two delayed ones.
+- **The requests `rc_client` makes in play** are `login2`, `gameid`,
+  `achievementsets`, `startsession`, `ping`, `awardachievement` and
+  `submitlbentry`. That is the door's whole allow-list.
+
+**One addition to the schema above:** a queued row keeps the player's user
+agent, so an unlock sent later still tells RetroAchievements which core
+earned it.
+

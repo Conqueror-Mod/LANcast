@@ -278,6 +278,11 @@ func (s *Store) DeleteUser(ctx context.Context, id string) error {
 	if _, err := tx.ExecContext(ctx, `DELETE FROM retro_account WHERE user_id = ?`, id); err != nil {
 		return fmt.Errorf("delete user retroachievements: %w", err)
 	}
+	// And any unlock still waiting to be sent for it (ADR 0112): nothing is
+	// ever submitted for an account that no longer exists.
+	if _, err := tx.ExecContext(ctx, `DELETE FROM retro_unlock_queue WHERE user_id = ?`, id); err != nil {
+		return fmt.Errorf("delete user retroachievements queue: %w", err)
+	}
 	res, err := tx.ExecContext(ctx, `DELETE FROM user WHERE id = ?`, id)
 	if err != nil {
 		return fmt.Errorf("delete user: %w", err)

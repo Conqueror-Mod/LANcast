@@ -270,6 +270,9 @@ type Server struct {
 	// nil when the server could not prepare it.
 	ra      *RetroAchievements
 	raCache *raCache
+	// raPoints is each account's RetroAchievements points as last heard,
+	// for the reply to an unlock the server queued (raearn.go).
+	raPoints raScores
 	// presets is the MilkDrop presets an administrator uploaded (ADR 0091).
 	presets *milkdrop.Store
 	// shaders converts a .milk's HLSL at upload (ADR 0091, step g): the
@@ -649,6 +652,9 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/profile/retroachievements", s.getRetroAchievements)
 	mux.HandleFunc("PUT /api/profile/retroachievements", s.putRetroAchievements)
 	mux.HandleFunc("DELETE /api/profile/retroachievements", s.deleteRetroAchievements)
+	// Earning (ADR 0112): turned on with the password once, off at will.
+	mux.HandleFunc("PUT /api/profile/retroachievements/earning", s.putRAEarning)
+	mux.HandleFunc("DELETE /api/profile/retroachievements/earning", s.deleteRAEarning)
 	mux.HandleFunc("GET /api/retroachievements/media/{dir}/{file}", s.raMediaRoute)
 	mux.HandleFunc("GET /api/profile/ratings/pending", s.listToRate)
 	mux.HandleFunc("PUT /api/profile/sharing", s.putSharing)
@@ -1019,6 +1025,9 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/items/{id}/saves", s.listSaves)
 	mux.HandleFunc("GET /api/items/{id}/saves/{slot}", s.getSave)
 	mux.HandleFunc("PUT /api/items/{id}/saves/{slot}", s.putSave)
+	// The desktop player's door to RetroAchievements (ADR 0112), which the
+	// game's ticket reaches too.
+	mux.HandleFunc("POST /api/items/{id}/retroachievements", s.raDoor)
 	mux.HandleFunc("POST /api/items/{id}/stream-ticket", s.mintStreamTicket)
 	mux.HandleFunc("GET /api/stream/{id}/transcode", s.transcodeStream)
 	mux.HandleFunc("GET /api/stream/{id}/hls/index.m3u8", s.hlsPlaylist)

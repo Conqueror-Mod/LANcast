@@ -203,8 +203,8 @@ func (s *Server) streamTicket(r *http.Request) (*store.Session, bool) {
  *
  * Every ticket: `GET`/`HEAD /api/stream/{id}`. A game's ticket (ADR 0073)
  * also: the game's file list and files, and the minting person's saves for
- * that game — read, and written with `PUT`, which is the one write a ticket
- * can make. It is still one item and still the person who minted it, and the
+ * that game — read, and written with `PUT` — and, with `POST`, the game's
+ * door to RetroAchievements (ADR 0112). It is still one item and still the person who minted it, and the
  * CSRF check has nothing to say about it for the reason it has nothing to say
  * about an API key: nothing attaches this header by itself.
  */
@@ -237,6 +237,11 @@ func ticketRoute(method, path string) (id int64, romOnly bool, ok bool) {
 			return id, true, true
 		case strings.HasPrefix(tail, "saves/") && !strings.Contains(tail[len("saves/"):], "/") &&
 			(read || method == http.MethodPut):
+			return id, true, true
+		// The player's rcheevos, through the server (ADR 0112): still one
+		// game and the person who minted the ticket, so it can only ever
+		// earn for them, in the game they are playing.
+		case tail == "retroachievements" && method == http.MethodPost:
 			return id, true, true
 		}
 	}
