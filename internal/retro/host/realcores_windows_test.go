@@ -177,12 +177,13 @@ func TestRealCoresDrawRealGames(t *testing.T) {
 			gl := &WGL{HWND: hwnd, CaptureCentre: true}
 			var msgs []string
 			var mu sync.Mutex
+			var sessionLog strings.Builder
 			sysdir := filepath.Join(dir, "system")
 			os.MkdirAll(sysdir, 0o755)
 			s := New(Config{
 				Core: core, GamePath: game, GameData: data, Video: video, GL: gl,
 				Saves: newFakeSaves(), SystemDir: sysdir, SaveDir: sysdir,
-				Log: slog.New(slog.NewTextHandler(io.Discard, nil)),
+				Log: slog.New(slog.NewTextHandler(&sessionLog, nil)),
 				OnEvent: func(e Event) {
 					mu.Lock()
 					defer mu.Unlock()
@@ -206,6 +207,13 @@ func TestRealCoresDrawRealGames(t *testing.T) {
 			el := time.Since(start)
 			video.mu.Lock()
 			t.Logf("ran %v; frames=%d last %dx%d aspect %.3f nonBlack=%d glCentre=%v", el, video.frames, video.w, video.h, video.aspect, video.nonBlack, gl.LastCentre)
+			// Which cores send a memory map is measured here (ADR 0112): the
+			// session's own line, map or system RAM size.
+			for _, l := range strings.Split(sessionLog.String(), "\n") {
+				if strings.Contains(l, "memory map") {
+					t.Log(l)
+				}
+			}
 			drew := video.nonBlack > 0 || gl.LastCentre != [4]byte{}
 			video.mu.Unlock()
 			if err != nil {

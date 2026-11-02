@@ -15,7 +15,10 @@
 // to 87) the header won over memory.
 package libretro
 
-import "strings"
+import (
+	"fmt"
+	"strings"
+)
 
 // APIVersion is the libretro API version this host speaks.
 const APIVersion = 1
@@ -47,6 +50,7 @@ const (
 	EnvGetUsername            = 38
 	EnvGetLanguage            = 39
 	EnvGetAudioVideoEnable    = 47 | envExperimental
+	EnvSetMemoryMaps          = 36 | envExperimental
 	EnvGetFastforwarding      = 49 | envExperimental
 	EnvGetInputBitmasks       = 51 | envExperimental
 	EnvGetCoreOptionsVersion  = 52
@@ -314,4 +318,76 @@ type InputDescriptor struct {
 // a frontend without it has them acknowledged and dropped, as before.
 type DescriptorSink interface {
 	SetInputDescriptors([]InputDescriptor)
+}
+
+/*
+ * Memory maps (SET_MEMORY_MAPS): how a core lays its memory out in the
+ * console's own address space.
+ *
+ * Memory(MemorySystemRAM) is one block. A console's memory isn't: a Game Boy
+ * Advance has work RAM at 0x02000000 and fast RAM at 0x03000000, and a core
+ * that describes them only through a map exposes no single system RAM block
+ * at all. RetroAchievements' addresses are console addresses, so achievements
+ * on such a core read the wrong bytes, or none, without the map (ADR 0112).
+ */
+
+// MemoryDescriptor is one region of a core's memory map, as libretro's
+// struct retro_memory_descriptor describes it.
+type MemoryDescriptor struct {
+	Flags uint64
+	// Ptr is the region's memory, which the core owns. It stays valid while
+	// the game is loaded. Zero for a region the core maps but does not expose.
+	Ptr uintptr
+	// Offset is where in Ptr the region starts.
+	Offset uint64
+	// Start is the region's first address in the console's address space.
+	// Select and Disconnect are libretro's address-decoding masks, and Len
+	// is the region's size in bytes.
+	Start, Select, Disconnect, Len uint64
+	// AddrSpace names the address space, for consoles with more than one;
+	// "" is the main one.
+	AddrSpace string
+}
+
+// Memory descriptor flags (RETRO_MEMDESC_*).
+const (
+	MemDescConst     = 1 << 0 // read only: ROM
+	MemDescBigEndian = 1 << 1
+	MemDescSystemRAM = 1 << 2
+	MemDescSaveRAM   = 1 << 3
+	MemDescVideoRAM  = 1 << 4
+)
+
+// MemoryMapSink is a Frontend that wants a core's memory map. Optional: a
+// frontend without it has the map acknowledged and dropped.
+type MemoryMapSink interface {
+	SetMemoryMap([]MemoryDescriptor)
+}
+
+// MemoryMapSummary describes a map in one line, for a log: each region's
+// start, length and kind, "02000000+40000 ram 03000000+8000 ram".
+func MemoryMapSummary(m []MemoryDescriptor) string {
+	parts := make([]string, 0, len(m))
+	for _, d := range m {
+		kind := "mem"
+		switch {
+		case d.Flags&MemDescConst != 0:
+			kind = "rom"
+		case d.Flags&MemDescSaveRAM != 0:
+			kind = "save"
+		case d.Flags&MemDescVideoRAM != 0:
+			kind = "vram"
+		case d.Flags&MemDescSystemRAM != 0:
+			kind = "ram"
+		}
+		if d.Ptr == 0 {
+			kind += ",unexposed"
+		}
+		s := fmt.Sprintf("%08x+%x %s", d.Start, d.Len, kind)
+		if d.AddrSpace != "" {
+			s = d.AddrSpace + ":" + s
+		}
+		parts = append(parts, s)
+	}
+	return strings.Join(parts, " ")
 }

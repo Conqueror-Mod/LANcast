@@ -30,6 +30,8 @@ type fakeCore struct {
 	// Mupen64Plus-Next does; refuseStates refuses every one.
 	stateNeedsFrame bool
 	refuseStates    bool
+	// memMap is sent through SET_MEMORY_MAPS during LoadGame, when set.
+	memMap []libretro.MemoryDescriptor
 }
 
 func (c *fakeCore) SystemInfo() libretro.SystemInfo {
@@ -43,7 +45,13 @@ func (c *fakeCore) Init(fe libretro.Frontend) error {
 	})
 	return nil
 }
-func (c *fakeCore) LoadGame(string, []byte) error { c.loaded = true; return nil }
+func (c *fakeCore) LoadGame(string, []byte) error {
+	c.loaded = true
+	if ms, ok := c.fe.(libretro.MemoryMapSink); ok && c.memMap != nil {
+		ms.SetMemoryMap(c.memMap)
+	}
+	return nil
+}
 func (c *fakeCore) AVInfo() libretro.AVInfo {
 	return libretro.AVInfo{BaseWidth: 2, BaseHeight: 1, AspectRatio: 2, FPS: 240, SampleRate: 32000}
 }
