@@ -70,6 +70,10 @@ func (s *Server) listPeers(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"peers": out})
 }
 
+// publicPort is where the public name answers: the port the CA validated it
+// on, which the server listens on while the public certificate is on.
+const publicPort = "443"
+
 /*
  * ourInvite builds the string this server's operator hands to somebody else.
  *
@@ -99,7 +103,21 @@ func (s *Server) ourInvite(w http.ResponseWriter, r *http.Request) {
 	 * timeout on every peer operation, for ever.
 	 */
 	ips := tlscert.StableIPs()
-	addrs := make([]string, 0, len(ips))
+	addrs := make([]string, 0, len(ips)+1)
+
+	/*
+	 * The public name goes first when there is one (ADR 0044 §5b). A
+	 * server behind a home router holds only a private IPv4 itself — its
+	 * public IPv4 is the router's — so without the name an invite offers a
+	 * friend on another IPv4-only network nothing they can dial. The name is
+	 * proven reachable on 443: the certificate is only valid because the CA
+	 * completed a tls-alpn-01 challenge there, and the server answers peers on
+	 * 443 exactly as on its main port. The name is not what is pinned — the
+	 * identity certificate is — so the CA's certificate plays no part.
+	 */
+	if name := s.publicName(); name != "" {
+		addrs = append(addrs, net.JoinHostPort(name, publicPort))
+	}
 	for _, ip := range ips {
 		addrs = append(addrs, net.JoinHostPort(ip, port))
 	}

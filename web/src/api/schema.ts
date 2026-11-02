@@ -2278,6 +2278,8 @@ export interface paths {
          * @description Administrators only. **Pairing is administrative and granting is not**: adding a peer opens a network relationship for the whole server — the same class of operational power as adding a library, so it is gated on the server rather than hidden in the client (ADR 0015).
          *
          *     **`addrs` carries only addresses that will still exist.** Windows keeps temporary IPv6 addresses that are replaced regularly and gone within a week, and an invite is recorded once at pairing and never re-learned (ADR 0044 §5) — so one written into an invite becomes an entry that no longer exists and is still tried. They cannot be told apart by inspection, so the operating system is asked; anything it cannot classify is kept, because a stale entry costs a timeout and a missing one can cost the pairing. It also carries only addresses another machine can reach: every address on a hypervisor’s host-only adapter (the WSL switch, Hyper-V’s Default Switch, VMware VMnet1/8, VirtualBox host-only) is left out, recognised by the hypervisor’s MAC prefix and the absence of a default gateway, so an external switch carrying the house’s own address and VPN overlays are kept.
+         *
+         *     **A public name comes first.** While the public certificate is valid, `addrs` leads with its host name on port 443 — the port the CA validated it on, where the server answers peers exactly as on its main port. A server behind a home router holds only a private IPv4 itself, so without the name a friend on an IPv4-only network has nothing to dial (ADR 0044 §5b). The name is a hint like any other: the identity key is what is pinned, never the name or its certificate. With a public name, a server whose interfaces offer nothing reachable can still introduce itself.
          */
         get: operations["getPeerInvite"];
         put?: never;
@@ -7722,6 +7724,7 @@ export interface components {
             fingerprint: string;
             fingerprint_display: string;
             name: string;
+            /** @description Where this server may be dialled, in the order to try: its public name on port 443 first while the public certificate is valid, then its own stable, reachable interface addresses on the listen port. Each is `host:port`; a host may be a name. */
             addrs: string[];
         };
         AddPeerRequest: {

@@ -332,6 +332,18 @@ damaged one with `bad_invite` and a message written for the person holding the
 paste. `GET /api/peers/invite` answers `409 not_reachable` on a server with no
 address another machine could reach — it cannot introduce itself.
 
+**A public name comes first.** While the public certificate
+(`GET /api/settings/public-certificate`) is valid, `addrs` leads with its host name on port 443 — the port the CA
+validated it on, where the server answers peers exactly as on its main port. A
+server behind a home router holds only a private IPv4 itself; its public IPv4 is
+the router's. Built from the interfaces alone, its invite offered a friend on an
+IPv4-only network nothing to dial
+([ADR 0044](adr/0044-server-identity-and-peering.md) §5b). The name is a hint
+like the rest: what is pinned is the identity key, never the name or the
+certificate a browser sees on it. With a public name, a server whose interfaces
+offer nothing reachable can still introduce itself, so the `409` above means
+neither exists.
+
 **An invite carries only addresses that will still exist.** Windows keeps
 temporary IPv6 addresses (RFC 4941) that are replaced regularly and gone within
 a week, and an invite is recorded once at pairing and never re-learned

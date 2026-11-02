@@ -5,6 +5,7 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"net/url"
 	"testing"
 
 	"lancast/internal/identity"
@@ -208,6 +209,53 @@ func TestAttachedServerStillAnswersPeers(t *testing.T) {
 	body, _ := io.ReadAll(resp.Body)
 	if string(body) != client.Fingerprint() {
 		t.Errorf("got %q, want the caller's fingerprint %s", body, client.Fingerprint())
+	}
+}
+
+/*
+ * An invite may lead with the server's public name (ADR 0044 §5b). In
+ * production that name carries a CA certificate for browsers, so this dials an
+ * attached server by name rather than by IP and checks the pin is the only
+ * thing that decides: the right key answers, and a stranger at the same name
+ * is refused. "localhost" stands in for the public name.
+ */
+func TestAPeerIsReachedByName(t *testing.T) {
+	server, client, browserSide := testIdentity(t), testIdentity(t), testIdentity(t)
+	browserCert, err := Certificate(browserSide)
+	if err != nil {
+		t.Fatal(err)
+	}
+	base := &tls.Config{Certificates: []tls.Certificate{browserCert}, MinVersion: tls.VersionTLS12}
+	if _, err := Attach(base, server); err != nil {
+		t.Fatal(err)
+	}
+	u, err := url.Parse(serve(t, base))
+	if err != nil {
+		t.Fatal(err)
+	}
+	byName := "https://localhost:" + u.Port()
+
+	hc, err := Client(client, server.Fingerprint())
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp, err := hc.Get(byName)
+	if err != nil {
+		t.Fatalf("peer call by name: %v", err)
+	}
+	body, _ := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	if string(body) != client.Fingerprint() {
+		t.Errorf("got %q, want the caller's fingerprint %s", body, client.Fingerprint())
+	}
+
+	wrong, err := Client(client, testIdentity(t).Fingerprint())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp, err := wrong.Get(byName); err == nil {
+		resp.Body.Close()
+		t.Fatal("a name reached a server holding a different key, and it was talked to")
 	}
 }
 
