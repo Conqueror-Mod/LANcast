@@ -67,6 +67,13 @@ Built by this project and shipped beside the client:
     replaces the library. The recipe that builds it, and the exact source
     revisions, are in third_party/libmpv/.
 
+  rcheevos (RetroAchievements)        MIT
+                                      third_party/rcheevos/upstream/LICENSE
+                                      third_party/rcheevos/PROVENANCE.md
+
+    v12.5.0, built with LANcast's shim into lancast-cheevos.dll so the
+    desktop player can earn achievements (ADR 0112).
+
 Vendored, with their own licence files beside them:
 
   hls.js                              Apache License 2.0
