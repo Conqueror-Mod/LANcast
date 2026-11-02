@@ -139,6 +139,8 @@ export interface AchievementSet {
   points: number;
   points_unlocked: number;
   rich_presence?: string;
+  /** RetroAchievements' own note about this player ("Hardcore unlocks cannot be earned…"). */
+  warning?: string;
   achievements: GameAchievement[] | null;
 }
 

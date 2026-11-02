@@ -65,15 +65,19 @@ type Achievement struct {
 
 // Summary is the loaded game's set, for the menu's Achievements page.
 type Summary struct {
-	GameID         uint32        `json:"game_id"`
-	Title          string        `json:"title"`
-	Badge          string        `json:"badge,omitempty"`
-	Total          uint32        `json:"total"`
-	Unlocked       uint32        `json:"unlocked"`
-	Points         uint32        `json:"points"`
-	PointsUnlocked uint32        `json:"points_unlocked"`
-	RichPresence   string        `json:"rich_presence,omitempty"`
-	Achievements   []Achievement `json:"achievements"`
+	GameID         uint32 `json:"game_id"`
+	Title          string `json:"title"`
+	Badge          string `json:"badge,omitempty"`
+	Total          uint32 `json:"total"`
+	Unlocked       uint32 `json:"unlocked"`
+	Points         uint32 `json:"points"`
+	PointsUnlocked uint32 `json:"points_unlocked"`
+	RichPresence   string `json:"rich_presence,omitempty"`
+	// Warning is RetroAchievements' own note about this player, sent in
+	// the set as a pseudo-achievement: today, that hardcore can't be
+	// earned with an emulator it has not approved (ADR 0112 §5).
+	Warning      string        `json:"warning,omitempty"`
+	Achievements []Achievement `json:"achievements"`
 }
 
 // Memory is the game's memory as the session knows it, after the core has
@@ -133,6 +137,11 @@ type engine interface {
 const (
 	maxAnswer          = 16 << 20
 	stopWaitForSending = 5 * time.Second
+	// warningID and above are RetroAchievements' warnings, not achievements
+	// (RC_CLIENT_ACHIEVEMENT_WARNING_ID): "Warning: Unknown Emulator" is one.
+	// rcheevos counts and submits none of them, but still raises their
+	// unlock, which would otherwise be a 0-point popup at every game start.
+	warningID = 101000001
 )
 
 type answer struct {
@@ -319,6 +328,10 @@ func (r *Runtime) List() Summary {
 	s.Total, s.Unlocked, s.Points, s.PointsUnlocked = g.Total, g.Unlocked, g.Points, g.PointsUnlocked
 	s.RichPresence = r.eng.RichPresence()
 	for _, a := range r.eng.Achievements() {
+		if a.ID >= warningID {
+			s.Warning = a.Description
+			continue
+		}
 		state := "locked"
 		switch a.State {
 		case Unlocked:
@@ -377,6 +390,10 @@ func (r *Runtime) Event(e Event) {
 	n := Notice{ID: e.ID, Title: e.Title, Description: e.Description, Points: e.Points}
 	switch e.Type {
 	case EventAchievementTriggered:
+		if e.ID >= warningID {
+			r.log.Info("rcheevos: RetroAchievements' warning", "title", e.Title, "text", e.Description)
+			return
+		}
 		n.Kind, n.Badge = "unlocked", badgeURL(e.Badge, true)
 	case EventProgressIndicatorShow, EventProgressIndicatorUpdate:
 		n.Kind, n.Progress = "progress", e.Text

@@ -88,6 +88,15 @@
   color: var(--text-secondary);
 }
 
+.ra-set__none {
+  flex-shrink: 0;
+  margin: 8px 0 0;
+  padding: 8px 10px;
+  border-left: 2px solid var(--text-secondary);
+  font-size: 13px;
+  color: var(--text-primary);
+}
+
 .ra-set__game {
   color: var(--text-primary);
   font-weight: 600;

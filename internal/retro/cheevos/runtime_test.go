@@ -53,7 +53,11 @@ func (f *fakeEngine) RestoreProgress(b []byte) error {
 }
 func (f *fakeEngine) Game() (GameInfo, bool) { return f.game, f.game.ID != 0 }
 func (f *fakeEngine) Achievements() []Listed {
-	return []Listed{{ID: 1, Title: "A", Badge: "11", State: Unlocked}, {ID: 2, Title: "B", Badge: "22", State: Locked, Progress: "3/10"}}
+	return []Listed{
+		{ID: 101000001, Title: "Warning: Unknown Emulator", Description: "Hardcore unlocks cannot be earned using this emulator.", State: Unlocked},
+		{ID: 1, Title: "A", Badge: "11", State: Unlocked},
+		{ID: 2, Title: "B", Badge: "22", State: Locked, Progress: "3/10"},
+	}
 }
 func (f *fakeEngine) RichPresence() string { return "Level 3" }
 
@@ -232,6 +236,7 @@ func TestEventsBecomeNotices(t *testing.T) {
 	g := newRig(t, nil)
 	_ = g.rt.Start(NES, Memory{}, "", nil)
 	h := g.eng.h
+	h.Event(Event{Type: EventAchievementTriggered, ID: 101000001, Title: "Warning: Unknown Emulator"}) // not an unlock
 	h.Event(Event{Type: EventAchievementTriggered, ID: 5, Title: "First", Points: 10, Badge: "00234"})
 	h.Event(Event{Type: EventProgressIndicatorUpdate, Title: "Coins", Text: "3/10"})
 	h.Event(Event{Type: EventProgressIndicatorHide})
@@ -264,7 +269,9 @@ func TestTheListForTheMenu(t *testing.T) {
 	g.eng.h.Done(OpLoadGame, OK, "")
 	g.rt.Frame()
 	s := g.rt.List()
-	if s.GameID != 9 || s.RichPresence != "Level 3" || len(s.Achievements) != 2 {
+	// RetroAchievements' warning is a note on the page, not an achievement.
+	if s.GameID != 9 || s.RichPresence != "Level 3" || len(s.Achievements) != 2 ||
+		s.Warning != "Hardcore unlocks cannot be earned using this emulator." {
 		t.Fatalf("list %+v", s)
 	}
 	a, b := s.Achievements[0], s.Achievements[1]

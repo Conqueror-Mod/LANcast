@@ -203,6 +203,9 @@ export function AchievementsPage({ status, set }: { status: AchievementStatus; s
   }
   const list = set?.achievements ?? [];
   const ordered = [...list].sort((a, b) => rank(a) - rank(b));
+  // Every one unsupported means the core shows rcheevos none of the game's
+  // memory (bsnes, today): say so once rather than on every row.
+  const noneEarnable = list.length > 0 && list.every((a) => a.state === "unsupported");
   return (
     <>
       <div className="retro-play__heading">Achievements</div>
@@ -218,7 +221,13 @@ export function AchievementsPage({ status, set }: { status: AchievementStatus; s
           )}
         </span>
         <span className="retro-play__hint">Casual (softcore): save states and rewind stay available.</span>
+        {set?.warning && <span className="retro-play__hint">RetroAchievements: {set.warning}</span>}
       </div>
+      {noneEarnable && (
+        <p className="ra-set__none" role="note">
+          None of these can be earned with this console's emulator yet: it doesn't let LANcast read the game's memory.
+        </p>
+      )}
       {!set && <p className="retro-play__hint">Loading…</p>}
       {set && (
         <ul className="ra-set" aria-label="Achievements in this game">

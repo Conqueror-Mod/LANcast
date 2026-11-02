@@ -312,6 +312,12 @@ completed the set. rcheevos stays unpatched.
   before the core sees the state. A state loaded before the set has
   arrived, as Continue loads one, keeps its progress until the set does.
 
+**RetroAchievements' warning.** Until it approves LANcast, RetroAchievements
+puts a "Warning: Unknown Emulator" pseudo-achievement (id 101000001 and up)
+into every set. rcheevos neither counts nor submits it, but it does raise its
+unlock. The runtime drops that unlock and shows the warning as a note on the
+Achievements page instead. Seen on the first real-account run, 2026-11-01.
+
 **The page** shows an unlock pop-up, the measured-progress line, and an
 **Achievements** page in the game menu, unlocked first. The profile's switch
 counts unlocks waiting to be sent, and says rich presence can't be turned

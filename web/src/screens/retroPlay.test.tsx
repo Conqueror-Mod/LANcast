@@ -750,6 +750,26 @@ describe("achievements while playing (ADR 0112)", () => {
     expect(button("Resume")).toBeTruthy();
   });
 
+  it("shows RetroAchievements' warning as a note, and says when nothing can be earned", async () => {
+    await render("/play/41");
+    emit({ kind: "started" });
+    emit({ kind: "achievement", event: "ready", title: "Sample Game", total: 2, unlocked: 0 });
+    emit({ kind: "menu" });
+    await act(async () => button("Achievements: 0 of 2…").click());
+    emit({
+      kind: "achievements",
+      set: {
+        ...set,
+        unlocked: 0,
+        warning: "Hardcore unlocks cannot be earned using this emulator.",
+        achievements: set.achievements.map((a) => ({ ...a, state: "unsupported" })),
+      },
+    });
+    expect(host.textContent).toContain("RetroAchievements: Hardcore unlocks cannot be earned using this emulator.");
+    expect(host.querySelector(".ra-set__none")!.textContent).toContain("can be earned with this console's emulator");
+    expect(host.querySelectorAll(".ra-set__row")).toHaveLength(2);
+  });
+
   it("says earning is off, in the server's words, and where to turn it on", async () => {
     await render("/play/41");
     emit({ kind: "started" });
