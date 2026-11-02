@@ -1447,6 +1447,50 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/profile/retroachievements/play": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Earn achievements while playing
+         * @description ADR 0112. Takes your RetroAchievements password once, exchanges it with RetroAchievements for a login token, seals the token as the API key is sealed, and discards the password. Needs a connected account; a token for a different RetroAchievements user than the one connected is refused. Softcore only.
+         */
+        put: operations["startEarningRetroAchievements"];
+        post?: never;
+        /**
+         * Stop earning achievements while playing
+         * @description Deletes the sealed token, and any unlocks still waiting to be sent, which nothing could send without it.
+         */
+        delete: operations["stopEarningRetroAchievements"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/items/{id}/retroachievements": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Send one of the player's RetroAchievements requests
+         * @description ADR 0112. The desktop player's rcheevos builds every RetroAchievements request and posts it here with the game's stream ticket (`Authorization: Ticket …`) or a session. The server accepts only `login2`, `gameid`, `achievementsets`, `startsession`, `ping` and `awardachievement`, for the caller's connected RetroAchievements account, softcore (`h` absent or `0`) and carrying no password; puts the caller's token in place of the player's placeholder; sends it to RetroAchievements; and returns the answer with any `Token` replaced by the placeholder. An award made while RetroAchievements cannot be reached is kept and sent later with the time it waited added, and the player is told it unlocked (`queued`).
+         */
+        post: operations["sendRetroAchievementsRequest"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/retroachievements/media/{dir}/{file}": {
         parameters: {
             query?: never;
@@ -9625,6 +9669,20 @@ export interface components {
                 name: string;
             }[];
         };
+        RetroAchievementsConnectRequest: {
+            /** @description The form rcheevos built (rc_api_request_t.post_data), with the placeholder token. */
+            body: string;
+            /** @description rcheevos' clause about itself, for the User-Agent RetroAchievements asks for. */
+            user_agent_clause?: string;
+        };
+        RetroAchievementsConnectAnswer: {
+            /** @description RetroAchievements' HTTP status. */
+            status: number;
+            /** @description RetroAchievements' answer, with any Token replaced by the placeholder. */
+            body: string;
+            /** @description An award kept to send later. */
+            queued?: boolean;
+        };
         RetroAchievementsView: {
             /** @description False when this server could not prepare the feature. */
             available: boolean;
@@ -9638,6 +9696,10 @@ export interface components {
             points: number;
             softcore_points: number;
             true_points: number;
+            /** @description Earning achievements while playing is on (ADR 0112). */
+            earning: boolean;
+            /** @description Unlocks kept while RetroAchievements could not be reached, waiting to be sent. */
+            unlocks_waiting: number;
             rich_presence?: string;
             recent: {
                 achievement_id: number;
@@ -12679,6 +12741,120 @@ export interface operations {
                 content?: never;
             };
             401: components["responses"]["Unauthorized"];
+        };
+    };
+    startEarningRetroAchievements: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @description Your RetroAchievements password. Sent to RetroAchievements once and not kept. */
+                    password: string;
+                };
+            };
+        };
+        responses: {
+            /** @description The caller's RetroAchievements. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RetroAchievementsView"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            /** @description No connected account, the feature is not available here, or the RetroAchievements name has changed since connecting. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description RetroAchievements could not be reached. */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    stopEarningRetroAchievements: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Earning is off. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+        };
+    };
+    sendRetroAchievementsRequest: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The game being played. */
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RetroAchievementsConnectRequest"];
+            };
+        };
+        responses: {
+            /** @description RetroAchievements' answer, for rcheevos. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RetroAchievementsConnectAnswer"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            /** @description Earning is off for the caller (`earning_off`), or the feature is not available here. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description RetroAchievements could not be reached, for a request that is not an award. */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
         };
     };
     retroAchievementsMedia: {

@@ -102,6 +102,42 @@ type Option struct {
 	Value       string   `json:"value"`
 }
 
+/*
+ * Achievements is RetroAchievements while playing (ADR 0112): evaluated
+ * against the game's memory once per frame the person sees played. Every
+ * method is called on the core's thread. Rewound frames are not reported:
+ * stepping back is not playing.
+ */
+type Achievements interface {
+	// Start loads the game's set, once the core has run memoryLogAfter
+	// frames: mGBA and Mupen64Plus-Next send their memory maps only once they
+	// are running, so a set started at LoadGame would read nothing on them.
+	// Calls before it (a Continue's progress, a pause) are the runtime's to
+	// hold or ignore.
+	Start(mem GameMemory, path string, data []byte) error
+	Frame()
+	// Idle hands over network answers while the game is paused.
+	Idle()
+	Reset()
+	// Progress is what is counting towards an achievement, kept with a save
+	// state; SetProgress restores it (nil: the state had none).
+	Progress() []byte
+	SetProgress([]byte)
+	// List tells the page the game's set, for the menu.
+	List()
+	// Stop is called before the core unloads the game.
+	Stop()
+}
+
+// GameMemory is the game's memory, for Achievements.Start: the core's map if
+// it sent one, and its system and save RAM blocks. All of it is the core's,
+// valid until the game unloads.
+type GameMemory struct {
+	Map       []libretro.MemoryDescriptor
+	SystemRAM []byte
+	SaveRAM   []byte
+}
+
 // Config is one game session.
 type Config struct {
 	Core      libretro.Core
@@ -132,6 +168,9 @@ type Config struct {
 	// FlushEvery is how often changed save RAM is sent to the server while
 	// playing. Zero means every five seconds.
 	FlushEvery time.Duration
+
+	// Achievements, if set, earns RetroAchievements while playing.
+	Achievements Achievements
 
 	OnEvent func(Event)
 	Log     *slog.Logger
@@ -289,6 +328,10 @@ func (s *Session) LoadState(slot string) {
 	}()
 }
 
+// ListAchievements asks for the game's achievements, for the menu. They
+// arrive as the page's own event, from Config.Achievements.
+func (s *Session) ListAchievements() { s.send(command{kind: "achievements"}) }
+
 // SetOption changes a core option; the core sees it on its next frame.
 func (s *Session) SetOption(key, value string) {
 	s.send(command{kind: "set-option", key: key, val: value})
@@ -423,12 +466,15 @@ func (s *Session) run(ctx context.Context) (err error) {
 	 * Continue on every N64 game start from the beginning, with only a line
 	 * in the log to say so.
 	 */
-	var resume []byte
+	var resume, resumeProgress []byte
 	resumeSlot, resumeTries, resumed := s.cfg.ResumeState, 0, false
 	if resumeSlot != "" {
 		if data, c, v, err := s.cfg.Saves.LoadState(resumeSlot); err == nil && len(data) > 0 && s.stateMismatch(c, v) == "" {
+			data, resumeProgress = splitProgress(data)
 			if resumed = core.Unserialize(data); !resumed {
 				resume = data
+			} else {
+				s.setProgress(resumeProgress)
 			}
 		}
 	}
@@ -463,12 +509,14 @@ func (s *Session) run(ctx context.Context) (err error) {
 		s.frameDone(time.Since(runStart))
 		if s.ticks++; s.ticks == memoryLogAfter {
 			s.logMemory(core)
+			s.startAchievements(core)
 		}
 		if resume != nil {
 			resumeTries++
 			switch {
 			case core.Unserialize(resume):
 				resume = nil
+				s.setProgress(resumeProgress)
 				s.cfg.Log.Info("retro session: resumed after the core's first frames", "slot", resumeSlot, "frames", resumeTries)
 				s.cfg.OnEvent(Event{Kind: "state-loaded", Slot: resumeSlot})
 			case resumeTries >= resumeFrames:
@@ -534,6 +582,9 @@ func (s *Session) drain(block bool) {
 				select {
 				case c = <-s.cmds:
 				case <-tick:
+					if a := s.cfg.Achievements; a != nil {
+						a.Idle()
+					}
 					pads, guide := ps.PollPads()
 					for _, move := range s.nav.Update(pads[0], guide, time.Now()) {
 						s.cfg.OnEvent(Event{Kind: "nav", Text: move})
@@ -584,6 +635,9 @@ func (s *Session) handle(c command) {
 	case "reset":
 		core.Reset()
 		s.rewind.clear()
+		if a := s.cfg.Achievements; a != nil {
+			a.Reset()
+		}
 	case "fast-forward":
 		s.fastForward = c.val == "on"
 	case "rewind":
@@ -606,8 +660,14 @@ func (s *Session) handle(c command) {
 		s.upload(func() error {
 			return s.cfg.Saves.StoreState(c.slot, data, s.info.LibraryName, s.info.LibraryVersion)
 		}, Event{Kind: "state-saved", Slot: c.slot}, "That save did not reach the server.")
+	case "achievements":
+		if a := s.cfg.Achievements; a != nil {
+			a.List()
+		}
 	case "apply-state":
-		if core.Unserialize(c.data) {
+		state, progress := splitProgress(c.data)
+		if core.Unserialize(state) {
+			s.setProgress(progress)
 			s.cfg.OnEvent(Event{Kind: "state-loaded", Slot: c.slot})
 		} else {
 			s.cfg.OnEvent(Event{Kind: "error", Slot: c.slot, Text: "The game refused that save."})
@@ -648,7 +708,33 @@ func (s *Session) serialize() ([]byte, bool) {
 	if !s.cfg.Core.Serialize(data) {
 		return nil, false
 	}
+	if a := s.cfg.Achievements; a != nil {
+		data = withProgress(data, a.Progress())
+	}
 	return data, true
+}
+
+// startAchievements loads the game's set, against its memory as the core
+// now describes it.
+func (s *Session) startAchievements(core libretro.Core) {
+	a := s.cfg.Achievements
+	if a == nil {
+		return
+	}
+	mem := GameMemory{Map: s.memoryMap, SystemRAM: core.Memory(libretro.MemorySystemRAM),
+		SaveRAM: core.Memory(libretro.MemorySaveRAM)}
+	if err := a.Start(mem, s.cfg.GamePath, s.cfg.GameData); err != nil {
+		s.cfg.Log.Warn("retro session: achievements unavailable", "error", err)
+		a.Stop()
+		s.cfg.Achievements = nil
+	}
+}
+
+// setProgress hands a loaded state's achievement progress to rcheevos.
+func (s *Session) setProgress(p []byte) {
+	if a := s.cfg.Achievements; a != nil {
+		a.SetProgress(p)
+	}
 }
 
 // upload runs a store in the background, so the network never costs a frame.
@@ -726,6 +812,9 @@ func (s *Session) finish() {
 	case <-done:
 	case <-time.After(30 * time.Second):
 		s.cfg.Log.Warn("retro session: saves still uploading after 30s; closing anyway")
+	}
+	if a := s.cfg.Achievements; a != nil {
+		a.Stop()
 	}
 	s.cfg.Core.UnloadGame()
 }
@@ -1060,13 +1149,21 @@ func (s *Session) runTick() {
 		for i := 0; i < fastFactor && !s.paused; i++ {
 			s.skipVideo = i < fastFactor-1
 			core.Run()
+			s.achFrame()
 			s.captureRewind()
 		}
 		s.skipVideo, s.muted = false, false
 	default:
 		s.announceSpeed("normal")
 		core.Run()
+		s.achFrame()
 		s.captureRewind()
+	}
+}
+
+func (s *Session) achFrame() {
+	if a := s.cfg.Achievements; a != nil {
+		a.Frame()
 	}
 }
 

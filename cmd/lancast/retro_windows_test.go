@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"lancast/internal/retro/cheevos"
 )
 
 // The page can name only these slots; anything else is refused before it
@@ -54,5 +56,23 @@ func TestAvailabilityOfAGLConsole(t *testing.T) {
 	}
 	if got := r.availability("dreamcast"); got["available"] != false {
 		t.Errorf("an unknown console = %v", got)
+	}
+}
+
+// What the page hears of an achievement (ADR 0112): only what was said, and
+// ready always carries its counts, even when they are zero.
+func TestAchievementEvent(t *testing.T) {
+	got := achievementEvent(cheevos.Notice{Kind: "unlocked", ID: 5501, Title: "Ach1", Points: 5,
+		Badge: "/api/retroachievements/media/Badge/00234.png"})
+	if got["kind"] != "achievement" || got["event"] != "unlocked" || got["id"] != uint32(5501) ||
+		got["points"] != uint32(5) || got["title"] != "Ach1" || got["badge"] == nil {
+		t.Errorf("unlocked: %v", got)
+	}
+	if _, ok := got["description"]; ok {
+		t.Errorf("an empty field was sent: %v", got)
+	}
+	ready := achievementEvent(cheevos.Notice{Kind: "ready", Title: "Sample"})
+	if ready["total"] != uint32(0) || ready["unlocked"] != uint32(0) {
+		t.Errorf("ready: %v", ready)
 	}
 }

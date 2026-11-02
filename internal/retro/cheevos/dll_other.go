@@ -29,5 +29,8 @@ func (c *Client) RestoreProgress(b []byte) error                     { return Er
 func (c *Client) Hash(console Console, path string, data []byte) (string, bool) {
 	return "", false
 }
+func (c *Client) Game() (GameInfo, bool)                  { return GameInfo{}, false }
+func (c *Client) Achievements() []Listed                  { return nil }
+func (c *Client) RichPresence() string                    { return "" }
 func (c *Client) MemoryRegions() int                      { return 0 }
 func (c *Client) ReadMemory(address uint32, n int) []byte { return nil }

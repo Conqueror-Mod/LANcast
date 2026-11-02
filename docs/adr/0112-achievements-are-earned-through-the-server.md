@@ -247,8 +247,88 @@ decision: ADR 0077 records why snes9x isn't used on the web.
   LANcast ships:** Mesen, bsnes, BlastEm, Gearsystem, mGBA, Mupen64Plus-Next
   and SwanStation. Each needs one achievement seen firing on a real dump
   before it is listed as supported.
-- **The exact Connect parameters** the server forwards and rewrites (the
-  token field, and an offset for delayed unlocks), taken from the pinned
-  rcheevos source when it is built rather than from memory.
+- ~~The exact Connect parameters~~ — settled from the pinned source when
+  step 3 was built; see "Built: steps 3 and 4" below.
 - **Whether RetroArch's web build has achievement support at all.** It
   doesn't matter to this decision: it stays off either way.
+
+## Built: steps 3 and 4 (PR #989, 2026-11-02)
+
+The server door and casual play, built on steps 1 and 2 as they merged
+(#993–#995). Where the build differs from the text above, this section is
+what holds.
+
+**The server door.**
+- `PUT /api/profile/retroachievements/play {password}` signs in with
+  `r=login2` once and seals the token; the password is not kept.
+  `DELETE` turns earning off and deletes the token and the queue.
+  Reconnecting the profile as a different RetroAchievements user clears
+  the token.
+- `POST /api/items/{id}/retroachievements`, with the game's stream ticket,
+  forwards one rcheevos request. The allow-list is what `rc_client` 12.5
+  sends a casual player: `login2`, `gameid`, `achievementsets`,
+  `startsession`, `ping`, `awardachievement`. A leaderboard entry is
+  refused: casual play submits none. An award claiming hardcore (`h=1`) is
+  refused.
+- **The token's field is `t`.** The player signs in with the placeholder
+  `lancast` as both its name and its token; the server puts the real ones in
+  and replaces `Token` in the answer with the placeholder.
+- **A delayed award** is sent with the time it waited added to `o` (seconds
+  since the unlock), and `v` signed again. rcheevos' signature is an MD5 of
+  public fields with no secret, so the server can re-sign it and
+  RetroAchievements dates the unlock when it was earned.
+- **A refusal is put into RetroAchievements' own answer format**, so rcheevos
+  hears "earning is off" as a failed sign-in (`not_authorized`) rather than
+  a network fault it would retry for ever. A 5xx or a missing answer stays
+  retryable.
+
+**Schema 87.** `retro_account.connect_token_sealed`, as above. The queue,
+`retro_unlock_queue`, holds `user_id`, `body` (the request with its token
+field emptied), `queued_at`, `tries`, `next_at` and `last_error`. It has no
+request-type column: only `awardachievement` is ever queued, because casual
+play submits no leaderboard entries. Retries back off, and an entry goes
+only when RetroAchievements answers it.
+
+**The shim's interface version 2.** Step 2's shim had no way to list a set,
+so the game menu could not show one. Version 2 adds `lc_game` (title, badge
+and counts), `lc_list_achievements`, `lc_achievement_at`,
+`lc_free_achievements` and `lc_rich_presence`. It also changes
+`lc_unload_game` to run one frame first. rcheevos 12.5 crashed in
+`rc_client_raise_mastery_event` when a game was unloaded straight after its
+last achievement unlocked, reading a game it had already cleared. The frame
+delivers the pending event first, and means the person hears that they
+completed the set. rcheevos stays unpatched.
+`TestRealRcheevosUnlocksFromMemory` covers that moment against the real DLL.
+
+**Play.**
+- `cheevos.Runtime` drives the Client from the game session. It starts
+  after the core's first 60 frames, at the point step 1 measured mGBA and
+  Mupen64Plus-Next to have sent their maps, not at LoadGame.
+- Every call into the DLL, and so every callback out of it, is on the
+  core's thread. The answers come back on other goroutines and wait to be
+  handed to rcheevos in the next frame or idle tick.
+- Rewound frames are not evaluated.
+- Progress rides on the end of each save state as a tagged trailer, cut off
+  before the core sees the state. A state loaded before the set has
+  arrived, as Continue loads one, keeps its progress until the set does.
+
+**RetroAchievements' warning.** Until it approves LANcast, RetroAchievements
+puts a "Warning: Unknown Emulator" pseudo-achievement (id 101000001 and up)
+into every set. rcheevos neither counts nor submits it, but it does raise its
+unlock. The runtime drops that unlock and shows the warning as a note on the
+Achievements page instead. Seen on the first real-account run, 2026-11-01.
+
+**The page** shows an unlock pop-up, the measured-progress line, and an
+**Achievements** page in the game menu, unlocked first. The profile's switch
+counts unlocks waiting to be sent, and says rich presence can't be turned
+off.
+
+**Not built yet:**
+- leaderboard trackers and challenge indicators (§6), which have no
+  leaderboards to show in casual play;
+- the hardcore rules (step 5);
+- the full user agent of §3, which needs the core and its version: the
+  server sends `LANcast/<version> (Windows) rcheevos/12.5` for now, and step
+  6 needs the rest.
+
+The real-account check in the installed app is still owed.

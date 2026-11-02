@@ -649,6 +649,11 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/profile/retroachievements", s.getRetroAchievements)
 	mux.HandleFunc("PUT /api/profile/retroachievements", s.putRetroAchievements)
 	mux.HandleFunc("DELETE /api/profile/retroachievements", s.deleteRetroAchievements)
+	// Earning while playing (ADR 0112): a password once for a token, and the
+	// player's requests, sent on with that token by its game's ticket.
+	mux.HandleFunc("PUT /api/profile/retroachievements/play", s.putRetroPlay)
+	mux.HandleFunc("DELETE /api/profile/retroachievements/play", s.deleteRetroPlay)
+	mux.HandleFunc("POST /api/items/{id}/retroachievements", s.raConnect)
 	mux.HandleFunc("GET /api/retroachievements/media/{dir}/{file}", s.raMediaRoute)
 	mux.HandleFunc("GET /api/profile/ratings/pending", s.listToRate)
 	mux.HandleFunc("PUT /api/profile/sharing", s.putSharing)

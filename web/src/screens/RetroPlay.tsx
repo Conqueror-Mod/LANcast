@@ -1,4 +1,11 @@
 import { ControlsPage } from "@/components/RetroControls";
+import {
+  AchievementsPage,
+  ProgressLine,
+  UnlockPopup,
+  achievementsLabel,
+  useAchievements,
+} from "@/components/RetroAchievements";
 import { useCallback, useEffect, useState } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
@@ -66,9 +73,11 @@ export function RetroPlay() {
   const [menu, setMenu] = useState(false);
   // Which page of the menu is showing (2026-10-18): a short main list, with
   // Picture, Speed & rewind and Controls a step in, so it fits a TV.
-  const [page, setPage] = useState<"main" | "picture" | "speed" | "controls">("main");
+  const [page, setPage] = useState<"main" | "picture" | "speed" | "controls" | "achievements">("main");
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const achievements = useAchievements(setNotice);
+  const achievementsEntry = achievementsLabel(achievements.status);
   const [options, setOptions] = useState<RetroOption[]>([]);
   // The core's own button names, for the Controls page.
   const [labels, setLabels] = useState<Record<string, string>>({});
@@ -297,6 +306,9 @@ export function RetroPlay() {
               <MenuButton label="Picture…" onSelect={() => setPage("picture")} />
               <MenuButton label="Speed & rewind…" onSelect={() => setPage("speed")} />
               <MenuButton label="Controls…" onSelect={() => setPage("controls")} />
+              {achievementsEntry && (
+                <MenuButton label={`${achievementsEntry}…`} onSelect={() => setPage("achievements")} />
+              )}
               {pb.itemID !== 0 && (
                 /*
                  * Whatever is playing in the corner (ADR 0076), from the menu the
@@ -405,6 +417,12 @@ export function RetroPlay() {
           {page === "controls" && (
             <ControlsPage platform={item?.platform ?? ""} labels={labels} onBack={() => setPage("main")} />
           )}
+          {page === "achievements" && (
+            <>
+              <MenuButton label="Back" onSelect={() => setPage("main")} autoFocus />
+              <AchievementsPage status={achievements.status} set={achievements.set} />
+            </>
+          )}
         </div>
       )}
 
@@ -413,6 +431,9 @@ export function RetroPlay() {
           {mode === "fast" ? "▶▶ Fast-forward" : "◀◀ Rewind"}
         </div>
       )}
+
+      {running && <UnlockPopup unlock={achievements.unlock} gameTitle={achievements.status.title} />}
+      {running && !menu && <ProgressLine progress={achievements.progress} />}
 
       {notice && (
         <div className="retro-play__notice" role="status">

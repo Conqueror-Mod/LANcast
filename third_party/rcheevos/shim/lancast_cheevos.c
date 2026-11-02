@@ -94,6 +94,8 @@ static void RC_CCONV server_call(const rc_api_request_t* request, rc_client_serv
 	on_request(id, request->url, request->post_data, request->content_type);
 }
 
+LC_API void lc_free_achievements(void);
+
 static void flatten(const rc_client_event_t* e, lc_event_t* out) {
 	memset(out, 0, sizeof *out);
 	out->type = e->type;
@@ -176,6 +178,7 @@ LC_API int lc_init(lc_request_fn request, lc_event_fn event, lc_log_fn log, lc_d
 
 LC_API void lc_shutdown(void) {
 	if (!client) return;
+	lc_free_achievements();
 	lc_lock(&pending_lock);
 	memset(pending, 0, sizeof pending);
 	lc_unlock(&pending_lock);
@@ -228,8 +231,17 @@ LC_API void lc_load_game(uint32_t console_id, const char* path, const uint8_t* d
 	if (client) rc_client_begin_identify_and_load_game(client, console_id, path, data, size, load_done, NULL);
 }
 
+/*
+ * One frame first: rcheevos 12.5 crashed in rc_client_raise_mastery_event when
+ * a game was unloaded straight after its last achievement unlocked, reading a
+ * game it had already cleared. The frame delivers the pending event (and the
+ * person hears that they completed the set). rcheevos itself is unpatched.
+ */
 LC_API void lc_unload_game(void) {
-	if (client) rc_client_unload_game(client);
+	if (!client) return;
+	lc_free_achievements();
+	if (rc_client_is_game_loaded(client)) rc_client_do_frame(client);
+	rc_client_unload_game(client);
 }
 
 LC_API void lc_do_frame(void) {
@@ -266,4 +278,82 @@ LC_API uint32_t lc_memory_regions(void) { return regions.count; }
 
 LC_API uint32_t lc_read_memory(uint32_t address, uint8_t* buffer, uint32_t size) {
 	return rc_libretro_memory_read(&regions, address, buffer, size);
+}
+
+/* The loaded game, for the menu (interface version 2). */
+
+static void copy_text(char* out, size_t size, const char* s) {
+	if (!out || size == 0) return;
+	out[0] = '\0';
+	if (!s) return;
+	strncpy(out, s, size - 1);
+	out[size - 1] = '\0';
+}
+
+LC_API uint32_t lc_game(char* title, size_t title_size, char* badge, size_t badge_size, lc_summary_t* summary) {
+	const rc_client_game_t* game = client ? rc_client_get_game_info(client) : NULL;
+	copy_text(title, title_size, NULL);
+	copy_text(badge, badge_size, NULL);
+	if (summary) memset(summary, 0, sizeof *summary);
+	if (!game || game->id == 0) return 0;
+	copy_text(title, title_size, game->title);
+	copy_text(badge, badge_size, game->badge_name);
+	if (summary) {
+		rc_client_user_game_summary_t s;
+		memset(&s, 0, sizeof s);
+		rc_client_get_user_game_summary(client, &s);
+		summary->total = s.num_core_achievements;
+		summary->unlocked = s.num_unlocked_achievements;
+		summary->points = s.points_core;
+		summary->points_unlocked = s.points_unlocked;
+	}
+	return game->id;
+}
+
+static rc_client_achievement_list_t* listed;
+static uint32_t listed_count;
+
+LC_API void lc_free_achievements(void) {
+	if (listed) rc_client_destroy_achievement_list(listed);
+	listed = NULL;
+	listed_count = 0;
+}
+
+LC_API uint32_t lc_list_achievements(void) {
+	lc_free_achievements();
+	if (!client) return 0;
+	listed = rc_client_create_achievement_list(client, RC_CLIENT_ACHIEVEMENT_CATEGORY_CORE,
+		RC_CLIENT_ACHIEVEMENT_LIST_GROUPING_LOCK_STATE);
+	if (!listed) return 0;
+	for (uint32_t b = 0; b < listed->num_buckets; b++) listed_count += listed->buckets[b].num_achievements;
+	return listed_count;
+}
+
+LC_API int lc_achievement_at(uint32_t index, lc_achievement_t* out) {
+	if (!listed || !out || index >= listed_count) return 0;
+	for (uint32_t b = 0; b < listed->num_buckets; b++) {
+		const rc_client_achievement_bucket_t* bucket = &listed->buckets[b];
+		if (index >= bucket->num_achievements) {
+			index -= bucket->num_achievements;
+			continue;
+		}
+		const rc_client_achievement_t* a = bucket->achievements[index];
+		memset(out, 0, sizeof *out);
+		out->id = a->id;
+		out->points = a->points;
+		out->percent = a->measured_percent;
+		out->state = a->unlocked != RC_CLIENT_ACHIEVEMENT_UNLOCKED_NONE ? LC_ACHIEVEMENT_UNLOCKED : LC_ACHIEVEMENT_LOCKED;
+		if (bucket->bucket_type == RC_CLIENT_ACHIEVEMENT_BUCKET_UNSUPPORTED) out->state = LC_ACHIEVEMENT_UNSUPPORTED;
+		out->title = a->title;
+		out->description = a->description;
+		out->badge = a->badge_name;
+		out->progress = a->measured_progress;
+		return 1;
+	}
+	return 0;
+}
+
+LC_API size_t lc_rich_presence(char* buffer, size_t size) {
+	if (!client || !buffer || size == 0 || !rc_client_has_rich_presence(client)) return 0;
+	return rc_client_get_rich_presence_message(client, buffer, size);
 }

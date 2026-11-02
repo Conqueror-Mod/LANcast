@@ -695,3 +695,99 @@ describe("the core's own button names (2026-10-18)", () => {
     delete window.lancastRetroControls;
   });
 });
+
+describe("achievements while playing (ADR 0112)", () => {
+  const set = {
+    game_id: 1234,
+    title: "Sample Game",
+    total: 2,
+    unlocked: 1,
+    points: 15,
+    points_unlocked: 5,
+    achievements: [
+      { id: 2, title: "Second", description: "Do the next thing", points: 10, state: "locked", progress: "3/10" },
+      { id: 1, title: "First", description: "Do a thing", points: 5, state: "unlocked",
+        badge: "/api/retroachievements/media/Badge/00234.png" },
+    ],
+  };
+
+  it("offers nothing in the menu until the client says there is a set", async () => {
+    await render("/play/41");
+    emit({ kind: "started" });
+    emit({ kind: "achievement", event: "none" });
+    emit({ kind: "menu" });
+    expect(buttons().some((b) => b.textContent?.startsWith("Achievements"))).toBe(false);
+  });
+
+  it("pops up an unlock with its picture and points, and counts it", async () => {
+    await render("/play/41");
+    emit({ kind: "started" });
+    emit({ kind: "achievement", event: "ready", title: "Sample Game", total: 2, unlocked: 0 });
+    emit({ kind: "achievement", event: "unlocked", id: 1, title: "First", description: "Do a thing", points: 5,
+      badge: "/api/retroachievements/media/Badge/00234.png" });
+    const popup = host.querySelector(".ra-unlock")!;
+    expect(popup.textContent).toContain("Achievement unlocked · 5 pts");
+    expect(popup.textContent).toContain("First");
+    expect(popup.querySelector("img")!.getAttribute("src")).toBe("/api/retroachievements/media/Badge/00234.png");
+    emit({ kind: "menu" });
+    expect(button("Achievements: 1 of 2…")).toBeTruthy();
+  });
+
+  it("asks the client for the set on its page, and lists unlocked first", async () => {
+    await render("/play/41");
+    emit({ kind: "started" });
+    emit({ kind: "achievement", event: "ready", title: "Sample Game", total: 2, unlocked: 1 });
+    emit({ kind: "menu" });
+    await act(async () => button("Achievements: 1 of 2…").click());
+    expect(window.lancastRetroCommand).toHaveBeenCalledWith("achievements", "");
+    expect(host.textContent).toContain("Loading…");
+    emit({ kind: "achievements", set });
+    const rows = [...host.querySelectorAll(".ra-set__row")];
+    expect(rows.map((r) => r.querySelector(".ra-set__title")!.textContent)).toEqual(["First", "Second"]);
+    expect(rows[1].textContent).toContain("3/10");
+    expect(host.textContent).toContain("5 of 15 points");
+    await act(async () => button("Back").click());
+    expect(button("Resume")).toBeTruthy();
+  });
+
+  it("shows RetroAchievements' warning as a note, and says when nothing can be earned", async () => {
+    await render("/play/41");
+    emit({ kind: "started" });
+    emit({ kind: "achievement", event: "ready", title: "Sample Game", total: 2, unlocked: 0 });
+    emit({ kind: "menu" });
+    await act(async () => button("Achievements: 0 of 2…").click());
+    emit({
+      kind: "achievements",
+      set: {
+        ...set,
+        unlocked: 0,
+        warning: "Hardcore unlocks cannot be earned using this emulator.",
+        achievements: set.achievements.map((a) => ({ ...a, state: "unsupported" })),
+      },
+    });
+    expect(host.textContent).toContain("RetroAchievements: Hardcore unlocks cannot be earned using this emulator.");
+    expect(host.querySelector(".ra-set__none")!.textContent).toContain("can be earned with this console's emulator");
+    expect(host.querySelectorAll(".ra-set__row")).toHaveLength(2);
+  });
+
+  it("says earning is off, in the server's words, and where to turn it on", async () => {
+    await render("/play/41");
+    emit({ kind: "started" });
+    emit({ kind: "achievement", event: "off", text: "earning achievements is off; turn it on in your profile" });
+    emit({ kind: "menu" });
+    await act(async () => button("Achievements: off…").click());
+    expect(host.textContent).toContain("earning achievements is off");
+    expect(host.textContent).toContain("in your profile, under RetroAchievements");
+  });
+
+  it("shows what is being counted towards, and says when an unlock is waiting to be sent", async () => {
+    await render("/play/41");
+    emit({ kind: "started" });
+    emit({ kind: "achievement", event: "progress", title: "Second", progress: "3/10" });
+    expect(host.querySelector(".ra-progress")!.textContent).toBe("Second · 3/10");
+    emit({ kind: "achievement", event: "progress-hide" });
+    expect(host.querySelector(".ra-progress")).toBeNull();
+    emit({ kind: "achievement", event: "offline" });
+    expect(host.textContent).toContain("Unlocks will be sent when it can.");
+  });
+});

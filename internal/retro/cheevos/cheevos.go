@@ -41,7 +41,7 @@ func DLLPath() string {
 
 // InterfaceVersion is the shim's LC_INTERFACE_VERSION. Open refuses a DLL
 // that reports another, so a mismatched DLL fails at load, not mid-game.
-const InterfaceVersion = 1
+const InterfaceVersion = 2
 
 // ErrUnsupported is Open's answer where the DLL cannot be loaded at all.
 var ErrUnsupported = errors.New("cheevos: achievements run on Windows only")
@@ -105,6 +105,36 @@ type Event struct {
 	// Text is measured progress, a tracker's display, a submitted score, or
 	// a server error's message, by Type.
 	Text string
+}
+
+// GameInfo is the loaded game, for the game menu.
+type GameInfo struct {
+	ID    uint32
+	Title string
+	// Badge is the game's badge name, "112233".
+	Badge                  string
+	Total, Unlocked        uint32 // core achievements
+	Points, PointsUnlocked uint32
+}
+
+// ListedState is where one achievement stands.
+type ListedState uint32
+
+const (
+	Locked      ListedState = 0
+	Unlocked    ListedState = 1
+	Unsupported ListedState = 2 // the set uses something this core does not provide
+)
+
+// Listed is one of the loaded game's achievements, unlocked first.
+type Listed struct {
+	ID, Points  uint32
+	State       ListedState
+	Percent     float32
+	Title       string
+	Description string
+	Badge       string // badge name, "12345"
+	Progress    string // "3/10", or ""
 }
 
 // Op names what a Done call is the end of.

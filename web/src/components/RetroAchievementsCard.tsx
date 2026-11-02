@@ -128,6 +128,8 @@ export function RetroAchievementsCard() {
         </p>
       )}
 
+      <EarnWhilePlaying view={data} />
+
       {recent.length > 0 && (
         <>
           <span className="ra__sub">Unlocked in the last two weeks</span>
@@ -211,4 +213,91 @@ function awardLabel(kind: string): string {
     default:
       return kind.replace(/-/g, " ");
   }
+}
+
+/*
+ * Earning while playing (ADR 0112): the desktop player unlocks achievements
+ * as you play, softcore only. Turning it on asks for the RetroAchievements
+ * password once, which the server trades for a login token and does not
+ * keep. The Web API key above only reads; it cannot unlock anything.
+ */
+function EarnWhilePlaying({ view }: { view: RAView }) {
+  const qc = useQueryClient();
+  const [asking, setAsking] = useState(false);
+  const [password, setPassword] = useState("");
+  const on = useMutation({
+    mutationFn: () => apiPost<RAView>("/api/profile/retroachievements/play", { password }, "PUT"),
+    onSuccess: (v) => {
+      qc.setQueryData(KEY, v);
+      setPassword("");
+      setAsking(false);
+    },
+  });
+  const off = useMutation({
+    mutationFn: () => apiSend("/api/profile/retroachievements/play", "DELETE"),
+    onSuccess: () => qc.invalidateQueries({ queryKey: KEY }),
+  });
+
+  if (view.earning) {
+    return (
+      <div className="ra__earn">
+        <span className="ra__sub">Earning while playing</span>
+        <p className="ra__intro">
+          On. Games in the LANcast desktop app unlock achievements as you play, in casual (softcore) mode.
+          {view.unlocks_waiting > 0 &&
+            ` ${view.unlocks_waiting} ${view.unlocks_waiting === 1 ? "unlock is" : "unlocks are"} waiting to reach RetroAchievements.`}
+        </p>
+        <button className="ra__link" disabled={off.isPending} onClick={() => off.mutate()}>
+          Turn off
+        </button>
+        {off.isError && (
+          <p className="ra__problem" role="alert">
+            {errorMessage(off.error)}
+          </p>
+        )}
+      </div>
+    );
+  }
+
+  const submit = (e: FormEvent) => {
+    e.preventDefault();
+    on.mutate();
+  };
+  return (
+    <div className="ra__earn">
+      <span className="ra__sub">Earning while playing</span>
+      <p className="ra__intro">
+        Unlock achievements as you play in the LANcast desktop app, in casual (softcore) mode, with save states
+        and rewind still available. This needs your RetroAchievements password once; the server swaps it for a
+        sign-in token and does not keep it. While you play, RetroAchievements also sees what you are doing in the
+        game (its rich presence, such as "Level 3, 2 lives"); that can't be turned off on its own.
+      </p>
+      {!asking ? (
+        <button className="ra__button" onClick={() => setAsking(true)}>
+          Turn on
+        </button>
+      ) : (
+        <form className="ra__form" onSubmit={submit}>
+          <label className="ra__field">
+            <span>RetroAchievements password for {view.user}</span>
+            <input
+              type="password"
+              value={password}
+              autoComplete="off"
+              autoFocus
+              onChange={(e) => setPassword(e.target.value)}
+            />
+          </label>
+          <button className="ra__button" disabled={on.isPending || !password}>
+            {on.isPending ? "Checking…" : "Turn on"}
+          </button>
+        </form>
+      )}
+      {on.isError && (
+        <p className="ra__problem" role="alert">
+          {errorMessage(on.error)}
+        </p>
+      )}
+    </div>
+  );
 }

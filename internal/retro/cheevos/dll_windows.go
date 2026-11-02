@@ -50,6 +50,9 @@ var shimFuncs = []string{
 	"lc_unload_game", "lc_do_frame", "lc_idle", "lc_reset", "lc_progress_size",
 	"lc_serialize_progress", "lc_deserialize_progress", "lc_hash",
 	"lc_memory_regions", "lc_read_memory",
+	// Interface version 2: the game menu's Achievements page.
+	"lc_game", "lc_list_achievements", "lc_achievement_at", "lc_free_achievements",
+	"lc_rich_presence",
 }
 
 // Client is the one rcheevos client in this process.
@@ -305,6 +308,60 @@ func (c *Client) ReadMemory(address uint32, n int) []byte {
 	buf := make([]byte, n)
 	got, _, _ := c.procs["lc_read_memory"].Call(uintptr(address), uintptr(unsafe.Pointer(&buf[0])), uintptr(n))
 	return buf[:uint32(got)]
+}
+
+// lcSummary mirrors lc_summary_t.
+type lcSummary struct{ total, unlocked, points, pointsUnlocked uint32 }
+
+// Game is the loaded game and its counts; false when none is loaded.
+func (c *Client) Game() (GameInfo, bool) {
+	var title [256]byte
+	var badge [64]byte
+	var s lcSummary
+	id, _, _ := c.procs["lc_game"].Call(uintptr(unsafe.Pointer(&title[0])), uintptr(len(title)),
+		uintptr(unsafe.Pointer(&badge[0])), uintptr(len(badge)), uintptr(unsafe.Pointer(&s)))
+	if uint32(id) == 0 {
+		return GameInfo{}, false
+	}
+	return GameInfo{
+		ID: uint32(id), Title: goString(&title[0]), Badge: goString(&badge[0]),
+		Total: s.total, Unlocked: s.unlocked, Points: s.points, PointsUnlocked: s.pointsUnlocked,
+	}, true
+}
+
+// lcAchievement mirrors lc_achievement_t.
+type lcAchievement struct {
+	id, points, state                   uint32
+	percent                             float32
+	title, description, badge, progress *byte
+}
+
+// Achievements is the loaded game's core achievements, unlocked first.
+func (c *Client) Achievements() []Listed {
+	n, _, _ := c.procs["lc_list_achievements"].Call()
+	defer c.procs["lc_free_achievements"].Call()
+	out := make([]Listed, 0, uint32(n))
+	for i := uint32(0); i < uint32(n); i++ {
+		var a lcAchievement
+		if ok, _, _ := c.procs["lc_achievement_at"].Call(uintptr(i), uintptr(unsafe.Pointer(&a))); int32(ok) == 0 {
+			break
+		}
+		out = append(out, Listed{
+			ID: a.id, Points: a.points, State: ListedState(a.state), Percent: a.percent,
+			Title: goString(a.title), Description: goString(a.description),
+			Badge: goString(a.badge), Progress: goString(a.progress),
+		})
+	}
+	return out
+}
+
+// RichPresence is the game's rich presence line, "" when it has none.
+func (c *Client) RichPresence() string {
+	var buf [256]byte
+	if n, _, _ := c.procs["lc_rich_presence"].Call(uintptr(unsafe.Pointer(&buf[0])), uintptr(len(buf))); n == 0 {
+		return ""
+	}
+	return goString(&buf[0])
 }
 
 func (c *Client) freeGame() {

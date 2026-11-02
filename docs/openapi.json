@@ -3625,6 +3625,162 @@
         }
       }
     },
+    "/profile/retroachievements/play": {
+      "put": {
+        "operationId": "startEarningRetroAchievements",
+        "tags": [
+          "profile"
+        ],
+        "summary": "Earn achievements while playing",
+        "description": "ADR 0112. Takes your RetroAchievements password once, exchanges it with RetroAchievements for a login token, seals the token as the API key is sealed, and discards the password. Needs a connected account; a token for a different RetroAchievements user than the one connected is refused. Softcore only.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "password"
+                ],
+                "properties": {
+                  "password": {
+                    "type": "string",
+                    "description": "Your RetroAchievements password. Sent to RetroAchievements once and not kept."
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The caller's RetroAchievements.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RetroAchievementsView"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "409": {
+            "description": "No connected account, the feature is not available here, or the RetroAchievements name has changed since connecting.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "RetroAchievements could not be reached.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "operationId": "stopEarningRetroAchievements",
+        "tags": [
+          "profile"
+        ],
+        "summary": "Stop earning achievements while playing",
+        "description": "Deletes the sealed token, and any unlocks still waiting to be sent, which nothing could send without it.",
+        "responses": {
+          "204": {
+            "description": "Earning is off."
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      }
+    },
+    "/items/{id}/retroachievements": {
+      "post": {
+        "operationId": "sendRetroAchievementsRequest",
+        "tags": [
+          "retro"
+        ],
+        "summary": "Send one of the player's RetroAchievements requests",
+        "description": "ADR 0112. The desktop player's rcheevos builds every RetroAchievements request and posts it here with the game's stream ticket (`Authorization: Ticket …`) or a session. The server accepts only `login2`, `gameid`, `achievementsets`, `startsession`, `ping` and `awardachievement`, for the caller's connected RetroAchievements account, softcore (`h` absent or `0`) and carrying no password; puts the caller's token in place of the player's placeholder; sends it to RetroAchievements; and returns the answer with any `Token` replaced by the placeholder. An award made while RetroAchievements cannot be reached is kept and sent later with the time it waited added, and the player is told it unlocked (`queued`).",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            },
+            "description": "The game being played."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RetroAchievementsConnectRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "RetroAchievements' answer, for rcheevos.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RetroAchievementsConnectAnswer"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "description": "Earning is off for the caller (`earning_off`), or the feature is not available here.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "RetroAchievements could not be reached, for a request that is not an award.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/retroachievements/media/{dir}/{file}": {
       "get": {
         "operationId": "retroAchievementsMedia",
@@ -22811,10 +22967,50 @@
           }
         }
       },
+      "RetroAchievementsConnectRequest": {
+        "type": "object",
+        "required": [
+          "body"
+        ],
+        "properties": {
+          "body": {
+            "type": "string",
+            "maxLength": 65536,
+            "description": "The form rcheevos built (rc_api_request_t.post_data), with the placeholder token."
+          },
+          "user_agent_clause": {
+            "type": "string",
+            "description": "rcheevos' clause about itself, for the User-Agent RetroAchievements asks for."
+          }
+        }
+      },
+      "RetroAchievementsConnectAnswer": {
+        "type": "object",
+        "required": [
+          "status",
+          "body"
+        ],
+        "properties": {
+          "status": {
+            "type": "integer",
+            "description": "RetroAchievements' HTTP status."
+          },
+          "body": {
+            "type": "string",
+            "description": "RetroAchievements' answer, with any Token replaced by the placeholder."
+          },
+          "queued": {
+            "type": "boolean",
+            "description": "An award kept to send later."
+          }
+        }
+      },
       "RetroAchievementsView": {
         "type": "object",
         "required": [
           "available",
+          "earning",
+          "unlocks_waiting",
           "connected",
           "points",
           "softcore_points",
@@ -22850,6 +23046,14 @@
           },
           "true_points": {
             "type": "integer"
+          },
+          "earning": {
+            "type": "boolean",
+            "description": "Earning achievements while playing is on (ADR 0112)."
+          },
+          "unlocks_waiting": {
+            "type": "integer",
+            "description": "Unlocks kept while RetroAchievements could not be reached, waiting to be sent."
           },
           "rich_presence": {
             "type": "string"

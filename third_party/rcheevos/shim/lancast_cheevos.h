@@ -28,8 +28,10 @@
 extern "C" {
 #endif
 
-/* The version of this interface. Go refuses a DLL with another one. */
-#define LC_INTERFACE_VERSION 1
+/* The version of this interface. Go refuses a DLL with another one.
+ * 2 added the loaded game, its achievements and rich presence, for the
+ * game menu's Achievements page. */
+#define LC_INTERFACE_VERSION 2
 
 /* An event, flattened from rc_client_event_t so Go reads one fixed layout. */
 typedef struct lc_event_t {
@@ -105,6 +107,45 @@ LC_API int lc_hash(uint32_t console_id, const char* path, const uint8_t* data, s
  * tests: proves an address resolves through the map. Returns bytes read. */
 LC_API uint32_t lc_memory_regions(void);
 LC_API uint32_t lc_read_memory(uint32_t address, uint8_t* buffer, uint32_t size);
+
+/*
+ * The loaded game, for the game menu (interface version 2).
+ *
+ * lc_game copies the game's title and badge name and fills summary; it
+ * returns the game's RetroAchievements id, 0 when none is loaded.
+ */
+typedef struct lc_summary_t {
+	uint32_t total;           /* core achievements */
+	uint32_t unlocked;
+	uint32_t points;
+	uint32_t points_unlocked;
+} lc_summary_t;
+
+LC_API uint32_t lc_game(char* title, size_t title_size, char* badge, size_t badge_size, lc_summary_t* summary);
+
+/* One achievement of the loaded game. Its strings stay valid until
+ * lc_free_achievements, or the next lc_list_achievements. */
+enum { LC_ACHIEVEMENT_LOCKED = 0, LC_ACHIEVEMENT_UNLOCKED = 1, LC_ACHIEVEMENT_UNSUPPORTED = 2 };
+typedef struct lc_achievement_t {
+	uint32_t id;
+	uint32_t points;
+	uint32_t state;           /* LC_ACHIEVEMENT_* */
+	float percent;            /* measured percent */
+	const char* title;
+	const char* description;
+	const char* badge;        /* badge name, "12345" */
+	const char* progress;     /* measured progress, "3/10", or "" */
+} lc_achievement_t;
+
+/* lc_list_achievements builds the loaded game's core achievements, unlocked
+ * first, and returns how many; lc_achievement_at reads one (1 if index is in
+ * range). */
+LC_API uint32_t lc_list_achievements(void);
+LC_API int lc_achievement_at(uint32_t index, lc_achievement_t* out);
+LC_API void lc_free_achievements(void);
+
+/* The rich presence line ("Level 3, 2 lives"); 0 when the game has none. */
+LC_API size_t lc_rich_presence(char* buffer, size_t size);
 
 #ifdef __cplusplus
 }
