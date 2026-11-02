@@ -1,0 +1,60 @@
+
+goroutine 170 gp=0x3bbdd57f50e0 m=15 mp=0x3bbdd5601808 [running]:
+runtime.throw({0x7ff6989716c3?, 0x3bbdd5090000?})
+	runtime/panic.go:1229 +0x4d fp=0x3bbdd55b5d78 sp=0x3bbdd55b5d48 pc=0x7ff697d0204d
+syscall.compileCallback({0x7ff69883d920?, 0x3bbdd56ce0f0?}, 0xc8?)
+	runtime/syscall_windows.go:334 +0x496 fp=0x3bbdd55b5e78 sp=0x3bbdd55b5d78 pc=0x7ff697d05cd6
+syscall.NewCallback(...)
+	syscall/syscall_windows.go:235
+lancast/internal/clientwindow.Monitors()
+	lancast/internal/clientwindow/placement_windows.go:50 +0x6e fp=0x3bbdd55b5ed8 sp=0x3bbdd55b5e78 pc=0x7ff697f2b52e
+main.(*nativePlayer).watchLayout(0x3bbdd5144240, 0x2, 0x3bbdd548c620, {0x3bbdd52563c0, 0x5a})
+	lancast/cmd/lancast/displaymatch_windows.go:215 +0x1ad fp=0x3bbdd55b5fa8 sp=0x3bbdd55b5ed8 pc=0x7ff6986fb7ed
+main.(*nativePlayer).matchDisplay.gowrap1()
+	lancast/cmd/lancast/displaymatch_windows.go:116 +0x27 fp=0x3bbdd55b5fe0 sp=0x3bbdd55b5fa8 pc=0x7ff6986fb2a7
+runtime.goexit({})
+	runtime/asm_amd64.s:1771 +0x1 fp=0x3bbdd55b5fe8 sp=0x3bbdd55b5fe0 pc=0x7ff697d09881
+created by main.(*nativePlayer).matchDisplay in goroutine 243
+	lancast/cmd/lancast/displaymatch_windows.go:116 +0x1105
+
+goroutine 1 gp=0x3bbdd5102000 m=0 mp=0x7ff699dfeda0 [syscall, locked to thread]:
+runtime.cgocall(0x7ff697c92560, 0x7ff699dff0f0)
+	runtime/cgocall.go:167 +0x3e fp=0x3bbdd515d1c8 sp=0x3bbdd515d160 pc=0x7ff697cff23e
+syscall.syscalln(0x3bbdd515d210?, 0x7ff697cff79b?, {0x3bbdd52ceda0?, 0x1d0ea733b68?, 0x1d0a54d09e0?})
+	runtime/syscall_windows.go:431 +0x4e fp=0x3bbdd515d1e8 sp=0x3bbdd515d1c8 pc=0x7ff697d05dee
+syscall.SyscallN(0x3bbdd52ceda0?, {0x3bbdd52ceda0?, 0x0?, 0x7ff697f26382?})
+	syscall/dll_windows.go:99 +0x1e fp=0x3bbdd515d220 sp=0x3bbdd515d1e8 pc=0x7ff697d1b8be
+golang.org/x/sys/windows.(*Proc).Call(0x7ff697c9f2c5?, {0x3bbdd52ceda0?, 0x7ff69880be40?, 0x1?})
+	golang.org/x/sys@v0.47.0/windows/dll_windows.go:166 +0x1c fp=0x3bbdd515d260 sp=0x3bbdd515d220 pc=0x7ff697de603c
+golang.org/x/sys/windows.(*LazyProc).Call(0x7ff699ddfd40, {0x3bbdd52ceda0, 0x4, 0x4})
+	golang.org/x/sys@v0.47.0/windows/dll_windows.go:316 +0x4a fp=0x3bbdd515d290 sp=0x3bbdd515d260 pc=0x7ff697de648a
+lancast/internal/webview2.(*webview).Run(0x3bbdd55149c0)
+	lancast/internal/webview2/webview.go:475 +0x85 fp=0x3bbdd515d328 sp=0x3bbdd515d290 pc=0x7ff697f25f25
+lancast/internal/clientwindow.open({{0x3bbdd519a9c0, 0x24}, {0x0, 0x0}, {0x7ff698950bfc, 0x7}, {0x7ff69921667c, 0x6}, 0x500, 0x320, ...})
+	lancast/internal/clientwindow/clientwindow_windows.go:164 +0xc48 fp=0x3bbdd515d738 sp=0x3bbdd515d328 pc=0x7ff697f27a08
+lancast/internal/clientwindow.Open(...)
+	lancast/internal/clientwindow/clientwindow.go:168
+main.runWindow(0x3bbdd520c480, 0x3bbdd541c3f0)
+	lancast/cmd/lancast/main.go:395 +0xe72 fp=0x3bbdd515dcb8 sp=0x3bbdd515d738 pc=0x7ff698705592
+main.main()
+	lancast/cmd/lancast/main.go:219 +0x8c5 fp=0x3bbdd515df48 sp=0x3bbdd515dcb8 pc=0x7ff698704545
+runtime.main()
+	runtime/proc.go:290 +0x2c7 fp=0x3bbdd515dfe0 sp=0x3bbdd515df48 pc=0x7ff697ccf627
+runtime.goexit({})
+	runtime/asm_amd64.s:1771 +0x1 fp=0x3bbdd515dfe8 sp=0x3bbdd515dfe0 pc=0x7ff697d09881
+
+goroutine 2 gp=0x3bbdd5102780 m=nil [force gc (idle), 65 minutes]:
+runtime.gopark(0x0?, 0x0?, 0x0?, 0x0?, 0x0?)
+	runtime/proc.go:462 +0xce fp=0x3bbdd5105fa8 sp=0x3bbdd5105f88 pc=0x7ff697d0216e
+runtime.goparkunlock(...)
+	runtime/proc.go:468
+runtime.forcegchelper()
+	runtime/proc.go:375 +0xb8 fp=0x3bbdd5105fe0 sp=0x3bbdd5105fa8 pc=0x7ff697ccf918
+runtime.goexit({})
+	runtime/asm_amd64.s:1771 +0x1 fp=0x3bbdd5105fe8 sp=0x3bbdd5105fe0 pc=0x7ff697d09881
+created by runtime.init.7 in goroutine 1
+	runtime/proc.go:363 +0x1a
+
+goroutine 3 gp=0x3bbdd5102b40 m=nil [GC sweep wait]:
+runtime.gopark(0x1?, 0x0?, 0x0?, 0x0?, 0x0?)
+	runtime/proc.go:462 +0xce fp=0x3bbdd5107f88 sp=0x3bbdd5107f68 pc=0x7ff697d0216e
