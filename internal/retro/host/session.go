@@ -154,19 +154,23 @@ type Session struct {
 
 	// Core-thread state.
 	format    libretro.PixelFormat
-	vars      map[string]libretro.Variable
-	varsDirty bool
-	av        libretro.AVInfo
-	bgra      []byte
-	pads      [2]Pad
-	menu      MenuRequest
-	nav       MenuNav
-	paused    bool
-	stopping  bool
-	sramSum   uint32
-	sramAt    time.Time
-	hw        *libretro.HWRender // what the core asked for, if anything
-	glReady   bool
+	memoryMap []libretro.MemoryDescriptor
+	// ticks counts frame steps, for logMemory; memoryLogged is set once it ran.
+	ticks        int
+	memoryLogged bool
+	vars         map[string]libretro.Variable
+	varsDirty    bool
+	av           libretro.AVInfo
+	bgra         []byte
+	pads         [2]Pad
+	menu         MenuRequest
+	nav          MenuNav
+	paused       bool
+	stopping     bool
+	sramSum      uint32
+	sramAt       time.Time
+	hw           *libretro.HWRender // what the core asked for, if anything
+	glReady      bool
 
 	pending sync.WaitGroup // uploads in flight
 
@@ -457,6 +461,9 @@ func (s *Session) run(ctx context.Context) (err error) {
 		runStart := time.Now()
 		s.runTick()
 		s.frameDone(time.Since(runStart))
+		if s.ticks++; s.ticks == memoryLogAfter {
+			s.logMemory(core)
+		}
 		if resume != nil {
 			resumeTries++
 			switch {
@@ -1096,6 +1103,44 @@ func (s *Session) announceSpeed(mode string) {
 	}
 	s.shown = mode
 	s.cfg.OnEvent(Event{Kind: "speed", Text: mode})
+}
+
+/*
+ * SetMemoryMap keeps the core's memory map (MemoryMapSink), for
+ * achievements (ADR 0112). A core sends it during LoadGame, on the core
+ * thread, and may send a new one later; the newest wins.
+ */
+func (s *Session) SetMemoryMap(m []libretro.MemoryDescriptor) {
+	s.memoryMap = m
+	if s.memoryLogged {
+		// Later than the line below was written, so it says so itself.
+		s.cfg.Log.Info("retro session: memory map", "core", s.info.LibraryName,
+			"regions", len(m), "map", libretro.MemoryMapSummary(m), "late", true)
+	}
+}
+
+// MemoryMap is the core's memory map, or nil for a core that sent none. Core
+// thread only, as the memory it points at is.
+func (s *Session) MemoryMap() []libretro.MemoryDescriptor { return s.memoryMap }
+
+// memoryLogAfter is how many frames run before logMemory reports. Not at
+// LoadGame: mGBA and Mupen64Plus-Next send their maps once they are running,
+// and Mupen's system RAM read as empty straight after loading. A line written
+// then said "no memory map" for cores that have one.
+const memoryLogAfter = 60
+
+// logMemory says once per game how this core exposes its memory: a map, or
+// only a system RAM block. Which of the cores LANcast ships send a map is
+// measured from this line, not assumed (ADR 0112).
+func (s *Session) logMemory(core libretro.Core) {
+	s.memoryLogged = true
+	if len(s.memoryMap) > 0 {
+		s.cfg.Log.Info("retro session: memory map", "core", s.info.LibraryName,
+			"regions", len(s.memoryMap), "map", libretro.MemoryMapSummary(s.memoryMap))
+		return
+	}
+	s.cfg.Log.Info("retro session: no memory map", "core", s.info.LibraryName,
+		"system_ram", len(core.Memory(libretro.MemorySystemRAM)))
 }
 
 /*

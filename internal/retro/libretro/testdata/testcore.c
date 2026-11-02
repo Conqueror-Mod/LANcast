@@ -85,10 +85,29 @@ EXPORT void retro_get_system_av_info(struct retro_system_av_info *av) {
 EXPORT void retro_set_controller_port_device(unsigned port, unsigned device) { (void)port; (void)device; }
 EXPORT void retro_reset(void) { counter = 0; }
 
+/* SET_MEMORY_MAPS (RETRO_ENVIRONMENT_SET_MEMORY_MAPS | EXPERIMENTAL), laid
+ * out as libretro.h declares it. */
+struct retro_memory_descriptor {
+	uint64_t flags; void *ptr; size_t offset, start, select, disconnect, len;
+	const char *addrspace;
+};
+struct retro_memory_map { const struct retro_memory_descriptor *descriptors; unsigned num_descriptors; };
+static uint8_t wram[32];
+
 EXPORT bool retro_load_game(const struct retro_game_info *game) {
 	if (!game || !game->data || game->size == 0) return false;
 	seed = ((const uint8_t *)game->data)[0];
 	sram[15] = (uint8_t)game->size;
+	wram[0] = 0xA5; wram[31] = 0x5A;
+	/* On the stack, as real cores often have it: the host must copy the
+	 * descriptors during the call, not keep this pointer. */
+	struct retro_memory_descriptor d[3] = {
+		{ 1 << 2, wram, 0, 0x02000000, 0, 0, sizeof wram, NULL },        /* system RAM */
+		{ 1 << 3, sram, 4, 0x0E000000, 0, 0, sizeof sram - 4, "SRAM" },  /* save RAM, offset */
+		{ 1 << 0, NULL, 0, 0x08000000, 0, 0, 0x100, NULL },               /* ROM, unexposed */
+	};
+	struct retro_memory_map m = { d, 3 };
+	env(36 | 0x10000, &m);
 	return true;
 }
 

@@ -11,6 +11,7 @@ import (
 	"runtime"
 	"sync"
 	"testing"
+	"unsafe"
 )
 
 /*
@@ -69,7 +70,10 @@ type recorder struct {
 	sysDir   string
 	polls    int
 	messages []string
+	memMap   []MemoryDescriptor
 }
+
+func (r *recorder) SetMemoryMap(m []MemoryDescriptor) { r.memMap = m }
 
 func (r *recorder) SetPixelFormat(f PixelFormat) bool { r.format = f; return true }
 func (r *recorder) SystemDirectory() string           { return r.sysDir }
@@ -163,6 +167,26 @@ func TestBindingAgainstARealCore(t *testing.T) {
 	}
 	if core.Memory(MemorySystemRAM) != nil {
 		t.Error("a region the core does not expose came back non-nil")
+	}
+
+	// The memory map, copied out of descriptors the core built on its stack.
+	if len(rec.memMap) != 3 {
+		t.Fatalf("memory map = %+v, want 3 regions", rec.memMap)
+	}
+	ram, save, rom := rec.memMap[0], rec.memMap[1], rec.memMap[2]
+	if ram.Flags != MemDescSystemRAM || ram.Start != 0x02000000 || ram.Len != 32 || ram.AddrSpace != "" || ram.Ptr == 0 {
+		t.Errorf("system RAM region = %+v", ram)
+	} else if b := unsafe.Slice((*byte)(cPointer(ram.Ptr)), ram.Len); b[0] != 0xA5 || b[31] != 0x5A {
+		t.Errorf("system RAM through its pointer = % x, want a5 … 5a", b)
+	}
+	if save.Flags != MemDescSaveRAM || save.Offset != 4 || save.Start != 0x0E000000 || save.Len != 12 || save.AddrSpace != "SRAM" {
+		t.Errorf("save RAM region = %+v", save)
+	}
+	if rom.Flags != MemDescConst || rom.Ptr != 0 || rom.Len != 0x100 {
+		t.Errorf("ROM region = %+v", rom)
+	}
+	if got, want := MemoryMapSummary(rec.memMap), "02000000+20 ram SRAM:0e000000+c save 08000000+100 rom,unexposed"; got != want {
+		t.Errorf("summary = %q, want %q", got, want)
 	}
 
 	state := make([]byte, core.SerializeSize())

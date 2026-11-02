@@ -552,6 +552,15 @@ func (c *dllCore) environment(cmd uint32, data unsafe.Pointer) bool {
 			ds.SetInputDescriptors(out)
 		}
 		return true
+	case EnvSetMemoryMaps:
+		// Where the console's memory is, for achievements (ADR 0112). Taken
+		// as a copy: the descriptor array is the core's, and a core may free
+		// it once the call returns. The regions it points at stay valid while
+		// the game is loaded.
+		if ms, ok := fe.(MemoryMapSink); ok && data != nil {
+			ms.SetMemoryMap(parseMemoryMap((*retroMemoryMap)(data)))
+		}
+		return true
 	case EnvSetPerformanceLevel, EnvSetControllerInfo,
 		EnvSetSupportNoGame, EnvSetSerializationQuirks:
 		// Acknowledged and ignored: nothing here changes what the host does.
@@ -656,6 +665,49 @@ func logCB(level, format uintptr) uintptr {
 
 // retroInputDescriptor is struct retro_input_descriptor: four unsigneds and
 // a const char *, the array ended by a null description.
+// retroMemoryMap is struct retro_memory_map.
+type retroMemoryMap struct {
+	descriptors *retroMemoryDescriptor
+	count       uint32
+}
+
+// retroMemoryDescriptor is struct retro_memory_descriptor: a uint64 of flags,
+// then pointers and size_t fields, all 8 bytes on 64-bit Windows.
+type retroMemoryDescriptor struct {
+	flags      uint64
+	ptr        uintptr
+	offset     uintptr
+	start      uintptr
+	sel        uintptr
+	disconnect uintptr
+	length     uintptr
+	addrspace  *byte
+}
+
+// maxMemoryDescriptors bounds what a core's count is believed for. Real maps
+// have a handful of regions; RetroArch's largest known is under 100.
+const maxMemoryDescriptors = 1024
+
+// parseMemoryMap copies a core's memory map out of its C layout.
+func parseMemoryMap(m *retroMemoryMap) []MemoryDescriptor {
+	if m == nil || m.descriptors == nil || m.count == 0 {
+		return nil
+	}
+	n := int(m.count)
+	if n > maxMemoryDescriptors {
+		n = maxMemoryDescriptors
+	}
+	out := make([]MemoryDescriptor, 0, n)
+	for _, d := range unsafe.Slice(m.descriptors, n) {
+		out = append(out, MemoryDescriptor{
+			Flags: d.flags, Ptr: d.ptr, Offset: uint64(d.offset), Start: uint64(d.start),
+			Select: uint64(d.sel), Disconnect: uint64(d.disconnect), Len: uint64(d.length),
+			AddrSpace: goString(d.addrspace),
+		})
+	}
+	return out
+}
+
 type retroInputDescriptor struct {
 	port, device, index, id uint32
 	description             *byte
