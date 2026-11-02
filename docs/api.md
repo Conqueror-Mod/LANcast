@@ -1284,7 +1284,7 @@ else's.
 ### `PUT` · `DELETE /api/profile/retroachievements/play`
 
 Earning achievements while playing in the desktop app
-([ADR 0112](adr/0112-achievements-are-earned-in-the-desktop-player.md)).
+([ADR 0112](adr/0112-achievements-are-earned-through-the-server.md)).
 Softcore only.
 
 - `PUT {password}` needs a connected account. The server sends your

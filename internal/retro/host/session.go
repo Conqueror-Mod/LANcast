@@ -109,9 +109,12 @@ type Option struct {
  * stepping back is not playing.
  */
 type Achievements interface {
-	// Start loads the game's set, after the core has loaded the game (so its
-	// memory maps are known).
-	Start(core libretro.Core, path string, data []byte) error
+	// Start loads the game's set, once the core has run memoryLogAfter
+	// frames: mGBA and Mupen64Plus-Next send their memory maps only once they
+	// are running, so a set started at LoadGame would read nothing on them.
+	// Calls before it (a Continue's progress, a pause) are the runtime's to
+	// hold or ignore.
+	Start(mem GameMemory, path string, data []byte) error
 	Frame()
 	// Idle hands over network answers while the game is paused.
 	Idle()
@@ -124,6 +127,15 @@ type Achievements interface {
 	List()
 	// Stop is called before the core unloads the game.
 	Stop()
+}
+
+// GameMemory is the game's memory, for Achievements.Start: the core's map if
+// it sent one, and its system and save RAM blocks. All of it is the core's,
+// valid until the game unloads.
+type GameMemory struct {
+	Map       []libretro.MemoryDescriptor
+	SystemRAM []byte
+	SaveRAM   []byte
 }
 
 // Config is one game session.
@@ -181,19 +193,23 @@ type Session struct {
 
 	// Core-thread state.
 	format    libretro.PixelFormat
-	vars      map[string]libretro.Variable
-	varsDirty bool
-	av        libretro.AVInfo
-	bgra      []byte
-	pads      [2]Pad
-	menu      MenuRequest
-	nav       MenuNav
-	paused    bool
-	stopping  bool
-	sramSum   uint32
-	sramAt    time.Time
-	hw        *libretro.HWRender // what the core asked for, if anything
-	glReady   bool
+	memoryMap []libretro.MemoryDescriptor
+	// ticks counts frame steps, for logMemory; memoryLogged is set once it ran.
+	ticks        int
+	memoryLogged bool
+	vars         map[string]libretro.Variable
+	varsDirty    bool
+	av           libretro.AVInfo
+	bgra         []byte
+	pads         [2]Pad
+	menu         MenuRequest
+	nav          MenuNav
+	paused       bool
+	stopping     bool
+	sramSum      uint32
+	sramAt       time.Time
+	hw           *libretro.HWRender // what the core asked for, if anything
+	glReady      bool
 
 	pending sync.WaitGroup // uploads in flight
 
@@ -431,12 +447,6 @@ func (s *Session) run(ctx context.Context) (err error) {
 	}
 	core.SetControllerPortDevice(0, libretro.DeviceJoypad)
 	core.SetControllerPortDevice(1, libretro.DeviceJoypad)
-	if a := s.cfg.Achievements; a != nil {
-		if err := a.Start(core, s.cfg.GamePath, s.cfg.GameData); err != nil {
-			s.cfg.Log.Warn("retro session: achievements unavailable", "error", err)
-			s.cfg.Achievements = nil
-		}
-	}
 
 	if s.cfg.Audio != nil {
 		if err := s.cfg.Audio.Open(int(s.av.SampleRate + 0.5)); err != nil {
@@ -497,6 +507,10 @@ func (s *Session) run(ctx context.Context) (err error) {
 		runStart := time.Now()
 		s.runTick()
 		s.frameDone(time.Since(runStart))
+		if s.ticks++; s.ticks == memoryLogAfter {
+			s.logMemory(core)
+			s.startAchievements(core)
+		}
 		if resume != nil {
 			resumeTries++
 			switch {
@@ -698,6 +712,22 @@ func (s *Session) serialize() ([]byte, bool) {
 		data = withProgress(data, a.Progress())
 	}
 	return data, true
+}
+
+// startAchievements loads the game's set, against its memory as the core
+// now describes it.
+func (s *Session) startAchievements(core libretro.Core) {
+	a := s.cfg.Achievements
+	if a == nil {
+		return
+	}
+	mem := GameMemory{Map: s.memoryMap, SystemRAM: core.Memory(libretro.MemorySystemRAM),
+		SaveRAM: core.Memory(libretro.MemorySaveRAM)}
+	if err := a.Start(mem, s.cfg.GamePath, s.cfg.GameData); err != nil {
+		s.cfg.Log.Warn("retro session: achievements unavailable", "error", err)
+		a.Stop()
+		s.cfg.Achievements = nil
+	}
 }
 
 // setProgress hands a loaded state's achievement progress to rcheevos.
@@ -1170,6 +1200,44 @@ func (s *Session) announceSpeed(mode string) {
 	}
 	s.shown = mode
 	s.cfg.OnEvent(Event{Kind: "speed", Text: mode})
+}
+
+/*
+ * SetMemoryMap keeps the core's memory map (MemoryMapSink), for
+ * achievements (ADR 0112). A core sends it during LoadGame, on the core
+ * thread, and may send a new one later; the newest wins.
+ */
+func (s *Session) SetMemoryMap(m []libretro.MemoryDescriptor) {
+	s.memoryMap = m
+	if s.memoryLogged {
+		// Later than the line below was written, so it says so itself.
+		s.cfg.Log.Info("retro session: memory map", "core", s.info.LibraryName,
+			"regions", len(m), "map", libretro.MemoryMapSummary(m), "late", true)
+	}
+}
+
+// MemoryMap is the core's memory map, or nil for a core that sent none. Core
+// thread only, as the memory it points at is.
+func (s *Session) MemoryMap() []libretro.MemoryDescriptor { return s.memoryMap }
+
+// memoryLogAfter is how many frames run before logMemory reports. Not at
+// LoadGame: mGBA and Mupen64Plus-Next send their maps once they are running,
+// and Mupen's system RAM read as empty straight after loading. A line written
+// then said "no memory map" for cores that have one.
+const memoryLogAfter = 60
+
+// logMemory says once per game how this core exposes its memory: a map, or
+// only a system RAM block. Which of the cores LANcast ships send a map is
+// measured from this line, not assumed (ADR 0112).
+func (s *Session) logMemory(core libretro.Core) {
+	s.memoryLogged = true
+	if len(s.memoryMap) > 0 {
+		s.cfg.Log.Info("retro session: memory map", "core", s.info.LibraryName,
+			"regions", len(s.memoryMap), "map", libretro.MemoryMapSummary(s.memoryMap))
+		return
+	}
+	s.cfg.Log.Info("retro session: no memory map", "core", s.info.LibraryName,
+		"system_ram", len(core.Memory(libretro.MemorySystemRAM)))
 }
 
 /*

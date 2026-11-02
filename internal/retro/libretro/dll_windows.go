@@ -165,60 +165,7 @@ type dllCore struct {
 
 	// The core's own hardware-context callbacks, when it asked for one.
 	contextReset, contextDestroy uintptr
-
-	// memMap is a C copy of the memory map the core declared, and its
-	// descriptors; 0 when it declared none. Freed with the game.
-	memMap, memDescs unsafe.Pointer
 }
-
-// retroMemoryDescriptor and retroMemoryMap mirror libretro.h on 64-bit
-// Windows: eight 8-byte fields, and a pointer with a count.
-type retroMemoryDescriptor struct {
-	flags                                  uint64
-	ptr                                    unsafe.Pointer
-	offset, start, sel, disconnect, length uintptr
-	addrspace                              *byte
-}
-
-type retroMemoryMap struct {
-	descriptors unsafe.Pointer
-	num         uint32
-}
-
-// maxMemoryDescriptors bounds what is copied from a core. Real cores declare
-// a handful; this stops a bad count from walking off the end of memory.
-const maxMemoryDescriptors = 256
-
-func (c *dllCore) setMemoryMap(data unsafe.Pointer) bool {
-	c.freeMemoryMap()
-	m := (*retroMemoryMap)(data)
-	if m.descriptors == nil || m.num == 0 || m.num > maxMemoryDescriptors {
-		return false
-	}
-	size := unsafe.Sizeof(retroMemoryDescriptor{})
-	descs := cAlloc(uintptr(m.num) * size)
-	for i := uint32(0); i < m.num; i++ {
-		src := (*retroMemoryDescriptor)(unsafe.Add(m.descriptors, uintptr(i)*size))
-		dst := (*retroMemoryDescriptor)(unsafe.Add(descs, uintptr(i)*size))
-		*dst = *src
-		if src.addrspace != nil {
-			dst.addrspace = (*byte)(c.cstr(goString(src.addrspace)))
-		}
-	}
-	mm := cAlloc(unsafe.Sizeof(retroMemoryMap{}))
-	*(*retroMemoryMap)(mm) = retroMemoryMap{descriptors: descs, num: m.num}
-	c.memMap, c.memDescs = mm, descs
-	return true
-}
-
-func (c *dllCore) freeMemoryMap() {
-	cFree(c.memMap)
-	cFree(c.memDescs)
-	c.memMap, c.memDescs = nil, nil
-}
-
-// MemoryMap is the map the core declared, or 0 (MemoryMapper).
-func (c *dllCore) MemoryMap() uintptr { return uintptr(c.memMap) }
 
 var coreFuncs = []string{
 	"retro_set_environment", "retro_set_video_refresh", "retro_set_audio_sample",
@@ -391,7 +338,6 @@ func (c *dllCore) UnloadGame() {
 		c.loaded = false
 	}
 	c.freeGame()
-	c.freeMemoryMap()
 }
 
 func (c *dllCore) Close() {
@@ -454,10 +400,6 @@ func environmentCB(cmd, data uintptr) uintptr {
 func (c *dllCore) environment(cmd uint32, data unsafe.Pointer) bool {
 	fe := c.fe
 	switch cmd {
-	case EnvSetMemoryMaps:
-		// Kept for RetroAchievements (ADR 0112), which reads a game's memory
-		// through it on cores that describe their memory this way.
-		return data != nil && c.setMemoryMap(data)
 	case EnvGetCanDupe:
 		if data != nil {
 			*(*bool)(data) = true
@@ -610,6 +552,15 @@ func (c *dllCore) environment(cmd uint32, data unsafe.Pointer) bool {
 			ds.SetInputDescriptors(out)
 		}
 		return true
+	case EnvSetMemoryMaps:
+		// Where the console's memory is, for achievements (ADR 0112). Taken
+		// as a copy: the descriptor array is the core's, and a core may free
+		// it once the call returns. The regions it points at stay valid while
+		// the game is loaded.
+		if ms, ok := fe.(MemoryMapSink); ok && data != nil {
+			ms.SetMemoryMap(parseMemoryMap((*retroMemoryMap)(data)))
+		}
+		return true
 	case EnvSetPerformanceLevel, EnvSetControllerInfo,
 		EnvSetSupportNoGame, EnvSetSerializationQuirks:
 		// Acknowledged and ignored: nothing here changes what the host does.
@@ -714,6 +665,49 @@ func logCB(level, format uintptr) uintptr {
 
 // retroInputDescriptor is struct retro_input_descriptor: four unsigneds and
 // a const char *, the array ended by a null description.
+// retroMemoryMap is struct retro_memory_map.
+type retroMemoryMap struct {
+	descriptors *retroMemoryDescriptor
+	count       uint32
+}
+
+// retroMemoryDescriptor is struct retro_memory_descriptor: a uint64 of flags,
+// then pointers and size_t fields, all 8 bytes on 64-bit Windows.
+type retroMemoryDescriptor struct {
+	flags      uint64
+	ptr        uintptr
+	offset     uintptr
+	start      uintptr
+	sel        uintptr
+	disconnect uintptr
+	length     uintptr
+	addrspace  *byte
+}
+
+// maxMemoryDescriptors bounds what a core's count is believed for. Real maps
+// have a handful of regions; RetroArch's largest known is under 100.
+const maxMemoryDescriptors = 1024
+
+// parseMemoryMap copies a core's memory map out of its C layout.
+func parseMemoryMap(m *retroMemoryMap) []MemoryDescriptor {
+	if m == nil || m.descriptors == nil || m.count == 0 {
+		return nil
+	}
+	n := int(m.count)
+	if n > maxMemoryDescriptors {
+		n = maxMemoryDescriptors
+	}
+	out := make([]MemoryDescriptor, 0, n)
+	for _, d := range unsafe.Slice(m.descriptors, n) {
+		out = append(out, MemoryDescriptor{
+			Flags: d.flags, Ptr: d.ptr, Offset: uint64(d.offset), Start: uint64(d.start),
+			Select: uint64(d.sel), Disconnect: uint64(d.disconnect), Len: uint64(d.length),
+			AddrSpace: goString(d.addrspace),
+		})
+	}
+	return out
+}
+
 type retroInputDescriptor struct {
 	port, device, index, id uint32
 	description             *byte

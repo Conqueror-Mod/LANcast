@@ -6,15 +6,14 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
-
-	"lancast/internal/retro/libretro"
 )
 
 // fakeAchievements records what the session asked of it (ADR 0112).
 type fakeAchievements struct {
 	mu            sync.Mutex
 	started       int
-	startedLoaded bool // the core had loaded the game when Start came
+	startedLoaded bool  // the core had loaded the game when Start came
+	startedAfter  int64 // frames the core had run when Start came
 	path          string
 	frames        atomic.Int64
 	idles         atomic.Int64
@@ -27,13 +26,20 @@ type fakeAchievements struct {
 	core          *fakeCore
 }
 
-func (a *fakeAchievements) Start(core libretro.Core, path string, _ []byte) error {
+func (a *fakeAchievements) Start(_ GameMemory, path string, _ []byte) error {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	a.started++
 	a.path = path
 	a.startedLoaded = a.core.loaded
+	a.startedAfter = int64(a.core.counter.Load())
 	return nil
+}
+
+func (a *fakeAchievements) hasStarted() bool {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return a.started > 0
 }
 func (a *fakeAchievements) Frame() { a.frames.Add(1) }
 func (a *fakeAchievements) Idle()  { a.idles.Add(1) }
@@ -73,12 +79,13 @@ func startWithAchievements(t *testing.T, mutate func(*Config)) (*harness, *fakeA
 	return h, a
 }
 
-// Started once the game is loaded, told of every played frame and of a
-// reset, kept going while paused, and stopped before the game unloads.
+// Started once the game has run long enough to have sent its memory map,
+// told of every played frame and of a reset, kept going while paused, and
+// stopped before the game unloads.
 func TestAchievementsFollowTheGame(t *testing.T) {
 	h, a := startWithAchievements(t, nil)
 	deadline := time.Now().Add(5 * time.Second)
-	for a.frames.Load() < 5 && time.Now().Before(deadline) {
+	for !a.hasStarted() && time.Now().Before(deadline) {
 		time.Sleep(5 * time.Millisecond)
 	}
 	h.s.Reset()
@@ -96,6 +103,9 @@ func TestAchievementsFollowTheGame(t *testing.T) {
 	defer a.mu.Unlock()
 	if a.started != 1 || !a.startedLoaded || a.path != `C:\games\Sample.nes` {
 		t.Errorf("start: %d times, after load %v, path %q", a.started, a.startedLoaded, a.path)
+	}
+	if a.startedAfter < memoryLogAfter {
+		t.Errorf("started after %d frames; a core may not have sent its map before %d", a.startedAfter, memoryLogAfter)
 	}
 	if a.frames.Load() < 5 || a.idles.Load() == 0 {
 		t.Errorf("frames %d, idles %d", a.frames.Load(), a.idles.Load())

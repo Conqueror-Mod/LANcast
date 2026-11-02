@@ -183,8 +183,8 @@ is in the [Feature backlog](#feature-backlog) entry it names.*
   member account, once, for 7 days, with its limits set before anything is
   seen. Schema 84.
 - **In-play RetroAchievements** — unlocks while you play (rcheevos). **Built,
-  unreleased** (PR #989, [ADR 0112](adr/0112-achievements-are-earned-in-the-desktop-player.md)):
-  softcore, in the desktop player, through the server, which holds the token
+  unreleased** (PR #989, [ADR 0112](adr/0112-achievements-are-earned-through-the-server.md)):
+  casual (softcore), in the desktop player, through the server, which holds the token
   and keeps unlocks that cannot be sent yet. Schema 87. A real-account test in
   the installed app is owed. The profile half shipped in v0.9.88.
 

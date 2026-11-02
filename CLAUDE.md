@@ -47,7 +47,9 @@ internal/retro/    retro games (ADR 0073): romhash/ identifies a dump, retrodb/
                    the pinned DATs, identify/ the worker, saves/ the server's
                    copies, and the desktop player — libretro/ (syscall binding),
                    host/ (the session), remote/ (files and saves by ticket),
-                   cores/ (which core plays what, fetched from libretro)
+                   cores/ (which core plays what, fetched from libretro),
+                   cheevos/ (rcheevos in lancast-cheevos.dll, built from
+                   third_party/rcheevos; ADR 0112)
 internal/knownserver/ which servers this client trusts, and by which key (ADR 0070)
 internal/comic/    comics (ADR 0101): a Book is a .cbz or a .pdf; pdf/ finds the one
                    picture a PDF page shows, never renders (ADR 0102) and is fuzzed
@@ -55,7 +57,7 @@ cmd/lancast/       LANcast.exe: the app (window + tray) and, by subcommand, the
                    server (ADR 0080). The window itself is internal/clientwindow,
                    internal/webview2 and internal/certpin — not subdirectories
                    of this one, which is only the entrypoint and its bindings.
-docs/adr/          decision records (111 and counting — read before re-deciding)
+docs/adr/          decision records (112 and counting — read before re-deciding)
 ```
 
 ## Rules

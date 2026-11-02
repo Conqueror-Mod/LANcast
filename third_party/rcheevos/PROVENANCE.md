@@ -1,59 +1,66 @@
-# rcheevos — RetroAchievements' own library, built by LANcast
+# rcheevos — RetroAchievements in the desktop player
 
-The desktop player earns achievements by running
-[rcheevos](https://github.com/RetroAchievements/rcheevos), the library every
-RetroAchievements-approved emulator uses, against the game's memory
-([ADR 0112](../../docs/adr/0112-achievements-are-earned-in-the-desktop-player.md)).
+The desktop player earns achievements through rcheevos, RetroAchievements' own
+C library, built into `lancast-cheevos.dll` with a small shim of LANcast's and
+loaded through syscall like libmpv and the emulator cores
+([ADR 0112](../../docs/adr/0112-achievements-are-earned-through-the-server.md)).
 
 ## What ships
 
 | | |
 |---|---|
-| File | `rcheevos.dll`, beside `LANcast.exe` |
-| Licence | **MIT** (rcheevos; and libretro.h, from libretro-common) |
-| rcheevos | v12.5.0, commit `1433173220a7eaede6a9ed7a18e94117be1821e0` |
-| SHA-256 | `45db6d569ce1bb84814643ce6a01fd65d205ef4f4a1f9ffc63286500367f5e52` |
+| File | `lancast-cheevos.dll`, beside `LANcast.exe` |
+| Licence | **MIT** (`upstream/LICENSE`), plus LANcast's shim |
+| rcheevos | **v12.5.0**, commit `1433173220a7eaede6a9ed7a18e94117be1821e0` |
+| Source | https://github.com/RetroAchievements/rcheevos |
 
-The DLL is committed at [`x64/rcheevos.dll`](x64/rcheevos.dll), as the
-WebView2 loader is: it is 337 KB, and a file that small is easier to audit in
-the repository than as a separate download. **It is reproducible.** Built by
-[`build.sh`](build.sh) from the commits pinned in
-[`versions.env`](versions.env), the same toolchain gives the same bytes, so
-anyone can rebuild it and compare the hash above. The build strips at link
-time and suppresses the PE timestamp, which is what makes that true.
+The binary is not in this repository. [`build.sh`](build.sh) compiles it from
+the sources here with a mingw-w64 gcc, and checks two things before it
+finishes: the DLL exports exactly the functions in
+[`shim/lancast_cheevos.h`](shim/lancast_cheevos.h), and it depends on nothing
+but KERNEL32 and the Windows C runtime.
 
-## What is in it
+The release workflow runs `build.sh` with the same mingw-w64 cross-compiler it
+uses for everything else, and CI runs it on every pull request, so the DLL in a
+release is always built from the sources at that tag.
 
-- rcheevos itself, every `.c` file except the RAIntegration bridge (a
-  developer tool that loads another DLL) and the external-client shim it
-  uses, built with `RC_CLIENT_SUPPORTS_HASH` so it identifies games itself.
-- [`lancast_rc.c`](lancast_rc.c), LANcast's shim. rcheevos' own API takes
-  structures and callbacks shaped for C; the shim turns them into flat calls
-  the Go side can make through `syscall` with no cgo. It exports only `lrc_*`
-  functions, and `build.sh` refuses a build that exports anything else.
-- Softcore only: the shim turns hardcore off on every path (ADR 0112 §4).
+**Linked into it besides rcheevos:** mingw-w64's winpthread, statically, for
+`clock_gettime` (MIT/expat; the clock code itself is public domain). `build.sh`
+says why it is named explicitly.
 
-## Changes from upstream
+## What was copied, and what was changed
 
-**rcheevos is not patched.** One behaviour of v12.5.0 is worked around in the
-shim instead: unloading a game straight after its last achievement unlocks
-crashed in `rc_client_raise_mastery_event`, which read a game rcheevos had
-already cleared. The shim runs one frame before unloading, which delivers
-the pending event first (and means the person hears that they completed the
-set). `TestRealRcheevosUnlocksFromMemory` covers that moment.
+From the tag, unmodified:
 
-## What it may not do
+- `src/` → `upstream/src/`
+- `include/` → `upstream/include/`
+- `LICENSE` → `upstream/LICENSE`
 
-rcheevos builds every request; it sends none itself. Each goes through the
-player's `Sender` to the LANcast server, which checks it (`ra.Check`), adds
-the person's token and passes it on. The DLL has no network code of its own
-to call.
+**One file moved:** `test/libretro.h` → `upstream/include/libretro.h`.
+`rc_libretro.c` includes `libretro.h` for the memory-map structures, and
+upstream keeps its copy among the tests, which were not vendored. It is
+rcheevos' own trimmed copy of the libretro structures, under rcheevos' licence,
+and otherwise byte-for-byte upstream's.
 
-## Builds
+Left out on purpose: the tests, the Visual Studio projects, and the
+RAIntegration bridge. `src/rc_client_raintegration.c` is vendored, because it
+is part of `src/`, but `build.sh` does not compile it — it loads the
+RetroAchievements developer toolkit, which has no place in a player.
 
-Each row is a DLL that shipped. Check a file with `sha256sum rcheevos.dll` (or
-`Get-FileHash`).
+Nothing in `upstream/` is patched. If that ever changes, the patch belongs
+beside this file and in this note.
 
-| date | rcheevos | size | SHA-256 |
-|---|---|---|---|
-| 2026-11-01 | v12.5.0 | 337,408 | `45db6d569ce1bb84814643ce6a01fd65d205ef4f4a1f9ffc63286500367f5e52` |
+## Why it sits here and not in a Go package
+
+Go refuses to build a package directory holding `.c` files unless cgo is on,
+and LANcast builds with cgo off. `third_party/` is not a Go package, so the C
+can live here without touching the Go build.
+
+## Updating
+
+1. Check out the new tag of rcheevos, and copy `src/`, `include/`, `LICENSE`
+   and `test/libretro.h` as above.
+2. Update the version and commit in this file and in NOTICE.
+3. Run `build.sh`, then the binding tests in `internal/retro/cheevos`. The
+   shim's interface version (`LC_INTERFACE_VERSION`) changes only when the
+   shim's own functions do, not when rcheevos does.

@@ -55,6 +55,14 @@ jobs:
         with:
           packages: gcc-mingw-w64-x86-64-win32
 
+      # lancast-cheevos.dll, the desktop player's achievements (ADR 0112).
+      # Built here, unlike libmpv, because its sources are vendored and it
+      # takes seconds: there is nothing to fetch and nothing to trust but this
+      # repository. build.sh fails if the exports drift from the shim's header
+      # or the DLL needs anything Windows does not already have.
+      - name: build lancast-cheevos.dll
+        run: CC=x86_64-w64-mingw32-gcc third_party/rcheevos/build.sh
+
       # libmpv, the desktop client's player (ADR 0067/0069). Built out of band
       # by third_party/libmpv/build.sh and published as a release asset, because
       # 46 MB of decoder does not belong in git. fetch.sh verifies it against the
@@ -133,13 +141,6 @@ jobs:
           # client falling back to the browser with no obvious cause.
           test -f third_party/webview2/x64/WebView2Loader.dll \
             || { echo "WebView2Loader.dll is missing from third_party/"; exit 1; }
-          # rcheevos is committed too (ADR 0112), and checked against the hash
-          # its PROVENANCE.md records: the build is reproducible, so another
-          # hash means another file.
-          want="$(grep -o '[0-9a-f]\{64\}' third_party/rcheevos/PROVENANCE.md | head -1)"
-          have="$(sha256sum third_party/rcheevos/x64/rcheevos.dll | cut -d' ' -f1)"
-          test "$have" = "$want" \
-            || { echo "rcheevos.dll hashes $have, PROVENANCE.md records $want"; exit 1; }
           # libmpv is optional in the same way it is optional at runtime: the
           # .nsi compiles it in only when the file is there (!if /FileExists).
           if [ -f third_party/libmpv/out/libmpv-2.dll ]; then

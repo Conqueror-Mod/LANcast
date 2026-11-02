@@ -269,7 +269,8 @@ function EarnWhilePlaying({ view }: { view: RAView }) {
       <p className="ra__intro">
         Unlock achievements as you play in the LANcast desktop app, in casual (softcore) mode, with save states
         and rewind still available. This needs your RetroAchievements password once; the server swaps it for a
-        sign-in token and does not keep it.
+        sign-in token and does not keep it. While you play, RetroAchievements also sees what you are doing in the
+        game (its rich presence, such as "Level 3, 2 lives"); that can't be turned off on its own.
       </p>
       {!asking ? (
         <button className="ra__button" onClick={() => setAsking(true)}>

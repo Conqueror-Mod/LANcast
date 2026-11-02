@@ -20,8 +20,12 @@ without making it noisier.
   Windows logs no Application Error for it (Go handles the exception itself).
   `applog.CaptureCrashes` sends that text to `lancastd-crash.log` and
   `lancast-client-crash.log`, beside each log. The next start moves a report
-  to `.1` and logs `the last run crashed` with its cause. Added after the
-  window died mid-film and left no trace anywhere.
+  to `.1` and logs `the last run crashed` with its cause: the `panic:` or
+  `fatal error:` line if the report has one, and where it happened, read from
+  the crashing goroutine's stack. Added after the window died mid-film and
+  left no trace anywhere. The first crash it caught reached the file as
+  stacks alone, without its `fatal error:` line, so the cause leans on the
+  stack rather than the header.
 - **A viewer.** Settings shows the tail of the server log and of this window's
   log, so nobody has to be told where the files are.
 - **Levels with a switch.** The server runs at Info with a Debug switch

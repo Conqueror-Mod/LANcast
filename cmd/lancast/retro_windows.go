@@ -484,20 +484,17 @@ func (r *retroPlayer) run(ctx context.Context, game *remote.Game, corePath strin
 /*
  * achievements is the game's RetroAchievements runtime (ADR 0112), or nil
  * when there can be none: a console RetroAchievements does not cover, or no
- * rcheevos.dll beside the app. Whether the person has earning switched on is
- * the server's to say, at the runtime's first request; an "off" event is how
- * the page hears it.
+ * lancast-cheevos.dll beside the app (an error at Start, logged by the
+ * session). Whether the person has earning switched on is the server's to
+ * say, at the runtime's first request; an "off" event is how the page hears
+ * it.
  */
 func (r *retroPlayer) achievements(game *remote.Game, platform string) host.Achievements {
-	console := cheevos.Console(platform)
+	console := cheevos.ConsoleFor(platform)
 	if console == 0 {
 		return nil
 	}
-	if err := loadCheevos(); err != nil {
-		slog.Info("retro: no achievements", "error", err)
-		return nil
-	}
-	rt := cheevos.New(game.Achievements, func(e cheevos.Event) { r.emit(achievementEvent(e)) }, slog.Default())
+	rt := cheevos.New(game.Achievements, func(n cheevos.Notice) { r.emit(achievementEvent(n)) }, slog.Default())
 	return &gameAchievements{rt: rt, console: console, emit: r.emit}
 }
 
@@ -505,12 +502,12 @@ func (r *retroPlayer) achievements(game *remote.Game, platform string) host.Achi
 // game but not RetroAchievements' number for its console.
 type gameAchievements struct {
 	rt      *cheevos.Runtime
-	console uint32
+	console cheevos.Console
 	emit    func(map[string]any)
 }
 
-func (a *gameAchievements) Start(core libretro.Core, path string, data []byte) error {
-	return a.rt.Start(core, a.console, path, data)
+func (a *gameAchievements) Start(mem host.GameMemory, path string, data []byte) error {
+	return a.rt.Start(a.console, cheevos.Memory{Map: mem.Map, SystemRAM: mem.SystemRAM, SaveRAM: mem.SaveRAM}, path, data)
 }
 func (a *gameAchievements) Frame() { a.rt.Frame() }
 func (a *gameAchievements) Idle()  { a.rt.Idle() }
@@ -525,9 +522,9 @@ func (a *gameAchievements) List() {
 	a.emit(map[string]any{"kind": "achievements", "set": a.rt.List()})
 }
 
-// achievementEvent is a runtime event as the page hears it: kind
+// achievementEvent is a runtime notice as the page hears it: kind
 // "achievement", with what happened in "event".
-func achievementEvent(e cheevos.Event) map[string]any {
+func achievementEvent(e cheevos.Notice) map[string]any {
 	out := map[string]any{"kind": "achievement", "event": e.Kind}
 	for k, v := range map[string]string{"title": e.Title, "description": e.Description,
 		"badge": e.Badge, "progress": e.Progress, "text": e.Text} {
@@ -544,24 +541,6 @@ func achievementEvent(e cheevos.Event) map[string]any {
 		out["total"], out["unlocked"] = e.Total, e.Unlocked
 	}
 	return out
-}
-
-var (
-	cheevosOnce sync.Once
-	cheevosErr  error
-)
-
-// loadCheevos loads rcheevos.dll from beside the app, once, as libmpv is.
-func loadCheevos() error {
-	cheevosOnce.Do(func() {
-		exe, err := os.Executable()
-		if err != nil {
-			cheevosErr = err
-			return
-		}
-		cheevosErr = cheevos.Load(filepath.Join(filepath.Dir(exe), "rcheevos.dll"))
-	})
-	return cheevosErr
 }
 
 // gameID recovers the item a remote.Game was made for, for the cache path.

@@ -101,7 +101,7 @@ type raConnectRequest struct {
 type raConnectAnswer struct {
 	Status int    `json:"status"`
 	Body   string `json:"body"`
-	// Queued is an award kept to send later (ADR 0112 §5): the player shows
+	// Queued is an award kept to send later (ADR 0112 §3): the player shows
 	// it unlocked, and the profile counts it as waiting.
 	Queued bool `json:"queued,omitempty"`
 }
@@ -191,7 +191,7 @@ const raQueueEvery = time.Minute
 
 /*
  * RunRetroUnlockQueue sends awards kept while RetroAchievements could not be
- * reached (ADR 0112 §5), until ctx ends. Each goes with the time it waited
+ * reached (ADR 0112 §3), until ctx ends. Each goes with the time it waited
  * added to it, so the achievement is dated when it was earned. One that
  * RetroAchievements answers, yes or no, is done; one it still cannot be
  * reached for waits longer each time, up to six hours.

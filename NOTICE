@@ -67,13 +67,13 @@ Built by this project and shipped beside the client:
     replaces the library. The recipe that builds it, and the exact source
     revisions, are in third_party/libmpv/.
 
-  rcheevos                           MIT License
-                                     third_party/rcheevos/LICENSE
-                                     third_party/rcheevos/PROVENANCE.md
+  rcheevos (RetroAchievements)        MIT
+                                      third_party/rcheevos/upstream/LICENSE
+                                      third_party/rcheevos/PROVENANCE.md
 
-    RetroAchievements' own library, built from a pinned commit with a small
-    shim of LANcast's (ADR 0112), unpatched. The recipe, the exact source
-    revisions and the reproducible build's hash are in third_party/rcheevos/.
+    v12.5.0, built with LANcast's shim into lancast-cheevos.dll so the
+    desktop player can earn achievements (ADR 0112). Statically linked
+    with mingw-w64's winpthread (MIT), for its clock.
 
 Vendored, with their own licence files beside them:
 

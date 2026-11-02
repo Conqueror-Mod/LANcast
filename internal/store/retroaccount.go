@@ -35,8 +35,8 @@ func (s *Store) SetRetroAccount(ctx context.Context, a RetroAccount) error {
 		ON CONFLICT(user_id) DO UPDATE SET
 		  ra_user = excluded.ra_user, ra_ulid = excluded.ra_ulid,
 		  api_key_sealed = excluded.api_key_sealed, connected_at = excluded.connected_at,
-		  token_sealed = CASE WHEN retro_account.ra_ulid = excluded.ra_ulid
-		                      THEN retro_account.token_sealed END`,
+		  connect_token_sealed = CASE WHEN retro_account.ra_ulid = excluded.ra_ulid
+		                              THEN retro_account.connect_token_sealed END`,
 		a.UserID, a.RAUser, a.RAULID, a.APIKeySealed, time.Now().Unix())
 	if err != nil {
 		return fmt.Errorf("set retroachievements account: %w", err)
@@ -48,7 +48,7 @@ func (s *Store) SetRetroAccount(ctx context.Context, a RetroAccount) error {
 func (s *Store) GetRetroAccount(ctx context.Context, userID string) (*RetroAccount, error) {
 	a := RetroAccount{UserID: userID}
 	err := s.db.QueryRowContext(ctx, `
-		SELECT ra_user, ra_ulid, api_key_sealed, token_sealed, connected_at
+		SELECT ra_user, ra_ulid, api_key_sealed, connect_token_sealed, connected_at
 		FROM retro_account WHERE user_id = ?`, userID).
 		Scan(&a.RAUser, &a.RAULID, &a.APIKeySealed, &a.TokenSealed, &a.ConnectedAt)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -67,7 +67,7 @@ func (s *Store) SetRetroToken(ctx context.Context, userID string, sealed []byte)
 	if len(sealed) > 0 {
 		v = sealed
 	}
-	if _, err := s.db.ExecContext(ctx, `UPDATE retro_account SET token_sealed = ? WHERE user_id = ?`, v, userID); err != nil {
+	if _, err := s.db.ExecContext(ctx, `UPDATE retro_account SET connect_token_sealed = ? WHERE user_id = ?`, v, userID); err != nil {
 		return fmt.Errorf("set retroachievements token: %w", err)
 	}
 	if v == nil {
@@ -96,7 +96,7 @@ func (s *Store) DeleteRetroAccount(ctx context.Context, userID string) error {
 	return tx.Commit()
 }
 
-// RetroUnlock is an award waiting to reach RetroAchievements (ADR 0112 §5).
+// RetroUnlock is an award waiting to reach RetroAchievements (ADR 0112 §3).
 // Body is the player's request with its token field empty.
 type RetroUnlock struct {
 	ID       int64

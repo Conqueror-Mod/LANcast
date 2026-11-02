@@ -5,48 +5,21 @@ package cheevos
 import (
 	"context"
 	"net/url"
-	"os"
 	"strings"
 	"sync"
 	"testing"
 	"time"
-
-	"lancast/internal/retro/libretro"
 )
 
 /*
- * Against the real rcheevos.dll, built by third_party/rcheevos/build.sh.
- * Opt in with RCHEEVOS_DLL=<path to rcheevos.dll>, as the real-core tests
- * opt in with RETRO_CORES: CI has no DLL.
+ * The runtime against the real DLL, built by buildDLL as the binding's own
+ * tests build it.
  *
- * A fake core gives an NES's 2 KB of RAM, and a fake RetroAchievements
- * answers with a one-achievement set whose condition is "byte 1 is 3". Writing
- * that byte must unlock it and send a softcore award: the whole path, from
- * memory through rcheevos to the request the server would forward.
+ * An NES's 2 KiB of RAM, and a fake RetroAchievements that answers with a
+ * one-achievement set whose condition is "byte 1 is 3". Writing that byte
+ * must unlock it and send a casual award: the whole path, from memory
+ * through rcheevos to the request the server would forward.
  */
-
-type fakeCore struct{ ram []byte }
-
-func (c *fakeCore) SystemInfo() libretro.SystemInfo             { return libretro.SystemInfo{} }
-func (c *fakeCore) Init(libretro.Frontend) error                { return nil }
-func (c *fakeCore) LoadGame(string, []byte) error               { return nil }
-func (c *fakeCore) AVInfo() libretro.AVInfo                     { return libretro.AVInfo{} }
-func (c *fakeCore) SetControllerPortDevice(port, device uint32) {}
-func (c *fakeCore) Reset()                                      {}
-func (c *fakeCore) Run()                                        {}
-func (c *fakeCore) SerializeSize() int                          { return 0 }
-func (c *fakeCore) Serialize([]byte) bool                       { return false }
-func (c *fakeCore) Unserialize([]byte) bool                     { return false }
-func (c *fakeCore) UnloadGame()                                 {}
-func (c *fakeCore) ContextReset()                               {}
-func (c *fakeCore) ContextDestroy()                             {}
-func (c *fakeCore) Close()                                      {}
-func (c *fakeCore) Memory(id uint32) []byte {
-	if id == 2 { // RETRO_MEMORY_SYSTEM_RAM
-		return c.ram
-	}
-	return nil
-}
 
 const oneAchievementSet = `{"Success":true,"GameId":1234,"Title":"Sample Game","ConsoleId":7,` +
 	`"ImageIconUrl":"https://media.retroachievements.org/Images/112233.png",` +
@@ -91,27 +64,27 @@ func (f *fakeRA) requests(kind string) []url.Values {
 }
 
 func TestRealRcheevosUnlocksFromMemory(t *testing.T) {
-	path := os.Getenv("RCHEEVOS_DLL")
-	if path == "" {
-		t.Skip("set RCHEEVOS_DLL to the rcheevos.dll third_party/rcheevos/build.sh made")
-	}
-	if err := Load(path); err != nil {
-		t.Fatal(err)
-	}
+	path := buildDLL(t)
 	ra := &fakeRA{}
 	var mu sync.Mutex
-	var events []Event
-	rt := New(ra.send, func(e Event) {
+	var notices []Notice
+	rt := newRuntime(func(h Handler) (engine, error) {
+		c, err := Open(path, h)
+		if err != nil {
+			return nil, err
+		}
+		return c, nil
+	}, ra.send, func(n Notice) {
 		mu.Lock()
-		events = append(events, e)
+		notices = append(notices, n)
 		mu.Unlock()
 	}, nil)
-	saw := func(kind string) *Event {
+	saw := func(kind string) *Notice {
 		mu.Lock()
 		defer mu.Unlock()
-		for i := range events {
-			if events[i].Kind == kind {
-				return &events[i]
+		for i := range notices {
+			if notices[i].Kind == kind {
+				return &notices[i]
 			}
 		}
 		return nil
@@ -126,19 +99,24 @@ func TestRealRcheevosUnlocksFromMemory(t *testing.T) {
 			time.Sleep(5 * time.Millisecond)
 		}
 		if until != "" {
-			t.Fatalf("no %q event; events: %+v; requests: %v", until, events, ra.seen)
+			t.Fatalf("no %q notice; notices: %+v; requests: %v", until, notices, ra.seen)
 		}
 	}
 
-	core := &fakeCore{ram: make([]byte, 0x800)}
+	ram := make([]byte, 0x800)
 	game := append([]byte("NES\x1a"), make([]byte, 16*1024+12)...)
-	if err := rt.Start(core, Console("nes"), `C:\games\Sample.nes`, game); err != nil {
+	if err := rt.Start(NES, Memory{SystemRAM: ram}, `C:\games\Sample.nes`, game); err != nil {
 		t.Fatal(err)
 	}
-	defer rt.Stop()
+	stopped := false
+	defer func() {
+		if !stopped {
+			rt.Stop()
+		}
+	}()
 	frames("ready", 400)
-	if e := saw("ready"); e.Title != "Sample Game" || e.Total != 1 || e.Unlocked != 0 {
-		t.Errorf("ready: %+v", *e)
+	if n := saw("ready"); n.Title != "Sample Game" || n.Total != 1 || n.Unlocked != 0 {
+		t.Errorf("ready: %+v", *n)
 	}
 	for _, v := range ra.seen {
 		if v.Has("p") || (v.Get("h") != "" && v.Get("h") != "0") {
@@ -154,10 +132,15 @@ func TestRealRcheevosUnlocksFromMemory(t *testing.T) {
 	if saw("unlocked") != nil {
 		t.Fatal("unlocked before the condition was met")
 	}
-	core.ram[1] = 3
+	before := rt.List()
+	if len(before.Achievements) != 1 || before.Achievements[0].State != "locked" ||
+		before.Achievements[0].Badge != "/api/retroachievements/media/Badge/00234_lock.png" {
+		t.Errorf("list before: %+v", before)
+	}
+	ram[1] = 3
 	frames("unlocked", 100)
-	if e := saw("unlocked"); e.ID != 5501 || e.Points != 5 || !strings.HasPrefix(e.Badge, "/api/retroachievements/media/Badge/") {
-		t.Errorf("unlocked: %+v", *e)
+	if n := saw("unlocked"); n.ID != 5501 || n.Points != 5 || n.Badge != "/api/retroachievements/media/Badge/00234.png" {
+		t.Errorf("unlocked: %+v", *n)
 	}
 	for i := 0; i < 100 && len(ra.requests("awardachievement")) == 0; i++ {
 		rt.Frame()
@@ -170,8 +153,10 @@ func TestRealRcheevosUnlocksFromMemory(t *testing.T) {
 
 	// The menu's list, and progress for a save state.
 	sum := rt.List()
-	if sum.Title != "Sample Game" || sum.Total != 1 || sum.Unlocked != 1 || len(sum.Achievements) != 1 ||
-		sum.Achievements[0].State != "unlocked" {
+	if sum.GameID != 1234 || sum.Title != "Sample Game" || sum.Total != 1 || sum.Unlocked != 1 ||
+		sum.Points != 5 || sum.PointsUnlocked != 5 || len(sum.Achievements) != 1 ||
+		sum.Achievements[0].State != "unlocked" || sum.Achievements[0].Title != "Ach1" ||
+		!strings.HasSuffix(sum.Badge, "/Images/112233.png") {
 		t.Errorf("list: %+v", sum)
 	}
 	if p := rt.Progress(); len(p) == 0 {
@@ -182,10 +167,11 @@ func TestRealRcheevosUnlocksFromMemory(t *testing.T) {
 
 	/*
 	 * Stopping now, with the set just completed and no frame since the
-	 * award's answer, is the moment rcheevos v12.5 crashed the process in
+	 * award's answer, is the moment rcheevos 12.5 crashed the process in
 	 * unload (a pending mastery event read a game it had already cleared).
 	 * The shim runs one frame first, which also means the person hears it.
 	 */
+	stopped = true
 	rt.Stop()
 	if saw("mastered") == nil {
 		t.Error("completing the set was never announced")

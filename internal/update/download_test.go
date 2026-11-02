@@ -11,6 +11,8 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -265,5 +267,31 @@ func TestTheOldProgramsAreNotInstallFiles(t *testing.T) {
 	}
 	if !installFiles["LANcast.exe"] {
 		t.Error("LANcast.exe is not an install file")
+	}
+}
+
+// Every DLL the Windows archive carries is one the updater installs. The
+// archive is .goreleaser.yaml's to define and this list is the updater's, and
+// nothing else ties them together: a DLL added to one and not the other ships
+// with every fresh install and never reaches an updated one.
+func TestEveryShippedDLLIsAnInstallFile(t *testing.T) {
+	cfg, err := os.ReadFile(filepath.Join("..", "..", ".goreleaser.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var dlls []string
+	for _, line := range strings.Split(string(cfg), "\n") {
+		line = strings.TrimSpace(line)
+		if name, ok := strings.CutPrefix(line, "dst: "); ok && strings.HasSuffix(strings.ToLower(name), ".dll") {
+			dlls = append(dlls, name)
+		}
+	}
+	if len(dlls) < 3 {
+		t.Fatalf("found %v in .goreleaser.yaml; expected WebView2Loader, libmpv and lancast-cheevos at least", dlls)
+	}
+	for _, name := range dlls {
+		if !installFiles[name] {
+			t.Errorf("the archive ships %s but the updater does not install it", name)
+		}
 	}
 }
