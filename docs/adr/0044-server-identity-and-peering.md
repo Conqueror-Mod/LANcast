@@ -1,6 +1,6 @@
 # ADR 0044 — Server identity and peering
 
-Date: 2026-08-19 · Status: accepted (amended 2026-09-30 — see §5a)
+Date: 2026-08-19 · Status: accepted (amended 2026-09-30 — see §5a; 2026-11-01 — see §5b)
 
 Closes the half of [ADR 0014](0014-transport-security.md) that ADR 0014 named
 and deliberately left open: *"It encrypts the wire; it does not authenticate the
@@ -166,6 +166,43 @@ detail:
 
 This does not weaken §5 — it is what §5 assumed. The fingerprint remains the
 identity and no address has ever been permitted to change it.
+
+### 5b. An invite leads with the public name
+
+**Added 2026-11-01.** An invite's addresses were enumerated from the machine's
+own interfaces. On a server behind a home router that is a private IPv4 plus
+whatever IPv6 the machine holds — its public IPv4 belongs to the router, not
+the PC. A friend whose network is IPv4-only therefore received an invite with no
+address that could work, and their server sat at `added` for ever with nothing
+arriving at ours. §5a cannot help: it corrects a hint from a connection that
+already got through.
+
+**While the public certificate (ADR 0081) is valid, the invite's first address
+is its host name on port 443**, followed by the interface addresses as before.
+
+- **443, not the listen port.** The certificate is issued over a tls-alpn-01
+  challenge on 443, so a valid one is evidence the name answered there; and
+  while it is on, the server also listens on 443 with the same TLS
+  configuration as its main port, including the ALPN divert to the peer path.
+  The router's 443 forward and IPv6 on 443 both arrive at a listener that
+  answers peers.
+- **First, because the order is the dialling order.** The name is the one
+  address that works from anywhere; on a LAN, the racing in `peer.Reach`
+  (#804) keeps a slower first entry from costing the local one its turn.
+- **The name changes nothing about trust.** What is pinned is the identity
+  certificate (§4). A browser sees the CA's certificate on that name; a peer
+  never does, because its ClientHello is diverted by ALPN before a certificate
+  is chosen. Somebody else answering at the name is refused by the pin, exactly
+  as at a stale IP.
+- **Only while the certificate is valid.** An expired or never-issued
+  certificate is no evidence the name reaches this server, and an address
+  recorded at pairing is never re-learned, so a guess written into an invite is
+  tried for as long as the pairing lasts.
+
+An existing pairing does not gain the name: §5 records addresses once. The
+friend's server needs a fresh invite pasted. Nor does this help the other
+direction — reaching a friend's server behind NAT needs a forward or an overlay
+on their side, which no invite of ours can supply.
 
 ### 6. Identity belongs to the data directory
 

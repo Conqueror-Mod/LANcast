@@ -4,6 +4,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -267,6 +268,17 @@ func TestAddressRules(t *testing.T) {
 	// still a peer, and a parser that insisted otherwise would refuse it.
 	if _, err := Encode(id, "x", []string{"utopia.example:8080"}); err != nil {
 		t.Errorf("a hostname was refused: %v", err)
+	}
+
+	// A server with a public name puts it first (ADR 0044 §5b), and
+	// the order is the dialling order, so it must survive the round trip.
+	named := []string{"aither.example.net:443", "192.168.1.20:8080", "[2001:db8::7]:8080"}
+	s, err = Encode(id, "x", named)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, err := Parse(s); err != nil || !reflect.DeepEqual(got.Addrs, named) {
+		t.Errorf("a named invite came back as %v (%v), want %v", got.Addrs, err, named)
 	}
 }
 
