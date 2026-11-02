@@ -55,6 +55,14 @@ jobs:
         with:
           packages: gcc-mingw-w64-x86-64-win32
 
+      # lancast-cheevos.dll, the desktop player's achievements (ADR 0112).
+      # Built here, unlike libmpv, because its sources are vendored and it
+      # takes seconds: there is nothing to fetch and nothing to trust but this
+      # repository. build.sh fails if the exports drift from the shim's header
+      # or the DLL needs anything Windows does not already have.
+      - name: build lancast-cheevos.dll
+        run: CC=x86_64-w64-mingw32-gcc third_party/rcheevos/build.sh
+
       # libmpv, the desktop client's player (ADR 0067/0069). Built out of band
       # by third_party/libmpv/build.sh and published as a release asset, because
       # 46 MB of decoder does not belong in git. fetch.sh verifies it against the

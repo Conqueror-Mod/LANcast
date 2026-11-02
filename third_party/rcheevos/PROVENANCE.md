@@ -20,6 +20,14 @@ finishes: the DLL exports exactly the functions in
 [`shim/lancast_cheevos.h`](shim/lancast_cheevos.h), and it depends on nothing
 but KERNEL32 and the Windows C runtime.
 
+The release workflow runs `build.sh` with the same mingw-w64 cross-compiler it
+uses for everything else, and CI runs it on every pull request, so the DLL in a
+release is always built from the sources at that tag.
+
+**Linked into it besides rcheevos:** mingw-w64's winpthread, statically, for
+`clock_gettime` (MIT/expat; the clock code itself is public domain). `build.sh`
+says why it is named explicitly.
+
 ## What was copied, and what was changed
 
 From the tag, unmodified:

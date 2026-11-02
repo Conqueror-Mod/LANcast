@@ -119,6 +119,14 @@ archives:
       - src: third_party/libmpv/LICENSE.LGPL
         dst: libmpv-LICENSE.txt
 
+      # rcheevos, the desktop player's achievements (ADR 0112), built by the
+      # release workflow from the vendored sources. MIT asks that its notice
+      # go with every copy, so its licence travels beside it.
+      - src: third_party/rcheevos/out/lancast-cheevos.dll
+        dst: lancast-cheevos.dll
+      - src: third_party/rcheevos/upstream/LICENSE
+        dst: rcheevos-LICENSE.txt
+
   - id: unix
     ids: [lancast-unix]
     name_template: "LANcast_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
