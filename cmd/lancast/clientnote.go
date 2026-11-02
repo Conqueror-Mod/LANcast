@@ -41,6 +41,7 @@ var noteAreas = map[string]bool{
 	"auth":         true, // signed out while the page thought otherwise
 	"together":     true, // Watch Together seen from this window
 	"error":        true, // uncaught errors and rejected promises
+	"visualizer":   true, // how evenly a visualizer draws (web/src/playback/frameRecord.ts)
 }
 
 const (
