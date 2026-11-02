@@ -47,7 +47,9 @@ internal/retro/    retro games (ADR 0073): romhash/ identifies a dump, retrodb/
                    the pinned DATs, identify/ the worker, saves/ the server's
                    copies, and the desktop player — libretro/ (syscall binding),
                    host/ (the session), remote/ (files and saves by ticket),
-                   cores/ (which core plays what, fetched from libretro)
+                   cores/ (which core plays what, fetched from libretro),
+                   cheevos/ (rcheevos in lancast-cheevos.dll, built from
+                   third_party/rcheevos; ADR 0112)
 internal/knownserver/ which servers this client trusts, and by which key (ADR 0070)
 internal/comic/    comics (ADR 0101): a Book is a .cbz or a .pdf; pdf/ finds the one
                    picture a PDF page shows, never renders (ADR 0102) and is fuzzed
