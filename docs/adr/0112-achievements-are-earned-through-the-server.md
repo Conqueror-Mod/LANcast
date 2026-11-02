@@ -220,6 +220,27 @@ achievement half-met when you saved resets when you load.
 - **Reusing the Web API key for earning.** It can't. Connect needs a token,
   which only a password login gives.
 
+## Measured: how each core exposes its memory
+
+Measured 2026-11-01, with step 1's session log line, on real dumps after 60
+frames. That timing matters: mGBA and Mupen64Plus-Next send their maps only
+once they are running, and a line written straight after loading said they
+had none.
+
+| Core | Console | Memory |
+|---|---|---|
+| mGBA | Game Boy Advance | a map, 11 regions (work RAM at 0x02000000, fast RAM at 0x03000000) |
+| Mesen | NES | a map, 64 regions of 256 bytes |
+| Mupen64Plus-Next | Nintendo 64 | a map, 18 regions (RDRAM at 0x80000000) |
+| BlastEm | Mega Drive | no map; a 64 KiB system RAM block |
+| **bsnes** | SNES | **no map and no system RAM** |
+| Gearsystem | Master System | not measured: no dump in the test library |
+| SwanStation | PlayStation | not measured: it needs its BIOS |
+
+**bsnes as shipped exposes nothing to read, so SNES achievements can't work
+with it.** SNES needs a core that exposes its memory. That is its own
+decision: ADR 0077 records why snes9x isn't used on the web.
+
 ## Not verified yet
 
 - **Whether rcheevos' libretro memory-map helper handles every desktop core
