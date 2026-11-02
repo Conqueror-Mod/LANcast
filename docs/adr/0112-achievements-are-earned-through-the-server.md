@@ -1,6 +1,11 @@
 # ADR 0112 — Achievements are earned through the server
 
-Date: 2026-11-01 · Status: **proposed** · Follows [ADR 0090](0090-retroachievements-are-yours-to-connect.md)
+Date: 2026-11-01 · Status: **accepted** 2026-11-01 · Follows [ADR 0090](0090-retroachievements-are-yours-to-connect.md)
+
+Chris accepted it as written on 2026-11-01. That covers both of his choices:
+every RetroAchievements call goes through the server (section 3), and play is
+casual first, with hardcore built in but hidden until RetroAchievements
+approves LANcast (section 5).
 
 ADR 0090 put a person's RetroAchievements progress on their profile, and
 left **earning** achievements for its own record. This is that record: an
@@ -137,7 +142,7 @@ no-phone-home principle applied rather than restated.
 
 ### 5. Casual first. Hardcore is built in, and offered once approved
 
-**Proposed for Chris:**
+**Decided:**
 - **The rules are built now.** With hardcore on:
   - Continue starts from the in-game save (SRAM) instead of the auto state, or
     offers to drop to casual;
