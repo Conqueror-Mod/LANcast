@@ -56,7 +56,9 @@ func TestCaptureCrashesKeepsWhyAProcessDied(t *testing.T) {
 	if earlier == nil {
 		t.Fatal("the next start did not notice the earlier crash")
 	}
-	if earlier.Cause != "panic: the film window fell over" {
+	// The header, and where: the test's own goroutine, in LANcast's code.
+	if !strings.HasPrefix(earlier.Cause, "panic: the film window fell over (in lancast/internal/applog.") ||
+		!strings.Contains(earlier.Cause, " at crash_test.go:") {
 		t.Errorf("cause = %q", earlier.Cause)
 	}
 	if kept, err := os.ReadFile(earlier.Path); err != nil || !strings.Contains(string(kept), "fell over") {
@@ -88,4 +90,72 @@ func TestCaptureCrashesIsQuietWithoutACrash(t *testing.T) {
 // file a process holds open).
 func releaseCrashOutput(t *testing.T) {
 	t.Cleanup(func() { _ = debug.SetCrashOutput(nil, debug.CrashOptions{}) })
+}
+
+// The first crash this ever caught had no header line at all, only stacks, and
+// its cause came out empty. testdata/callback-limit-crash.txt is the top of
+// that report, as it reached the file on 2026-11-01.
+func TestCrashCauseNamesTheSiteWhenTheHeaderIsMissing(t *testing.T) {
+	got := crashCause(filepath.Join("testdata", "callback-limit-crash.txt"))
+	want := "crashed in syscall.compileCallback, called from lancast/internal/clientwindow.Monitors at placement_windows.go:50"
+	if got != want {
+		t.Errorf("cause =\n  %q\nwant\n  %q", got, want)
+	}
+}
+
+func TestCauseOf(t *testing.T) {
+	for _, c := range []struct {
+		name  string
+		lines []string
+		want  string
+	}{
+		{"nothing", []string{"", "some text"}, ""},
+		{"header only", []string{"fatal error: out of memory"}, "fatal error: out of memory"},
+		{
+			"panic in LANcast's own code",
+			[]string{
+				"panic: boom", "",
+				"goroutine 7 [running]:",
+				"main.play(0x1)",
+				"\tlancast/cmd/lancast/player.go:12 +0x1f",
+				"created by main.start in goroutine 1",
+				"\tlancast/cmd/lancast/player.go:3 +0x2",
+			},
+			"panic: boom (in main.play at player.go:12)",
+		},
+		{
+			// Only the crashing goroutine counts; LANcast frames in another
+			// goroutine are not where it happened.
+			"no LANcast frame in the crashing goroutine",
+			[]string{
+				"goroutine 3 [running]:",
+				"runtime.throw({0x1, 0x2})",
+				"\truntime/panic.go:1 +0x1",
+				"net/http.(*conn).serve(0x1)",
+				"\tnet/http/server.go:2 +0x1",
+				"",
+				"goroutine 1 [select]:",
+				"main.main()",
+				"\tlancast/cmd/lancast/main.go:9 +0x1",
+			},
+			"crashed in net/http.(*conn).serve",
+		},
+	} {
+		if got := causeOf(c.lines); got != c.want {
+			t.Errorf("%s: %q, want %q", c.name, got, c.want)
+		}
+	}
+}
+
+func TestFrameFileKeepsSpacesInAPath(t *testing.T) {
+	for in, want := range map[string]string{
+		"\tlancast/internal/clientwindow/placement_windows.go:50 +0x6e fp=0x1 sp=0x2": "placement_windows.go:50",
+		"\tD:/My Projects/LANcast/internal/applog/crash_test.go:28 +0x45":             "crash_test.go:28",
+		"\tsyscall/syscall_windows.go:235":                                            "syscall_windows.go:235",
+		"\tno file here":                                                              "",
+	} {
+		if got := frameFile(in); got != want {
+			t.Errorf("frameFile(%q) = %q, want %q", in, got, want)
+		}
+	}
 }
