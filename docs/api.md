@@ -1573,6 +1573,7 @@ rather than matching everybody.
 | `year` | Restrict to this exact release year. **Repeatable**; a non-numeric value is `400` |
 | `resolution` | Restrict to a resolution tier — `uhd`, `hd1080`, `hd720`, `sd`. **Repeatable**. An **unrecognised key is ignored rather than rejected**: these arrive from bookmarked query strings, and a renamed tier should widen the grid back rather than break the page |
 | `platform` | Restrict a retro library to some consoles (ADR 0073), by the values `platform` carries: `nes`, `snes`, `n64`, `gb`, `gbc`, `gba`, `sms`, `genesis`, `ps1`. **Repeatable**, OR within the facet. An **unrecognised console is ignored rather than rejected**, for the reason resolution keys are |
+| `release_type` | Restrict albums to some kinds of record (ADR 0115), by the values `release_type` carries: `Album`, `EP`, `Single`, `Compilation`, `Live`, `Soundtrack`… **Repeatable**, OR within the facet. **A track matches by its album's type**, so Play all over a grid of EPs queues the EPs' tracks. An album not yet matched has no type, so it is left out while a type is chosen; an unknown value matches nothing |
 | `person` | Restrict to items this person is credited on, **in any role**. **Repeatable**; ids come from `/cast`, and a non-numeric value is `400` — an id is machine-generated, so a malformed one means the caller is confused, and widening to the whole library would look like the person matched everything |
 | `actor` / `director` | The same filter scoped to one credit role. **Repeatable**. "Who is in this" and "who made this" are different questions, and `person` answers both without saying which was meant — somebody looking for what Eastwood *directed* does not want what he only acted in. A person who does both matches under both, once in each |
 | `face_cluster` | Restrict to photographs a **face group** appears in (ADR 0052) — the payoff for naming somebody on the People page. **Not `person`**, which is a film credit: a credit is what a provider said about a film, a face group is a cluster of embeddings this server computed from photographs, and nothing joins them. **Repeatable**, OR within the facet like every other — see below, because the reason is not consistency. A non-numeric value is `400`. **Marked folders are excluded and the caller cannot opt in**: being able to ask who is in a folder you cannot open is the disclosure [ADR 0051](adr/0051-sensitive-content-is-obscured-until-asked-for.md) covers, by another route |
@@ -5785,7 +5786,13 @@ the calling account, and the tag list is scoped to the library as well, so the
 filter row never offers a value that would return nothing.
 
 `GET /api/items` accepts repeated **`tag=<id>`** and **`favourite=1`**, alongside
-the existing facets. Ids rather than names, because a name is unique only within
+the existing facets.
+
+At the album level (`kind=album`) the facets also carry **`release_types`**:
+the kinds of record among the library's matched albums, most common first
+(ADR 0115). It is empty anywhere else, and empty until some album is matched,
+so a Type filter exists only where it can narrow something. An album carries
+its own as **`release_type`**, absent until it is matched. Ids rather than names, because a name is unique only within
 one account.
 
 An id belonging to another account matches nothing rather than erroring — the

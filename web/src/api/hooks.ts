@@ -1599,6 +1599,9 @@ export interface ItemQuery {
   resolutions?: string[];
   /** Retro consoles (ADR 0073) — nes | snes | n64 | … */
   platforms?: string[];
+  /** Kinds of record (ADR 0115) — Album | EP | Single | … A track matches by
+   *  its album's, so a queue gathered with these holds the albums' tracks. */
+  releaseTypes?: string[];
   /** Person ids from /cast. Matches any credited role. */
   people?: number[];
   /** Person ids restricted to acting credits. */
@@ -1644,6 +1647,7 @@ function itemsParams({
   years = [],
   resolutions = [],
   platforms = [],
+  releaseTypes = [],
   people = [],
   actors = [],
   directors = [],
@@ -1674,6 +1678,7 @@ function itemsParams({
   for (const y of years) params.append("year", String(y));
   for (const r of resolutions) params.append("resolution", r);
   for (const p of platforms) params.append("platform", p);
+  for (const t of releaseTypes) params.append("release_type", t);
   for (const p of people) params.append("person", String(p));
   for (const a of actors) params.append("actor", String(a));
   for (const d of directors) params.append("director", String(d));

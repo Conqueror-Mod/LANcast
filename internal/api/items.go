@@ -626,6 +626,9 @@ func (s *Server) listItems(w http.ResponseWriter, r *http.Request) {
 		Unrated: q.Get("unrated") == "1",
 		UserID:  s.userID(r),
 		Years:   years,
+		// Kinds of record, on the Albums level (ADR 0115). An unknown one is a
+		// value that matches nothing, not a key to refuse.
+		ReleaseTypes: nonEmpty(q["release_type"]),
 		// Resolution keys are not validated here. An unknown one contributes no
 		// clause in the store rather than a 400: these arrive from a bookmarked
 		// query string, and a tier that has been renamed should widen the grid

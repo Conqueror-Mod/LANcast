@@ -6838,6 +6838,8 @@ export interface components {
             edition?: string | null;
             /** @description A ROM's console (ADR 0073): `nes`, `snes`, `n64`, `gb`, `gbc`, `gba`, `sms`, `genesis` or `ps1`. Absent on every other kind, and on a ROM no extension, folder or hash could place. **An open set**, like `kind`: more consoles arrive without a major version. */
             platform?: string | null;
+            /** @description **An album only:** what kind of record it is, from MusicBrainz (ADR 0115) — `Album`, `EP`, `Single`, `Broadcast`, or a secondary type that says more (`Compilation`, `Live`, `Soundtrack`, `Remix`…). Absent until the album is matched, and on every other kind. **An open set**. */
+            release_type?: string | null;
             /** @description A ROM's release region as its name gives it (`USA`, `USA, Europe`), read from the DAT name once matched and from the filename before. Absent when the name carries none, and on every other kind. */
             region?: string;
             /** @description The file's container, e.g. `mkv`. */
@@ -7548,6 +7550,8 @@ export interface components {
             resolutions: components["schemas"]["ResolutionBucket"][];
             /** @description Consoles present in a retro library (ADR 0073), alphabetical; a client orders them for display. Empty in every other library, so a Console filter exists only where it can narrow something. */
             platforms: string[];
+            /** @description The kinds of record among a music library's matched albums (ADR 0115), most common first. **Only when the facets are asked for at the album level** (`kind=album`); empty otherwise, and empty until some album is matched, so a Type filter exists only where it can narrow something. */
+            release_types?: string[];
             /** @description Most-populated first. */
             collections: components["schemas"]["CollectionFacet"][];
             /** @description The highest rating present, so a client offers only thresholds that can match: a library topping out at 8.4 has no business showing a 9+ filter guaranteed to return nothing. */
@@ -11334,6 +11338,8 @@ export interface operations {
                 resolution?: string[];
                 /** @description Restrict a retro library to some consoles (ADR 0073), by the values `Item.platform` carries. An **unrecognised console is ignored rather than rejected**, for the reason resolution keys are. **Repeatable**, OR within the facet. */
                 platform?: string[];
+                /** @description Restrict albums to some kinds of record (ADR 0115), by the values `Item.release_type` carries: `Album`, `EP`, `Single`, `Compilation`, `Live`, `Soundtrack`… **Repeatable**, OR within the facet. **A track matches by its album's type**, so a queue gathered with the grid's filters (`kind=track`) holds the tracks of the albums on screen. An album not yet matched has no type, so it is left out while a type is chosen. An unknown value matches nothing. */
+                release_type?: string[];
                 /** @description Restrict to items this person is credited on, **in any role**. Ids come from the library's cast list, and a non-numeric value is `400` — an id is machine-generated, so a malformed one means the caller is confused, and widening to the whole library would look like the person matched everything. **Repeatable.** Repeatable filters are OR within a facet and AND across facets: two genres widen the grid, adding a decade narrows it. A blank value is dropped rather than treated as a filter for the empty string. */
                 person?: number[];
                 /** @description The person filter scoped to acting credits. "Who is in this" and "who made this" are different questions, and `person` answers both without saying which was meant. Somebody who does both matches under both, once in each. **Repeatable.** Repeatable filters are OR within a facet and AND across facets: two genres widen the grid, adding a decade narrows it. A blank value is dropped rather than treated as a filter for the empty string. */

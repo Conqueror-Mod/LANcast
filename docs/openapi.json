@@ -1766,6 +1766,18 @@
             }
           },
           {
+            "name": "release_type",
+            "in": "query",
+            "required": false,
+            "description": "Restrict albums to some kinds of record (ADR 0115), by the values `Item.release_type` carries: `Album`, `EP`, `Single`, `Compilation`, `Live`, `Soundtrack`… **Repeatable**, OR within the facet. **A track matches by its album's type**, so a queue gathered with the grid's filters (`kind=track`) holds the tracks of the albums on screen. An album not yet matched has no type, so it is left out while a type is chosen. An unknown value matches nothing.",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          {
             "name": "person",
             "in": "query",
             "required": false,
@@ -15744,6 +15756,13 @@
             ],
             "description": "A ROM's console (ADR 0073): `nes`, `snes`, `n64`, `gb`, `gbc`, `gba`, `sms`, `genesis` or `ps1`. Absent on every other kind, and on a ROM no extension, folder or hash could place. **An open set**, like `kind`: more consoles arrive without a major version."
           },
+          "release_type": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "**An album only:** what kind of record it is, from MusicBrainz (ADR 0115) — `Album`, `EP`, `Single`, `Broadcast`, or a secondary type that says more (`Compilation`, `Live`, `Soundtrack`, `Remix`…). Absent until the album is matched, and on every other kind. **An open set**."
+          },
           "region": {
             "type": "string",
             "description": "A ROM's release region as its name gives it (`USA`, `USA, Europe`), read from the DAT name once matched and from the filename before. Absent when the name carries none, and on every other kind."
@@ -17328,6 +17347,13 @@
               "type": "string"
             },
             "description": "Consoles present in a retro library (ADR 0073), alphabetical; a client orders them for display. Empty in every other library, so a Console filter exists only where it can narrow something."
+          },
+          "release_types": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "The kinds of record among a music library's matched albums (ADR 0115), most common first. **Only when the facets are asked for at the album level** (`kind=album`); empty otherwise, and empty until some album is matched, so a Type filter exists only where it can narrow something."
           },
           "collections": {
             "type": "array",
