@@ -40,8 +40,22 @@ const artist = {
 let host: HTMLDivElement;
 let root: Root;
 
-/** children is what the artist page finds under the artist. */
-function mount(children: Record<string, unknown>[]) {
+/**
+ * children is what the artist page finds under the artist; tracks is what
+ * /tracks answers with, every track at either depth. Defaulted to the children
+ * that are tracks plus two per album, which is the shape the server walks.
+ */
+function mount(
+  children: Record<string, unknown>[],
+  tracks: Record<string, unknown>[] = children.flatMap((c) =>
+    c.kind === "track"
+      ? [c]
+      : [
+          { id: Number(c.id) * 100 + 1, kind: "track", title: "One", missing: false },
+          { id: Number(c.id) * 100 + 2, kind: "track", title: "Two", missing: false },
+        ],
+  ),
+) {
   vi.stubGlobal(
     "fetch",
     vi.fn(async (url: string) => {
@@ -56,6 +70,9 @@ function mount(children: Record<string, unknown>[]) {
           configured: true,
           user: { id: "u1", name: "dana", role: "admin" },
         });
+      }
+      if (url.includes("/tracks")) {
+        return json({ items: tracks });
       }
       if (url.includes("parent_id=") || url.includes("/children")) {
         return json({ items: children, total: children.length });

@@ -9172,6 +9172,42 @@
         }
       }
     },
+    "/items/{id}/tracks": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/ItemId"
+        }
+      ],
+      "get": {
+        "operationId": "getArtistTracks",
+        "tags": [
+          "items"
+        ],
+        "summary": "Every track by an artist, in the artist page's order",
+        "description": "Records in the page's order (by sort title), each record's tracks by disc then track number, then row id **so the order is total**. A track parented straight to the artist (no album folder) is ordered by its own title among the records, where the page draws it. Missing files are left out: this is what the artist page's Play all and Shuffle queue. Progress is attached. Given an album, answers with that album's tracks.\n\nA route of its own rather than `/items?parent_id=`, which returns the albums and would make every client walk them. Not paged.",
+        "responses": {
+          "200": {
+            "description": "Every track, in order.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ItemList"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
     "/items/{id}/continue": {
       "parameters": [
         {

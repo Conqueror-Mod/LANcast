@@ -86,9 +86,19 @@ function TrackRow({
   onRemove,
   onAddToPlaylist,
   edits,
+  stateQueue,
+  album,
 }: {
   track: Item;
   queue: string;
+  /**
+   * The queue as ids, handed over in history state rather than ?queue=. Set
+   * for an artist's whole discography, which is hundreds of ids — too many for
+   * a URL (see Player.tsx on the two ways a queue arrives).
+   */
+  stateQueue?: number[];
+  /** The record this track is from, shown under its title. */
+  album?: string;
   albumArtist: string | undefined;
   showNumbers: boolean;
   /** Another track in this list carries the same title. */
@@ -101,7 +111,10 @@ function TrackRow({
   edits?: PlaylistRowEdits;
 }) {
   const navigate = useNavigate();
-  const play = () => navigate(`/watch/${track.id}?queue=${queue}`);
+  const play = () =>
+    stateQueue
+      ? navigate(`/watch/${track.id}`, { state: { queue: stateQueue } })
+      : navigate(`/watch/${track.id}?queue=${queue}`);
   const [menuAt, setMenuAt] = useState<MenuPoint | null>(null);
   const [byKey, setByKey] = useState(false);
   const openedFrom = useRef<HTMLElement | null>(null);
@@ -238,7 +251,11 @@ function TrackRow({
       )}
       <span className="track-row__title">
         {track.title}
-        {performer && <span className="track-row__artist">{performer}</span>}
+        {(album || performer) && (
+          <span className="track-row__artist">
+            {[album, performer].filter(Boolean).join(" · ")}
+          </span>
+        )}
         {ambiguous && fileName && (
           <span className="track-row__file" title={fileName}>
             {fileName}
@@ -336,9 +353,18 @@ export function TrackList({
   tracks,
   albumArtist,
   playlistID,
+  discography = false,
 }: {
   tracks: Item[];
   albumArtist?: string;
+  /**
+   * Set for an artist's every track, across all its records. The list is one
+   * sequence then, like a playlist: grouping on disc would gather every
+   * record's disc 1 under one heading and reorder the page, and each record's
+   * own track numbers would count 1, 2, 3, 1, 2 down it. So the number column
+   * goes, and each row names its record instead.
+   */
+  discography?: boolean;
   /**
    * Set when this list *is* a playlist, which turns on the row edits. Absent
    * for an album, whose order is the record's and not the viewer's to change.
@@ -386,7 +412,11 @@ export function TrackList({
   // file was tagged with one — a folder of downloads, typically — has no
   // ordering to display, and a column of dashes claims otherwise.
   // A playlist is always numbered, by position — see PlaylistRowEdits.
-  const showNumbers = editing || tracks.some((t) => (t.episode ?? 0) > 0);
+  const showNumbers =
+    !discography && (editing || tracks.some((t) => (t.episode ?? 0) > 0));
+  // One sequence: a playlist's order, or a discography's (see the prop).
+  const oneSequence = editing || discography;
+  const stateQueue = discography ? tracks.map((t) => t.id) : undefined;
 
   // Disc headings appear only on a set that has more than one. Without them a
   // two-disc release counts 1..17 and then 1..15 again, which reads as a
@@ -399,7 +429,7 @@ export function TrackList({
   // disc numbers of the records they came from, so grouping on them would cut a
   // playlist into "Disc 1 / Disc 2" sections that mean nothing about this list
   // and, worse, would reorder it on screen.
-  const discs = editing ? [0] : [...new Set(tracks.map((t) => t.season ?? 0))];
+  const discs = oneSequence ? [0] : [...new Set(tracks.map((t) => t.season ?? 0))];
   const multiDisc = discs.length > 1;
 
   return (
@@ -411,7 +441,7 @@ export function TrackList({
               <span className="section-label">Disc {disc || "—"}</span>
             </div>
           )}
-          {(editing ? tracks : tracks.filter((t) => (t.season ?? 0) === disc))
+          {(oneSequence ? tracks : tracks.filter((t) => (t.season ?? 0) === disc))
             .map((track, i) => (
               <TrackRow
                 // Position, not id. A playlist may hold the same track twice
@@ -424,6 +454,8 @@ export function TrackList({
                 queue={queue}
                 albumArtist={albumArtist}
                 showNumbers={showNumbers}
+                stateQueue={stateQueue}
+                album={discography ? (track.series ?? undefined) : undefined}
                 // A repeat in a playlist is deliberate, so the filename hint is
                 // suppressed there. It exists for the mis-tagged album — two
                 // rows that differ only by length, where the file is the only
@@ -432,7 +464,10 @@ export function TrackList({
                 // annotating them with a path is noise on the one case where
                 // identical rows are correct.
                 ambiguous={
-                  !editing &&
+                  // Not across a discography either: the same song on two
+                  // records is ordinary there, and the album line under each
+                  // row already tells them apart.
+                  !oneSequence &&
                   ambiguousTitles.has((track.title ?? "").toLowerCase())
                 }
                 // In a playlist the row's × removes the entry, and the

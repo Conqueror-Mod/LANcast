@@ -2557,6 +2557,27 @@ off seasons rather than off the show — the obvious call returns the seasons, a
 every client would otherwise reimplement the walk and get the loose-episode case
 wrong.
 
+### `GET /api/items/{id}/tracks`
+
+Every track by an artist, as `{ "items": [...] }`, in the order the artist page
+shows them: records in the page's order (by sort title), each record's tracks by
+disc then track number, and row id last so the order is total. Progress is
+attached, so the list can show what has been played without a request per row.
+Missing files are left out — this is what the artist page's **Play all** and
+**Shuffle** queue, and the player cannot open a missing file.
+
+**Two depths.** Most tracks hang off an album and the album off the artist, but
+a file in the artist's folder with no album folder around it is parented
+straight to the artist. That loose track is ordered by its own title among the
+records, which is where the page draws it. Given an album, the same rule answers
+with that album's tracks.
+
+A route of its own rather than `/api/items?parent_id=`, for the reason
+`/episodes` is one: the obvious call returns the albums, and every client would
+otherwise walk them and get the loose track wrong. Not paged: a queue is the
+whole discography or it is wrong. `404` for an id that does not exist or the
+caller may not see.
+
 ### `GET /api/items/{id}/previews` and `GET /api/items/{id}/previews/{n}`
 
 The frames shown over the scrub bar ([ADR 0105](adr/0105-a-preview-is-a-keyframe-every-ten-seconds.md)):

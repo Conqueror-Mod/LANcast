@@ -4036,6 +4036,31 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/items/{id}/tracks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The item's id. */
+                id: components["parameters"]["ItemId"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Every track by an artist, in the artist page's order
+         * @description Records in the page's order (by sort title), each record's tracks by disc then track number, then row id **so the order is total**. A track parented straight to the artist (no album folder) is ordered by its own title among the records, where the page draws it. Missing files are left out: this is what the artist page's Play all and Shuffle queue. Progress is attached. Given an album, answers with that album's tracks.
+         *
+         *     A route of its own rather than `/items?parent_id=`, which returns the albums and would make every client walk them. Not paged.
+         */
+        get: operations["getArtistTracks"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/items/{id}/continue": {
         parameters: {
             query?: never;
@@ -16901,6 +16926,32 @@ export interface operations {
                     "application/json": components["schemas"]["ItemList"];
                 };
             };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    getArtistTracks: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The item's id. */
+                id: components["parameters"]["ItemId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Every track, in order. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ItemList"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             404: components["responses"]["NotFound"];
         };
