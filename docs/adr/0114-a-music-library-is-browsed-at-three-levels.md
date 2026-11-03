@@ -62,6 +62,14 @@ an artist is in Jazz if anything of theirs is.
 - A track tile opens the track's page, as it does from search. A tracks view
   laid out as rows would read better at 9,000 tracks; it is not this decision,
   and the tile grid pages in as it scrolls.
+- **Combined genres stay as tagged.** On the first real library (9,945
+  tracks, 119 genres), many tags are lists joined by something other than `;`:
+  `Indie / Alternative` on 836 tracks, `Alternative Rock / Indie Rock /
+  Post-Grunge`, `Alternative\Rock`, `Modern Metal, Power Metal`, and a
+  tagger's leftover `//folk`. Splitting on `/`, `\` and `,` was offered and
+  declined (2026-11-02): the tag is the owner's statement, and a chip reading
+  exactly what the file says is something they can fix in their tagger. Do not
+  re-propose the split without a new reason.
 - Genres are whatever the files say. Matching albums against a database
   (MusicBrainz) would give them an authority the tags do not have. That is a
   separate decision with its own ADR, and nothing here forecloses it.
