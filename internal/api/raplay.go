@@ -23,8 +23,8 @@ import (
  * taken out of the answer. The player logs in with a placeholder and never
  * holds the token.
  *
- * Softcore only: a request that claims hardcore is refused here as well as
- * never being made by the player.
+ * Softcore only until ra.HardcoreApproved: a request that claims hardcore
+ * is refused here as well as never being made by the player.
  */
 
 // putRetroPlay turns earning on: the person's RetroAchievements password,

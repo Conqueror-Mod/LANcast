@@ -149,3 +149,29 @@ func TestAQueuedAwardLooksUnlockedToThePlayer(t *testing.T) {
 		t.Errorf("got %s", got)
 	}
 }
+
+// Hardcore unlocks and leaderboard entries go through only once
+// RetroAchievements has approved LANcast (ADR 0112 §5), and an editor upload
+// never does.
+func TestHardcoreWaitsForApproval(t *testing.T) {
+	hard := strings.Replace(awardNoDelay, "h=0", "h=1", 1)
+	board := "r=submitlbentry&u=Chrisdemo&t=lancast&i=1&s=100"
+	if HardcoreApproved {
+		t.Fatal("HardcoreApproved is on: that is RetroAchievements' decision, not a default")
+	}
+	for _, f := range []string{hard, board} {
+		if _, _, err := Check(f, "Chrisdemo"); err == nil {
+			t.Errorf("before approval, %q was let through", f)
+		}
+	}
+	HardcoreApproved = true
+	defer func() { HardcoreApproved = false }()
+	for _, f := range []string{hard, board} {
+		if _, _, err := Check(f, "Chrisdemo"); err != nil {
+			t.Errorf("after approval, %q was refused: %v", f, err)
+		}
+	}
+	if _, _, err := Check("r=uploadachievement&u=Chrisdemo&t=lancast", "Chrisdemo"); err == nil {
+		t.Error("an editor upload was let through")
+	}
+}
