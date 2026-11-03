@@ -45,3 +45,36 @@ func AlbumBaseTitle(title string) string {
 		s = out
 	}
 }
+
+// albumArtistSeparators are what joins an artist to a title in a tag that
+// carries both: "AUDIOSLAVE - BEST COLLECTION". Spaced, so a hyphen inside a
+// name ("Jay-Z", "AC-DC") never splits it.
+var albumArtistSeparators = []string{" - ", " – ", " — "}
+
+/*
+ * AlbumSearchTitle is the title to look an album up by (ADR 0115): its own
+ * title without the album artist in front of it, then without edition notes.
+ *
+ * Some rips tag the album as "Artist - Title". Searched whole, the artist's
+ * name counts against the record's real title, and the right record scores
+ * below the wrong ones (Audioslave's "Best Collection" at 0.50, behind three
+ * other records). The prefix is dropped only when it is the album artist, by
+ * the one normalizer, and never when that would leave nothing: a self-titled
+ * "Weezer - Weezer" keeps "Weezer".
+ *
+ * Matching only, like AlbumBaseTitle. The album keeps the title its tags give.
+ */
+func AlbumSearchTitle(title, albumArtist string) string {
+	s := strings.TrimSpace(title)
+	artist := SortTitle(albumArtist)
+	if artist != "" {
+		for _, sep := range albumArtistSeparators {
+			left, right, ok := strings.Cut(s, sep)
+			if ok && SortTitle(left) == artist && strings.TrimSpace(right) != "" {
+				s = strings.TrimSpace(right)
+				break
+			}
+		}
+	}
+	return AlbumBaseTitle(s)
+}
