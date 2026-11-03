@@ -473,6 +473,11 @@ type Item struct {
 	// Platform is a ROM's console (ADR 0073): "n64", "snes", … Nil for every
 	// other kind, and for a ROM no extension or folder could place.
 	Platform *string `json:"platform,omitempty"`
+	// ReleaseType is what kind of record an album is, from MusicBrainz (ADR
+	// 0115): "Album", "EP", "Single", or a secondary type that says more
+	// ("Compilation", "Live", "Soundtrack"). Nil until an album is matched,
+	// and for every other kind.
+	ReleaseType *string `json:"release_type,omitempty"`
 	/*
 	 * Region is a ROM's release region ("USA", "USA, Europe"), or empty.
 	 *
@@ -1031,6 +1036,12 @@ type ItemFilter struct {
 	Scope  []int64
 
 	Years []int // exact release years
+
+	// ReleaseTypes keeps albums of these kinds of record (ADR 0115): "Album",
+	// "EP", "Single", "Compilation"…, and tracks on such albums. An album not
+	// yet matched has none, so it leaves the grid while a type is chosen,
+	// which is what choosing one asks.
+	ReleaseTypes []string
 	// Platforms restricts a retro library to some consoles (ADR 0073).
 	Platforms   []string
 	Resolutions []string // bucket keys: uhd | hd1080 | hd720 | sd
@@ -1216,7 +1227,7 @@ const itemCols = `id, library_id, root_id, kind, path, title, sort_title, year, 
 	match_state, match_score, metadata_updated_at,
 	probed_at, video_codec, video_profile, width, height, video_bitrate,
 	audio_codec, audio_channels, video_frame_rate, imdb_id, artist, taken_at,
-	sensitive, sensitive_effective, platform`
+	sensitive, sensitive_effective, platform, release_type`
 
 // itemColsMI is itemCols qualified with the media_item alias "mi", for queries
 // that join another table carrying same-named columns (duration_ms, watched).
@@ -1253,7 +1264,7 @@ func scanItem(sc interface{ Scan(...any) error }) (*Item, error) {
 		&it.Provider, &it.ExternalID, &it.MatchState, &it.MatchScore, &it.MetadataUpdatedAt,
 		&it.ProbedAt, &it.VideoCodec, &it.VideoProfile, &it.Width, &it.Height,
 		&it.VideoBitRate, &it.AudioCodec, &it.AudioChannels, &it.FrameRate, &it.IMDbID,
-		&it.Artist, &it.TakenAt, &own, &effective, &it.Platform)
+		&it.Artist, &it.TakenAt, &own, &effective, &it.Platform, &it.ReleaseType)
 	if err != nil {
 		return nil, err
 	}
@@ -1515,6 +1526,17 @@ func (s *Store) ListItems(ctx context.Context, f ItemFilter) ([]Item, int, error
 		where += ` AND year IN (` + placeholders(len(f.Years)) + `)`
 		for _, y := range f.Years {
 			args = append(args, y)
+		}
+	}
+	if len(f.ReleaseTypes) > 0 {
+		// A track takes its album's type, so Play all over a grid of EPs
+		// queues the EPs' tracks rather than nothing: a track has no type of
+		// its own, and the queue is gathered by the grid's own filters.
+		where += ` AND COALESCE(release_type, (SELECT p.release_type FROM media_item p
+			WHERE p.id = media_item.parent_id AND media_item.kind = 'track'))
+			IN (` + placeholders(len(f.ReleaseTypes)) + `)`
+		for _, t := range f.ReleaseTypes {
+			args = append(args, t)
 		}
 	}
 	if len(f.Resolutions) > 0 {
@@ -1961,6 +1983,11 @@ type Facets struct {
 	// favourites toggle is only offered when it can change the grid.
 	HasFavourites bool `json:"has_favourites"`
 
+	// The kinds of record present among this library's albums (ADR 0115),
+	// most common first. Only at the album level, and only once some album is
+	// matched: before that there is nothing a Type filter could narrow.
+	ReleaseTypes []string `json:"release_types"`
+
 	// The highest rating present, so the client offers only thresholds that can
 	// return something. A library topping out at 8.4 has no business showing a
 	// 9+ filter that is guaranteed to be empty.
@@ -2019,6 +2046,29 @@ func (s *Store) LibraryFacetsAt(ctx context.Context, libraryID int64, userID, ki
 		Genres: []string{}, Decades: []int{}, ContentRatings: []string{},
 		Initials: []string{}, Years: []int{}, Resolutions: []ResolutionBucket{},
 		Collections: []CollectionFacet{}, Tags: []Tag{}, Platforms: []string{},
+		ReleaseTypes: []string{},
+	}
+
+	if kind == "album" {
+		rrows, err := s.db.QueryContext(ctx, `
+			SELECT release_type FROM media_item
+			WHERE library_id = ? AND kind = 'album' AND missing = 0 AND release_type IS NOT NULL
+			GROUP BY release_type ORDER BY COUNT(*) DESC, release_type`, libraryID)
+		if err != nil {
+			return f, fmt.Errorf("library facets (release types): %w", err)
+		}
+		for rrows.Next() {
+			var t string
+			if err := rrows.Scan(&t); err != nil {
+				rrows.Close()
+				return f, fmt.Errorf("library facets (release types): %w", err)
+			}
+			f.ReleaseTypes = append(f.ReleaseTypes, t)
+		}
+		rrows.Close()
+		if err := rrows.Err(); err != nil {
+			return f, err
+		}
 	}
 
 	prows, err := s.db.QueryContext(ctx, `

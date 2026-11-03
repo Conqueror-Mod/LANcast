@@ -127,6 +127,10 @@ export function FilterBar({
       // grid already shows.
       case "platform":
         return (facets?.platforms?.length ?? 0) > 1;
+      // One type is offered all the same, unlike one console: "EP" beside a
+      // grid of everything narrows it to the EPs.
+      case "release_type":
+        return (facets?.release_types?.length ?? 0) > 0;
       case "status":
         return !!(
           facets?.has_in_progress ||
@@ -309,6 +313,11 @@ function FilterPanel({
             chip(p, platformLabel(p), selected.has(p), () =>
               onToggle("platform", p),
             ),
+          )}
+
+        {category.key === "release_type" &&
+          (facets?.release_types ?? []).map((t) =>
+            chip(t, t, selected.has(t), () => onToggle("release_type", t)),
           )}
 
         {category.key === "year" &&

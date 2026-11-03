@@ -824,6 +824,10 @@ export function Detail() {
     // An album's artist belongs on the line that says what this is, ahead of
     // the year — "Between the Buried and Me · 2021", the way a record is named.
     isAlbum ? (item.artist ?? "") : "",
+    // What kind of record, once MusicBrainz has said (ADR 0115) — "EP",
+    // "Compilation", "Live". Not "Album": on an album's own page it says
+    // nothing the page does not.
+    isAlbum && item.release_type && item.release_type !== "Album" ? item.release_type : "",
     item.year ? String(item.year) : "",
     runtime(item.duration_ms),
     item.content_rating ?? "",

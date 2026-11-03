@@ -63,6 +63,9 @@ export const FILTER_CATEGORIES: FilterCategory[] = [
   // Only drawn in a library that holds more than one console's games, like
   // every category that cannot change the grid otherwise (ADR 0073).
   { key: "platform", label: "Console", mode: "chips" },
+  // Album, EP, Single, Compilation… on a music library's Albums level, once
+  // MusicBrainz has said what its albums are (ADR 0115).
+  { key: "release_type", label: "Type", mode: "chips" },
   /*
    * Tag is chips rather than a search, because a person's own tags are a small
    * list by construction — they typed every one of them. That is the same
@@ -227,6 +230,7 @@ export function activePills(
   }
 
   for (const p of params.getAll("platform")) push("platform", p, platformLabel(p));
+  for (const t of params.getAll("release_type")) push("release_type", t, t);
 
   const status = params.get("status");
   if (status && STATUS_LABELS[status]) {

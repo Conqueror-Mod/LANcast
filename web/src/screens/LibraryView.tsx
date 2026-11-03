@@ -76,6 +76,7 @@ export function LibraryView({
   const years = params.getAll("year");
   const resolutions = params.getAll("resolution");
   const platforms = params.getAll("platform");
+  const releaseTypes = params.getAll("release_type");
   const people = params.getAll("person");
   const actors = params.getAll("actor");
   const directors = params.getAll("director");
@@ -149,6 +150,7 @@ export function LibraryView({
         unwatched,
         years: years.map(Number),
         resolutions,
+        releaseTypes,
         people: people.map(Number),
         actors: actors.map(Number),
         directors: directors.map(Number),
@@ -195,6 +197,7 @@ export function LibraryView({
     years: years.map(Number),
     resolutions,
     platforms,
+    releaseTypes,
     people: people.map(Number),
     actors: actors.map(Number),
     directors: directors.map(Number),
@@ -270,7 +273,9 @@ export function LibraryView({
       (prev) => {
         if (show) prev.set("show", show);
         else prev.delete("show");
-        for (const k of ["year", "decade", "initial"]) prev.delete(k);
+        // A type is an album's (ADR 0115): kept on Tracks it would filter by
+        // a facet the bar no longer draws there.
+        for (const k of ["year", "decade", "initial", "release_type"]) prev.delete(k);
         const next = levelFor(config, show);
         const cur = prev.get("sort");
         if (cur && !next?.sorts.some((s) => s.value === cur)) prev.delete("sort");
@@ -389,6 +394,7 @@ export function LibraryView({
     years.length > 0 ||
     resolutions.length > 0 ||
     platforms.length > 0 ||
+    releaseTypes.length > 0 ||
     people.length > 0 ||
     actors.length > 0 ||
     directors.length > 0 ||

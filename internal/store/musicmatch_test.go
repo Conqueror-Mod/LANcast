@@ -265,3 +265,56 @@ func TestFixingAnAlbumRequeuesItsArtist(t *testing.T) {
 		t.Error("a locked artist was put back in the queue")
 	}
 }
+
+// The Type filter (ADR 0115): the facet offers only types present among
+// matched albums, at the album level alone; the filter keeps those albums,
+// and their tracks, so Play all over a grid of EPs queues the EPs.
+func TestReleaseTypeFacetAndFilter(t *testing.T) {
+	f := newMusicFixture(t)
+	ctx := context.Background()
+
+	before, err := f.st.LibraryFacetsAt(ctx, f.lib, "u1", "album")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(before.ReleaseTypes) != 0 {
+		t.Errorf("types before any match = %v; nothing to narrow yet", before.ReleaseTypes)
+	}
+
+	f.st.ApplyAlbumMatch(ctx, f.album, AlbumMatch{Provider: "musicbrainz", ExternalID: "rg-1", State: "matched", Score: 1, ReleaseType: "EP"})
+	f.st.ApplyAlbumMatch(ctx, f.other, AlbumMatch{Provider: "musicbrainz", ExternalID: "rg-2", State: "matched", Score: 1, ReleaseType: "Album"})
+
+	albums, err := f.st.LibraryFacetsAt(ctx, f.lib, "u1", "album")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(albums.ReleaseTypes, []string{"Album", "EP"}) {
+		t.Errorf("album-level types = %v", albums.ReleaseTypes)
+	}
+	top, _ := f.st.LibraryFacetsAt(ctx, f.lib, "u1", "")
+	if len(top.ReleaseTypes) != 0 {
+		t.Errorf("artist-level types = %v; an artist has no type", top.ReleaseTypes)
+	}
+
+	eps, _, err := f.st.ListItems(ctx, ItemFilter{LibraryID: f.lib, Kind: "album", ReleaseTypes: []string{"EP"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(eps) != 1 || eps[0].ID != f.album || eps[0].ReleaseType == nil || *eps[0].ReleaseType != "EP" {
+		t.Errorf("EP albums = %+v, want Record carrying its type", eps)
+	}
+	tracks, _, err := f.st.ListItems(ctx, ItemFilter{LibraryID: f.lib, Kind: "track", ReleaseTypes: []string{"EP"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var ids []int64
+	for _, it := range tracks {
+		ids = append(ids, it.ID)
+	}
+	slices.Sort(ids)
+	want := []int64{f.t1, f.t2}
+	slices.Sort(want)
+	if !slices.Equal(ids, want) {
+		t.Errorf("tracks on EPs = %v, want %v", ids, want)
+	}
+}
