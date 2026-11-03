@@ -353,6 +353,17 @@
   .browse__filters-toggle {
     display: inline-flex;
   }
+
+  /*
+   * The filter bar takes a row of its own, so the panel hanging from it
+   * starts at the gutter. Beside Sort the bar began ~300px in, and a panel
+   * as wide as the screen ran that far off the right edge (reported from a
+   * phone, genre chips cut mid-word). FilterBar.css spans the panel to it.
+   */
+  .browse__controls .fbar {
+    flex: 1 1 100%;
+    min-width: 0;
+  }
 }
 
 /*
