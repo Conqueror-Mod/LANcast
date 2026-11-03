@@ -19,6 +19,10 @@ const (
 	KindShow    Kind = "show"
 	KindSeason  Kind = "season"
 	KindEpisode Kind = "episode"
+	// An album is matched to a MusicBrainz release group, and an artist is
+	// identified through its albums, never by searching its name (ADR 0115).
+	KindAlbum  Kind = "album"
+	KindArtist Kind = "artist"
 )
 
 // Caps declares what a provider can answer for.
@@ -27,6 +31,8 @@ type Caps struct {
 	Show    bool
 	Episode bool
 	Artwork bool
+	// Music is albums and artists (ADR 0115).
+	Music bool
 }
 
 // Supports reports whether the provider handles this kind.
@@ -38,6 +44,8 @@ func (c Caps) Supports(k Kind) bool {
 		return c.Show
 	case KindEpisode:
 		return c.Episode
+	case KindAlbum, KindArtist:
+		return c.Music
 	}
 	return false
 }
@@ -50,6 +58,8 @@ type Query struct {
 	Series  string
 	Season  int
 	Episode int
+	// Artist is an album's album artist, scored beside its title (ADR 0115).
+	Artist string
 }
 
 // Ref identifies one record within a provider.
@@ -70,6 +80,22 @@ type Candidate struct {
 	Overview   string
 	Popularity float64
 	PosterURL  string
+	/*
+	 * Artist is an album candidate's artist credit, as one string.
+	 *
+	 * Not on the wire yet: the candidates endpoint sends this struct as it is,
+	 * and a new key is a contract change that goes with the Fix match screen
+	 * for albums (ADR 0115, step 3) and its docs, not before.
+	 */
+	Artist string `json:"-"`
+	// ArtistNames are each credited artist's name, as credited and as the
+	// catalogue knows them ("Тату" and "t.A.T.u."), so one name in a
+	// collaboration or an artist credited in another script still agrees.
+	ArtistNames []string `json:"-"`
+	// ReleaseType is an album candidate's kind of record ("Album", "Single",
+	// "Compilation"…), which breaks a tie between same-named records (Decide).
+	// Off the wire for the same reason as Artist.
+	ReleaseType string `json:"-"`
 
 	// Score and Breakdown are filled in by Rank, not by the provider.
 	Score     float64
@@ -232,6 +258,10 @@ type Record struct {
 	// or series. Nil for the common standalone case.
 	Collection *CollectionRef
 
+	// Music is what a music source adds beyond the shared fields (ADR 0115).
+	// Nil from every other source.
+	Music *MusicInfo
+
 	/*
 	 * Keywords are the source's free tags, and they carry the groupings a
 	 * franchise field cannot.
@@ -247,6 +277,28 @@ type Record struct {
 	 * question would be a schema change earning nothing.
 	 */
 	Keywords []Keyword
+}
+
+/*
+ * MusicInfo is an album's or an artist's identity in a music catalogue.
+ *
+ * The identity is the point of matching music (ADR 0115): the tags already
+ * name the album, and what they cannot do is say which record it is to
+ * anything outside LANcast.
+ */
+type MusicInfo struct {
+	// ReleaseType is Album, EP, Single, Compilation, Live or Soundtrack for an
+	// album: the secondary type when there is one, since a live album is
+	// better described as Live than as Album. Empty for an artist.
+	ReleaseType string
+	// Artists is the credit, in order: the album's, or the artist itself.
+	Artists []MusicArtist
+}
+
+// MusicArtist is one credited artist.
+type MusicArtist struct {
+	ID   string
+	Name string
 }
 
 // Keyword is one of a source's free tags.
