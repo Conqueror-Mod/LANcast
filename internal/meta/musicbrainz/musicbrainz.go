@@ -387,12 +387,30 @@ func candidates(resp searchResponse) []meta.Candidate {
 	return out
 }
 
+/*
+ * CoverArtBase is the Cover Art Archive (ADR 0115, step 4): the front image
+ * people have uploaded for a release group, served from the Internet Archive.
+ * A variable so a test can point it elsewhere.
+ */
+var CoverArtBase = "https://coverartarchive.org"
+
+// CoverArtURL is a release group's front cover at 500 pixels: enough for a
+// tile and an album page, a fraction of the original's size. It answers 404
+// when the archive has none, which a download reports as a failure and the
+// caller skips.
+func CoverArtURL(releaseGroupID string) string {
+	return CoverArtBase + "/release-group/" + releaseGroupID + "/front-500"
+}
+
 func albumRecord(rg releaseGroup) *meta.Record {
 	rec := &meta.Record{
 		Source:     ID,
 		ExternalID: rg.ID,
 		Kind:       meta.KindAlbum,
 		Genres:     topGenres(rg.Genres),
+		// Named, not fetched: whether it is wanted is the caller's call (an
+		// album with art of its own keeps it).
+		Artwork: []meta.ArtRef{{Kind: meta.ArtPoster, URL: CoverArtURL(rg.ID)}},
 		Music: &meta.MusicInfo{
 			ReleaseType: releaseType(rg.PrimaryType, rg.SecondaryTypes),
 			Artists:     creditArtists(rg.ArtistCredit),

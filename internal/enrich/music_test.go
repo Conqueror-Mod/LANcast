@@ -3,6 +3,7 @@ package enrich
 import (
 	"context"
 	"errors"
+	"fmt"
 	"slices"
 	"sync/atomic"
 	"testing"
@@ -191,4 +192,128 @@ func TestAnArtistSplitBetweenTwoIsNotGuessed(t *testing.T) {
 	if ar := get(t, m.st, m.artist); ar.MatchState != meta.StateUnmatched || ar.ExternalID != nil && *ar.ExternalID != "" {
 		t.Errorf("artist: %s %v", ar.MatchState, ar.ExternalID)
 	}
+}
+
+// urlArt stores each URL as its own image, so one cover can replace another.
+type urlArt struct{ downloaded []string }
+
+func (a *urlArt) Download(_ context.Context, url string) (string, int, int, int64, error) {
+	a.downloaded = append(a.downloaded, url)
+	return fmt.Sprintf("%064x", len(a.downloaded)), 500, 500, 1000, nil
+}
+func (a *urlArt) Stored(string) bool { return false }
+
+func withCovers(p *fakeMusic) *fakeMusic {
+	for id, r := range p.records {
+		if r.Kind == meta.KindAlbum {
+			r.Artwork = []meta.ArtRef{{Kind: meta.ArtPoster, URL: "https://coverartarchive.org/release-group/" + id + "/front-500"}}
+		}
+	}
+	return p
+}
+
+func runWith(t *testing.T, st *store.Store, p meta.Provider, art ArtCache) {
+	t.Helper()
+	reg := meta.NewRegistry()
+	reg.AddProvider(p)
+	if err := New(st, reg, art, quietLog()).Run(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func posterSource(t *testing.T, st *store.Store, id int64) (string, bool) {
+	t.Helper()
+	src, ok, err := st.SelectedArtworkSource(context.Background(), id, "poster")
+	if err != nil {
+		t.Fatal(err)
+	}
+	return src, ok
+}
+
+// Step 4: a confidently matched album with no cover gets its record's front
+// cover; one with art of its own keeps it.
+func TestAMatchedAlbumWithoutArtGetsTheArchiveCover(t *testing.T) {
+	m := newMusicLib(t)
+	m.st.SetMusicMatching(true)
+	ctx := context.Background()
+	// Hello Nasty has a cover from its files: no source URL.
+	if err := m.st.PutArtwork(ctx, m.a1, fmt.Sprintf("%064x", 999), "poster", "", 600, 600, 1); err != nil {
+		t.Fatal(err)
+	}
+	art := &urlArt{}
+	runWith(t, m.st, withCovers(beastie()), art)
+
+	if src, _ := posterSource(t, m.st, m.a1); src != "" {
+		t.Errorf("Hello Nasty's own cover was replaced by %q", src)
+	}
+	src, ok := posterSource(t, m.st, m.a2)
+	if !ok || src != "https://coverartarchive.org/release-group/rg-ic/front-500" {
+		t.Errorf("Ill Communication cover = %q %v, want the archive's", src, ok)
+	}
+	if len(art.downloaded) != 1 {
+		t.Errorf("downloaded %v, want only the album without art", art.downloaded)
+	}
+}
+
+// A guess brings no picture: a wrong cover is the most visible mistake there
+// is. Two records of one name, neither the album, is a guess (Decide).
+func TestAReviewMatchBringsNoCover(t *testing.T) {
+	m := newMusicLib(t)
+	m.st.SetMusicMatching(true)
+	p := withCovers(beastie())
+	single := func(id string) meta.Candidate {
+		return meta.Candidate{Provider: "musicbrainz", ExternalID: id, Kind: meta.KindAlbum,
+			Title: "Hello Nasty", Artist: "Beastie Boys", Year: 1998, ReleaseType: "Single"}
+	}
+	p.byTitle["Hello Nasty"] = []meta.Candidate{single("rg-hn"), single("rg-ic")}
+	art := &urlArt{}
+	runWith(t, m.st, p, art)
+	if al := get(t, m.st, m.a1); al.MatchState != meta.StateReview {
+		t.Fatalf("fixture: Hello Nasty is %s (%.2f), want review", al.MatchState, deref(al.MatchScore))
+	}
+	if _, ok := posterSource(t, m.st, m.a1); ok {
+		t.Error("a review-band match brought a cover")
+	}
+}
+
+// Fixing a match replaces a cover that came with the wrong one, and never a
+// cover of the album's own or a locked one.
+func TestFixMatchReplacesOnlyTheArchiveCover(t *testing.T) {
+	m := newMusicLib(t)
+	m.st.SetMusicMatching(true)
+	p := withCovers(beastie())
+	art := &urlArt{}
+	runWith(t, m.st, p, art)
+	ctx := context.Background()
+	reg := meta.NewRegistry()
+	reg.AddProvider(p)
+	w := New(m.st, reg, art, quietLog())
+
+	// Ill Communication's archive cover is the wrong record's: fixing it
+	// brings the right one.
+	if err := w.ApplyMusicMatch(ctx, get(t, m.st, m.a2), "musicbrainz", "rg-hn"); err != nil {
+		t.Fatal(err)
+	}
+	if src, _ := posterSource(t, m.st, m.a2); src != "https://coverartarchive.org/release-group/rg-hn/front-500" {
+		t.Errorf("after the fix the cover is %q", src)
+	}
+
+	// A cover the person locked stays, whatever the match.
+	if err := m.st.LockField(ctx, m.a1, meta.FieldArtwork); err != nil {
+		t.Fatal(err)
+	}
+	before, _ := posterSource(t, m.st, m.a1)
+	if err := w.ApplyMusicMatch(ctx, get(t, m.st, m.a1), "musicbrainz", "rg-ic"); err != nil {
+		t.Fatal(err)
+	}
+	if after, _ := posterSource(t, m.st, m.a1); after != before {
+		t.Errorf("a locked cover changed from %q to %q", before, after)
+	}
+}
+
+func deref(f *float64) float64 {
+	if f == nil {
+		return 0
+	}
+	return *f
 }

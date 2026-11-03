@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"sort"
+	"strings"
 
 	"lancast/internal/meta"
 	"lancast/internal/store"
@@ -33,6 +34,7 @@ type MusicStore interface {
 	MarkMusicUnmatched(ctx context.Context, itemID int64, score float64) error
 	ArtistCreditVotes(ctx context.Context, artistID int64) (map[string]int, int, error)
 	RequeueArtistOf(ctx context.Context, albumID int64) error
+	SelectedArtworkSource(ctx context.Context, itemID int64, kind string) (string, bool, error)
 }
 
 func isMusic(kind meta.Kind) bool { return kind == meta.KindAlbum || kind == meta.KindArtist }
@@ -90,8 +92,47 @@ func (w *Worker) enrichAlbum(ctx context.Context, ms MusicStore, item store.Item
 			m.ArtistID = rec.Music.Artists[0].ID
 		}
 	}
-	return true, ms.ApplyAlbumMatch(ctx, item.ID, m)
+	if err := ms.ApplyAlbumMatch(ctx, item.ID, m); err != nil {
+		return true, err
+	}
+	// Only a confident match brings a cover: a wrong picture on a guess is
+	// the most visible mistake this could make.
+	if state == meta.StateMatched {
+		w.albumCover(ctx, ms, item.ID, rec)
+	}
+	return true, nil
 }
+
+/*
+ * albumCover gives a matched album its record's front cover from the Cover
+ * Art Archive (ADR 0115, step 4), only where the album has none of its own.
+ *
+ * Art read off the disk has no source URL and is never replaced; nor is a
+ * locked one. A cover that came from the archive is replaced, because it
+ * belonged to the match, and a corrected match should not keep the wrong
+ * record's picture. The local cover pass writes over this one whenever it
+ * finds art in the files, so the tags win here too.
+ */
+func (w *Worker) albumCover(ctx context.Context, ms MusicStore, albumID int64, rec *meta.Record) {
+	if len(rec.Artwork) == 0 {
+		return
+	}
+	src, has, err := ms.SelectedArtworkSource(ctx, albumID, string(meta.ArtPoster))
+	if err != nil {
+		w.log.Warn("album cover check failed", "album", albumID, "error", err)
+		return
+	}
+	if has && (!isCoverArchive(src) || src == rec.Artwork[0].URL) {
+		return
+	}
+	locked, err := w.st.LockedFields(ctx, albumID)
+	if err != nil || meta.LockedSet(locked)[meta.FieldArtwork] {
+		return
+	}
+	w.storeArtwork(ctx, albumID, rec.Artwork)
+}
+
+func isCoverArchive(url string) bool { return strings.Contains(url, "coverartarchive.org/") }
 
 /*
  * enrichArtist takes the artist its albums agree on.
@@ -205,5 +246,6 @@ func (w *Worker) ApplyMusicMatch(ctx context.Context, item store.Item, providerI
 	if err := ms.ApplyAlbumMatch(ctx, item.ID, m); err != nil {
 		return err
 	}
+	w.albumCover(ctx, ms, item.ID, rec)
 	return ms.RequeueArtistOf(ctx, item.ID)
 }

@@ -41,6 +41,12 @@ you compiled yourself cannot send one; it offers to copy the report instead.
   "Identify albums with MusicBrainz" in Settings and nothing is asked; matches
   already made stay. Genres it supplies are its users' work, shared under
   CC BY-NC-SA, and are shown with that credit.
+- **Album covers from the Cover Art Archive.** When an album is matched with
+  confidence and has no cover of its own, LANcast asks coverartarchive.org for
+  that record's front cover, by its MusicBrainz id, and downloads the image
+  from the Internet Archive, where the archive keeps it. Nothing else is sent.
+  An album with a cover in its files is never asked about, and the same
+  switch turns this off.
 
 ## What happens only when someone asks
 

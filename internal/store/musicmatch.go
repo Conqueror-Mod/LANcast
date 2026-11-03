@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"time"
 )
@@ -93,6 +94,27 @@ func (s *Store) RequeueArtistOf(ctx context.Context, albumID int64) error {
 		return fmt.Errorf("requeue artist: %w", err)
 	}
 	return nil
+}
+
+/*
+ * SelectedArtworkSource is where an item's chosen image of one kind came
+ * from: a provider's URL, or "" for one read off the disk. ok is false when
+ * it has none. Album covers use it to tell art of the album's own, which is
+ * never replaced, from a Cover Art Archive image a later match may correct.
+ */
+func (s *Store) SelectedArtworkSource(ctx context.Context, itemID int64, kind string) (source string, ok bool, err error) {
+	var src sql.NullString
+	err = s.db.QueryRowContext(ctx, `
+		SELECT a.source_url FROM item_artwork ia JOIN artwork a ON a.id = ia.artwork_id
+		WHERE ia.item_id = ? AND ia.kind = ? AND ia.selected = 1
+		LIMIT 1`, itemID, kind).Scan(&src)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", false, nil
+	}
+	if err != nil {
+		return "", false, fmt.Errorf("selected artwork source: %w", err)
+	}
+	return src.String, true, nil
 }
 
 // fillGenres gives an item genres only when it has none and they are not
