@@ -1,6 +1,6 @@
 # ADR 0116 — An audiobook is its own library, and most of it is built already
 
-Date: 2026-11-03 · Status: **proposed** · Related: [ADR 0024](0024-music-libraries.md), [ADR 0028](0028-pictures-library.md), [ADR 0073](0073-a-retro-game-is-a-file-the-server-owns.md), [ADR 0101](0101-a-comic-is-read-out-of-its-archive.md)
+Date: 2026-11-03 · Status: **accepted** · Related: [ADR 0024](0024-music-libraries.md), [ADR 0028](0028-pictures-library.md), [ADR 0073](0073-a-retro-game-is-a-file-the-server-owns.md), [ADR 0101](0101-a-comic-is-read-out-of-its-archive.md)
 
 ## Context
 
@@ -33,7 +33,15 @@ So most of what a book needs is in the tree. What is missing is a place for
 books to live, a model that is not artist → album → track, and a player that
 offers what a listener expects.
 
-## Decision (proposed)
+## Decision
+
+**Accepted by the owner on 2026-11-03**, with the answers to its open
+questions recorded below in place of the questions. The library to build
+against is a set of 115 Star Trek audiobooks, kept as a test library like
+the others (`TEST AUDIOBOOK LIBRARY`). **Its tags are read and reported
+before step 1 is built**, as the matcher was measured before ADR 0115's
+screens: author, narrator and series are assumed below to sit in particular
+tags, and that assumption is checked against real files first.
 
 ### Its own library kind, `audiobooks`, holding `book` items
 
@@ -68,7 +76,15 @@ All filename and tag guessing lives in `internal/media`, as ever.
   exports put it. A `narrator` tag wins where present.
 - **Series and number**: the grouping tag or `series` / `series-part` tags,
   else a folder named after the series holding numbered books
-  ("Discworld/01 The Colour of Magic").
+  ("Discworld/01 The Colour of Magic"). **One series and one number per
+  book.** Star Trek nests (*The Next Generation*, then #12 within it, and
+  sometimes a sub-series such as *Destiny*); the finer level is left for a
+  later step, if the tags carry it.
+- **Abridged and unabridged** recordings of one book are **two books**, shown
+  side by side with "Abridged" marked the way a film's edition is ([ADR 0042](0042-two-files-one-work.md)).
+  They are different recordings, not copies, and are never grouped.
+- **A full-cast audio drama lists every narrator**, and the narrator filter
+  finds the book under each of them.
 - **Cover**: embedded art, else `cover.jpg` beside it, which is the existing
   cover pass unchanged.
 
@@ -86,13 +102,15 @@ The music player, not the film player, plus:
   endpoint that exists.
 - **Speed**: 0.75× to 2× in 0.25 steps, remembered **per book**, because
   somebody who listens to one narrator at 1.5× may not want another at that
-  speed. Pitch is kept, which `playbackRate` does by default in browsers and
+  speed. **A book never played starts at 1×**, not at the last speed used
+  elsewhere. Pitch is kept, which `playbackRate` does by default in browsers and
   mpv does with its `scaletempo` default.
 - **Skip back 15 s and forward 30 s**, the convention every book player shares,
   in place of seeking by track.
 - **A sleep timer**: 15, 30, 45 or 60 minutes, or **end of chapter**. A book
   is listened to in bed, and finding the place again in the morning is half of
-  why resume matters.
+  why resume matters. **It fades out over its last few seconds** rather than
+  stopping dead.
 - **Resume is the default, not an offer.** Pressing Play on a started book goes
   to where it stopped, with no "resume or start over?" question, minus a few
   seconds so the last sentence is heard again. Start over sits in the menu.
@@ -100,8 +118,15 @@ The music player, not the film player, plus:
 ### Browsing
 
 Books by title, author, narrator and series, with filters for author,
-narrator and series. Shelves for Continue Listening and Recently Added. The
-tiles are square like albums: book covers are square more often than not.
+**narrator** and series. The narrator filter earns its place here: books read
+by a cast member repeat across a Star Trek library. Shelves for Continue
+Listening and Recently Added. **Continue Listening is the audiobooks
+library's own**, separate from music's, so a half-finished book does not push
+songs off the shelf or the other way round. The tiles are square like albums:
+book covers are square more often than not.
+
+**Books stay on this server**, like comics (ADR 0101): an audiobooks library
+is not offered to paired servers until somebody asks for it.
 
 ## The thing that is easy to get wrong
 
@@ -134,16 +159,24 @@ counts once when it finishes, not once per part.
    skips, speed per book.
 3. The sleep timer, and the author, narrator and series filters.
 
-## Open questions for the owner
+Before step 1: `devseed` creates `TEST AUDIOBOOK LIBRARY` like the other
+test libraries, and the 115 books' tags are read and reported. Whether they
+are `.m4b` files or folders of parts, and where author, narrator and series
+really sit, decides the details of step 1, not its shape: both forms of book
+are planned.
 
-- **Is anybody waiting for this?** The rule this project has followed is to
-  plan an area right before building it, and to build it when somebody has
-  the files. Is there an audiobook library to point it at, and roughly what
-  shape is it in: `.m4b` files, or folders of MP3 parts?
-- **Narrator as a filter, or only shown on the book?** A filter is cheap, but
-  only worth it if narrators repeat in the library.
-- **Should books be offered to paired servers** like films and music, or kept
-  local like comics (ADR 0101) until somebody asks?
+## Answered by the owner, 2026-11-03
+
+1. **Is there a library?** Yes: 115 Star Trek audiobooks, for testing.
+   Format to be read from the files when they arrive.
+2. **Narrator as a filter?** Yes.
+3. **Offered to paired servers?** No, kept local like comics, until asked.
+4. **Series?** One series and one number per book; sub-series later.
+5. **Abridged and unabridged?** Both shown, "Abridged" marked like an edition.
+6. **Full-cast dramas?** Every narrator listed, and found by the filter.
+7. **Continue Listening?** The audiobooks library's own shelf.
+8. **Sleep timer?** 15/30/45/60 minutes and end of chapter, fading out.
+9. **Default speed?** 1× for a book never played; each book then keeps its own.
 
 ## Not in this ADR
 

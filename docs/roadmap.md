@@ -194,8 +194,14 @@ is in the [Feature backlog](#feature-backlog) entry it names.*
   names what is still open (leaderboard trackers, queued leaderboard entries). The
   application can go in from 2027-02-02.
 
+- **Audiobooks** — [ADR 0116](adr/0116-an-audiobook-is-its-own-library.md),
+  accepted 2026-11-03: a library kind of its own, books as one item whether one
+  file or a folder of parts, chapters, speed per book, a sleep timer. Waiting
+  on the test library (115 Star Trek audiobooks) arriving, so its tags can be
+  read before step 1.
+
 **Feature backlog, not yet planned.**
-- Libraries and media: **audiobooks**, **ebooks** beyond comics (EPUB),
+- Libraries and media: **ebooks** beyond comics (EPUB),
   `.cbr` comics, and photo **bursts**. Loudness levelling from ReplayGain tags
   is built ([ADR 0108](adr/0108-music-is-levelled-by-its-own-replaygain.md));
   measuring untagged tracks is not.
@@ -1096,9 +1102,10 @@ group is not priority.
   207 are their own bucket. Marked folders are excluded from it entirely
   (ADR 0051, amended). Face grouping, the large piece when this was written,
   has since been built (ADR 0052).
-- **Audiobooks** — not built; **proposed** as
+- **Audiobooks** — not built; **accepted** as
   [ADR 0116](adr/0116-an-audiobook-is-its-own-library.md) (2026-11-03), its own
-  library kind, waiting on the owner's answers to its open questions. Checking
+  library kind, with the owner's nine answers recorded in it. The test library
+  is 115 Star Trek audiobooks; their tags are read before step 1 is built. Checking
   the code for it corrected this entry: resume by position already works for
   any audio, chapters are already read from a file on demand (#949), and both
   players already carry a playback rate. What is missing is a place for books,
