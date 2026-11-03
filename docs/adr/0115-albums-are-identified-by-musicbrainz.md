@@ -1,6 +1,6 @@
 # ADR 0115 — Albums are identified by MusicBrainz, and the tags still win
 
-Date: 2026-11-03 · Status: **proposed** · Related: [ADR 0024](0024-music-libraries.md), [ADR 0007](0007-provider-and-localsource-split.md), [ADR 0008](0008-field-level-locking.md), [ADR 0114](0114-a-music-library-is-browsed-at-three-levels.md)
+Date: 2026-11-03 · Status: **accepted** · Related: [ADR 0024](0024-music-libraries.md), [ADR 0007](0007-provider-and-localsource-split.md), [ADR 0008](0008-field-level-locking.md), [ADR 0114](0114-a-music-library-is-browsed-at-three-levels.md)
 
 ## Context
 
@@ -135,9 +135,10 @@ Music matching is on by default, as TMDB is for films. What it sends:
 
 [docs/privacy.md](../privacy.md) gains both under "What is on unless you turn
 it off", in the same commit as the code. A library setting turns it off.
-**Open for the owner's review:** whether existing music libraries start
-matching on upgrade or wait to be switched on. This ADR proposes on, because an
-off-by-default identity is one nobody discovers.
+**Existing music libraries start matching on upgrade**, and genres from
+MusicBrainz fill albums that have none, with credit shown. Both were approved
+by the owner on 2026-11-03. Off by default would have been an identity
+nobody discovers.
 
 ## The thing that is easy to get wrong
 
