@@ -7223,6 +7223,8 @@ export interface components {
             detect_markers: boolean;
             /** @description Make scrub-bar previews in the background (ADR 0105). Off by default. */
             scrub_previews?: boolean;
+            /** @description Identify albums and artists in MusicBrainz (ADR 0115). On by default. Sends album titles and artist names to musicbrainz.org. Tags win: only a missing year or genre is filled. Off takes music out of the enrichment queue and keeps matches already made; on starts a pass now. */
+            match_music: boolean;
             /** @description Fetch box art and a screenshot for each identified ROM from libretro-thumbnails (ADR 0073). **Off by default**: it is a network fetch per game. Identifying ROMs is offline and does not depend on it. Turning it on re-queues identified ROMs so their art arrives now. */
             retro_artwork: boolean;
             /** @description Read where photographs were taken and group picture libraries by town (ADR 0078). **Off by default.** Turning it on starts the location pass at once; **turning it off deletes every location and place read**, rather than hiding them. */
@@ -7365,6 +7367,8 @@ export interface components {
             detect_markers?: boolean;
             /** @description Make scrub-bar previews in the background (ADR 0105). Off by default. */
             scrub_previews?: boolean;
+            /** @description Identify albums and artists in MusicBrainz (ADR 0115). On by default. Sends album titles and artist names to musicbrainz.org. Tags win: only a missing year or genre is filled. Off takes music out of the enrichment queue and keeps matches already made; on starts a pass now. */
+            match_music?: boolean;
             /** @description Fetch box art and a screenshot for each identified ROM from libretro-thumbnails (ADR 0073). **Off by default**: it is a network fetch per game. Identifying ROMs is offline and does not depend on it. Turning it on re-queues identified ROMs so their art arrives now. */
             retro_artwork?: boolean;
             /** @description Read where photographs were taken and group picture libraries by town (ADR 0078). **Off by default.** Turning it on starts the location pass at once; **turning it off deletes every location and place read**, rather than hiding them. */

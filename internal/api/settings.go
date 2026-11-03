@@ -103,6 +103,7 @@ func (s *Server) getSettings(w http.ResponseWriter, r *http.Request) {
 		"scrub_previews": cur.ScrubPreviews,
 		"retro_artwork":  cur.RetroArtwork,
 		"photo_places":   cur.PhotoPlaces,
+		"match_music":    cur.MatchMusic,
 		"login_picker":   cur.LoginPicker,
 
 		// The pre-roll folder (ADR 0099), "" when off.
@@ -155,6 +156,7 @@ func (s *Server) putSettings(w http.ResponseWriter, r *http.Request) {
 		DetectMarkers    *bool    `json:"detect_markers"`
 		ScrubPreviews    *bool    `json:"scrub_previews"`
 		RetroArtwork     *bool    `json:"retro_artwork"`
+		MatchMusic       *bool    `json:"match_music"`
 		PhotoPlaces      *bool    `json:"photo_places"`
 		LoginPicker      *bool    `json:"login_picker"`
 		HardwareEncoder  *string  `json:"hardware_encoder"`
@@ -264,6 +266,9 @@ func (s *Server) putSettings(w http.ResponseWriter, r *http.Request) {
 	}
 	if req.RetroArtwork != nil {
 		next.RetroArtwork = *req.RetroArtwork
+	}
+	if req.MatchMusic != nil {
+		next.MatchMusic = *req.MatchMusic
 	}
 	if req.AutoEnrich != nil {
 		next.AutoEnrich = *req.AutoEnrich
@@ -523,6 +528,14 @@ func (s *Server) putSettings(w http.ResponseWriter, r *http.Request) {
 	if next.RetroArtwork && !prev.RetroArtwork {
 		s.requeueROMs(r.Context())
 	}
+	// Music matching (ADR 0115): the queue follows the switch at once, and on
+	// starts a pass now rather than at the next scan.
+	if next.MatchMusic != prev.MatchMusic {
+		s.st.SetMusicMatching(next.MatchMusic)
+		if next.MatchMusic {
+			s.enrichSoon()
+		}
+	}
 	/*
 	 * Photo places (ADR 0078): on starts the location pass now, for the
 	 * reason marker detection does; off deletes everything it read.
@@ -574,6 +587,7 @@ func changedSettings(prev, next config.Settings) []string {
 	add("max_quality", prev.MaxQuality != next.MaxQuality)
 	add("detect_markers", prev.DetectMarkers != next.DetectMarkers)
 	add("retro_artwork", prev.RetroArtwork != next.RetroArtwork)
+	add("match_music", prev.MatchMusic != next.MatchMusic)
 	add("photo_places", prev.PhotoPlaces != next.PhotoPlaces)
 	add("login_picker", prev.LoginPicker != next.LoginPicker)
 	add("auto_enrich", prev.AutoEnrich != next.AutoEnrich)

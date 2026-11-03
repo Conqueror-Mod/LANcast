@@ -16528,6 +16528,7 @@
           "sensitive_marking",
           "detect_markers",
           "retro_artwork",
+          "match_music",
           "photo_places",
           "auto_enrich",
           "update_check",
@@ -16676,6 +16677,10 @@
             "type": "boolean"
           },
           "scrub_previews": { "type": "boolean", "description": "Make scrub-bar previews in the background (ADR 0105). Off by default." },
+          "match_music": {
+            "type": "boolean",
+            "description": "Identify albums and artists in MusicBrainz (ADR 0115). On by default. Sends album titles and artist names to musicbrainz.org. Tags win: only a missing year or genre is filled. Off takes music out of the enrichment queue and keeps matches already made; on starts a pass now."
+          },
           "retro_artwork": {
             "type": "boolean",
             "description": "Fetch box art and a screenshot for each identified ROM from libretro-thumbnails (ADR 0073). **Off by default**: it is a network fetch per game. Identifying ROMs is offline and does not depend on it. Turning it on re-queues identified ROMs so their art arrives now."
@@ -16919,6 +16924,10 @@
             "type": "boolean"
           },
           "scrub_previews": { "type": "boolean", "description": "Make scrub-bar previews in the background (ADR 0105). Off by default." },
+          "match_music": {
+            "type": "boolean",
+            "description": "Identify albums and artists in MusicBrainz (ADR 0115). On by default. Sends album titles and artist names to musicbrainz.org. Tags win: only a missing year or genre is filled. Off takes music out of the enrichment queue and keeps matches already made; on starts a pass now."
+          },
           "retro_artwork": {
             "type": "boolean",
             "description": "Fetch box art and a screenshot for each identified ROM from libretro-thumbnails (ADR 0073). **Off by default**: it is a network fetch per game. Identifying ROMs is offline and does not depend on it. Turning it on re-queues identified ROMs so their art arrives now."

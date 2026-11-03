@@ -1384,6 +1384,24 @@ function AdminSections({ pane }: { pane: string }) {
                 />
                 Write NFO sidecar files next to media
               </label>
+              <label className="set-toggle">
+                <input
+                  type="checkbox"
+                  checked={settings.match_music}
+                  onChange={(e) =>
+                    update.mutate({ match_music: e.target.checked })
+                  }
+                />
+                Identify albums with MusicBrainz
+              </label>
+              <p className="set-row__sub">
+                Each album is matched to its record in MusicBrainz, which adds
+                what kind of record it is and fills a missing year, genre or
+                cover. Your tags always win. Album titles and artist names are
+                sent to musicbrainz.org, about one a second; the first pass
+                over a large library takes a couple of hours. Genres from
+                MusicBrainz come from its users and are shown with credit.
+              </p>
             </>
           )}
         </section>

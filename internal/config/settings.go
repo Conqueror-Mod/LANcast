@@ -137,6 +137,17 @@ type Settings struct {
 	PhotoPlaces bool `json:"photo_places"`
 
 	/*
+	 * MatchMusic identifies albums and artists in MusicBrainz (ADR 0115).
+	 *
+	 * On by default, as film metadata is: the owner approved existing
+	 * libraries matching on upgrade, and an identity that is off by default
+	 * is one nobody discovers. It sends album titles and artist names to
+	 * musicbrainz.org (docs/privacy.md). Off takes albums out of the queue;
+	 * matches already made are kept.
+	 */
+	MatchMusic bool `json:"match_music"`
+
+	/*
 	 * LoginPicker shows the accounts on the sign-in page, as tiles to pick
 	 * from, to devices on the home network and nobody else (GET
 	 * /api/auth/accounts). On by default (Chris, 2026-10-17); the names are
@@ -402,7 +413,7 @@ func Defaults() Settings {
 		AllowMediaDeletion: true, ScanIntervalHours: 0,
 		AuditRetentionDays: 90, MaxTranscodes: DefaultMaxTranscodes,
 		BackupEveryDays: 7, BackupKeep: 4, OptimizedLimitGB: 200,
-		LoginPicker: true}
+		LoginPicker: true, MatchMusic: true}
 }
 
 // SettingsStore reads and writes the settings file.
