@@ -31,6 +31,8 @@ import {
 } from "./trailMath";
 import { createTrailRenderer, type TrailRenderer } from "./trails";
 import { MilkdropCanvas } from "./MilkdropCanvas";
+import { driveFrames } from "./frameDriver";
+import { createFrameRecorder } from "./frameRecord";
 
 /*
  * The visualizers in Now Playing's stage (docs/now-playing-plan.md): the
@@ -208,15 +210,11 @@ function ClassicCanvas({
     const raw = new Float32Array(SPECTRUM_BARS);
     const bars = new Float32Array(SPECTRUM_BARS);
     const peaks: Peaks = newPeaks(SPECTRUM_BARS);
-    let last = -1;
-    let id = 0;
-
-    const frame = (now: number) => {
-      id = requestAnimationFrame(frame);
-      // A frame after a long gap (a pause, a dropped tab) moves by one frame's
-      // worth, not by the whole gap at once.
-      const dt = last < 0 ? 1 / 60 : Math.min(0.1, (now - last) / 1000);
-      last = now;
+    const rec = createFrameRecorder(kind);
+    // dt is the driver's (frameDriver.ts): rAF's gap, or one refresh of the
+    // screen when the window keeps time for it, capped so a frame after a
+    // long gap moves by one frame's worth, not by the whole gap at once.
+    const draw = (dt: number) => {
 
       const box = canvas.getBoundingClientRect();
       const { w, h } = canvasSize(box.width, box.height, window.devicePixelRatio);
@@ -224,6 +222,7 @@ function ClassicCanvas({
         canvas.width = w;
         canvas.height = h;
       }
+      rec.size(w, h);
       const ratio = box.width > 0 ? w / box.width : 1;
       g.clearRect(0, 0, w, h);
       const node = analyserRef.current();
@@ -249,8 +248,8 @@ function ClassicCanvas({
         drawScope(g, w, h, ratio, time, calm ? 0.45 : 0.9, pal);
       }
     };
-    id = requestAnimationFrame(frame);
-    return () => cancelAnimationFrame(id);
+    const driver = driveFrames(kind, draw, rec);
+    return () => driver.stop();
   }, [running, kind, calm, analyserRef, paletteRef]);
 
   return <canvas ref={canvasRef} className="playback__viz-canvas" data-viz={kind} aria-hidden="true" />;
@@ -297,16 +296,15 @@ function TrailCanvas({
     let time: Uint8Array<ArrayBuffer> = new Uint8Array(0);
     let low = { start: 1, end: 2 };
     let lowFor = "";
-    let last = -1;
-    let id = 0;
+    // Named "trails" rather than by preset: `,` and `.` change the preset
+    // without restarting this loop, so a recorder's window can hold several.
+    const rec = createFrameRecorder("trails");
 
-    const frame = (now: number) => {
-      id = requestAnimationFrame(frame);
-      const dt = last < 0 ? 1 / 60 : Math.min(0.1, (now - last) / 1000);
-      last = now;
+    const draw = (dt: number) => {
       const box = canvas.getBoundingClientRect();
       const { w, h } = trailSize(box.width, box.height, window.devicePixelRatio);
       gfx.resize(w, h);
+      rec.size(w, h);
       const node = analyserRef.current();
       if (!node) return;
       const key = `${node.frequencyBinCount}@${node.context.sampleRate}`;
@@ -322,8 +320,8 @@ function TrailCanvas({
       const p = frameParams(calmRef.current ? calmPreset(base) : base, state, bandEnergy(freq, low.start, low.end), dt);
       gfx.frame(time, p, paletteRef.current);
     };
-    id = requestAnimationFrame(frame);
-    return () => cancelAnimationFrame(id);
+    const driver = driveFrames("trails", draw, rec);
+    return () => driver.stop();
   }, [running, analyserRef, paletteRef]);
 
   return <canvas ref={canvasRef} className="playback__viz-canvas" data-viz={preset} aria-hidden="true" />;

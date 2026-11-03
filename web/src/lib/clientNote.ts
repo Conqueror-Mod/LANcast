@@ -14,7 +14,7 @@
  * the thing that breaks the app.
  */
 
-export type NoteArea = "playback" | "capabilities" | "auth" | "together" | "error";
+export type NoteArea = "playback" | "capabilities" | "auth" | "together" | "error" | "visualizer";
 export type NoteLevel = "info" | "warn" | "error";
 
 declare global {
