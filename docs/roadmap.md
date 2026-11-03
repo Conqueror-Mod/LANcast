@@ -188,9 +188,11 @@ is in the [Feature backlog](#feature-backlog) entry it names.*
   and keeps unlocks that cannot be sent yet. Schema 87. The profile half shipped in v0.9.88.
   **Hardcore rules built and hidden** (step 5): no state loads or rewind in hardcore,
   Continue drops to casual, turning it on restarts the game. All behind
-  `ra.HardcoreApproved`, which stays false until RetroAchievements approves LANcast
-  (step 6: the full user agent, a privacy policy, the core licence list, and six
-  months of public release).
+  `ra.HardcoreApproved`, which stays false until RetroAchievements approves LANcast.
+  **Step 6, ready to apply:** the full user agent, [docs/privacy.md](privacy.md) and
+  [docs/cores.md](cores.md) are built; [the checklist](retroachievements-application.md)
+  names what is still open (leaderboard trackers, queued leaderboard entries). The
+  application can go in from 2027-02-02.
 
 **Feature backlog, not yet planned.**
 - Libraries and media: **audiobooks**, **ebooks** beyond comics (EPUB),

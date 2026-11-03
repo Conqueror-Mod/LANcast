@@ -327,9 +327,7 @@ off.
 - leaderboard trackers and challenge indicators (§6), which have no
   leaderboards to show in casual play;
 - the hardcore rules (step 5): built since, below;
-- the full user agent of §3, which needs the core and its version: the
-  server sends `LANcast/<version> (Windows) rcheevos/12.5` for now, and step
-  6 needs the rest.
+- the full user agent of §3: built since, in step 6, below.
 
 **Checked in the installed app with a real account, 2026-11-02:**
 - Super Mario 64 (Mupen64Plus-Next) unlocked "Ready to Fight Bowser", and
@@ -379,3 +377,34 @@ The profile says hardcore isn't offered yet, and why.
 
 Not in step 5: queueing leaderboard entries while RetroAchievements is
 unreachable (only awards are queued), and the step 6 application itself.
+
+## Built: step 6, ready to apply
+
+What LANcast can do before the application itself, which is the owner's to
+send no earlier than 2027-02-02.
+[docs/retroachievements-application.md](../retroachievements-application.md)
+is the checklist: each requirement, where it is met, and what is still open.
+
+**The user agent of §3.** The desktop player builds
+`LANcast/<version> (Windows <major>.<minor>) <core>/<version> rcheevos/<version>`.
+The core and its version are as the core reports them, made safe for a
+header, and Windows' version comes from `RtlGetVersion`. The player sends it
+as `user_agent` with each request. The server sends it on when it has exactly
+that shape (`ra.UserAgentOK`). Otherwise, and for an older player, a
+development build or a queued award, it sends its own shorter one. The queue
+keeps the request, not the player's user agent.
+
+**The core list:** [docs/cores.md](../cores.md), with each desktop core's
+pinned SHA-256. `TestTheCoreListMatchesTheCode` fails when it and the code
+disagree.
+
+**The privacy policy:** [docs/privacy.md](../privacy.md), written from an
+audit of every outbound call in the code. It is linked from Settings › About
+and from the README.
+
+**Still open before applying**, from the checklist:
+- leaderboard trackers and challenge indicators on the page (§6);
+- queueing leaderboard entries on the server (§3 asks for both awards and
+  entries; only awards are queued);
+- one achievement seen on each supported core, including Gearsystem and
+  SwanStation.
