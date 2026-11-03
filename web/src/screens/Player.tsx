@@ -199,14 +199,22 @@ export function Player() {
      * sequence, which is a statement about order that four callers were making
      * without knowing it. See shuffleForEntry.
      */
-    setShuffle(
-      shuffleForEntry(
-        stateShuffle,
-        suppliedQueue,
-        shuffleRef.current,
-        playingRef.current === itemID,
-      ),
+    const wantShuffle = shuffleForEntry(
+      stateShuffle,
+      suppliedQueue,
+      shuffleRef.current,
+      playingRef.current === itemID,
     );
+    /*
+     * Only when asked, or when it changes. Setting shuffle on is a new
+     * randomisation (Randomize all depends on that), so re-entering what is
+     * playing with shuffle on and calling it anyway reshuffled the queue with
+     * the playing track at the front: track 41 of 9,000 came back from the
+     * mini-player as 1 of 9,000 (miniPlayerKeepsShuffle.test.tsx).
+     */
+    if (stateShuffle !== undefined || wantShuffle !== shuffleRef.current) {
+      setShuffle(wantShuffle);
+    }
     // stateQueue is stable for a history entry; its length identifies it well
     // enough to avoid re-running on an unrelated render.
     // eslint-disable-next-line react-hooks/exhaustive-deps
