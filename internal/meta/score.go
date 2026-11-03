@@ -348,7 +348,7 @@ func Decide(cands []Candidate) (Candidate, string) {
 func AlbumQuery(title, albumArtist string, year int) Query {
 	return Query{
 		Kind:   KindAlbum,
-		Title:  media.AlbumBaseTitle(title),
+		Title:  media.AlbumSearchTitle(title, albumArtist),
 		Artist: strings.TrimSpace(albumArtist),
 		Year:   year,
 	}

@@ -132,6 +132,14 @@ A match adds:
   library. The album page credits MusicBrainz wherever they are shown;
 - **cover art** where the album has none, from the Cover Art Archive (front
   image of the release group). Asked for only for those albums: 88 here.
+  As built (step 4): fetched when the album is **matched with confidence**
+  or a person confirms a match, never on a review-band guess, because a wrong
+  cover is the most visible mistake this could make. The 500-pixel front
+  image, not the original. A cover from the files is never replaced, nor a
+  locked one; a cover that came from the archive is, when a fix changes the
+  record, so a corrected album does not keep the wrong record's picture. The
+  local cover pass reads every album's files whatever the album has, so art
+  in the files replaces an archive cover whichever arrives first.
 
 Locked fields are never touched, and a `locked` match is never re-scored, as
 for every other kind. **Fix match works on albums and artists:** the existing

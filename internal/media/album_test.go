@@ -27,3 +27,25 @@ func TestAlbumBaseTitle(t *testing.T) {
 		}
 	}
 }
+
+// From the test library's review band: a tag that names the artist inside the
+// album title. And the names a careless strip would break.
+func TestAlbumSearchTitle(t *testing.T) {
+	cases := []struct{ title, artist, want string }{
+		{"AUDIOSLAVE - BEST COLLECTION", "Audioslave", "BEST COLLECTION"},
+		{"The Beatles – Abbey Road (Remastered)", "The Beatles", "Abbey Road"},
+		{"Beatles - Abbey Road", "The Beatles", "Abbey Road"}, // articles normalize away
+		{"Weezer - Weezer", "Weezer", "Weezer"},
+		{"Weezer -", "Weezer", "Weezer -"}, // nothing after it: the title is what it is
+		{"Live - Throwing Copper", "Live", "Throwing Copper"},
+		{"Jay-Z - The Blueprint", "Jay-Z", "The Blueprint"},
+		{"Jay-Z & Linkin Park - Collision Course", "Jay-Z", "Jay-Z & Linkin Park - Collision Course"},
+		{"Side A - Side B", "Somebody", "Side A - Side B"}, // not the artist: part of the name
+		{"Hello Nasty", "", "Hello Nasty"},
+	}
+	for _, c := range cases {
+		if got := AlbumSearchTitle(c.title, c.artist); got != c.want {
+			t.Errorf("AlbumSearchTitle(%q, %q) = %q, want %q", c.title, c.artist, got, c.want)
+		}
+	}
+}

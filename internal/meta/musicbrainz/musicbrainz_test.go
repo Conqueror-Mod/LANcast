@@ -162,6 +162,12 @@ func TestAnAlbumRecord(t *testing.T) {
 	if len(rec.Music.Artists) != 1 || rec.Music.Artists[0].ID != "9beb62b2-88db-4cea-801e-162cd344ee53" {
 		t.Errorf("artists = %+v", rec.Music.Artists)
 	}
+	// The cover is named, not fetched: whether it is wanted is the worker's
+	// decision (step 4).
+	if len(rec.Artwork) != 1 || rec.Artwork[0].Kind != meta.ArtPoster ||
+		rec.Artwork[0].URL != "https://coverartarchive.org/release-group/"+rec.ExternalID+"/front-500" {
+		t.Errorf("artwork = %+v", rec.Artwork)
+	}
 }
 
 func TestAnArtistRecord(t *testing.T) {
