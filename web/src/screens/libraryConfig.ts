@@ -37,6 +37,25 @@ export interface LibraryKindConfig {
    * defaulted on, so a new kind has to decide.
    */
   cast?: boolean;
+  /**
+   * Other levels the library can be shown at, besides its top level.
+   *
+   * Music only (ADR 0114): the top level is artists, which carry no year, so a
+   * year or decade filter had nothing to filter. Shown as Albums or Tracks, the
+   * grid lists that kind across the whole library with its own sorts and its
+   * own facets. The key is the URL's `?show=`.
+   */
+  levels?: LibraryLevel[];
+}
+
+export interface LibraryLevel {
+  /** The `?show=` value; absent for the top level. */
+  show: string;
+  label: string;
+  /** The item kind the grid lists at this level; absent for the top level. */
+  kind?: "album" | "track";
+  searchPlaceholder: string;
+  sorts: SortOption[];
 }
 
 /*
@@ -97,14 +116,66 @@ const SHOW: LibraryKindConfig = {
 // sort_title tie-breaker, and produced exactly the same list as "Title". Two of
 // the three options did the same thing, which is indistinguishable from sorting
 // being broken — and is what it was reported as.
+//
+// Albums and tracks do have years (an album's is its earliest track's), which
+// is where Year comes back, and a track has a running time, which is where the
+// duration sorts do. Neither is offered on artists.
+const MUSIC_ARTIST_SORTS: SortOption[] = [
+  { value: "title", label: "Title" },
+  { value: "added", label: "Recently added" },
+];
+
 const MUSIC: LibraryKindConfig = {
   searchPlaceholder: "Search artists",
   playlists: true,
-  sorts: [
-    { value: "title", label: "Title" },
-    { value: "added", label: "Recently added" },
+  sorts: MUSIC_ARTIST_SORTS,
+  levels: [
+    {
+      show: "",
+      label: "Artists",
+      searchPlaceholder: "Search artists",
+      sorts: MUSIC_ARTIST_SORTS,
+    },
+    {
+      show: "albums",
+      label: "Albums",
+      kind: "album",
+      searchPlaceholder: "Search albums",
+      sorts: [
+        { value: "title", label: "Title" },
+        { value: "year", label: "Year" },
+        { value: "added", label: "Recently added" },
+      ],
+    },
+    {
+      show: "tracks",
+      label: "Tracks",
+      kind: "track",
+      searchPlaceholder: "Search tracks",
+      sorts: [
+        { value: "title", label: "Title" },
+        { value: "year", label: "Year" },
+        { value: "added", label: "Recently added" },
+        { value: "longest", label: "Duration (longest)" },
+        { value: "shortest", label: "Duration (shortest)" },
+      ],
+    },
   ],
 };
+
+/*
+ * The level a library is being shown at, from `?show=`.
+ *
+ * An unknown value is the top level rather than an empty grid, so an old link
+ * or a hand-typed URL still shows the library.
+ */
+export function levelFor(
+  config: LibraryKindConfig,
+  show: string | null,
+): LibraryLevel | undefined {
+  if (!config.levels) return undefined;
+  return config.levels.find((l) => l.show === (show ?? "")) ?? config.levels[0];
+}
 
 // A picture library's top level is galleries (ADR 0028). Sorted by when the
 // picture was taken rather than by title, because the titles are filenames and

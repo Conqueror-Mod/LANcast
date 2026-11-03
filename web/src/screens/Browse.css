@@ -354,3 +354,19 @@
     display: inline-flex;
   }
 }
+
+/*
+ * Artists / Albums / Tracks (ADR 0114). One group, so the three read as one
+ * choice rather than three actions. The chosen level is weight and a raised
+ * background, never gold: gold is where the focus is.
+ */
+.browse__levels {
+  display: inline-flex;
+  gap: 2px;
+  flex-shrink: 0;
+}
+.browse__level.is-on {
+  color: var(--text-primary);
+  background: var(--space-raised);
+  font-weight: 600;
+}
