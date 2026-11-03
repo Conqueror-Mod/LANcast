@@ -2980,64 +2980,9 @@ export function useDownloadUpdate() {
 }
 
 /**
- * fetchArtistQueue flattens an artist into a play queue: every track of every
- * album, albums in the order the artist page lists them and tracks in the order
- * the record plays.
- *
- * **An artist's children are usually albums, and not always.** A file sitting
- * in an artist's folder with no album folder around it is parsed as a track
- * belonging to that artist and nothing else, so it is parented straight to the
- * artist — reported on a real library as two Play all buttons on one page, one
- * of which did nothing.
- *
- * Those loose tracks are queued where they sit. Taking the children in the
- * order the page lists them and expanding only the albums keeps the queue in
- * the order somebody is looking at, which no amount of grouping afterwards
- * recovers.
- *
- * It is a fetch rather than a hook because it runs when the button is pressed,
- * not when the page opens. A prolific artist is thirty albums, and thirty
- * requests to render a page whose Play all may never be pressed is a bad
- * trade — where thirty requests on the press, once, cached afterwards by the
- * same query keys the album pages use, costs nothing anybody notices on a LAN.
- */
-export async function fetchArtistQueue(
-  qc: QueryClient,
-  children: { id: number; kind: string }[],
-): Promise<number[]> {
-  const pages = await Promise.all(
-    children.map((child) =>
-      // A track under the artist is already a leaf. Asking the server for its
-      // children would be a request that can only answer "none", once per
-      // single, on every press.
-      child.kind !== "album"
-        ? Promise.resolve([child as unknown as Item])
-        : qc.fetchQuery({
-            // The same key useChildren uses for an album, so a record already
-            // opened is already here, and opening one later is served from this.
-            queryKey: ["children", child.id, "track"],
-            queryFn: () =>
-              apiGet<ItemsPage>(
-                `/api/items?parent_id=${child.id}&sort=track`,
-              ).then((r) => r.items),
-          }),
-    ),
-  );
-  // Only leaves. An album containing anything other than tracks is not a shape
-  // the scanner produces today, but handing the player a container would be a
-  // silent failure rather than a loud one.
-  return pages
-    .flat()
-    .filter((t) => !isContainer(t))
-    .map((t) => t.id);
-}
-
-/**
  * fetchDescendantIDs flattens any container into a play queue of leaf ids.
  *
- * fetchArtistQueue above is the two-level version of this for one shape; this
- * is the general one, and it exists because a right-click on a *tile* has no
- * page open behind it. The detail page knows a show's seasons because it
+ * It exists because a right-click on a *tile* has no page open behind it. The detail page knows a show's seasons because it
  * rendered them. A menu opened on a poster in a search result knows nothing but
  * the row, so "Play all" has to go and find out.
  *
@@ -3282,6 +3227,29 @@ export function useShowStanding(id: number, enabled: boolean) {
     queryFn: () => fetchShowContinue(id),
     enabled: enabled && id > 0,
     staleTime: 0,
+  });
+}
+
+/*
+ * Every track by an artist, in the order its page shows them: records in page
+ * order, each record's tracks in playing order, loose singles where the page
+ * draws them (GET /api/items/{id}/tracks).
+ *
+ * The key sits under ["children", id] on purpose. Marking a track played and
+ * removing one both invalidate ["children"] (invalidateWatchState,
+ * useDeleteItem), and a key of its own beside it — ["artist-tracks", id] —
+ * would be reached by neither: the stale-list bug CLAUDE.md records four times.
+ * "artist-tracks" cannot collide with useChildren's third element, which is a
+ * sort name.
+ */
+export function useArtistTracks(artistID: number, enabled: boolean) {
+  return useQuery({
+    queryKey: ["children", artistID, "artist-tracks"],
+    queryFn: ({ signal }) =>
+      apiGet<{ items: Item[] }>(`/api/items/${artistID}/tracks`, signal).then(
+        (r) => r.items ?? [],
+      ),
+    enabled: enabled && artistID > 0,
   });
 }
 

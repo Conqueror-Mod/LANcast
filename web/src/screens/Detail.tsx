@@ -1,5 +1,4 @@
 import { useCallback, useState } from "react";
-import { useQueryClient } from "@tanstack/react-query";
 import {
   heroEligible,
   useHeroMode,
@@ -15,7 +14,7 @@ import {
   useChildren,
   useCollectionMembers,
   useIsAdmin,
-  fetchArtistQueue,
+  useArtistTracks,
   usePlaylistEntries,
   useDeletePlaylist,
   fetchShowEpisodes,
@@ -25,7 +24,7 @@ import {
   useContinueWatching,
 } from "@/api/hooks";
 import { resumeSeconds } from "@/playback/resumePoint";
-import { playAllLabel } from "@/lib/playAll";
+import { offersShuffle, playAllLabel } from "@/lib/playAll";
 import { continueQueue } from "@/lib/continueQueue";
 import { showContinueTarget } from "@/lib/continueShow";
 import { artworkURL } from "@/api/client";
@@ -503,43 +502,33 @@ export function Detail() {
       ? members
       : parentChildren;
 
-  // ---- an artist's Play all -------------------------------------------------
+  // ---- an artist's tracks, and its Play all ---------------------------------
   const isArtist = item?.kind === "artist";
   /*
-   * What an artist's Play all has to gather.
+   * Every track by the artist, in the order the page shows its records
+   * (GET /api/items/{id}/tracks). The track list under the albums draws it, and
+   * Play all and Shuffle queue it.
    *
-   * Not simply "the children", which is what this was. A file sitting in an
-   * artist's folder with no album folder around it is parented straight to the
-   * artist, so an artist's children can include *tracks* — and passing a track
-   * id where an album id was expected asked the server for its children, got
-   * none, and built an empty queue. The button then did nothing at all, beside
-   * a second Play all that worked.
-   *
-   * Both kinds are carried through in page order, and the queue builder
-   * expands the albums and keeps the tracks where they sit.
+   * One request, made when the page opens, because the list is on the page.
+   * Play all used to walk the albums itself on the press, a request per
+   * record — and had to know that an artist's children can include a loose
+   * *track*, which it once did not: handed a track id where an album id was
+   * expected, it built an empty queue and the button did nothing. The server
+   * walks both depths now, so no client has to.
    */
-  const artistParts = isArtist
-    ? (children ?? []).map((c) => ({ id: c.id, kind: c.kind }))
-    : [];
-  const qc = useQueryClient();
-  const [queueing, setQueueing] = useState(false);
-  const playArtist = useCallback(async () => {
-    if (queueing) return;
-    setQueueing(true);
-    try {
-      const queue = await fetchArtistQueue(qc, artistParts);
-      if (queue.length > 0) {
-        navigate(`/watch/${queue[0]}?queue=${queue.join(",")}`);
-      }
-    } finally {
-      // Cleared even on failure: a button stuck reading "Gathering…" forever is
-      // a worse answer than one that simply did not work and can be pressed
-      // again.
-      setQueueing(false);
-    }
-    // artistParts is rebuilt each render; its contents are what matter.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [qc, artistParts.map((p) => p.id).join(","), navigate, queueing]);
+  const { data: artistTracks } = useArtistTracks(itemID, isArtist);
+  const artistQueue = (artistTracks ?? []).map((t) => t.id);
+  /*
+   * In history state, not ?queue=: a prolific artist is hundreds of ids, which
+   * is the case Player.tsx takes a queue this way for. Shuffle picks its first
+   * track at random (startOf), or the shuffle would pin the same song first
+   * every time.
+   */
+  const playArtist = (shuffle: boolean) => {
+    const start = startOf(artistQueue, shuffle);
+    if (start === undefined) return;
+    navigate(`/watch/${start}`, { state: { queue: artistQueue, shuffle } });
+  };
 
   const [fixOpen, setFixOpen] = useState(false);
   // The picture currently in the banner, and the one the viewer opened at.
@@ -1225,19 +1214,20 @@ export function Detail() {
                   this programme" is not, so the artist gets the two-level
                   version: every track of every album, records in the order
                   shown and tracks in the order they play. */}
-              {isArtist && artistParts.length > 0 && (
-                <PlayButton
-                  label={
-                    queueing
-                      ? "Gathering…"
-                      : // One loose track and nothing else is one thing to play;
-                        // one album still holds its tracks.
-                        playAllLabel(
-                          artistParts.length === 1 && artistParts[0].kind === "track" ? 1 : undefined,
-                        )
-                  }
-                  onPlay={playArtist}
-                />
+              {isArtist && artistQueue.length > 0 && (
+                <>
+                  <PlayButton
+                    label={playAllLabel(artistQueue.length)}
+                    onPlay={() => playArtist(false)}
+                  />
+                  {offersShuffle(artistQueue.length) && (
+                    <SecondaryButton
+                      label="Shuffle"
+                      className="detail__play detail__play--secondary"
+                      onPress={() => playArtist(true)}
+                    />
+                  )}
+                </>
               )}
               {watchlistable(item) && <WatchlistButton id={item.id} />}
               {(ownTrailer || trailer) && (
@@ -1446,6 +1436,21 @@ export function Detail() {
                 ))}
               </div>
             )}
+          </section>
+        )}
+        {/*
+          Every track by the artist, under its records. The same list an album
+          draws, as one sequence: rows name their record, and pressing one
+          plays on through the whole discography from there.
+        */}
+        {isArtist && artistTracks && artistTracks.length > 0 && (
+          <section className="detail__children">
+            <span className="section-label">Tracks</span>
+            <TrackList
+              tracks={artistTracks}
+              albumArtist={item.title}
+              discography
+            />
           </section>
         )}
         {isCollection && <MissingFilms films={missingFilms(collectionFilms)} />}

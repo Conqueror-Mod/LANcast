@@ -913,6 +913,9 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/items/{id}/lyrics", s.itemLyrics)
 	mux.HandleFunc("GET /api/items/{id}/continue", s.continueShow)
 	mux.HandleFunc("GET /api/items/{id}/episodes", s.showEpisodes)
+	// An artist's whole discography, flattened: its page's track list and the
+	// queue its Play all and Shuffle hand over.
+	mux.HandleFunc("GET /api/items/{id}/tracks", s.artistTracks)
 	mux.HandleFunc("GET /api/items/{id}/subtitles", s.listSubtitles)
 	mux.HandleFunc("GET /api/items/{id}/subtitles/search", s.searchSubtitles)
 	mux.HandleFunc("POST /api/items/{id}/subtitles/download", s.downloadSubtitle)
