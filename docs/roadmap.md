@@ -182,11 +182,15 @@ is in the [Feature backlog](#feature-backlog) entry it names.*
   Settings › Users & access › **Invite a friend** makes a link that creates one
   member account, once, for 7 days, with its limits set before anything is
   seen. Schema 84.
-- **In-play RetroAchievements** — unlocks while you play (rcheevos). **Built,
-  unreleased** (PR #989, [ADR 0112](adr/0112-achievements-are-earned-through-the-server.md)):
+- **In-play RetroAchievements** — unlocks while you play (rcheevos). **Shipped
+  in v0.10.2** ([ADR 0112](adr/0112-achievements-are-earned-through-the-server.md)):
   casual (softcore), in the desktop player, through the server, which holds the token
-  and keeps unlocks that cannot be sent yet. Schema 87. A real-account test in
-  the installed app is owed. The profile half shipped in v0.9.88.
+  and keeps unlocks that cannot be sent yet. Schema 87. The profile half shipped in v0.9.88.
+  **Hardcore rules built and hidden** (step 5): no state loads or rewind in hardcore,
+  Continue drops to casual, turning it on restarts the game. All behind
+  `ra.HardcoreApproved`, which stays false until RetroAchievements approves LANcast
+  (step 6: the full user agent, a privacy policy, the core licence list, and six
+  months of public release).
 
 **Feature backlog, not yet planned.**
 - Libraries and media: **audiobooks**, **ebooks** beyond comics (EPUB),

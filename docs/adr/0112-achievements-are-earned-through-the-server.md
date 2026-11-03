@@ -326,9 +326,56 @@ off.
 **Not built yet:**
 - leaderboard trackers and challenge indicators (§6), which have no
   leaderboards to show in casual play;
-- the hardcore rules (step 5);
+- the hardcore rules (step 5): built since, below;
 - the full user agent of §3, which needs the core and its version: the
   server sends `LANcast/<version> (Windows) rcheevos/12.5` for now, and step
   6 needs the rest.
 
-The real-account check in the installed app is still owed.
+**Checked in the installed app with a real account, 2026-11-02:**
+- Super Mario 64 (Mupen64Plus-Next) unlocked "Ready to Fight Bowser", and
+  RetroAchievements accepted it.
+- An SNES game loaded its set with nothing earnable, as the measurement
+  above predicts for bsnes.
+
+## Built: step 5, the hardcore rules (hidden)
+
+Built and tested with the switch hidden, as §5 decided. **One switch,
+`ra.HardcoreApproved`, is false**, and changes only in a commit made after
+RetroAchievements approves LANcast. While it is false:
+- the player offers no hardcore;
+- the server refuses an award claiming hardcore, as before;
+- the server refuses a leaderboard entry.
+
+When it is true, the server also forwards `submitlbentry`, which rcheevos
+sends only in hardcore.
+
+**The rules, in the game session** (`internal/retro/host`, Config
+`HardcoreAllowed` and `Hardcore`):
+- A state can be saved but not loaded, whether from a slot or applied.
+- Rewind won't go on, and turning hardcore on drops the states it held.
+- Fast-forward stays: it isn't on RetroAchievements' list.
+- **Continue drops the session to casual**, and says why: "a resumed session
+  must drop to casual". Of §5's two options, this is the one built. Play,
+  which starts from the in-game save, is the hardcore start. A game with no
+  state to resume stays hardcore.
+- **Casual to hardcore mid-game restarts the game.** The session turns
+  hardcore on in rcheevos, which asks for a reset (`EventReset`, only logged
+  by the runtime), then resets the core and tells rcheevos. Hardcore to
+  casual just carries on.
+- The page hears the mode before "started" (`hardcore-on`/`hardcore-off`,
+  with the reason), so it never asks for rewind into a refusal.
+
+**The shim's interface version 3** adds `lc_set_hardcore` and `lc_hardcore`.
+`lc_init` still starts every client casual.
+
+**The page:**
+- a "Hardcore" marker while playing in it (not gold, which means focus
+  only);
+- the Load entries and the Rewind switch are replaced by a line saying why;
+- a Hardcore entry in the game menu, which says that turning it on restarts
+  the game.
+
+The profile says hardcore isn't offered yet, and why.
+
+Not in step 5: queueing leaderboard entries while RetroAchievements is
+unreachable (only awards are queued), and the step 6 application itself.

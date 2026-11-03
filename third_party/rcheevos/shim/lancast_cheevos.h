@@ -30,8 +30,9 @@ extern "C" {
 
 /* The version of this interface. Go refuses a DLL with another one.
  * 2 added the loaded game, its achievements and rich presence, for the
- * game menu's Achievements page. */
-#define LC_INTERFACE_VERSION 2
+ * game menu's Achievements page. 3 added hardcore on and off (ADR 0112
+ * step 5). */
+#define LC_INTERFACE_VERSION 3
 
 /* An event, flattened from rc_client_event_t so Go reads one fixed layout. */
 typedef struct lc_event_t {
@@ -146,6 +147,16 @@ LC_API void lc_free_achievements(void);
 
 /* The rich presence line ("Level 3, 2 lives"); 0 when the game has none. */
 LC_API size_t lc_rich_presence(char* buffer, size_t size);
+
+/*
+ * Hardcore (interface version 3). lc_init starts every client casual; only
+ * the desktop player turns hardcore on, and only once RetroAchievements has
+ * approved LANcast (ADR 0112 section 5). Turning it on with a game loaded
+ * makes rcheevos raise RC_CLIENT_EVENT_RESET: the player resets the game and
+ * calls lc_reset. lc_hardcore reports what rcheevos has now.
+ */
+LC_API void lc_set_hardcore(int enabled);
+LC_API int lc_hardcore(void);
 
 #ifdef __cplusplus
 }

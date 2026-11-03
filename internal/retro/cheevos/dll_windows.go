@@ -53,6 +53,8 @@ var shimFuncs = []string{
 	// Interface version 2: the game menu's Achievements page.
 	"lc_game", "lc_list_achievements", "lc_achievement_at", "lc_free_achievements",
 	"lc_rich_presence",
+	// Interface version 3: hardcore (ADR 0112 step 5).
+	"lc_set_hardcore", "lc_hardcore",
 }
 
 // Client is the one rcheevos client in this process.
@@ -353,6 +355,22 @@ func (c *Client) Achievements() []Listed {
 		})
 	}
 	return out
+}
+
+// SetHardcore turns hardcore on or off. On, with a game loaded, rcheevos
+// raises EventReset: the game has to be reset before it counts.
+func (c *Client) SetHardcore(on bool) {
+	var v uintptr
+	if on {
+		v = 1
+	}
+	_, _, _ = c.procs["lc_set_hardcore"].Call(v)
+}
+
+// Hardcore is whether rcheevos has hardcore on.
+func (c *Client) Hardcore() bool {
+	r, _, _ := c.procs["lc_hardcore"].Call()
+	return int32(r) != 0
 }
 
 // RichPresence is the game's rich presence line, "" when it has none.

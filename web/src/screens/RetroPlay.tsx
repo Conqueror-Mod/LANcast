@@ -6,7 +6,7 @@ import {
   achievementsLabel,
   useAchievements,
 } from "@/components/RetroAchievements";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { useGameSaves, useItem } from "@/api/hooks";
@@ -86,6 +86,15 @@ export function RetroPlay() {
   // keys the page never sees.
   const [fastForward, setFastForward] = useState(false);
   const [rewind, setRewind] = useState(rewindPreferred);
+  /*
+   * Hardcore (ADR 0112 §5): "unavailable" until the client says otherwise,
+   * which it does only once RetroAchievements approves LANcast. On, a state
+   * saves but does not load and rewind is off. The ref is for the event
+   * handler, which asks for rewind at "started".
+   */
+  const [hardcore, setHardcore] = useState<"unavailable" | "off" | "on">("unavailable");
+  const hardcoreRef = useRef(hardcore);
+  hardcoreRef.current = hardcore;
   const [mode, setMode] = useState<"normal" | "fast" | "rewind">("normal");
   // How the picture is drawn, for this console (2026-10-18).
   const [display, setDisplay] = useState<RetroDisplay>(DEFAULT_DISPLAY);
@@ -146,8 +155,17 @@ export function RetroPlay() {
           case "started":
             setLoading(null);
             setRunning(true);
-            if (rewindPreferred()) void retroCommand("rewind", "on");
+            if (rewindPreferred() && hardcoreRef.current !== "on") void retroCommand("rewind", "on");
             break;
+          case "hardcore-on":
+          case "hardcore-off": {
+            const on = e.kind === "hardcore-on";
+            // Back to casual mid-game: rewind comes back as the person left it.
+            if (!on && hardcoreRef.current === "on" && rewindPreferred()) void retroCommand("rewind", "on");
+            setHardcore(on ? "on" : "off");
+            if (e.text) setNotice(e.text);
+            break;
+          }
           case "speed":
             setMode(e.text === "fast" || e.text === "rewind" ? e.text : "normal");
             break;
@@ -293,21 +311,34 @@ export function RetroPlay() {
                   />
                 ))}
               </div>
-              <div className="retro-play__group" aria-label="Load">
-                {STATE_SLOTS.filter((slot) => slotPlayer.get(slot) === "desktop").map((slot) => (
-                  <MenuButton
-                    key={slot}
-                    label={`Load ${slotLabel(slot)}`}
-                    onSelect={() => void retroCommand("load-state", slot)}
-                  />
-                ))}
-              </div>
+              {hardcore === "on" ? (
+                <p className="retro-play__hint">Loading a save state is off in hardcore.</p>
+              ) : (
+                <div className="retro-play__group" aria-label="Load">
+                  {STATE_SLOTS.filter((slot) => slotPlayer.get(slot) === "desktop").map((slot) => (
+                    <MenuButton
+                      key={slot}
+                      label={`Load ${slotLabel(slot)}`}
+                      onSelect={() => void retroCommand("load-state", slot)}
+                    />
+                  ))}
+                </div>
+              )}
               <MenuButton label={`Game volume: ${volumeLabel(volume)}`} onSelect={cycleVolume} />
               <MenuButton label="Picture…" onSelect={() => setPage("picture")} />
               <MenuButton label="Speed & rewind…" onSelect={() => setPage("speed")} />
               <MenuButton label="Controls…" onSelect={() => setPage("controls")} />
               {achievementsEntry && (
                 <MenuButton label={`${achievementsEntry}…`} onSelect={() => setPage("achievements")} />
+              )}
+              {hardcore !== "unavailable" && (
+                <MenuButton
+                  label={hardcore === "on" ? "Hardcore: On" : "Hardcore: Off (turning it on restarts the game)"}
+                  onSelect={() => {
+                    void retroCommand("hardcore", hardcore === "on" ? "off" : "on");
+                    closeMenu();
+                  }}
+                />
               )}
               {pb.itemID !== 0 && (
                 /*
@@ -397,15 +428,19 @@ export function RetroPlay() {
                     void retroCommand("fast-forward", next ? "on" : "off");
                   }}
                 />
-                <MenuButton
-                  label={`Rewind: ${rewind ? "On" : "Off"}`}
-                  onSelect={() => {
-                    const next = !rewind;
-                    setRewind(next);
-                    setRewindPreferred(next);
-                    void retroCommand("rewind", next ? "on" : "off");
-                  }}
-                />
+                {hardcore === "on" ? (
+                  <p className="retro-play__hint">Rewind is off in hardcore.</p>
+                ) : (
+                  <MenuButton
+                    label={`Rewind: ${rewind ? "On" : "Off"}`}
+                    onSelect={() => {
+                      const next = !rewind;
+                      setRewind(next);
+                      setRewindPreferred(next);
+                      void retroCommand("rewind", next ? "on" : "off");
+                    }}
+                  />
+                )}
                 <p className="retro-play__hint">
                   Hold Tab or click the right stick to fast-forward. With rewind on, hold R or click the
                   left stick to go back.
@@ -429,6 +464,12 @@ export function RetroPlay() {
       {running && !menu && mode !== "normal" && (
         <div className="retro-play__speed" aria-live="polite">
           {mode === "fast" ? "▶▶ Fast-forward" : "◀◀ Rewind"}
+        </div>
+      )}
+
+      {running && hardcore === "on" && (
+        <div className="retro-play__hardcore" aria-label="Hardcore">
+          Hardcore
         </div>
       )}
 

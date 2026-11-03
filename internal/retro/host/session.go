@@ -82,7 +82,7 @@ type SaveStore interface {
 
 // Event is something the person should hear about.
 type Event struct {
-	Kind string // started, options, paused, resumed, menu, state-saved, state-loaded, sram-saved, message, error, stopped, speed
+	Kind string // started, options, paused, resumed, menu, state-saved, state-loaded, sram-saved, message, error, stopped, speed, hardcore-on, hardcore-off
 	Slot string
 	Text string
 	Err  error
@@ -125,6 +125,9 @@ type Achievements interface {
 	SetProgress([]byte)
 	// List tells the page the game's set, for the menu.
 	List()
+	// SetHardcore is the session's mode, before Start and whenever it
+	// changes (ADR 0112 §5).
+	SetHardcore(on bool)
 	// Stop is called before the core unloads the game.
 	Stop()
 }
@@ -171,6 +174,16 @@ type Config struct {
 
 	// Achievements, if set, earns RetroAchievements while playing.
 	Achievements Achievements
+
+	// HardcoreAllowed offers hardcore (ADR 0112 §5), which only
+	// RetroAchievements' approval of LANcast may turn on. Hardcore starts the
+	// session in it. Both mean nothing without Achievements.
+	//
+	// In hardcore a state can be saved but not loaded, rewind is off, a
+	// Continue drops the session to casual, and turning hardcore on mid-game
+	// restarts the game. Fast-forward stays: RetroAchievements allows it.
+	HardcoreAllowed bool
+	Hardcore        bool
 
 	OnEvent func(Event)
 	Log     *slog.Logger
@@ -228,6 +241,7 @@ type Session struct {
 	// every rewound one. shown is what the page was last told (the badge).
 	fastForward bool
 	rewindOn    bool
+	hardcore    bool // ADR 0112 §5: no state loads, no rewind
 	rewind      *rewindRing
 	rewindBuf   []byte
 	frameNo     int
@@ -295,6 +309,11 @@ func (s *Session) SetDisplay(d Display) { s.display.Store(&d) }
 // SetFastForward turns the menu's fast-forward on or off. The hold keys work
 // either way.
 func (s *Session) SetFastForward(on bool) { s.send(command{kind: "fast-forward", val: onOff(on)}) }
+
+// SetHardcore turns hardcore on or off (ADR 0112 §5). On restarts the game,
+// as RetroAchievements requires; off keeps playing. Refused unless
+// Config.HardcoreAllowed.
+func (s *Session) SetHardcore(on bool) { s.send(command{kind: "hardcore", val: onOff(on)}) }
 
 // SetRewind turns rewinding on or off. Off by default: it costs a state copy
 // every other frame, and turning it off drops the states it held.
@@ -468,8 +487,15 @@ func (s *Session) run(ctx context.Context) (err error) {
 	 */
 	var resume, resumeProgress []byte
 	resumeSlot, resumeTries, resumed := s.cfg.ResumeState, 0, false
+	s.hardcore = s.cfg.Hardcore && s.cfg.HardcoreAllowed && s.cfg.Achievements != nil
+	dropped := ""
 	if resumeSlot != "" {
 		if data, c, v, err := s.cfg.Saves.LoadState(resumeSlot); err == nil && len(data) > 0 && s.stateMismatch(c, v) == "" {
+			if s.hardcore {
+				// RetroAchievements: a resumed session must drop to casual.
+				s.hardcore = false
+				dropped = "Continue loads a save state, so this game is casual. Play starts it in hardcore."
+			}
 			data, resumeProgress = splitProgress(data)
 			if resumed = core.Unserialize(data); !resumed {
 				resume = data
@@ -477,6 +503,13 @@ func (s *Session) run(ctx context.Context) (err error) {
 				s.setProgress(resumeProgress)
 			}
 		}
+	}
+	if a := s.cfg.Achievements; a != nil {
+		a.SetHardcore(s.hardcore)
+	}
+	// Before "started", so the page knows the mode before it asks for rewind.
+	if s.cfg.HardcoreAllowed {
+		s.announceHardcore(dropped)
 	}
 	s.cfg.OnEvent(Event{Kind: "started"})
 	if resumed {
@@ -640,7 +673,13 @@ func (s *Session) handle(c command) {
 		}
 	case "fast-forward":
 		s.fastForward = c.val == "on"
+	case "hardcore":
+		s.switchHardcore(c.val == "on")
 	case "rewind":
+		if c.val == "on" && s.hardcore {
+			s.cfg.OnEvent(Event{Kind: "error", Text: "Rewind is off in hardcore."})
+			return
+		}
 		s.rewindOn = c.val == "on"
 		if !s.rewindOn {
 			s.rewind.clear()
@@ -665,6 +704,10 @@ func (s *Session) handle(c command) {
 			a.List()
 		}
 	case "apply-state":
+		if s.hardcore {
+			s.cfg.OnEvent(Event{Kind: "error", Slot: c.slot, Text: "Loading a save state is off in hardcore."})
+			return
+		}
 		state, progress := splitProgress(c.data)
 		if core.Unserialize(state) {
 			s.setProgress(progress)
@@ -673,6 +716,44 @@ func (s *Session) handle(c command) {
 			s.cfg.OnEvent(Event{Kind: "error", Slot: c.slot, Text: "The game refused that save."})
 		}
 	}
+}
+
+/*
+ * switchHardcore changes the mode mid-game (ADR 0112 §5). Hardcore to casual
+ * is allowed at any time. Casual to hardcore needs a full reset, so the game
+ * restarts, and rewind goes with the states it held.
+ */
+func (s *Session) switchHardcore(on bool) {
+	a := s.cfg.Achievements
+	switch {
+	case on == s.hardcore:
+		return
+	case !on:
+		s.hardcore = false
+		a.SetHardcore(false)
+		s.announceHardcore("Hardcore is off. Save states and rewind are back.")
+	case !s.cfg.HardcoreAllowed || a == nil:
+		s.cfg.OnEvent(Event{Kind: "error", Text: "Hardcore isn't available yet."})
+	default:
+		// rcheevos asks for the reset itself (EventReset); this is it.
+		a.SetHardcore(true)
+		s.cfg.Core.Reset()
+		s.rewind.clear()
+		s.rewindOn = false
+		s.hardcore = true
+		a.Reset()
+		s.announceHardcore("Hardcore is on, and the game restarted. Save states can be saved but not loaded.")
+	}
+}
+
+// announceHardcore tells the page the mode: "hardcore-on" or
+// "hardcore-off", with why in Text when there is a reason to give.
+func (s *Session) announceHardcore(why string) {
+	kind := "hardcore-off"
+	if s.hardcore {
+		kind = "hardcore-on"
+	}
+	s.cfg.OnEvent(Event{Kind: kind, Text: why})
 }
 
 /*

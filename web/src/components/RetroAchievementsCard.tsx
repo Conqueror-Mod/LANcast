@@ -247,6 +247,10 @@ function EarnWhilePlaying({ view }: { view: RAView }) {
           {view.unlocks_waiting > 0 &&
             ` ${view.unlocks_waiting} ${view.unlocks_waiting === 1 ? "unlock is" : "unlocks are"} waiting to reach RetroAchievements.`}
         </p>
+        <p className="ra__intro">
+          Hardcore isn't offered yet. RetroAchievements counts hardcore unlocks only from emulators it has approved, and
+          it hasn't approved LANcast.
+        </p>
         <button className="ra__link" disabled={off.isPending} onClick={() => off.mutate()}>
           Turn off
         </button>
