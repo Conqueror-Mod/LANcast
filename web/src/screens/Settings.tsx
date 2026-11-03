@@ -3511,6 +3511,23 @@ function GeneralSection() {
           </div>
         </div>
       </div>
+      {/* What LANcast sends, to whom and when, and the emulator cores it plays
+          with (ADR 0112 step 6: RetroAchievements asks that both be findable). */}
+      <div className="set-row">
+        <div className="set-row__main">
+          <div className="set-row__title">Privacy</div>
+          <div className="set-row__sub">
+            Everything LANcast sends beyond your network, and when.{" "}
+            <a href="https://github.com/Conqueror-Mod/LANcast/blob/main/docs/privacy.md" target="_blank" rel="noreferrer">
+              Privacy
+            </a>
+            {" · "}
+            <a href="https://github.com/Conqueror-Mod/LANcast/blob/main/docs/cores.md" target="_blank" rel="noreferrer">
+              Emulator cores and licences
+            </a>
+          </div>
+        </div>
+      </div>
     </section>
   );
 }

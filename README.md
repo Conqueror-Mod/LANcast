@@ -46,7 +46,8 @@ stable interfaces. Kodi's real win was that TV shows weren't hardcoded.
 
 **No phone-home.** Local-first, LAN-first. Nothing is required to reach the
 internet for the server to work, and the server does not do network things you
-did not ask for. Remote access is opt-in and self-owned (WireGuard, Tailscale,
+did not ask for ([docs/privacy.md](docs/privacy.md) lists everything it does reach,
+including the two things on by default, and what triggers each). Remote access is opt-in and self-owned (WireGuard, Tailscale,
 your own reverse proxy, or a public name whose certificate LANcast requests only
 once you turn it on) — never a relay you rent.
 
@@ -276,6 +277,8 @@ a change to the installer itself needs the installer.
 | [docs/design.md](docs/design.md) | Visual design system, the gold rule, keyboard model |
 | [docs/metadata.md](docs/metadata.md) | Providers, matching, locking, artwork |
 | [docs/security.md](docs/security.md) | What is protected, what is not — **read before exposing it** |
+| [docs/privacy.md](docs/privacy.md) | Everything LANcast sends beyond your network, to whom, and when |
+| [docs/cores.md](docs/cores.md) | Every emulator core, its licence and its source |
 | [docs/roadmap.md](docs/roadmap.md) | Every release, every area's status, and what each pass taught |
 | [docs/adr/](docs/adr/) | 112 decision records — why things are the way they are |
 
