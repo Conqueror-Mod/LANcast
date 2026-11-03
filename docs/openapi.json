@@ -22982,6 +22982,11 @@
           "user_agent_clause": {
             "type": "string",
             "description": "rcheevos' clause about itself, for the User-Agent RetroAchievements asks for."
+          },
+          "user_agent": {
+            "type": "string",
+            "maxLength": 200,
+            "description": "The whole User-Agent the player built, naming its core: LANcast/<version> (Windows <major>.<minor>) <core>/<version> rcheevos/<version>. Sent to RetroAchievements as it is when it has that shape; otherwise the server sends its own. Optional."
           }
         }
       },

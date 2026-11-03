@@ -94,6 +94,10 @@ type raConnectRequest struct {
 	// UserAgentClause is the clause rcheevos writes about itself
 	// (rc_client_get_user_agent_clause). RetroAchievements asks for it.
 	UserAgentClause string `json:"user_agent_clause"`
+	// UserAgent is the whole User-Agent the player built, naming its core
+	// (ADR 0112 §3). Sent as it is when ra.UserAgentOK; otherwise, and for a
+	// player too old to send one, the server builds a shorter one.
+	UserAgent string `json:"user_agent"`
 }
 
 // raConnectAnswer is RetroAchievements' answer, for the player to give to
@@ -141,7 +145,7 @@ func (s *Server) raConnect(w http.ResponseWriter, r *http.Request) {
 			"this server can't read your RetroAchievements token; turn earning on again in your profile")
 		return
 	}
-	agent := s.raAgent(req.UserAgentClause)
+	agent := s.raAgent(req.UserAgent, req.UserAgentClause)
 	// Not the request's context: a player closing mid-award must not cancel
 	// the award on its way to RetroAchievements.
 	ctx, cancel := context.WithTimeout(context.WithoutCancel(r.Context()), 30*time.Second)
@@ -168,8 +172,12 @@ func (s *Server) raConnect(w http.ResponseWriter, r *http.Request) {
 }
 
 // raAgent is the User-Agent RetroAchievements asks an emulator for: the
-// emulator and version, then rcheevos' clause about itself.
-func (s *Server) raAgent(clause string) string {
+// player's own, when it has the expected shape, or else the emulator and
+// version, then rcheevos' clause about itself.
+func (s *Server) raAgent(player, clause string) string {
+	if ra.UserAgentOK(player) {
+		return player
+	}
 	clause = strings.Map(func(r rune) rune {
 		if r > unicode.MaxASCII || !unicode.IsPrint(r) {
 			return -1
@@ -242,7 +250,9 @@ func (s *Server) sendRetroUnlocks(ctx context.Context, now time.Time) {
 			continue
 		}
 		waited := now.Sub(time.Unix(u.QueuedAt, 0))
-		_, body, err := s.ra.Client.Do(ctx, ra.WithToken(ra.Delay(form, waited), string(token)), s.raAgent(""))
+		// The queue keeps the request, not the player's User-Agent, so a
+		// delayed award goes with the server's shorter one.
+		_, body, err := s.ra.Client.Do(ctx, ra.WithToken(ra.Delay(form, waited), string(token)), s.raAgent("", ""))
 		if errors.Is(err, ra.ErrUnreachable) {
 			backoff := time.Minute << min(u.Tries, 9)
 			if backoff > 6*time.Hour {

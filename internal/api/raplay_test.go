@@ -230,3 +230,35 @@ func TestOnlyThisGamesTicketSends(t *testing.T) {
 		t.Errorf("a made-up ticket: %d, want 401", code)
 	}
 }
+
+// The player's own User-Agent, naming its core, reaches RetroAchievements
+// when it has the expected shape; anything else gets the server's
+// (ADR 0112 §3).
+func TestThePlayersUserAgentIsChecked(t *testing.T) {
+	f, fc := raPlayFixture(t)
+	tk := "Ticket " + mintTicket(t, f.h, f.cart)
+	resp := f.h.authed(t, "PUT", "/api/profile/retroachievements/play", map[string]any{"password": "right password"})
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("turn on: %d", resp.StatusCode)
+	}
+	sendAs := func(agent string) string {
+		t.Helper()
+		b, _ := json.Marshal(raConnectRequest{Body: "r=ping&u=Player1&t=lancast&g=1", UserAgentClause: "rcheevos/12.5", UserAgent: agent})
+		resp := f.raw(t, "POST", "/api/items/"+itoa(f.cart)+"/retroachievements", b, tk)
+		if resp.StatusCode != http.StatusOK {
+			t.Fatalf("send: %d %s", resp.StatusCode, body(t, resp))
+		}
+		resp.Body.Close()
+		fc.mu.Lock()
+		defer fc.mu.Unlock()
+		return fc.agent[len(fc.agent)-1]
+	}
+	good := "LANcast/0.10.2 (Windows 10.0) mupen64plus-next/2.6-Vulkan rcheevos/12.5"
+	if got := sendAs(good); got != good {
+		t.Errorf("sent %q, want the player's", got)
+	}
+	if got := sendAs("Totally/1.0 rcheevos/12.5"); got == "Totally/1.0 rcheevos/12.5" || !strings.HasPrefix(got, "LANcast/") {
+		t.Errorf("an odd User-Agent went through as %q", got)
+	}
+}
