@@ -80,7 +80,14 @@ export interface RetroEvent {
     /** RetroAchievements while playing (ADR 0112): what happened is in `event`. */
     | "achievement"
     /** The game's set, answering the "achievements" command. */
-    | "achievements";
+    | "achievements"
+    /**
+     * Hardcore's mode (ADR 0112 §5), before "started" and on every change,
+     * with why in `text` when there is a reason. Never sent while LANcast is
+     * not approved for hardcore.
+     */
+    | "hardcore-on"
+    | "hardcore-off";
   slot?: string;
   text?: string;
   done?: number;
@@ -234,7 +241,8 @@ export type RetroCommand =
   | "stop"
   // The value rides in the second argument, "on" or "off".
   | "fast-forward"
-  | "rewind";
+  | "rewind"
+  | "hardcore";
 
 /*
  * Whether rewind is on, remembered on this device. Off unless turned on: it

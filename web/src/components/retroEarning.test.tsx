@@ -114,6 +114,8 @@ describe("earning while playing", () => {
     const put = calls.find((c) => c.url.endsWith("/api/profile/retroachievements/play") && c.method === "PUT");
     expect(JSON.parse(put!.body!)).toEqual({ password: "hunter2" });
     expect(host.textContent).toContain("On. Games in the LANcast desktop app unlock achievements");
+    // Hardcore is built and hidden until RetroAchievements approves LANcast (ADR 0112 §5): the switch says why.
+    expect(host.textContent).toContain("Hardcore isn't offered yet.");
     expect(host.querySelector('input[type="password"]')).toBeNull();
   });
 
