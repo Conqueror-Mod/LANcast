@@ -201,8 +201,14 @@ is in the [Feature backlog](#feature-backlog) entry it names.*
   names what is still open (leaderboard trackers, queued leaderboard entries). The
   application can go in from 2027-02-02.
 
+- **Audiobooks** — [ADR 0116](adr/0116-an-audiobook-is-its-own-library.md),
+  accepted 2026-11-03: a library kind of its own, books as one item whether one
+  file or a folder of parts, chapters, speed per book, a sleep timer. Waiting
+  on the test library (115 Star Trek audiobooks) arriving, so its tags can be
+  read before step 1.
+
 **Feature backlog, not yet planned.**
-- Libraries and media: **audiobooks**, **ebooks** beyond comics (EPUB),
+- Libraries and media: **ebooks** beyond comics (EPUB),
   `.cbr` comics, and photo **bursts**. Loudness levelling from ReplayGain tags
   is built ([ADR 0108](adr/0108-music-is-levelled-by-its-own-replaygain.md));
   measuring untagged tracks is not.
@@ -1107,18 +1113,17 @@ group is not priority.
   207 are their own bucket. Marked folders are excluded from it entirely
   (ADR 0051, amended). Face grouping, the large piece when this was written,
   has since been built (ADR 0052).
-- **Audiobooks** — not built. Nothing in LANcast tells a book from an album:
-  an `.m4b` already streams as `audio/mp4` and probes like any other track, so a
-  book dropped into a music library today is one very long track, or a folder
-  of chapter files shuffled among the songs. What a book needs that music does
-  not: **resume by position**, which a ten-hour book cannot live without (check
-  what music's playback state records before assuming it does this);
-  **chapters**, read from the container, which `internal/probe` does not ask
-  ffprobe for yet; **playback speed**, which a book listener expects and a music
-  listener never touches; and **author, narrator and series** rather than artist
-  and album. The question to settle first is whether it is its own library kind,
-  as music, pictures and retro each became (ADR 0024, 0028, 0073), or a mode of
-  the music kind. Resume and the different model both argue for its own kind.
+- **Audiobooks** — not built; **accepted** as
+  [ADR 0116](adr/0116-an-audiobook-is-its-own-library.md) (2026-11-03), its own
+  library kind, with the owner's nine answers recorded in it. The test library
+  is 115 Star Trek audiobooks; their tags are read before step 1 is built. Checking
+  the code for it corrected this entry: resume by position already works for
+  any audio, chapters are already read from a file on demand (#949), and both
+  players already carry a playback rate. What is missing is a place for books,
+  a model that is not artist → album → track, and a player with chapters, speed
+  per book, 15/30 skips and a sleep timer. An `.m4b` is **not indexed at all**
+  today: the scanner's audio list lacks it, so a book dropped into a music
+  library does not appear, rather than appearing as one long track.
 - **Ebooks** — not built. A library kind for EPUB and a reader in the client.
   Three things carry the weight. The **renderer**: a reflowable EPUB reader
   would be the largest third-party library the client carries, so it gets the

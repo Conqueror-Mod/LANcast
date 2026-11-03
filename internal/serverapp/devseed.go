@@ -35,6 +35,11 @@ var devLibraries = []devLibrary{
 	{name: "Pictures", kind: media.LibraryOther, folder: "TEST PICTURE LIBRARY",
 		note: "photo libraries are not implemented — ADR 0024 defers them, and " +
 			"the scanner would index nothing"},
+	// The 115-book Star Trek set ADR 0116 is built against. Named now so the
+	// folder is agreed before the kind exists; step 1 drops the note and gives
+	// it media.LibraryAudiobooks.
+	{name: "Audiobooks", kind: media.LibraryOther, folder: "TEST AUDIOBOOK LIBRARY",
+		note: "audiobook libraries are not built yet — ADR 0116 step 1"},
 }
 
 // runDevSeed points a development instance at a set of test libraries.
