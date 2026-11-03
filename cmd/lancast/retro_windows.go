@@ -22,6 +22,7 @@ import (
 	"lancast/internal/retro/cores"
 	"lancast/internal/retro/host"
 	"lancast/internal/retro/libretro"
+	"lancast/internal/retro/ra"
 	"lancast/internal/retro/remote"
 )
 
@@ -432,11 +433,14 @@ func (r *retroPlayer) run(ctx context.Context, game *remote.Game, corePath strin
 		Video:   &host.GDIVideo{HWND: hwnd},
 		// The GPU path (stage 3). A framebuffer core never asks for it, so
 		// it costs nothing there; an N64 core cannot run without it.
-		GL:              &host.WGL{HWND: hwnd},
-		Audio:           &host.WaveOut{},
-		Input:           host.Controllers{HWND: hwnd, Map: &r.maps},
-		Saves:           game,
-		Achievements:    r.achievements(game, platform),
+		GL:           &host.WGL{HWND: hwnd},
+		Audio:        &host.WaveOut{},
+		Input:        host.Controllers{HWND: hwnd, Map: &r.maps},
+		Saves:        game,
+		Achievements: r.achievements(game, platform),
+		// Hardcore is built and hidden (ADR 0112 §5): offered only once
+		// RetroAchievements approves LANcast, and never the default.
+		HardcoreAllowed: ra.HardcoreApproved,
 		Options:         savedOptions(platform),
 		Display:         savedDisplay(platform),
 		ResumeState:     resumeSlot,
@@ -514,6 +518,8 @@ func (a *gameAchievements) Idle()  { a.rt.Idle() }
 func (a *gameAchievements) Reset() { a.rt.Reset() }
 func (a *gameAchievements) Stop()  { a.rt.Stop() }
 
+func (a *gameAchievements) SetHardcore(on bool) { a.rt.SetHardcore(on) }
+
 func (a *gameAchievements) Progress() []byte     { return a.rt.Progress() }
 func (a *gameAchievements) SetProgress(p []byte) { a.rt.SetProgress(p) }
 
@@ -572,15 +578,18 @@ func (r *retroPlayer) command(name, slot string) error {
 		} else {
 			s.LoadState(slot)
 		}
-	case "fast-forward", "rewind":
+	case "fast-forward", "rewind", "hardcore":
 		// The value rides in slot: "on" or "off", and nothing else.
 		if slot != "on" && slot != "off" {
 			return fmt.Errorf("%s wants on or off, not %q", name, slot)
 		}
-		if name == "fast-forward" {
+		switch name {
+		case "fast-forward":
 			s.SetFastForward(slot == "on")
-		} else {
+		case "rewind":
 			s.SetRewind(slot == "on")
+		default:
+			s.SetHardcore(slot == "on")
 		}
 	case "stop":
 		r.stop()
