@@ -2,6 +2,7 @@ package host
 
 import (
 	"bytes"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -23,6 +24,7 @@ type fakeAchievements struct {
 	stopUnloaded  bool // the core had already unloaded when Stop came
 	progress      []byte
 	restored      [][]byte
+	hardcore      []bool // every SetHardcore, in order
 	core          *fakeCore
 }
 
@@ -45,6 +47,11 @@ func (a *fakeAchievements) Frame() { a.frames.Add(1) }
 func (a *fakeAchievements) Idle()  { a.idles.Add(1) }
 func (a *fakeAchievements) Reset() { a.mu.Lock(); a.resets++; a.mu.Unlock() }
 func (a *fakeAchievements) List()  { a.mu.Lock(); a.lists++; a.mu.Unlock() }
+func (a *fakeAchievements) SetHardcore(on bool) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.hardcore = append(a.hardcore, on)
+}
 func (a *fakeAchievements) Stop() {
 	a.mu.Lock()
 	defer a.mu.Unlock()
@@ -205,5 +212,156 @@ func TestSplitProgress(t *testing.T) {
 		if s, p := splitProgress(raw); !bytes.Equal(s, raw) || p != nil {
 			t.Errorf("%v split into %v + %v", raw, s, p)
 		}
+	}
+}
+
+// modeLog records the hardcore events a session sends, which arrive before
+// "started" and so before start() hands the harness over.
+type modeLog struct {
+	mu     sync.Mutex
+	events []Event
+}
+
+func (m *modeLog) watch(c *Config) {
+	prev := c.OnEvent
+	c.OnEvent = func(e Event) {
+		if strings.HasPrefix(e.Kind, "hardcore-") {
+			m.mu.Lock()
+			m.events = append(m.events, e)
+			m.mu.Unlock()
+		}
+		prev(e)
+	}
+}
+
+func (m *modeLog) first(t *testing.T) Event {
+	t.Helper()
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if len(m.events) == 0 {
+		t.Fatal("no hardcore event before started")
+	}
+	return m.events[0]
+}
+
+// Hardcore (ADR 0112 §5): a state saves but does not load, and rewind will
+// not go on. The mode is told to the page before "started", so the page
+// never asks for rewind into a refusal.
+func TestHardcoreBlocksLoadsAndRewind(t *testing.T) {
+	var m modeLog
+	h, a := startWithAchievements(t, func(c *Config) { c.HardcoreAllowed, c.Hardcore = true, true; m.watch(c) })
+	if e := m.first(t); e.Kind != "hardcore-on" {
+		t.Fatalf("mode: %+v", e)
+	}
+	h.s.SaveState("state-1")
+	h.waitFor(t, "state-saved")
+	h.s.LoadState("state-1")
+	if e := h.waitFor(t, "error"); e.Text != "Loading a save state is off in hardcore." {
+		t.Errorf("load: %+v", e)
+	}
+	h.s.SetRewind(true)
+	if e := h.waitFor(t, "error"); e.Text != "Rewind is off in hardcore." {
+		t.Errorf("rewind: %+v", e)
+	}
+	h.stop(t)
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if len(a.hardcore) != 1 || !a.hardcore[0] {
+		t.Errorf("SetHardcore calls %v", a.hardcore)
+	}
+}
+
+// A resumed session drops to casual, as RetroAchievements requires, and says
+// why; a game with no state to resume stays hardcore.
+func TestContinueDropsToCasual(t *testing.T) {
+	first, _ := startWithAchievements(t, func(c *Config) { c.SaveStateOnStop = true })
+	first.stop(t)
+
+	var m modeLog
+	h, a := startWithAchievements(t, func(c *Config) {
+		c.Saves = first.saves
+		c.ResumeState = "auto"
+		c.HardcoreAllowed, c.Hardcore = true, true
+		m.watch(c)
+	})
+	if e := m.first(t); e.Kind != "hardcore-off" || !strings.Contains(e.Text, "Continue loads a save state") {
+		t.Errorf("drop: %+v", e)
+	}
+	h.stop(t)
+	a.mu.Lock()
+	if len(a.hardcore) != 1 || a.hardcore[0] {
+		t.Errorf("SetHardcore calls %v", a.hardcore)
+	}
+	a.mu.Unlock()
+
+	var fm modeLog
+	fresh, _ := startWithAchievements(t, func(c *Config) {
+		c.ResumeState = "auto" // nothing saved under it
+		c.HardcoreAllowed, c.Hardcore = true, true
+		fm.watch(c)
+	})
+	fresh.stop(t)
+	if e := fm.first(t); e.Kind != "hardcore-on" {
+		t.Errorf("fresh: %+v", e)
+	}
+}
+
+// Casual to hardcore restarts the game, and drops rewind with the states it
+// held; hardcore to casual just carries on, with loads back.
+func TestHardcoreMidGame(t *testing.T) {
+	var m modeLog
+	h, a := startWithAchievements(t, func(c *Config) { c.HardcoreAllowed = true; m.watch(c) })
+	if e := m.first(t); e.Kind != "hardcore-off" || e.Text != "" {
+		t.Errorf("mode: %+v", e)
+	}
+	h.s.SaveState("state-1")
+	h.waitFor(t, "state-saved")
+	h.s.SetRewind(true)
+	for h.core.counter.Load() < 20 {
+		time.Sleep(5 * time.Millisecond)
+	}
+	h.s.SetHardcore(true)
+	if e := h.waitFor(t, "hardcore-on"); !strings.Contains(e.Text, "restarted") {
+		t.Errorf("on: %+v", e)
+	}
+	if n := h.core.counter.Load(); n >= 20 {
+		t.Errorf("the game did not restart: counter %d", n)
+	}
+	h.s.SetHardcore(false)
+	h.waitFor(t, "hardcore-off")
+	h.s.LoadState("state-1")
+	h.waitFor(t, "state-loaded")
+	h.stop(t)
+
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if len(a.hardcore) != 3 || a.hardcore[0] || !a.hardcore[1] || a.hardcore[2] {
+		t.Errorf("SetHardcore calls %v", a.hardcore)
+	}
+	if a.resets != 1 {
+		t.Errorf("rcheevos told of %d resets, want the one hardcore needs", a.resets)
+	}
+}
+
+// Without RetroAchievements' approval there is no hardcore at all: asking at
+// the start is ignored, the page hears no mode, and the switch is refused.
+func TestNoHardcoreWithoutApproval(t *testing.T) {
+	var m modeLog
+	h, a := startWithAchievements(t, func(c *Config) { c.Hardcore = true; m.watch(c) })
+	h.s.SetHardcore(true)
+	if e := h.waitFor(t, "error"); e.Text != "Hardcore isn't available yet." {
+		t.Errorf("switch: %+v", e)
+	}
+	h.s.SetRewind(true) // casual: allowed, so no error follows
+	h.s.SaveState("state-1")
+	h.waitFor(t, "state-saved")
+	h.stop(t)
+	if len(m.events) != 0 {
+		t.Errorf("the page heard a mode: %+v", m.events)
+	}
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if len(a.hardcore) != 1 || a.hardcore[0] {
+		t.Errorf("SetHardcore calls %v", a.hardcore)
 	}
 }

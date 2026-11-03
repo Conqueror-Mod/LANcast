@@ -38,8 +38,9 @@ const Placeholder = "lancast"
 var ErrLoginRefused = errors.New("RetroAchievements did not accept that username and password")
 
 // Allowed are the request types rcheevos' rc_client sends for a softcore
-// player (v12.5). Anything else, an editor upload or a leaderboard entry
-// among them, is refused.
+// player (v12.5). Anything else, an editor upload among them, is refused.
+// A leaderboard entry is allowed only with HardcoreApproved: rcheevos
+// submits them in hardcore only.
 var Allowed = map[string]bool{
 	"login2":           true,
 	"gameid":           true,
@@ -47,6 +48,22 @@ var Allowed = map[string]bool{
 	"startsession":     true,
 	"ping":             true,
 	"awardachievement": true,
+}
+
+/*
+ * HardcoreApproved is RetroAchievements' approval of LANcast as a hardcore
+ * emulator (ADR 0112 §5), and the one switch for everything hardcore: the
+ * player offers it, and the server forwards hardcore unlocks and leaderboard
+ * entries, only while it is true.
+ *
+ * It is false, and changes only in a commit made after RetroAchievements has
+ * said yes. A var rather than a const so that tests can see both sides.
+ */
+var HardcoreApproved = false
+
+// allowed is Allowed with what HardcoreApproved adds.
+func allowed(kind string) bool {
+	return Allowed[kind] || (HardcoreApproved && kind == "submitlbentry")
 }
 
 // Login exchanges a username and password for a login token, once. The
@@ -126,7 +143,7 @@ func Check(form, raUser string) (url.Values, string, error) {
 		return nil, "", errors.New("not a RetroAchievements request")
 	}
 	kind := v.Get("r")
-	if !Allowed[kind] {
+	if !allowed(kind) {
 		return nil, "", fmt.Errorf("LANcast does not send %q requests", kind)
 	}
 	if v.Has("p") {
@@ -141,7 +158,7 @@ func Check(form, raUser string) (url.Values, string, error) {
 	if !strings.EqualFold(v.Get("u"), raUser) {
 		return nil, "", errors.New("that request is for a different RetroAchievements account")
 	}
-	if v.Get("h") != "" && v.Get("h") != "0" {
+	if v.Get("h") != "" && v.Get("h") != "0" && !HardcoreApproved {
 		return nil, "", errors.New("LANcast earns softcore achievements only")
 	}
 	v.Del("t")

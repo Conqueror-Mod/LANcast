@@ -353,6 +353,12 @@ LC_API int lc_achievement_at(uint32_t index, lc_achievement_t* out) {
 	return 0;
 }
 
+LC_API void lc_set_hardcore(int enabled) {
+	if (client) rc_client_set_hardcore_enabled(client, enabled ? 1 : 0);
+}
+
+LC_API int lc_hardcore(void) { return client ? rc_client_get_hardcore_enabled(client) : 0; }
+
 LC_API size_t lc_rich_presence(char* buffer, size_t size) {
 	if (!client || !buffer || size == 0 || !rc_client_has_rich_presence(client)) return 0;
 	return rc_client_get_rich_presence_message(client, buffer, size);

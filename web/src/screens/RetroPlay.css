@@ -125,6 +125,25 @@ html.lancast-native-video .retro-play {
   pointer-events: none;
 }
 
+/*
+ * Hardcore's marker (ADR 0112 §5), opposite the speed pill. RetroAchievements
+ * asks that the mode be visible while playing. Not gold: gold is focus only.
+ */
+.retro-play__hardcore {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  padding: 6px 12px;
+  border-radius: var(--radius-tile);
+  background: rgba(5, 7, 15, 0.75);
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  pointer-events: none;
+}
+
 /* A sub-page's name, under the game's title (the menu's pages, 2026-10-18). */
 .retro-play__heading {
   margin: 4px 0 2px;

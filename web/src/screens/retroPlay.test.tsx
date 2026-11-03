@@ -791,3 +791,58 @@ describe("achievements while playing (ADR 0112)", () => {
     expect(host.textContent).toContain("Unlocks will be sent when it can.");
   });
 });
+
+describe("hardcore (ADR 0112 §5)", () => {
+  it("offers nothing until the client says hardcore is available", async () => {
+    await render("/play/41");
+    emit({ kind: "started" });
+    emit({ kind: "menu" });
+    expect(buttons().some((b) => b.textContent?.startsWith("Hardcore"))).toBe(false);
+    expect(host.querySelector(".retro-play__hardcore")).toBeNull();
+  });
+
+  it("in hardcore: a marker, no loads, no rewind, and no rewind asked for at the start", async () => {
+    saves = [{ slot: "state-3", updated_at: 1, size_bytes: 4, core: "mgba" }];
+    localStorage.setItem("lancast:retro-rewind", "on");
+    try {
+      await render("/play/41");
+      emit({ kind: "hardcore-on" });
+      emit({ kind: "started" });
+      expect(window.lancastRetroCommand).not.toHaveBeenCalledWith("rewind", "on");
+      expect(host.querySelector(".retro-play__hardcore")!.textContent).toBe("Hardcore");
+      emit({ kind: "menu" });
+      const labels = buttons().map((b) => b.textContent);
+      expect(labels).toContain("Save to Slot 1");
+      expect(labels.some((l) => l?.startsWith("Load "))).toBe(false);
+      expect(host.textContent).toContain("Loading a save state is off in hardcore.");
+      await act(async () => button("Speed & rewind…").click());
+      expect(buttons().some((b) => b.textContent?.startsWith("Rewind"))).toBe(false);
+      expect(host.textContent).toContain("Rewind is off in hardcore.");
+    } finally {
+      localStorage.removeItem("lancast:retro-rewind");
+    }
+  });
+
+  it("switches from the menu, and says why the mode changed", async () => {
+    await render("/play/41");
+    emit({ kind: "hardcore-off" });
+    emit({ kind: "started" });
+    emit({ kind: "menu" });
+    await act(async () => button("Hardcore: Off (turning it on restarts the game)").click());
+    expect(window.lancastRetroCommand).toHaveBeenCalledWith("hardcore", "on");
+    emit({ kind: "hardcore-on", text: "Hardcore is on, and the game restarted." });
+    expect(host.textContent).toContain("Hardcore is on, and the game restarted.");
+    emit({ kind: "menu" });
+    await act(async () => button("Hardcore: On").click());
+    expect(window.lancastRetroCommand).toHaveBeenCalledWith("hardcore", "off");
+  });
+
+  it("says when Continue dropped the game to casual", async () => {
+    await render("/play/41");
+    emit({ kind: "hardcore-off", text: "Continue loads a save state, so this game is casual. Play starts it in hardcore." });
+    emit({ kind: "started" });
+    expect(host.textContent).toContain("Play starts it in hardcore.");
+    expect(host.querySelector(".retro-play__hardcore")).toBeNull();
+  });
+});
+

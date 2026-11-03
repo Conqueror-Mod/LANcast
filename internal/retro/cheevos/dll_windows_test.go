@@ -456,3 +456,21 @@ func expectedHash(console Console, data []byte) string {
 	}
 	return md5Hex(data)
 }
+
+// A new client is casual, and hardcore goes on and off when asked (ADR 0112
+// step 5): the switch the player keeps hidden until RetroAchievements
+// approves LANcast.
+func TestHardcoreIsOffUntilAsked(t *testing.T) {
+	c, _ := open(t)
+	if c.Hardcore() {
+		t.Fatal("a new client is in hardcore")
+	}
+	c.SetHardcore(true)
+	if !c.Hardcore() {
+		t.Error("hardcore did not go on")
+	}
+	c.SetHardcore(false)
+	if c.Hardcore() {
+		t.Error("hardcore did not go off")
+	}
+}
