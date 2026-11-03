@@ -437,7 +437,7 @@ func (r *retroPlayer) run(ctx context.Context, game *remote.Game, corePath strin
 		Audio:        &host.WaveOut{},
 		Input:        host.Controllers{HWND: hwnd, Map: &r.maps},
 		Saves:        game,
-		Achievements: r.achievements(game, platform),
+		Achievements: r.achievements(game, platform, core.SystemInfo()),
 		// Hardcore is built and hidden (ADR 0112 §5): offered only once
 		// RetroAchievements approves LANcast, and never the default.
 		HardcoreAllowed: ra.HardcoreApproved,
@@ -493,12 +493,15 @@ func (r *retroPlayer) run(ctx context.Context, game *remote.Game, corePath strin
  * say, at the runtime's first request; an "off" event is how the page hears
  * it.
  */
-func (r *retroPlayer) achievements(game *remote.Game, platform string) host.Achievements {
+func (r *retroPlayer) achievements(game *remote.Game, platform string, core libretro.SystemInfo) host.Achievements {
 	console := cheevos.ConsoleFor(platform)
 	if console == 0 {
 		return nil
 	}
-	rt := cheevos.New(game.Achievements, func(n cheevos.Notice) { r.emit(achievementEvent(n)) }, slog.Default())
+	send := func(ctx context.Context, body, clause string) (int, []byte, error) {
+		return game.AchievementsAs(ctx, body, clause, raUserAgent(Version, core, clause))
+	}
+	rt := cheevos.New(send, func(n cheevos.Notice) { r.emit(achievementEvent(n)) }, slog.Default())
 	return &gameAchievements{rt: rt, console: console, emit: r.emit}
 }
 

@@ -1312,16 +1312,18 @@ Softcore only.
 
 One RetroAchievements request from the desktop player, for the game it is
 playing. The player runs rcheevos, which builds every request an emulator
-makes, and hands each here instead of sending it: `{body, user_agent_clause}`,
-where `body` is rcheevos' form. Reached with the game's stream ticket
+makes, and hands each here instead of sending it: `{body, user_agent_clause,
+user_agent}`, where `body` is rcheevos' form. Reached with the game's stream ticket
 (`Authorization: Ticket …`) or a session.
 
 The server sends it to RetroAchievements only if it is `login2`, `gameid`,
 `achievementsets`, `startsession`, `ping` or `awardachievement`, for your own
 connected RetroAchievements account, softcore (`h` absent or `0`), with no
 password in it; anything else is `400`. It puts your token in place of the
-player's placeholder (`lancast`), sends it with the User-Agent
-`LANcast/<version> (Windows) <clause>`, and answers `{status, body}`:
+player's placeholder (`lancast`) and sends it with the player's own
+User-Agent, `user_agent`, when it has the shape
+`LANcast/<version> (Windows <major>.<minor>) <core>/<version> rcheevos/<version>`
+(ADR 0112 §3), or else with `LANcast/<version> (Windows) <clause>`. It answers `{status, body}`:
 RetroAchievements' own status and answer, with any `Token` replaced by the
 placeholder. The player never holds the token.
 

@@ -9677,6 +9677,8 @@ export interface components {
             body: string;
             /** @description rcheevos' clause about itself, for the User-Agent RetroAchievements asks for. */
             user_agent_clause?: string;
+            /** @description The whole User-Agent the player built, naming its core: LANcast/<version> (Windows <major>.<minor>) <core>/<version> rcheevos/<version>. Sent to RetroAchievements as it is when it has that shape; otherwise the server sends its own. Optional. */
+            user_agent?: string;
         };
         RetroAchievementsConnectAnswer: {
             /** @description RetroAchievements' HTTP status. */
