@@ -624,10 +624,11 @@ export function Detail() {
   const poster = artworkURL(item.artwork?.poster, "poster2x");
   const cast = castOf(item.credits);
   // Fix match corrects a provider's identification. A season and a collection
-  // have none to correct — one is structural, the other provider-derived — and
-  // neither does music: ADR 0024 ships no music provider, so the only thing to
-  // search would be TMDB, which would answer a record with films. An artist and
-  // an album are assembled from the tags of the files beneath them.
+  // have none to correct — one is structural, the other provider-derived.
+  // Albums and artists do, since MusicBrainz identifies them (ADR 0115): an
+  // album is searched there by title and artist, and an artist is offered the
+  // artists its albums credit. A track is not matched at all, so it has
+  // nothing to fix.
   // Pictures are the same argument again, one step further: ADR 0028 ships no
   // picture provider and never will — there is nothing to identify a family
   // photograph against. A gallery is a folder the scanner read.
@@ -637,7 +638,7 @@ export function Detail() {
   const canFixMatch =
     item.kind !== "collection" &&
     item.kind !== "season" &&
-    !isMusic &&
+    item.kind !== "track" &&
     !isPicture(item) &&
     // A ROM is identified by its hash against a DAT (ADR 0073); Fix match
     // searches film and TV providers that have never heard of it.
@@ -939,6 +940,35 @@ export function Detail() {
             {item.genres && item.genres.length > 0 && (
               <div className="detail__genres">{item.genres.join(" · ")}</div>
             )}
+
+            {/* The credit ADR 0115 owes MusicBrainz. Its identity data is
+                CC0, but genres are its users' tags under CC BY-NC-SA, and an
+                album with no genre of its own takes them. Which genres came
+                from where is not recorded, so the credit says both halves. */}
+            {(item.kind === "album" || item.kind === "artist") &&
+              item.provider === "musicbrainz" &&
+              item.external_id && (
+                <div className="detail__credit">
+                  Identified by{" "}
+                  <a
+                    href={`https://musicbrainz.org/${item.kind === "artist" ? "artist" : "release-group"}/${encodeURIComponent(item.external_id)}`}
+                    target="_blank"
+                    rel="noreferrer noopener"
+                  >
+                    MusicBrainz
+                  </a>
+                  . Where the tags gave no genre, the genres are its users',
+                  under{" "}
+                  <a
+                    href="https://creativecommons.org/licenses/by-nc-sa/3.0/"
+                    target="_blank"
+                    rel="noreferrer noopener"
+                  >
+                    CC BY-NC-SA
+                  </a>
+                  .
+                </div>
+              )}
 
             {/* How many times this has been watched, shown only once there is
                 something to say.

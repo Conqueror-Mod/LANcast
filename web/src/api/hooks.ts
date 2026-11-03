@@ -1241,11 +1241,17 @@ export function useDeleteItem(id: number) {
 // render fully without waiting on it. A 404 is a normal "no trailer" answer.
 // Provider matches for correcting an item's identity. Lazy: only searches once
 // a query is set, so opening Fix match does not fire a provider call until asked.
-export function useCandidates(id: number, query: string | null) {
+// `artist` is an album's only: the artist to search with instead of its album
+// artist (ADR 0115).
+export function useCandidates(id: number, query: string | null, artist = "") {
   return useQuery({
-    queryKey: ["candidates", id, query],
+    queryKey: ["candidates", id, query, artist],
     queryFn: ({ signal }) => {
-      const p = query ? `?q=${encodeURIComponent(query)}` : "";
+      const params = new URLSearchParams();
+      if (query) params.set("q", query);
+      if (artist) params.set("artist", artist);
+      const qs = params.toString();
+      const p = qs ? `?${qs}` : "";
       return apiGet<MatchCandidate[]>(
         `/api/items/${id}/candidates${p}`,
         signal,

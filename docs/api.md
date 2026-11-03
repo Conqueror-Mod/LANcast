@@ -4478,7 +4478,7 @@ requesting the artwork, not by styling it — artwork is content-addressed and
 served `immutable`, so the server cannot vary it per viewer without poisoning
 the cache for everyone.
 
-### `GET /api/items/{id}/candidates?q=`
+### `GET /api/items/{id}/candidates?q=&artist=`
 
 Search the provider for re-match candidates. **Omit `q`** to search by what the
 file is named — the identity re-derived from the filename — not by the current
@@ -4523,6 +4523,43 @@ A fan translation is not in the database under its English name: The Binding
 Blade is listed as "Fire Emblem - Fuuin no Tsurugi (Japan)", which "fire
 emblem" reaches and "binding blade" does not.
 
+**An album (`kind` `album`) is searched in MusicBrainz** (ADR 0115), exactly as
+the background pass searches it, so the dialog shows the scores the pass acted
+on: by its title, without a trailing edition note such as "(Deluxe Edition)",
+and by its album artist. `q` replaces the title and drops the year; `artist`
+replaces the artist, for a folder whose tags name a label, or nobody, as the
+artist. A MusicBrainz id, or a musicbrainz.org address with one in it, in `q`
+returns that release group alone, scored against the album as it stands.
+
+Each album candidate adds `Artist` (the credit as MusicBrainz prints it) and
+`ReleaseType` (`Album`, `EP`, `Single`, or a secondary type such as
+`Compilation`, `Live`, `Soundtrack`), and its `Breakdown` adds `artist`: how far
+the credit agrees with the album artist, by shared words. An album is weighted
+title 0.55, artist 0.30, year 0.15, and an artist below 0.80 caps the total at
+0.50 whatever the title says — "Greatest Hits" by somebody else is not this
+album. `popularity` is 0; MusicBrainz has none. Neither key appears for any
+other kind.
+
+```json
+[ { "Provider": "musicbrainz", "ExternalID": "b2d5e2c4-…", "Kind": "album",
+    "Title": "Hello Nasty", "Artist": "Beastie Boys", "ReleaseType": "Album",
+    "Year": 1998, "Score": 1,
+    "Breakdown": { "title": 1, "year": 1, "popularity": 0, "artist": 1,
+                   "total": 1, "year_gap": 0 } } ]
+```
+
+**An artist (`kind` `artist`) is never searched by name.** "Nirvana" is
+several artists, and a name cannot say which. Its candidates are the artists
+its albums are credited to, each with its share of those albums as `Score`
+(and `Breakdown.total`); the current answer is listed even with no votes, and
+`q` is ignored. To change what an artist is, fix its albums: each fix sends the
+artist back to be voted on again.
+
+Both are `409` `music_matching_off` while the `match_music` setting is off
+(off means nothing is asked of MusicBrainz, a dialog included), `503` `busy`
+when MusicBrainz turns the request away, and `502` `unavailable` when it cannot
+be reached.
+
 ```json
 [ { "Provider": "libretro-db", "ExternalID": "Fire Emblem - Fuuin no Tsurugi (Japan)",
     "Kind": "rom", "Title": "Fire Emblem - Fuuin no Tsurugi (Japan)", "Year": 2002,
@@ -4556,6 +4593,19 @@ A name the installed database does not list there is `400` `not_found`;
 
 ```json
 { "provider": "libretro-db", "external_id": "Fire Emblem - Fuuin no Tsurugi (Japan)" }
+```
+
+**For an album or an artist,** `provider` is `musicbrainz` and `external_id` a
+MusicBrainz id: a release group for an album, an artist for an artist (ADR
+0115). **The tags still win.** The album keeps its title and its artist, and a
+year or genres are filled only where it has none; what a match changes is its
+identity, its release type and the artist it is credited to. It is then
+locked. Correcting an album sends its artist back to be voted on again from
+its albums' credits, unless that artist is locked. `400` `not_found` is an id
+MusicBrainz does not know; `409`, `502` and `503` as for `/candidates`.
+
+```json
+{ "provider": "musicbrainz", "external_id": "b2d5e2c4-…" }
 ```
 
 ### `GET` / `POST /api/together`

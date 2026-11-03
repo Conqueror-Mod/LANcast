@@ -196,6 +196,14 @@ func (s *Server) candidates(w http.ResponseWriter, r *http.Request) {
 		s.romCandidates(w, r, it)
 		return
 	}
+	switch meta.Kind(it.Kind) {
+	case meta.KindAlbum:
+		s.albumCandidates(w, r, it)
+		return
+	case meta.KindArtist:
+		s.artistCandidates(w, r, it)
+		return
+	}
 
 	q := meta.Query{Kind: meta.Kind(it.Kind), Title: it.Title}
 	if v := strings.TrimSpace(r.URL.Query().Get("q")); v != "" {
@@ -307,18 +315,26 @@ func (s *Server) applyMatch(w http.ResponseWriter, r *http.Request) {
 		s.applyROMMatch(w, r, it, req.Provider, req.ExternalID)
 		return
 	}
-	if _, found := s.reg.Provider(req.Provider); !found {
-		writeError(w, http.StatusBadRequest, "bad_request", "unknown provider: "+req.Provider)
-		return
-	}
+	if k := meta.Kind(it.Kind); k == meta.KindAlbum || k == meta.KindArtist {
+		// Albums and artists have their own path, where the tags still win
+		// (ADR 0115); the shared one would merge MusicBrainz over them.
+		if !s.applyMusicMatch(w, r, it, req.Provider, req.ExternalID) {
+			return
+		}
+	} else {
+		if _, found := s.reg.Provider(req.Provider); !found {
+			writeError(w, http.StatusBadRequest, "bad_request", "unknown provider: "+req.Provider)
+			return
+		}
 
-	// Fetch and apply the chosen record synchronously. It cannot go through the
-	// background pass: that queue skips locked items and re-searches, which would
-	// re-pick the candidate the user just rejected. The item is then locked so a
-	// rescan reconciles files without re-litigating this identity.
-	if err := s.worker.ApplyMatch(r.Context(), *it, req.Provider, req.ExternalID, meta.Kind(req.Kind)); err != nil {
-		s.writeInternal(w, err, "apply match")
-		return
+		// Fetch and apply the chosen record synchronously. It cannot go through the
+		// background pass: that queue skips locked items and re-searches, which would
+		// re-pick the candidate the user just rejected. The item is then locked so a
+		// rescan reconciles files without re-litigating this identity.
+		if err := s.worker.ApplyMatch(r.Context(), *it, req.Provider, req.ExternalID, meta.Kind(req.Kind)); err != nil {
+			s.writeInternal(w, err, "apply match")
+			return
+		}
 	}
 	s.enrichSoon()
 

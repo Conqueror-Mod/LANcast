@@ -2,6 +2,7 @@ package enrich
 
 import (
 	"context"
+	"fmt"
 	"sort"
 
 	"lancast/internal/meta"
@@ -31,6 +32,7 @@ type MusicStore interface {
 	ApplyArtistMatch(ctx context.Context, itemID int64, m store.ArtistMatch) error
 	MarkMusicUnmatched(ctx context.Context, itemID int64, score float64) error
 	ArtistCreditVotes(ctx context.Context, artistID int64) (map[string]int, int, error)
+	RequeueArtistOf(ctx context.Context, albumID int64) error
 }
 
 func isMusic(kind meta.Kind) bool { return kind == meta.KindAlbum || kind == meta.KindArtist }
@@ -155,4 +157,53 @@ func winner(votes map[string]int) (id string, share float64, tied bool) {
 	})
 	tied = len(all) > 1 && all[1].n == all[0].n
 	return all[0].id, float64(all[0].n) / float64(total), tied
+}
+
+/*
+ * ApplyMusicMatch applies the record a person chose in Fix match and locks
+ * the identity, so no later pass re-decides it. The fields are still filled
+ * only where the tags left a gap: choosing a record says what the album is,
+ * not that its tags are wrong. Correcting an album sends its artist back to
+ * be voted again, since the vote may have changed.
+ */
+func (w *Worker) ApplyMusicMatch(ctx context.Context, item store.Item, providerID, externalID string) error {
+	ms, ok := w.st.(MusicStore)
+	if !ok {
+		return fmt.Errorf("this store does not hold music matches")
+	}
+	provider, ok := w.reg.Provider(providerID)
+	if !ok {
+		return fmt.Errorf("unknown provider %q", providerID)
+	}
+	kind := meta.Kind(item.Kind)
+	rec, err := provider.Fetch(ctx, meta.Ref{Kind: kind, ExternalID: externalID})
+	if err != nil {
+		return fmt.Errorf("fetch confirmed match: %w", err)
+	}
+	if rec == nil {
+		return fmt.Errorf("provider %q returned no record for %q", providerID, externalID)
+	}
+	if kind == meta.KindArtist {
+		return ms.ApplyArtistMatch(ctx, item.ID, store.ArtistMatch{
+			Provider: providerID, ExternalID: externalID, Score: 1,
+			Genres: rec.Genres, Confirmed: true,
+		})
+	}
+	m := store.AlbumMatch{
+		Provider: providerID, ExternalID: externalID, Score: 1,
+		Genres: rec.Genres, Confirmed: true,
+	}
+	if rec.Fields.Year != nil {
+		m.Year = *rec.Fields.Year
+	}
+	if rec.Music != nil {
+		m.ReleaseType = rec.Music.ReleaseType
+		if len(rec.Music.Artists) > 0 {
+			m.ArtistID = rec.Music.Artists[0].ID
+		}
+	}
+	if err := ms.ApplyAlbumMatch(ctx, item.ID, m); err != nil {
+		return err
+	}
+	return ms.RequeueArtistOf(ctx, item.ID)
 }

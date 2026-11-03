@@ -181,19 +181,30 @@ func TestTheRollUpKeepsFilledGenresUntilTheTagsSpeak(t *testing.T) {
 	}
 }
 
-// Until Fix match learns albums (step 3), an album is neither reviewed nor
-// re-parsed: the one would search films for it, the other guess a video name.
-func TestAlbumsStayOutOfReviewAndReparse(t *testing.T) {
+// Fix match searches MusicBrainz for an album (step 3), so an album in doubt
+// is reviewed. An artist is only when its albums disagree: one nothing
+// identified has no candidates to offer. Neither is ever re-parsed, which
+// guesses a video's filename.
+func TestWhichMusicIsReviewed(t *testing.T) {
 	f := newMusicFixture(t)
 	ctx := context.Background()
 	f.st.ApplyAlbumMatch(ctx, f.album, AlbumMatch{Provider: "musicbrainz", ExternalID: "rg-1", State: "review", Score: 0.6})
 	f.st.MarkMusicUnmatched(ctx, f.other, 0.2)
+	f.st.MarkMusicUnmatched(ctx, f.otherArtist, 0)
+	f.st.ApplyArtistMatch(ctx, f.artist, ArtistMatch{Provider: "musicbrainz", ExternalID: "a-1", State: "review", Score: 0.4})
 	q, err := f.st.ReviewQueue(ctx, f.lib, 50)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(q) != 0 {
-		t.Errorf("review queue holds %d music items", len(q))
+	var got []int64
+	for _, it := range q {
+		got = append(got, it.ID)
+	}
+	slices.Sort(got)
+	want := []int64{f.artist, f.album, f.other}
+	slices.Sort(want)
+	if !slices.Equal(got, want) {
+		t.Errorf("review queue = %v, want the disputed artist and both albums %v (not the unidentified artist %d)", got, want, f.otherArtist)
 	}
 	r, err := f.st.ReparseTargets(ctx, f.lib, true)
 	if err != nil {
@@ -201,5 +212,56 @@ func TestAlbumsStayOutOfReviewAndReparse(t *testing.T) {
 	}
 	for _, x := range r {
 		t.Errorf("re-parse target %+v", x)
+	}
+}
+
+// A person's choice applies over a locked match and locks it; the automatic
+// pass never does. Either way the tags still win.
+func TestAConfirmedAlbumMatchLocksAndKeepsTheTags(t *testing.T) {
+	f := newMusicFixture(t)
+	ctx := context.Background()
+	if err := f.st.ApplyAlbumMatch(ctx, f.album, AlbumMatch{Provider: "musicbrainz", ExternalID: "rg-wrong",
+		Confirmed: true, Year: 2001, Genres: []string{"Pop"}}); err != nil {
+		t.Fatal(err)
+	}
+	f.st.ApplyAlbumMatch(ctx, f.album, AlbumMatch{Provider: "musicbrainz", ExternalID: "rg-auto", State: "matched", Score: 1})
+	al := itemRow(t, f.st, f.album)
+	if al.MatchState != "locked" || *al.ExternalID != "rg-wrong" {
+		t.Fatalf("after an automatic pass: %s %v; the confirmed match should hold", al.MatchState, *al.ExternalID)
+	}
+	if err := f.st.ApplyAlbumMatch(ctx, f.album, AlbumMatch{Provider: "musicbrainz", ExternalID: "rg-right", Confirmed: true}); err != nil {
+		t.Fatal(err)
+	}
+	al = itemRow(t, f.st, f.album)
+	if *al.ExternalID != "rg-right" || al.MatchState != "locked" {
+		t.Errorf("a second confirmation: %s %v", al.MatchState, *al.ExternalID)
+	}
+	if al.Year == nil || *al.Year != 1994 {
+		t.Errorf("year = %v; the tagged 1994 should win", al.Year)
+	}
+	if g, _ := f.st.Genres(ctx, f.album); !slices.Equal(g, []string{"Jazz", "Soul"}) {
+		t.Errorf("genres = %v; the tags should win", g)
+	}
+}
+
+// Correcting an album may change which artist its artist is, so the artist
+// goes back to be voted again. A locked artist does not.
+func TestFixingAnAlbumRequeuesItsArtist(t *testing.T) {
+	f := newMusicFixture(t)
+	ctx := context.Background()
+	f.st.ApplyArtistMatch(ctx, f.artist, ArtistMatch{Provider: "musicbrainz", ExternalID: "a-1", State: "matched", Score: 1})
+	if !stamped(t, f.st, f.artist) {
+		t.Fatal("artist not stamped after a match")
+	}
+	if err := f.st.RequeueArtistOf(ctx, f.album); err != nil {
+		t.Fatal(err)
+	}
+	if stamped(t, f.st, f.artist) {
+		t.Error("the artist was not put back in the queue")
+	}
+	f.st.ApplyArtistMatch(ctx, f.otherArtist, ArtistMatch{Provider: "musicbrainz", ExternalID: "a-2", Confirmed: true})
+	f.st.RequeueArtistOf(ctx, f.other)
+	if !stamped(t, f.st, f.otherArtist) {
+		t.Error("a locked artist was put back in the queue")
 	}
 }

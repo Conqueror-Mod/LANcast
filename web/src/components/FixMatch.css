@@ -270,3 +270,22 @@
   font-size: 13px;
   line-height: 1.5;
 }
+
+/* Albums (ADR 0115): the artist field sits beside the title, narrower. */
+.fixmatch__input--artist {
+  flex: 0 1 40%;
+  min-width: 0;
+}
+.fixmatch__artist {
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin-top: 2px;
+}
+.fixmatch__share {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-top: 6px;
+}
+.fixmatch__why {
+  text-align: left;
+}

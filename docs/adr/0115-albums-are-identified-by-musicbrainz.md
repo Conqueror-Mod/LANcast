@@ -138,6 +138,31 @@ for every other kind. **Fix match works on albums and artists:** the existing
 `/candidates` and `/match` endpoints learn the two kinds. The dialog searches
 MusicBrainz by album title and artist, as it searches TMDB for a film.
 
+As built (step 3):
+
+- **An album's dialog is the background pass made visible.** It searches with
+  the same query and scores with the same scorer, so the numbers a person sees
+  are the ones the pass acted on. The artist can be replaced, for a folder whose
+  tags name a label as the artist, and a pasted MusicBrainz link fetches that
+  record exactly.
+- **An artist's dialog has no search box.** Its candidates are the artists its
+  albums credit, each with its share of them. A name search would bring back
+  the guess this decision exists to avoid. To change what an artist is, fix its
+  albums: **correcting an album puts its artist back in the queue** to be
+  voted on again, unless the artist is locked.
+- **A confirmed match locks the identity and nothing else.** The tags still
+  win: a person choosing a record says what the album is, not that its tags are
+  wrong. Year and genres stay gap-only.
+- **Music joins the review queue**: albums, and an artist only when its albums
+  disagree. An artist nothing identified has no candidates to offer, so listing
+  it would be a Fix button that cannot fix (the comic rule, ADR 0101).
+- **Off means off for the dialog too.** With `match_music` off, both endpoints
+  refuse (`409 music_matching_off`) rather than ask MusicBrainz, because the
+  privacy page says nothing is asked.
+- **The credit** sits under the genres on an identified album or artist and
+  links to its MusicBrainz page. It says both halves, because which genres
+  came from tags and which from MusicBrainz is not recorded.
+
 ### Switched on like films are
 
 Music matching is on by default, as TMDB is for films. What it sends:

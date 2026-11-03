@@ -80,22 +80,16 @@ type Candidate struct {
 	Overview   string
 	Popularity float64
 	PosterURL  string
-	/*
-	 * Artist is an album candidate's artist credit, as one string.
-	 *
-	 * Not on the wire yet: the candidates endpoint sends this struct as it is,
-	 * and a new key is a contract change that goes with the Fix match screen
-	 * for albums (ADR 0115, step 3) and its docs, not before.
-	 */
-	Artist string `json:"-"`
+	// Artist is an album candidate's artist credit, as one string ("Jay-Z &
+	// Linkin Park"). Absent for every other kind.
+	Artist string `json:",omitempty"`
 	// ArtistNames are each credited artist's name, as credited and as the
 	// catalogue knows them ("Тату" and "t.A.T.u."), so one name in a
 	// collaboration or an artist credited in another script still agrees.
 	ArtistNames []string `json:"-"`
 	// ReleaseType is an album candidate's kind of record ("Album", "Single",
 	// "Compilation"…), which breaks a tie between same-named records (Decide).
-	// Off the wire for the same reason as Artist.
-	ReleaseType string `json:"-"`
+	ReleaseType string `json:",omitempty"`
 
 	// Score and Breakdown are filled in by Rank, not by the provider.
 	Score     float64
