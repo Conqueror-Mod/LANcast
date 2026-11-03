@@ -32,5 +32,7 @@ func (c *Client) Hash(console Console, path string, data []byte) (string, bool) 
 func (c *Client) Game() (GameInfo, bool)                  { return GameInfo{}, false }
 func (c *Client) Achievements() []Listed                  { return nil }
 func (c *Client) RichPresence() string                    { return "" }
+func (c *Client) SetHardcore(on bool)                     {}
+func (c *Client) Hardcore() bool                          { return false }
 func (c *Client) MemoryRegions() int                      { return 0 }
 func (c *Client) ReadMemory(address uint32, n int) []byte { return nil }

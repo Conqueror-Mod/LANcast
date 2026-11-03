@@ -41,7 +41,7 @@ func DLLPath() string {
 
 // InterfaceVersion is the shim's LC_INTERFACE_VERSION. Open refuses a DLL
 // that reports another, so a mismatched DLL fails at load, not mid-game.
-const InterfaceVersion = 2
+const InterfaceVersion = 3
 
 // ErrUnsupported is Open's answer where the DLL cannot be loaded at all.
 var ErrUnsupported = errors.New("cheevos: achievements run on Windows only")

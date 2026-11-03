@@ -132,6 +132,8 @@ type engine interface {
 	Game() (GameInfo, bool)
 	Achievements() []Listed
 	RichPresence() string
+	SetHardcore(on bool)
+	Hardcore() bool
 }
 
 const (
@@ -163,12 +165,13 @@ type Runtime struct {
 	sending sync.WaitGroup
 	answers chan answer
 
-	eng     engine
-	clause  string
-	started bool
-	loaded  bool // the load finished well, and ready has not been said yet
-	ready   bool
-	off     bool
+	eng      engine
+	clause   string
+	hardcore bool // what the session asked for; casual until it does
+	started  bool
+	loaded   bool // the load finished well, and ready has not been said yet
+	ready    bool
+	off      bool
 	// early is progress from a state loaded before the set had (Continue
 	// does this: the state goes in at once, the set arrives over the
 	// network), handed over when it does.
@@ -214,6 +217,11 @@ func (r *Runtime) Start(console Console, mem Memory, path string, data []byte) e
 	r.clause = eng.UserAgentClause()
 	if !eng.SetMemory(console, mem.Map, mem.SystemRAM, mem.SaveRAM) {
 		r.log.Warn("rcheevos: the core exposes no memory for this console", "console", console)
+	}
+	// Casual unless the session asked: the client starts casual, and a set
+	// loaded in hardcore is the one RetroAchievements counts that way.
+	if r.hardcore {
+		eng.SetHardcore(true)
 	}
 	// rcheevos waits for the sign-in before loading, so both start now.
 	if err := eng.Login(ra.Placeholder, ra.Placeholder); err != nil {
@@ -276,6 +284,16 @@ func (r *Runtime) settle() {
 		r.hasEarly = false
 		r.SetProgress(r.early)
 		r.early = nil
+	}
+}
+
+// SetHardcore turns hardcore on or off (ADR 0112 §5). The session decides
+// when that is allowed, and resets the game itself after turning it on:
+// rcheevos asks for that reset with EventReset, which the runtime only logs.
+func (r *Runtime) SetHardcore(on bool) {
+	r.hardcore = on
+	if r.started {
+		r.eng.SetHardcore(on)
 	}
 }
 
@@ -405,6 +423,10 @@ func (r *Runtime) Event(e Event) {
 		n = Notice{Kind: "offline"}
 	case EventReconnected:
 		n = Notice{Kind: "online"}
+	case EventReset:
+		// Hardcore was turned on: the session resets the game itself.
+		r.log.Info("rcheevos: reset requested")
+		return
 	case EventServerError:
 		r.log.Warn("rcheevos: RetroAchievements refused a request", "api", e.Title, "error", e.Text)
 		n = Notice{Kind: "problem", Text: e.Text}

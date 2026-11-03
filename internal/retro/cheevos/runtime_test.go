@@ -60,6 +60,14 @@ func (f *fakeEngine) Achievements() []Listed {
 	}
 }
 func (f *fakeEngine) RichPresence() string { return "Level 3" }
+func (f *fakeEngine) SetHardcore(on bool) {
+	if on {
+		f.log("hardcore on")
+	} else {
+		f.log("hardcore off")
+	}
+}
+func (f *fakeEngine) Hardcore() bool { return f.count("hardcore on") > f.count("hardcore off") }
 
 func (f *fakeEngine) count(call string) int {
 	n := 0
@@ -295,6 +303,36 @@ func TestStopUnloadsThenCloses(t *testing.T) {
 		t.Error("closed twice")
 	}
 	newRuntime(nil, nil, nil, nil).Stop()
+}
+
+// Casual unless asked; asked before Start, the set loads in hardcore, and
+// later the switch goes straight to rcheevos. A reset request is the
+// session's to act on, so it is no notice.
+func TestHardcoreFollowsTheSession(t *testing.T) {
+	g := newRig(t, nil)
+	_ = g.rt.Start(NES, Memory{}, "", nil)
+	if g.eng.count("hardcore on") != 0 {
+		t.Fatal("hardcore without being asked")
+	}
+	g.rt.SetHardcore(true)
+	if !g.eng.Hardcore() {
+		t.Error("hardcore on did not reach rcheevos")
+	}
+	g.eng.h.Event(Event{Type: EventReset})
+	if g.kinds() != "" {
+		t.Errorf("notices %s", g.kinds())
+	}
+	g.rt.SetHardcore(false)
+	if g.eng.Hardcore() {
+		t.Error("hardcore off did not reach rcheevos")
+	}
+
+	h := newRig(t, nil)
+	h.rt.SetHardcore(true)
+	_ = h.rt.Start(NES, Memory{}, "", nil)
+	if strings.Join(h.eng.calls, ",") != "memory,hardcore on,login lancast lancast,load" {
+		t.Errorf("start: %v", h.eng.calls)
+	}
 }
 
 func TestConsoleFor(t *testing.T) {
