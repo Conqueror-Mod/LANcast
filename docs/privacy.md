@@ -33,6 +33,14 @@ you compiled yourself cannot send one; it offers to copy the report instead.
   carry a key for this. You can use your own key, or turn the built-in keys
   off in Settings; with no key at all, nothing is asked. Automatic
   enrichment can also be turned off.
+- **Album details from MusicBrainz.** LANcast asks musicbrainz.org about the
+  albums in a music library — each album's title, its album artist and its
+  year — and, for a match, the record's details. It needs no key and sends no
+  identifier beyond the program's name and version, which MusicBrainz asks
+  every client to send. It asks about one thing a second. Turn off
+  "Identify albums with MusicBrainz" in Settings and nothing is asked; matches
+  already made stay. Genres it supplies are its users' work, shared under
+  CC BY-NC-SA, and are shown with that credit.
 
 ## What happens only when someone asks
 

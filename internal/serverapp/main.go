@@ -37,6 +37,7 @@ import (
 	"lancast/internal/marker"
 	"lancast/internal/mediatools"
 	"lancast/internal/meta"
+	"lancast/internal/meta/musicbrainz"
 	"lancast/internal/meta/nfo"
 	"lancast/internal/meta/omdb"
 	"lancast/internal/meta/tmdb"
@@ -443,6 +444,10 @@ func run(ctx context.Context, addr, dataDir string, log *slog.Logger) error {
 		if s.OMDbKey != "" {
 			next.AddRatingSource(omdb.New(s.OMDbKey, omdb.WithCache(st)))
 		}
+		// Albums and artists (ADR 0115). Always registered: it needs no key,
+		// and whether it is asked anything is the match_music switch, which
+		// decides what the queue holds.
+		next.AddProvider(musicbrainz.New(api.Version, musicbrainz.WithCache(st)))
 		// Plugin-provided sources register the same way — indistinguishable
 		// downstream from the native ones (ADR 0007).
 		plugin.RegisterInto(next, plugins, log)
@@ -1093,7 +1098,9 @@ func run(ctx context.Context, addr, dataDir string, log *slog.Logger) error {
 		go trans.DetectHardware(ctx, settings.Get().HardwareEncoder)
 	}
 
-	// Pick up anything left pending from a previous run.
+	// Pick up anything left pending from a previous run. Music joins the
+	// queue only while matching it is on (ADR 0115).
+	st.SetMusicMatching(settings.Get().MatchMusic)
 	probeSoon()
 	enrichSoon()
 	markerSoon()

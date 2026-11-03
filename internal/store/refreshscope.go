@@ -57,8 +57,8 @@ const (
  * locked rows would be a button that undoes a person's decision, and no amount
  * of scoping makes that acceptable.
  */
-func refreshWhere(libraryID int64, scope RefreshScope) (string, []any, error) {
-	where := ` WHERE library_id = ? AND missing = 0 AND match_state != 'locked' AND ` + enrichableKinds
+func refreshWhere(libraryID int64, scope RefreshScope, enrichable string) (string, []any, error) {
+	where := ` WHERE library_id = ? AND missing = 0 AND match_state != 'locked' AND ` + enrichable
 	args := []any{libraryID}
 
 	switch scope {
@@ -80,7 +80,7 @@ func refreshWhere(libraryID int64, scope RefreshScope) (string, []any, error) {
  * it is still free.
  */
 func (s *Store) RefreshCount(ctx context.Context, libraryID int64, scope RefreshScope) (int64, error) {
-	where, args, err := refreshWhere(libraryID, scope)
+	where, args, err := refreshWhere(libraryID, scope, s.enrichableKinds())
 	if err != nil {
 		return 0, fmt.Errorf("refresh count: %w", err)
 	}
@@ -100,7 +100,7 @@ func (s *Store) RefreshCount(ctx context.Context, libraryID int64, scope Refresh
  * work by whatever changed in between.
  */
 func (s *Store) RefreshScoped(ctx context.Context, libraryID int64, scope RefreshScope) (int64, error) {
-	where, args, err := refreshWhere(libraryID, scope)
+	where, args, err := refreshWhere(libraryID, scope, s.enrichableKinds())
 	if err != nil {
 		return 0, fmt.Errorf("refresh library: %w", err)
 	}
@@ -145,7 +145,7 @@ func (s *Store) RefreshItemTree(ctx context.Context, itemID int64) (int64, error
 		UPDATE media_item SET metadata_updated_at = NULL
 		WHERE id IN (SELECT id FROM tree)
 		  AND match_state != 'locked'
-		  AND `+enrichableKinds, itemID)
+		  AND `+s.enrichableKinds(), itemID)
 	if err != nil {
 		return 0, fmt.Errorf("refresh item: %w", err)
 	}

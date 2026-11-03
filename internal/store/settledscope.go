@@ -42,12 +42,14 @@ import (
 // reachable by an ordinary refresh, so including it here would double the cost
 // of the button to do again what another button does — and the gap this exists
 // to close is precisely the rows nothing else can reach.
-const settledWhere = `
+func (s *Store) settledWhere() string {
+	return `
 	WHERE library_id = ? AND missing = 0
 	  AND match_state = 'locked'
 	  AND provider IS NOT NULL AND TRIM(provider) <> ''
 	  AND external_id IS NOT NULL AND TRIM(external_id) <> ''
-	  AND ` + enrichableKinds
+	  AND ` + s.enrichableKinds()
+}
 
 /*
  * SettledCount prices the pass without performing it.
@@ -60,7 +62,7 @@ const settledWhere = `
 func (s *Store) SettledCount(ctx context.Context, libraryID int64) (int64, error) {
 	var n int64
 	if err := s.db.QueryRowContext(ctx,
-		`SELECT COUNT(*) FROM media_item`+settledWhere, libraryID).Scan(&n); err != nil {
+		`SELECT COUNT(*) FROM media_item`+s.settledWhere(), libraryID).Scan(&n); err != nil {
 		return 0, fmt.Errorf("settled count: %w", err)
 	}
 	return n, nil
@@ -79,7 +81,7 @@ func (s *Store) SettledCount(ctx context.Context, libraryID int64) (int64, error
  */
 func (s *Store) SettledItems(ctx context.Context, libraryID int64) ([]Item, error) {
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT `+itemCols+` FROM media_item`+settledWhere+` ORDER BY id`, libraryID)
+		`SELECT `+itemCols+` FROM media_item`+s.settledWhere()+` ORDER BY id`, libraryID)
 	if err != nil {
 		return nil, fmt.Errorf("settled items: %w", err)
 	}

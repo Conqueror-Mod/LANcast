@@ -63,7 +63,10 @@ Above that rate every request gets a 503 until the rate drops.
   "Nirvana" is several artists, and a name search cannot tell which. Once its
   albums are matched, the artist takes the MusicBrainz artist most of its
   matched albums credit. With no matched album, it stays unmatched, which is
-  honest.
+  honest. **An artist waits while any of its albums is still pending**, so a
+  first pass never decides an artist from half its albums. A tie between two
+  artists, or a winner below half the votes, is not guessed: the first stays
+  unmatched, the second goes to review.
 - **Tracks are not matched.** That would be 9,945 searches at one a second,
   about 2¾ hours, for an identity nothing uses yet. Recording ids belong to the
   scrobbling decision, which needs them.
@@ -78,7 +81,15 @@ Above that rate every request gets a 503 until the rate drops.
   - year against the release group's first release date;
   - **an artist that disagrees caps the score below review.** "Greatest
     Hits" by the wrong artist is the music version of matching an obscure
-    film to a blockbuster.
+    film to a blockbuster. Agreement is by words (shared and contained
+    words), not by character similarity, which scored "Fueled By Ramen"
+    close to an unrelated artist;
+  - a title is searched without a trailing edition note ("(Deluxe Edition)",
+    "[Remastered]"; never "live"), through `media.AlbumBaseTitle`, and keeps
+    its own title.
+- **Two different records scoring within 0.02 go to review**, except when
+  exactly one of them is a plain Album: Prince's *1999* and its single, or
+  Motörhead's *Ace of Spades* and its single, are the album the person has.
 - The thresholds are the ones films use (0.85 applied silently, 0.55 applied
   and flagged). **Before any UI is built, the matcher is run over a sample of
   the real library and the split is reported.** If the review band holds
@@ -111,8 +122,9 @@ A match adds:
 - **a release type**: Album, EP, Single, Compilation, Live or Soundtrack, from
   MusicBrainz's primary and secondary types. This is new information no tag
   here carries. It becomes a filter on the Albums level ("show me albums, not
-  singles"). That one is a nullable column (schema 89), and nothing else in the
-  schema changes;
+  singles"). Two nullable columns (schema 89): `release_type`, and
+  `artist_external_id` on an album, the credit its artist is voted from.
+  Nothing else in the schema changes;
 - **a year** where the album has none, from the first release date;
 - **genres** where the album has none. Genres on a release group are
   MusicBrainz users' tag votes, which are **CC BY-NC-SA, not CC0**. LANcast
@@ -134,7 +146,12 @@ Music matching is on by default, as TMDB is for films. What it sends:
 - release group ids to `coverartarchive.org`.
 
 [docs/privacy.md](../privacy.md) gains both under "What is on unless you turn
-it off", in the same commit as the code. A library setting turns it off.
+it off", in the same commit as the code. **The server setting `match_music`
+turns it off** (Settings → Metadata), not a library setting: there is one
+limiter and one queue, and a per-library switch would answer a question
+nobody has asked. Off takes albums and artists out of the queue and keeps the
+matches already made; on starts a pass at once. A busy MusicBrainz (503) is
+never recorded as "no match": the album stays pending for the next pass.
 **Existing music libraries start matching on upgrade**, and genres from
 MusicBrainz fill albums that have none, with credit shown. Both were approved
 by the owner on 2026-11-03. Off by default would have been an identity

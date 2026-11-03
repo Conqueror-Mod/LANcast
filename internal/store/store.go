@@ -33,7 +33,20 @@ type Store struct {
 	db *sql.DB
 	// changed hears what the store's writes change (changes.go, ADR 0079).
 	changed atomic.Pointer[changeHook]
+	// musicMatching puts albums and artists in the enrichment queue (ADR
+	// 0115). Off until the server says the setting is on, so a store opened
+	// by a tool or a test never asks MusicBrainz for anything.
+	musicMatching atomic.Bool
 }
+
+/*
+ * SetMusicMatching says whether albums and artists are matched (ADR 0115).
+ *
+ * Off takes them out of the queue and out of its count, rather than leaving
+ * them pending: a count that never falls reads as a stuck backlog, which is
+ * the bug the enrichable-kinds comment in meta.go records.
+ */
+func (s *Store) SetMusicMatching(on bool) { s.musicMatching.Store(on) }
 
 // Open connects to the database at path and applies the schema. Schema
 // application is idempotent, so this is safe on every start.
@@ -3470,13 +3483,23 @@ func (s *Store) EnsureDerivedContainer(ctx context.Context, libraryID int64, kin
 		return 0, fmt.Errorf("ensure derived container: unexpected kind %q", kind)
 	}
 	now := time.Now().Unix()
+	/*
+	 * A gallery or a playlist has nothing to match and is born settled. An
+	 * album or an artist is born waiting for MusicBrainz (ADR 0115): stamped
+	 * "matched" as these used to be, it never entered the queue, and claimed
+	 * an identity nothing had given it.
+	 */
+	state, score, stamped := "matched", 1.0, any(now)
+	if kind == "album" || kind == "artist" {
+		state, score, stamped = "unmatched", 0, nil
+	}
 	_, err := s.db.ExecContext(ctx, `
 		INSERT INTO media_item
 			(library_id, kind, path, title, sort_title, parent_id,
 			 match_state, match_score, metadata_updated_at, added_at, updated_at, missing)
-		VALUES (?, ?, ?, ?, ?, ?, 'matched', 1, ?, ?, ?, 0)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
 		ON CONFLICT(path) DO NOTHING`,
-		libraryID, kind, path, title, sortTitle, parentID, now, now, now)
+		libraryID, kind, path, title, sortTitle, parentID, state, score, stamped, now, now)
 	if err != nil {
 		return 0, fmt.Errorf("ensure %s %q: %w", kind, path, err)
 	}
@@ -3556,8 +3579,16 @@ func (s *Store) RollUpMusicGenres(ctx context.Context, libraryID int64) error {
 	} {
 		unlocked := `c.library_id = ? AND c.kind = '` + level.kind + `'
 			AND NOT EXISTS (SELECT 1 FROM item_lock l WHERE l.item_id = c.id AND l.field = 'genres')`
+		/*
+		 * Replaced only where something under it has a genre. An album whose
+		 * tracks carry none may hold genres MusicBrainz filled (ADR 0115), and
+		 * an empty union is no reason to erase them; the day a track is tagged,
+		 * the tags take over, as tags always do.
+		 */
 		if _, err := tx.ExecContext(ctx, `
-			DELETE FROM item_genre WHERE item_id IN (SELECT c.id FROM media_item c WHERE `+unlocked+`)`,
+			DELETE FROM item_genre WHERE item_id IN (SELECT c.id FROM media_item c WHERE `+unlocked+`
+				AND EXISTS (SELECT 1 FROM media_item ch JOIN item_genre ig ON ig.item_id = ch.id
+					WHERE ch.parent_id = c.id AND ch.kind IN (`+level.children+`) AND ch.missing = 0))`,
 			libraryID); err != nil {
 			return fmt.Errorf("roll up %s genres: %w", level.kind, err)
 		}
