@@ -175,3 +175,29 @@ func TestHardcoreWaitsForApproval(t *testing.T) {
 		t.Error("an editor upload was let through")
 	}
 }
+
+// The player's own User-Agent goes to RetroAchievements only in the shape
+// ADR 0112 §3 gives; anything else gets the server's (RetroAchievements
+// requires a unique, stable one before it approves an emulator).
+func TestUserAgentShape(t *testing.T) {
+	for _, ok := range []string{
+		"LANcast/0.10.2 (Windows 10.0) mupen64plus-next/2.6-Vulkan-5d2ac21 rcheevos/12.5",
+		"LANcast/1.0.0 (Windows 10.0) mgba/0.11-dev rcheevos/12.5.0",
+	} {
+		if !UserAgentOK(ok) {
+			t.Errorf("refused %q", ok)
+		}
+	}
+	for _, bad := range []string{
+		"",
+		"LANcast/dev (Windows 10.0) mgba/0.11 rcheevos/12.5",                 // a development build
+		"LANcast/0.10.2 (Windows 10.0) mgba/0.11",                            // no rcheevos clause
+		"LANcast/0.10.2 (Windows 10.0) mgba/0.11 rcheevos/12.5\r\nX-Evil: 1", // a header smuggled in
+		"RetroArch/1.22 (Windows 10.0) mgba/0.11 rcheevos/12.5",              // someone else's name
+		"LANcast/0.10.2 (Windows 10.0) m gba/0.11 rcheevos/12.5",
+	} {
+		if UserAgentOK(bad) {
+			t.Errorf("accepted %q", bad)
+		}
+	}
+}

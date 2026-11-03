@@ -25,10 +25,17 @@ import (
  * error, which rcheevos tries again later.
  */
 func (g *Game) Achievements(ctx context.Context, body, userAgentClause string) (int, []byte, error) {
+	return g.AchievementsAs(ctx, body, userAgentClause, "")
+}
+
+// AchievementsAs is Achievements with the whole User-Agent the player built
+// (ADR 0112 §3), which the server sends if it has the expected shape.
+func (g *Game) AchievementsAs(ctx context.Context, body, userAgentClause, userAgent string) (int, []byte, error) {
 	payload, err := json.Marshal(struct {
 		Body   string `json:"body"`
 		Clause string `json:"user_agent_clause"`
-	}{body, userAgentClause})
+		Agent  string `json:"user_agent,omitempty"`
+	}{body, userAgentClause, userAgent})
 	if err != nil {
 		return 0, nil, err
 	}

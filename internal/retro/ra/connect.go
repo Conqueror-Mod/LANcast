@@ -10,6 +10,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -164,6 +165,17 @@ func Check(form, raUser string) (url.Values, string, error) {
 	v.Del("t")
 	return v, kind, nil
 }
+
+// userAgentShape is the User-Agent the desktop player builds (ADR 0112 §3):
+// LANcast's version, the system, the core and its version, and rcheevos'
+// clause. A development build's "dev" version does not match, and gets the
+// server's shorter one.
+var userAgentShape = regexp.MustCompile(
+	`^LANcast/[0-9]+\.[0-9]+\.[0-9]+ \(Windows [0-9]+\.[0-9]+\) [A-Za-z0-9._+-]{1,64}/[A-Za-z0-9._+-]{1,64} rcheevos/[0-9]+(\.[0-9]+){1,2}$`)
+
+// UserAgentOK reports whether a player's User-Agent has that shape, and so
+// may be sent to RetroAchievements as it is.
+func UserAgentOK(s string) bool { return len(s) <= 200 && userAgentShape.MatchString(s) }
 
 // WithToken is the form with the person's token in it, encoded to send.
 func WithToken(v url.Values, token string) string {
