@@ -1,6 +1,6 @@
 # Roadmap
 
-Last updated: 2026-11-02 · **v0.10.3 released · M0–M4 built.** The React client executes the design
+Last updated: 2026-11-03 · **v0.10.3 released, MusicBrainz albums on main · M0–M4 built.** The React client executes the design
 system and the client-UX backlog is closed. Observability (match, review, scan
 diagnostics), an audit log and CI are in place. Transport security (TLS) and
 multi-user accounts (admin/member roles) are built, and branding & splash shipped.
@@ -19,7 +19,14 @@ behind: the Releases table stopped at v0.9.78, and three backlog entries still
 listed work that had shipped as open. The release-by-release record is the
 [Releases](#releases) table, and what remains is [What is left](#what-is-left).*
 
-**Nothing sits unreleased.** v0.10.3 is the latest release. Since v0.9.78:
+**On main, unreleased:** albums identified by MusicBrainz
+([ADR 0115](adr/0115-albums-are-identified-by-musicbrainz.md), #1005–#1008 and
+the cover step): background matching with the tags still winning, Fix match for
+albums and artists, a Type filter on the Albums level, and covers from the
+Cover Art Archive for albums with none. Schema 89, one-way; the first pass over
+a large library takes about two hours at MusicBrainz's one request a second.
+
+v0.10.3 is the latest release. Since v0.9.78:
 - **v0.9.79:** one program, `LANcast.exe`, with the tray always present
   ([ADR 0080](adr/0080-one-executable-two-roles.md)), and a scan can be cancelled.
 - **v0.9.80–v0.9.81:** collections continue the way shows do, an About tab,
@@ -218,6 +225,10 @@ step 6, which is now native HLS against MSE, and
 is watching that keeps running.
 
 **Built, not yet watched working.**
+- **MusicBrainz albums** (ADR 0115) as the installed service, and its first
+  pass over the real library. Measured beforehand on 300 random albums of it
+  (285 matched, 7 review, 8 unmatched) and run live over the test library in
+  a dev build (202 of 218 matched), but never as the service.
 - **Extras** (#950), the one piece of the second unattended batch not seen
   working: an MKV extra played in the desktop window. Chapters, pre-roll,
   two-factor sign-in and the comics reader (CBZ and PDF) all passed as the
