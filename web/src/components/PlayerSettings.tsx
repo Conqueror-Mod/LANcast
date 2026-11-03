@@ -8,6 +8,7 @@ import { FONTS } from "@/playback/cueVars";
 import { COLORS, SIZES } from "./PlaybackSettings";
 import { usePlaybackPrefs, useSetPlaybackPrefs } from "@/api/hooks";
 import "./PlayerSettings.css";
+import { PhotosensitivityWarning } from "./PhotosensitivityWarning";
 
 /*
  * This device › Player: the player's own preferences, settable before
@@ -187,6 +188,7 @@ export function PlayerSettings() {
           />
           Calm visualizers: half the motion
         </label>
+        <PhotosensitivityWarning />
       </section>
     </>
   );

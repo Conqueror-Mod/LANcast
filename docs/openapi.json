@@ -4725,6 +4725,21 @@
           "libraries"
         ],
         "summary": "The filter values this library's browse view offers",
+        "parameters": [
+          {
+            "name": "kind",
+            "in": "query",
+            "required": false,
+            "description": "The level to describe (ADR 0114). Absent: the library's top level, as the default grid shows it. `album` or `track`: every album or track in the library, for a music library shown as Albums or Tracks. **A closed set**, unlike the listing's `kind`; anything else is a 400.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "album",
+                "track"
+              ]
+            }
+          }
+        ],
         "responses": {
           "200": {
             "description": "Only values actually present.",

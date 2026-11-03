@@ -65,6 +65,19 @@ export function NowPlaying() {
 
   const year = item?.year ?? album?.year ?? null;
   const albumTitle = item?.series ?? album?.title ?? null;
+  /*
+   * The artist, as a link to their page, the way the album already is.
+   *
+   * The artist page is the album's parent. It is linked only when that parent
+   * is an artist of the same name as the track's: a compilation's album sits
+   * under "Various Artists", and a track credited "X feat. Y" is not X's page
+   * by name. Otherwise the name stays plain text, which is no worse than before.
+   */
+  const { data: albumParent } = useItem(album?.parent_id ?? 0);
+  const artistPage =
+    albumParent?.kind === "artist" && item?.artist && sameName(albumParent.title, item.artist)
+      ? albumParent
+      : null;
   // On a phone the column starts under the switcher's rows, which live in
   // another box; it is told how many there are (NowPlaying.css).
   const rows = useStageRows();
@@ -80,7 +93,18 @@ export function NowPlaying() {
           <span className="section-label">Now playing</span>
           <h1 className="np__title">{item?.title ?? "Playing"}</h1>
           <p className="np__meta">
-            {item?.artist && <span>{item.artist}</span>}
+            {item?.artist &&
+              (artistPage ? (
+                <button
+                  className="np__album"
+                  onClick={() => navigate(`/item/${artistPage.id}`)}
+                  title={`Go to ${item.artist}`}
+                >
+                  {item.artist}
+                </button>
+              ) : (
+                <span>{item.artist}</span>
+              ))}
             {item?.artist && albumTitle && <span className="np__sep"> — </span>}
             {albumTitle &&
               (album ? (
@@ -343,4 +367,10 @@ function TabButton({
       {children}
     </button>
   );
+}
+
+/** Two artist names that are the same name: case and spacing forgiven. */
+export function sameName(a: string, b: string): boolean {
+  const n = (s: string) => s.normalize("NFC").trim().replace(/\s+/g, " ").toLowerCase();
+  return n(a) === n(b);
 }

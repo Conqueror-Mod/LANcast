@@ -2531,11 +2531,18 @@ export function useItems(query: ItemQuery) {
 // The filter values a library's browse view offers — genres, decades, and
 // content ratings actually present, plus whether an unwatched toggle is worth
 // showing, so a chosen filter never empties the grid.
-export function useFacets(libraryID: number) {
+//
+// `kind` asks for one level of a music library instead of its top level
+// (ADR 0114): album or track. The key nests it under ["facets", libraryID], so
+// every invalidation of "facets" still reaches it.
+export function useFacets(libraryID: number, kind?: "album" | "track") {
   return useQuery({
-    queryKey: ["facets", libraryID],
+    queryKey: kind ? ["facets", libraryID, kind] : ["facets", libraryID],
     queryFn: ({ signal }) =>
-      apiGet<Facets>(`/api/libraries/${libraryID}/facets`, signal),
+      apiGet<Facets>(
+        `/api/libraries/${libraryID}/facets${kind ? `?kind=${kind}` : ""}`,
+        signal,
+      ),
     enabled: libraryID > 0,
     staleTime: 30_000,
   });

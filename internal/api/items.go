@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"os"
@@ -269,7 +270,13 @@ func (s *Server) libraryFacets(w http.ResponseWriter, r *http.Request) {
 	if _, err := s.st.GetLibrary(r.Context(), id); s.notFoundOr(w, err, "get library", "no such library") {
 		return
 	}
-	facets, err := s.st.LibraryFacets(r.Context(), id, s.userID(r))
+	// kind=album|track: the facets of that level, for a music library shown
+	// as Albums or Tracks (ADR 0114). Absent is the top level, as always.
+	facets, err := s.st.LibraryFacetsAt(r.Context(), id, s.userID(r), r.URL.Query().Get("kind"))
+	if errors.Is(err, store.ErrFacetKind) {
+		writeError(w, http.StatusBadRequest, "bad_request", "kind must be album or track")
+		return
+	}
 	if err != nil {
 		s.writeInternal(w, err, "library facets")
 		return

@@ -95,6 +95,18 @@
   box-shadow: 0 18px 40px rgba(0, 0, 0, 0.5);
 }
 
+/* A phone: exactly the bar's width, which Browse.css makes the row's. A cap
+   in viewport units cannot know where the bar starts, so it overran by that
+   much. */
+@media (max-width: 600px) {
+  .fbar__panel {
+    right: 0;
+    width: auto;
+    min-width: 0;
+    max-width: none;
+  }
+}
+
 .fbar__search {
   width: 100%;
   margin-bottom: 10px;

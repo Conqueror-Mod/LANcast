@@ -51,6 +51,9 @@ function Probe() {
 }
 
 const ALBUM = 50;
+const ARTIST = 40;
+/** What the album sits under, per test: nothing, by default. */
+let albumParent: { id: number; title: string; kind: string } | null = null;
 const track = (id: number) => ({
   id,
   title: `Song ${id}`,
@@ -107,7 +110,9 @@ beforeEach(() => {
       const m = url.match(/\/api\/items\/(\d+)(\?|$)/);
       if (m) {
         const id = Number(m[1]);
-        if (id === ALBUM) return json({ id: ALBUM, title: "The Record", kind: "album", year: 1994 });
+        if (id === ALBUM)
+          return json({ id: ALBUM, title: "The Record", kind: "album", year: 1994, parent_id: albumParent?.id });
+        if (albumParent && id === albumParent.id) return json(albumParent);
         return json(id >= 90 ? film(id) : track(id));
       }
       if (url.includes("/api/auth")) return json({ user: { role: "admin" }, can_convert: true });
@@ -226,6 +231,35 @@ describe("Now Playing on a track", () => {
     await press(column()!.querySelector<HTMLButtonElement>(".np__album"));
     expect(path).toBe(`/item/${ALBUM}`);
     expect(pb.itemID).toBe(1);
+  });
+
+  it("goes to the artist from the meta line, as it does to the album", async () => {
+    albumParent = { id: ARTIST, title: "The Band", kind: "artist" };
+    try {
+      await playing(1, [1, 2, 3]);
+      await settle(); // the artist is asked for once the album has answered
+      const links = column()!.querySelectorAll<HTMLButtonElement>(".np__album");
+      expect([...links].map((l) => l.textContent)).toEqual(["The Band", "The Record"]);
+      await press(links[0]);
+      expect(path).toBe(`/item/${ARTIST}`);
+      expect(pb.itemID).toBe(1);
+    } finally {
+      albumParent = null;
+    }
+  });
+
+  // A compilation sits under "Various Artists": that is not this track's artist.
+  it("leaves the artist as plain text when the album belongs to someone else", async () => {
+    albumParent = { id: ARTIST, title: "Various Artists", kind: "artist" };
+    try {
+      await playing(1, [1, 2, 3]);
+      await settle();
+      const links = column()!.querySelectorAll<HTMLButtonElement>(".np__album");
+      expect([...links].map((l) => l.textContent)).toEqual(["The Record"]);
+      expect(column()!.querySelector(".np__meta")?.textContent).toBe("The Band — The Record · 1994");
+    } finally {
+      albumParent = null;
+    }
   });
 
   it("marks the chosen tab without gold", async () => {

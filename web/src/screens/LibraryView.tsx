@@ -27,7 +27,7 @@ import { tileWidth, useTileSize } from "@/lib/tileSize";
 import { FILTER_PARAM_KEYS } from "@/lib/browseFilters";
 import { ShuffleGlyph } from "@/components/PlayerGlyphs";
 import type { Item, Library } from "@/api/types";
-import type { LibraryKindConfig } from "./libraryConfig";
+import { levelFor, type LibraryKindConfig } from "./libraryConfig";
 import { offersShuffle, playAllLabel } from "@/lib/playAll";
 import "./Browse.css";
 
@@ -56,10 +56,20 @@ export function LibraryView({
   const [tileStep] = useTileSize();
   const [params, setParams] = useSearchParams();
   const q = params.get("q") ?? "";
+  /*
+   * The level a music library is shown at: Artists, Albums or Tracks (ADR
+   * 0114). Undefined for every other kind, which has one level.
+   */
+  const level = levelFor(config, params.get("show"));
+  const sorts = level?.sorts ?? config.sorts;
+  const searchPlaceholder = level?.searchPlaceholder ?? config.searchPlaceholder;
   // The default comes from the kind rather than being "title" for everyone: a
   // picture library sorted by title is sorted by UUID, which is no order at
-  // all. Each config lists its natural default first.
-  const sort = params.get("sort") ?? config.sorts[0].value;
+  // all. Each config lists its natural default first. A sort this level does
+  // not offer (a link to Tracks by duration, opened on Artists) is the default
+  // rather than a select showing nothing.
+  const asked = params.get("sort");
+  const sort = sorts.some((s) => s.value === asked) ? asked! : sorts[0].value;
   const genres = params.getAll("genre");
   const decades = params.getAll("decade");
   const contentRatings = params.getAll("content_rating");
@@ -165,7 +175,7 @@ export function LibraryView({
     }
   };
 
-  const { data: facets } = useFacets(libraryID);
+  const { data: facets } = useFacets(libraryID, level?.kind);
   const {
     data,
     isLoading,
@@ -214,6 +224,8 @@ export function LibraryView({
     // 1,211 was.
     excludeKind: q ? undefined : "collection,playlist",
     initial: initial || undefined,
+    // Every album or track in the library rather than its top level.
+    kind: level?.kind,
   });
 
   // Every control lives in the URL, so a filtered view is linkable and survives
@@ -240,6 +252,28 @@ export function LibraryView({
           ? cur.filter((v) => v !== value)
           : [...cur, value];
         for (const v of next) prev.append(key, v);
+        return prev;
+      },
+      { replace: true },
+    );
+  };
+
+  /*
+   * Changing level keeps what still means something there (genre, search,
+   * unwatched) and drops what does not: an artist has no year, the letters are
+   * a different list, and a duration sort does not exist on Artists. A filter
+   * kept across the switch with no chip to show it would be a grid emptied by
+   * nothing on screen.
+   */
+  const showLevel = (show: string) => {
+    setParams(
+      (prev) => {
+        if (show) prev.set("show", show);
+        else prev.delete("show");
+        for (const k of ["year", "decade", "initial"]) prev.delete(k);
+        const next = levelFor(config, show);
+        const cur = prev.get("sort");
+        if (cur && !next?.sorts.some((s) => s.value === cur)) prev.delete("sort");
         return prev;
       },
       { replace: true },
@@ -410,10 +444,10 @@ export function LibraryView({
         <input
           className="browse__search"
           type="search"
-          placeholder={config.searchPlaceholder}
+          placeholder={searchPlaceholder}
           value={q}
           onChange={(e) => setParam("q", e.target.value)}
-          aria-label={config.searchPlaceholder}
+          aria-label={searchPlaceholder}
         />
         <TileSizeSlider />
       </div>
@@ -428,6 +462,26 @@ export function LibraryView({
       )}
 
       <div className="browse__filters">
+        {/* Artists, Albums or Tracks (ADR 0114). First in the row because it
+            decides what everything after it filters. The selected level is
+            weight and a raised background, as the A-Z rail's letter is: gold
+            is focus, and a level is not that. */}
+        {config.levels && level && (
+          <div className="browse__levels" role="radiogroup" aria-label="Show">
+            {config.levels.map((l) => (
+              <button
+                key={l.show || "top"}
+                type="button"
+                role="radio"
+                aria-checked={l === level}
+                className={"browse__playall-btn browse__level" + (l === level ? " is-on" : "")}
+                onClick={() => l !== level && showLevel(l.show)}
+              >
+                {l.label}
+              </button>
+            ))}
+          </div>
+        )}
         {/* Every library whose contents are a queue. Pictures are the
             exception and stay one until a slideshow exists to put here. */}
         {playKind && (
@@ -555,7 +609,7 @@ export function LibraryView({
             value={sort}
             onChange={(e) => setParam("sort", e.target.value)}
           >
-            {config.sorts.map((s) => (
+            {sorts.map((s) => (
               <option key={s.value} value={s.value}>
                 {s.label}
               </option>

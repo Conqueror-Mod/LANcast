@@ -1971,6 +1971,37 @@ type Facets struct {
 // LibraryFacets returns the filter values present among a library's top-level
 // items, and whether this user has watched any of them.
 func (s *Store) LibraryFacets(ctx context.Context, libraryID int64, userID string) (Facets, error) {
+	return s.LibraryFacetsAt(ctx, libraryID, userID, "")
+}
+
+// ErrFacetKind is a facet level that is not one: kind is "", album or track.
+var ErrFacetKind = errors.New("facets: kind must be album or track")
+
+/*
+ * LibraryFacetsAt is LibraryFacets for one level of a music library (ADR 0114).
+ *
+ * The facets have always described what the grid shows, and a music grid
+ * showed artists, which carry no year and (until 0114) no genre, so every
+ * filter hid itself. With the library shown as Albums or Tracks the grid is a
+ * kind across the whole library rather than its top level, and the facets have
+ * to be that kind's, or the bar offers years the albums do not have.
+ *
+ * kind "" is the top level, exactly as before. The level is spelled into the
+ * SQL rather than bound, because it sits inside FILTER clauses and correlated
+ * subqueries at seven places; it comes from a closed set checked here, never
+ * from the caller's string.
+ */
+func (s *Store) LibraryFacetsAt(ctx context.Context, libraryID int64, userID, kind string) (Facets, error) {
+	level, parentless, mLevel := topLevelPredicate, "parent_id IS NULL", "m.parent_id IS NULL"
+	switch kind {
+	case "":
+	case "album", "track":
+		level = "media_item.kind = '" + kind + "' AND media_item.missing = 0"
+		parentless = "media_item.kind = '" + kind + "'"
+		mLevel = "m.kind = '" + kind + "'"
+	default:
+		return Facets{}, ErrFacetKind
+	}
 	f := Facets{
 		Genres: []string{}, Decades: []int{}, ContentRatings: []string{},
 		Initials: []string{}, Years: []int{}, Resolutions: []ResolutionBucket{},
@@ -2021,7 +2052,7 @@ func (s *Store) LibraryFacets(ctx context.Context, libraryID int64, userID strin
 		  JOIN item_tag it ON it.tag_id = t.id
 		  JOIN media_item ON media_item.id = it.item_id
 		 WHERE t.user_id = ? AND media_item.library_id = ?
-		   AND `+topLevelPredicate+`
+		   AND `+level+`
 		 GROUP BY t.id, t.name, t.folded
 		 ORDER BY t.folded`, userID, libraryID)
 	if err != nil {
@@ -2056,7 +2087,7 @@ func (s *Store) LibraryFacets(ctx context.Context, libraryID int64, userID strin
 			SELECT 1 FROM user_favourite uf
 			CROSS JOIN media_item ON media_item.id = uf.item_id
 			WHERE uf.user_id = ? AND media_item.library_id = ?
-			  AND `+topLevelPredicate+`)`,
+			  AND `+level+`)`,
 		userID, libraryID).Scan(&f.HasFavourites); err != nil {
 		return f, fmt.Errorf("library facets (favourites): %w", err)
 	}
@@ -2073,7 +2104,7 @@ func (s *Store) LibraryFacets(ctx context.Context, libraryID int64, userID strin
 			EXISTS (SELECT 1 FROM playback_state ps
 				CROSS JOIN media_item m ON m.id = ps.item_id
 				WHERE ps.user_id = ? AND ps.watched = 1
-				  AND m.library_id = ? AND m.parent_id IS NULL AND m.missing = 0)`,
+				  AND m.library_id = ? AND `+mLevel+` AND m.missing = 0)`,
 		userID, libraryID, userID, libraryID).Scan(&f.HasInProgress, &f.HasWatched); err != nil {
 		return f, fmt.Errorf("library facets (watched): %w", err)
 	}
@@ -2098,21 +2129,21 @@ func (s *Store) LibraryFacets(ctx context.Context, libraryID int64, userID strin
 	if err := s.db.QueryRowContext(ctx, `
 		SELECT
 			json_group_array(DISTINCT year)
-				FILTER (WHERE parent_id IS NULL AND year IS NOT NULL),
+				FILTER (WHERE `+parentless+` AND year IS NOT NULL),
 			json_group_array(DISTINCT content_rating)
-				FILTER (WHERE parent_id IS NULL AND content_rating != ''),
+				FILTER (WHERE `+parentless+` AND content_rating != ''),
 			-- Unprobed rows have no width and are skipped rather than
 			-- counted as SD.
 			json_group_array(DISTINCT width) FILTER (WHERE width > 0),
 			-- The initials, computed the way InitialFilter selects on, so the
 			-- rail can never offer a letter the filter then finds nothing for.
 			json_group_array(DISTINCT UPPER(SUBSTR(sort_title, 1, 1)))
-				FILTER (WHERE sort_title != '' AND `+topLevelPredicate+`),
+				FILTER (WHERE sort_title != '' AND `+level+`),
 			-- COALESCE so a library with no ratings answers 0 rather than
 			-- NULL, which the client reads as "offer no rating filter at all".
 			COALESCE(MAX(rating), 0),
 			-- 'unmatched' is meta.StateUnmatched, spelled out as ListItems does.
-			COALESCE(MAX(parent_id IS NULL
+			COALESCE(MAX(`+parentless+`
 				AND (match_state IS NULL OR match_state = 'unmatched')), 0)
 		FROM media_item
 		WHERE library_id = ? AND missing = 0`, libraryID).Scan(
@@ -2202,7 +2233,7 @@ func (s *Store) LibraryFacets(ctx context.Context, libraryID int64, userID strin
 			SELECT 1 FROM item_genre ig
 			CROSS JOIN media_item m ON m.id = ig.item_id
 			WHERE ig.genre_id = g.id
-			  AND m.library_id = ? AND m.parent_id IS NULL AND m.missing = 0)
+			  AND m.library_id = ? AND `+mLevel+` AND m.missing = 0)
 		ORDER BY g.name`, libraryID)
 	if err != nil {
 		return f, fmt.Errorf("library facets (genres): %w", err)
@@ -3330,6 +3361,9 @@ type TrackTags struct {
 	Disc      int
 	Track     int
 	Year      int
+	// Genres as the file states them, already split (scan.trackTagsFrom).
+	// Empty leaves the track's genres alone, the way an empty title does.
+	Genres []string
 	// Loudness is written as read, absent values included: a gain removed
 	// from the file is removed here. It is a measurement of the file, not
 	// metadata a person edits, so no lock applies.
@@ -3373,6 +3407,17 @@ func (s *Store) ApplyTrackTags(ctx context.Context, itemID int64, t TrackTags) e
 	add("season", t.Disc, t.Disc == 0)
 	add("episode", t.Track, t.Track == 0)
 	add("year", t.Year, t.Year == 0)
+
+	/*
+	 * Genres were read from every file and thrown away until ADR 0114: a music
+	 * library offered no genre filter because nothing in it had a genre. Its
+	 * own lock, as an edited genre has on a film.
+	 */
+	if len(t.Genres) > 0 && !locked["genres"] {
+		if err := s.replaceTagGenres(ctx, itemID, t.Genres); err != nil {
+			return err
+		}
+	}
 
 	l := t.Loudness
 	if _, err := s.db.ExecContext(ctx, `UPDATE media_item SET rg_track_gain = ?, rg_track_peak = ?,
@@ -3487,6 +3532,48 @@ func (s *Store) FillAlbumMetadata(ctx context.Context, libraryID int64) (int64, 
 	}
 	n, _ := res.RowsAffected()
 	return n, nil
+}
+
+/*
+ * RollUpMusicGenres gives every album its tracks' genres, and every artist its
+ * albums' and loose tracks' (ADR 0114).
+ *
+ * So a music library can be filtered by genre at whichever level it is shown:
+ * the Artists view asks for an artist with anything in Jazz, the Albums view
+ * for a Jazz album. Re-derived on each pass, like an album's year, so a retag
+ * reaches the album; a container whose genres somebody edited (locked) is left
+ * as it is. Albums first, because artists are built from them.
+ */
+func (s *Store) RollUpMusicGenres(ctx context.Context, libraryID int64) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("roll up music genres: %w", err)
+	}
+	defer tx.Rollback()
+	for _, level := range []struct{ kind, children string }{
+		{"album", "'track'"},
+		{"artist", "'album', 'track'"},
+	} {
+		unlocked := `c.library_id = ? AND c.kind = '` + level.kind + `'
+			AND NOT EXISTS (SELECT 1 FROM item_lock l WHERE l.item_id = c.id AND l.field = 'genres')`
+		if _, err := tx.ExecContext(ctx, `
+			DELETE FROM item_genre WHERE item_id IN (SELECT c.id FROM media_item c WHERE `+unlocked+`)`,
+			libraryID); err != nil {
+			return fmt.Errorf("roll up %s genres: %w", level.kind, err)
+		}
+		if _, err := tx.ExecContext(ctx, `
+			INSERT OR IGNORE INTO item_genre (item_id, genre_id)
+			SELECT c.id, ig.genre_id
+			  FROM media_item c
+			  JOIN media_item ch ON ch.parent_id = c.id
+			  JOIN item_genre ig ON ig.item_id = ch.id
+			 WHERE `+unlocked+`
+			   AND ch.kind IN (`+level.children+`) AND ch.missing = 0`,
+			libraryID); err != nil {
+			return fmt.Errorf("roll up %s genres: %w", level.kind, err)
+		}
+	}
+	return tx.Commit()
 }
 
 // DeleteEmptyMusicContainers removes artist and album rows left with no

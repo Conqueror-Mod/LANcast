@@ -3,6 +3,7 @@ import { ApiFailure } from "@/api/client";
 import { useDeleteMilkdropPreset, useMilkdropPresets, useUploadMilkdropPreset } from "@/api/hooks";
 import type { MilkdropPresetSummary } from "@/api/types";
 import { humanBytes } from "./BackupSettings";
+import { PhotosensitivityWarning } from "./PhotosensitivityWarning";
 
 /*
  * MilkDrop presets (ADR 0091), for an administrator: upload, list, remove.
@@ -107,6 +108,7 @@ export function MilkdropSettings() {
         checked here and never run as code, and every preset is drawn through LANcast&apos;s own pass,
         which holds flashing to three a second and keeps gold for focus.
       </p>
+      <PhotosensitivityWarning />
 
       {isLoading && <p className="set-row__sub">Loading…</p>}
       {error && <p className="set-error">The presets could not be listed: {(error as Error).message}</p>}

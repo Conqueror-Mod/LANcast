@@ -1473,6 +1473,12 @@ sorted; decades, years and resolutions are widest/newest-first.
   "has_in_progress": true, "has_unmatched": false }
 ```
 
+`?kind=album` or `?kind=track` describes that level instead of the top level
+(ADR 0114): a music library's top level is artists, which have no year, so the
+Albums and Tracks views ask for their own. Any other `kind` is a 400 — this is a
+closed set, unlike the listing's. Genres in a music library come from the files'
+tags, and an album and an artist carry the union of what is under them.
+
 `years` is offered **alongside** `decades`, not instead of it: a decade is how
 you browse and a year is how you find. A library spanning a century has too many
 years for a row of chips and exactly the right number for a searchable list.

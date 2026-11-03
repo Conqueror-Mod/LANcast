@@ -224,6 +224,11 @@ export const SETTINGS_INDEX: SettingEntry[] = [
   { pane: "player", label: "Even out loudness", terms: "replaygain volume normalise normalize" },
   { pane: "player", label: "Now Playing shows", terms: "visualizer cover art music" },
   { pane: "player", label: "Calm visualizers: half the motion", terms: "reduce motion milkdrop" },
+  {
+    pane: "player",
+    label: "Photosensitivity warning",
+    terms: "seizure epilepsy epileptic photosensitive flashing strobe visualizer",
+  },
   { pane: "player", label: "Theater output", terms: "tv display hdr monitor" },
   { pane: "player", label: "Match the display to the film's frame rate", terms: "refresh rate 23.976 hz judder" },
   { pane: "display", label: "Bigscreen mode", terms: "tv ten foot scale" },

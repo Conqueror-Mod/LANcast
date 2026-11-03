@@ -454,6 +454,7 @@ func trackTagsFrom(t probe.Tags) store.TrackTags {
 		Disc:      t.Disc,
 		Track:     t.Track,
 		Year:      t.Year,
+		Genres:    splitGenres(t.Genre),
 		Loudness: store.Loudness{
 			TrackGain: t.Loudness.TrackGain,
 			TrackPeak: t.Loudness.TrackPeak,
@@ -461,6 +462,26 @@ func trackTagsFrom(t probe.Tags) store.TrackTags {
 			AlbumPeak: t.Loudness.AlbumPeak,
 		},
 	}
+}
+
+// splitGenres turns a genre tag into genres (ADR 0114).
+//
+// A file with several genres states them in one value: ffprobe joins repeated
+// tags with ";", and taggers write "Rock; Pop" by hand. "/" is left alone, since
+// it is part of names such as "Drum/Bass" as often as it separates two. Case is
+// folded only to drop a repeat; the first spelling is the one kept.
+func splitGenres(tag string) []string {
+	var out []string
+	seen := map[string]bool{}
+	for _, part := range strings.FieldsFunc(tag, func(r rune) bool { return r == ';' || r == 0 }) {
+		g := strings.TrimSpace(part)
+		if g == "" || seen[strings.ToLower(g)] {
+			continue
+		}
+		seen[strings.ToLower(g)] = true
+		out = append(out, g)
+	}
+	return out
 }
 
 // reconcileMusic builds the artist → album → track hierarchy.
@@ -564,6 +585,10 @@ func (s *Scanner) reconcileMusic(ctx context.Context, lib store.Library, groups 
 	// properly tagged track should fix an album that had nothing.
 	if _, err := s.st.FillAlbumMetadata(ctx, lib.ID); err != nil {
 		s.log.Warn("filling album metadata", "library", lib.ID, "error", err)
+	}
+	// And their genres, from the tracks under them (ADR 0114).
+	if err := s.st.RollUpMusicGenres(ctx, lib.ID); err != nil {
+		s.log.Warn("rolling up music genres", "library", lib.ID, "error", err)
 	}
 
 	if n, err := s.st.DeleteEmptyMusicContainers(ctx, lib.ID); err != nil {
