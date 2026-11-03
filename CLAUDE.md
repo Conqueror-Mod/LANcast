@@ -28,6 +28,7 @@ internal/probe/    ffprobe wrapper + direct-play/remux/transcode decision
 internal/transcode/ ffmpeg pipeline: segmented file output and the live path
 internal/mpv/      libmpv via syscall: the desktop's own player (ADR 0067)
 internal/displaymode/ the player's screen follows the film's frame rate, and goes back
+internal/vsync/     one monitor's vertical blank, for the visualizers' clock (ADR 0113)
 internal/rating/   national certificates onto one ladder of ages
 internal/marker/   intro and credit detection
 internal/history/  the dashboard's minute-by-minute record, two days (ADR 0106)
@@ -57,7 +58,7 @@ cmd/lancast/       LANcast.exe: the app (window + tray) and, by subcommand, the
                    server (ADR 0080). The window itself is internal/clientwindow,
                    internal/webview2 and internal/certpin — not subdirectories
                    of this one, which is only the entrypoint and its bindings.
-docs/adr/          decision records (112 and counting — read before re-deciding)
+docs/adr/          decision records (113 and counting — read before re-deciding)
 ```
 
 ## Rules

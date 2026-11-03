@@ -126,13 +126,13 @@ export function summarise(
 const f1 = (n: number) => n.toFixed(1);
 
 /** The log line. key=value, like the Go side's, so it greps the same way. */
-export function formatSummary(kind: string, size: string, s: FrameSummary): string {
+export function formatSummary(kind: string, size: string, s: FrameSummary, clock = "raf"): string {
   const rate = s.paceMs > 0 ? 1000 / s.paceMs : 0;
   const events = Object.entries(s.events)
     .map(([k, v]) => `${k}:${v}`)
     .join(",");
   return (
-    `visualizer frames kind=${kind} size=${size} window=${f1(s.windowMs / 1000)}s frames=${s.frames}` +
+    `visualizer frames kind=${kind} size=${size} clock=${clock} window=${f1(s.windowMs / 1000)}s frames=${s.frames}` +
     ` pace_ms=${f1(s.paceMs)} rate=${f1(rate)}/s late=${s.late} missed=${s.missed}` +
     ` worst_ms=${f1(s.worstMs)} worst_at=+${f1(s.worstAtMs / 1000)}s p95_ms=${f1(s.p95Ms)} p99_ms=${f1(s.p99Ms)}` +
     ` work_p50=${f1(s.workP50)} work_p95=${f1(s.workP95)} work_max=${f1(s.workMax)} slow_work=${s.slowWork}` +
@@ -148,6 +148,11 @@ export interface FrameRecorder {
   size(w: number, h: number): void;
   /** Something that may explain a hitch, such as a preset load. Counted per window. */
   event(name: string): void;
+  /**
+   * What is driving the frames: "raf", or "display@29.97" for the screen's own
+   * ticks (frameDriver.ts). A change closes the window, so no line mixes two.
+   */
+  clock(label: string): void;
   /** The run has ended (paused, hidden, unmounted). Writes what is owed. */
   stop(): void;
 }
@@ -176,6 +181,7 @@ export function createFrameRecorder(kind: string, report: Report = defaultReport
   let lastWritten = -Infinity;
   let w = 0;
   let h = 0;
+  let clockLabel = "raf";
 
   /*
    * Long tasks anywhere on the page, so a hitch can be told apart as this
@@ -222,7 +228,7 @@ export function createFrameRecorder(kind: string, report: Report = defaultReport
     if (early || s.late > 0 || at - lastWritten >= CLEAN_EVERY_MS) {
       lastWritten = at;
       const dpr = typeof window !== "undefined" ? window.devicePixelRatio || 1 : 1;
-      report(formatSummary(kind, `${w}x${h}@${f1(dpr)}`, s));
+      report(formatSummary(kind, `${w}x${h}@${f1(dpr)}`, s, clockLabel));
     }
   };
 
@@ -257,6 +263,14 @@ export function createFrameRecorder(kind: string, report: Report = defaultReport
     },
     event(name) {
       events[name] = (events[name] ?? 0) + 1;
+    },
+    clock(label) {
+      if (label === clockLabel) return;
+      if (last >= 0) {
+        write(last, true);
+        reset(last);
+      }
+      clockLabel = label;
     },
     stop() {
       observer?.disconnect();

@@ -16,6 +16,7 @@ import {
 import { shaderFaults, withDefaultShaders } from "./milkdropShaders";
 import { trailSize } from "./trailMath";
 import { createFrameRecorder, type FrameRecorder } from "./frameRecord";
+import { driveFrames } from "./frameDriver";
 
 /*
  * The MilkDrop stage (ADR 0091, steps d and e).
@@ -313,14 +314,10 @@ export function MilkdropCanvas({ preset, ids, running, calm, analyser: analyserR
     let td: Uint8Array<ArrayBuffer> = new Uint8Array(0);
     const samples = new Uint8Array(BUTTERCHURN_SAMPLES);
     const levels = { timeByteArray: samples, timeByteArrayL: samples, timeByteArrayR: samples };
-    let last = -1;
-    let id = 0;
     const rec = createFrameRecorder("milkdrop");
     recRef.current = rec;
 
-    const draw = (now: number) => {
-      const dt = last < 0 ? 1 / 60 : Math.min(0.1, (now - last) / 1000);
-      last = now;
+    const draw = (dt: number) => {
       const node = analyserRef.current();
       if (!node) return;
       // The engine is made in the background (above); until it has the
@@ -355,16 +352,9 @@ export function MilkdropCanvas({ preset, ids, running, calm, analyser: analyserR
       }
       pass.frame(e.out, w, h, dt, limitRate(calmRef.current));
     };
-    const frame = (now: number) => {
-      id = requestAnimationFrame(frame);
-      const t0 = performance.now();
-      draw(now);
-      rec.tick(now, performance.now() - t0);
-    };
-    id = requestAnimationFrame(frame);
+    const driver = driveFrames("milkdrop", draw, rec);
     return () => {
-      cancelAnimationFrame(id);
-      rec.stop();
+      driver.stop();
       if (recRef.current === rec) recRef.current = null;
     };
   }, [running, analyserRef]);

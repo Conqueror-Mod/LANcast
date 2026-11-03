@@ -159,6 +159,10 @@ type Controller interface {
 	// ShowHTML replaces the page with one the caller carries -- the server
 	// picker, reached from the app rather than at startup. See Options.HTML.
 	ShowHTML(html string)
+	// Window is the top-level window's handle, for finding the monitor it is
+	// on (cmd/lancast/displayclock.go). Safe from any goroutine: it reads a
+	// handle and creates nothing, unlike VideoWindow.
+	Window() uintptr
 }
 
 // Open shows the window and blocks until it is closed.

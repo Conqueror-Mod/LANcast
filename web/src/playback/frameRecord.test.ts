@@ -96,7 +96,7 @@ describe("formatSummary", () => {
       gaps: 0,
       events: { preset: 1 },
     });
-    expect(line).toMatch(/^visualizer frames kind=milkdrop size=1920x1080@1\.0 window=30\.0s frames=1800 /);
+    expect(line).toMatch(/^visualizer frames kind=milkdrop size=1920x1080@1\.0 clock=raf window=30\.0s frames=1800 /);
     expect(line).toContain("rate=60.0/s late=2 missed=3 worst_ms=58.1 worst_at=+12.3s");
     expect(line).toContain("longtasks=2/130ms gaps=0 events=preset:1");
     // The binding cuts a note at 500 runes; the line must fit with room over.
@@ -163,6 +163,16 @@ describe("createFrameRecorder", () => {
     drive(short, 0, 2_000);
     short.stop();
     expect(lines).toHaveLength(1);
+  });
+
+  it("closes the window when the clock changes, so no line mixes two clocks", () => {
+    const rec = createFrameRecorder("milkdrop", report);
+    const t = drive(rec, 0, 10_000);
+    rec.clock("display@29.97");
+    expect(lines).toHaveLength(1);
+    expect(lines[0]).toContain("clock=raf");
+    drive(rec, t, WINDOW_MS + TICK);
+    expect(lines[1]).toContain("clock=display@29.97");
   });
 
   it("sends its lines to the window's log under the visualizer area", () => {

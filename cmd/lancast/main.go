@@ -487,9 +487,9 @@ func runWindow(l *launcher, d *desk) {
 		DataDir:  clientDataDir(),
 		CertPin:  pin,
 		DevTools: devToolsWanted(),
-		Bindings: withServerBindings(
+		Bindings: withServerBindings(withServerBindings(
 			withServerBindings(l.desktopBindings(native), l.serverBindings(windowNow)),
-			trayBindings(d)),
+			trayBindings(d)), displayClockBindings(windowNow)),
 	})
 	// The window is gone: a display switched for a film goes back before the
 	// process does, rather than waiting for recovery at the next launch.
