@@ -58,7 +58,10 @@ type Breakdown struct {
 	Year       float64 `json:"year"`       // year agreement, 0..1 (1.0 for episodes: n/a)
 	Popularity float64 `json:"popularity"` // popularity, 0..1
 	Total      float64 `json:"total"`      // the weighted sum, 0..1
-	YearGap    int     `json:"year_gap"`   // |want-got| years, 0 when either is unknown
+	// Artist is an album's artist agreement, 0..1. Not on the wire until the
+	// Fix match screen for albums documents it (ADR 0115, step 3).
+	Artist  float64 `json:"-"`
+	YearGap int     `json:"year_gap"` // |want-got| years, 0 when either is unknown
 }
 
 // Score rates a candidate against a query, 0.0 to 1.0.
@@ -69,6 +72,9 @@ func Score(q Query, c Candidate) float64 { return ScoreBreakdown(q, c).Total }
 func ScoreBreakdown(q Query, c Candidate) Breakdown {
 	if q.Kind == KindEpisode {
 		return scoreEpisode(q, c)
+	}
+	if q.Kind == KindAlbum {
+		return scoreAlbum(q, c)
 	}
 
 	// An absent year scores neutral (half credit) rather than redistributing
@@ -110,6 +116,144 @@ func scoreEpisode(q Query, c Candidate) Breakdown {
 		Year:       1,
 		Popularity: p,
 		Total:      clamp(t*(weightTitle+weightYear) + p*weightPopularity),
+	}
+}
+
+// Album weights (ADR 0115). The artist carries real weight because an album
+// title alone is weak evidence: "Greatest Hits" is a title hundreds of artists
+// share. The year carries little, because a tag's year is often a reissue's.
+const (
+	albumWeightTitle  = 0.55
+	albumWeightArtist = 0.30
+	albumWeightYear   = 0.15
+	// artistFloor is the artist agreement below which a candidate is another
+	// artist's record, however well its title matches.
+	artistFloor = 0.80
+	// wrongArtistCap holds a wrong artist's record under the review band, so
+	// it is neither applied nor offered as a probable match.
+	wrongArtistCap = ThresholdReview - 0.05
+)
+
+/*
+ * scoreAlbum rates a release group against an album's tags.
+ *
+ * An artist that disagrees caps the score below review instead of only
+ * costing its weight: an exact "Greatest Hits" by the wrong artist would
+ * otherwise score 0.55 + year and land in the review band as a likely match,
+ * which is the music version of matching an obscure film to a blockbuster.
+ *
+ * No artist on the album (an untagged rip) cannot be checked, and scores
+ * neutral, which keeps an exact title out of the silent band.
+ */
+func scoreAlbum(q Query, c Candidate) Breakdown {
+	t := titleScore(q.Title, c.Title)
+	a := 0.5
+	if q.Artist != "" {
+		a = titleScore(q.Artist, c.Artist)
+	}
+	y := albumYearScore(q.Year, c.Year)
+	b := Breakdown{
+		Title:  t,
+		Year:   y,
+		Artist: a,
+		Total:  clamp(t*albumWeightTitle + a*albumWeightArtist + y*albumWeightYear),
+	}
+	if q.Artist != "" && a < artistFloor && b.Total > wrongArtistCap {
+		b.Total = wrongArtistCap
+	}
+	if q.Year != 0 && c.Year != 0 {
+		b.YearGap = abs(q.Year - c.Year)
+	}
+	return b
+}
+
+// albumYearScore is gentler than a film's. A film's year is its one release;
+// an album's tag is often a remaster's or a compilation's date, years after
+// the record first came out, and that is still the record.
+func albumYearScore(want, got int) float64 {
+	if want == 0 || got == 0 {
+		return 0.6
+	}
+	switch d := abs(want - got); {
+	case d == 0:
+		return 1.0
+	case d <= 2:
+		return 0.8
+	default:
+		return 0.4
+	}
+}
+
+// tieMargin is how close the runner-up may come before the best is no longer
+// the answer but one of two.
+const tieMargin = 0.02
+
+/*
+ * Decide picks the answer from ranked candidates and the state it earns.
+ *
+ * The best candidate's score sets the state, except when a different record
+ * scores within tieMargin of it: then the pick is a coin toss, and a coin toss
+ * is not "matched". Queen has three release groups called Greatest Hits
+ * (1981, 2008, 2023); an album tagged with no year scores all three alike,
+ * and applying the first silently would be a guess presented as a fact. It is
+ * applied and flagged for review instead, as a weak match is.
+ *
+ * One tie is not a coin toss: a studio album against a single, an EP or a
+ * compilation of the same name. Prince's "1999" is a single and an album a
+ * month apart, and Motörhead's "Ace of Spades" is an album, two singles and
+ * three compilations. An album in a library called "1999" is the album; when
+ * exactly one of the tied records is a plain Album, it is the answer. Two
+ * plain albums tied is a coin toss again.
+ *
+ * cands must already be ranked (Rank). Empty gives the zero candidate and
+ * StateUnmatched.
+ */
+func Decide(cands []Candidate) (Candidate, string) {
+	if len(cands) == 0 {
+		return Candidate{}, StateUnmatched
+	}
+	best := cands[0]
+	state := StateFor(best.Score)
+	if state != StateMatched {
+		return best, state
+	}
+	var tied []Candidate
+	for _, c := range cands {
+		if best.Score-c.Score < tieMargin {
+			tied = append(tied, c)
+		}
+	}
+	distinct := map[string]bool{}
+	for _, c := range tied {
+		distinct[c.ExternalID] = true
+	}
+	if len(distinct) < 2 {
+		return best, state
+	}
+	var albums []Candidate
+	for _, c := range tied {
+		if c.ReleaseType == "Album" {
+			albums = append(albums, c)
+		}
+	}
+	if len(albums) == 1 {
+		return albums[0], StateFor(albums[0].Score)
+	}
+	return best, StateReview
+}
+
+/*
+ * AlbumQuery is the query for an album as a library holds it: its title
+ * without edition notes, because a release group is every edition of a
+ * record and "(Deluxe)" is not in its name (ADR 0115). The one place an album
+ * query is built, so enrichment and the measurement cannot ask differently.
+ */
+func AlbumQuery(title, albumArtist string, year int) Query {
+	return Query{
+		Kind:   KindAlbum,
+		Title:  media.AlbumBaseTitle(title),
+		Artist: strings.TrimSpace(albumArtist),
+		Year:   year,
 	}
 }
 
