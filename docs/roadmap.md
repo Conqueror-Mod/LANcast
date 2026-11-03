@@ -1,6 +1,6 @@
 # Roadmap
 
-Last updated: 2026-10-28 · **v0.9.98 released · M0–M4 built.** The React client executes the design
+Last updated: 2026-11-02 · **v0.10.3 released · M0–M4 built.** The React client executes the design
 system and the client-UX backlog is closed. Observability (match, review, scan
 diagnostics), an audit log and CI are in place. Transport security (TLS) and
 multi-user accounts (admin/member roles) are built, and branding & splash shipped.
@@ -19,7 +19,7 @@ behind: the Releases table stopped at v0.9.78, and three backlog entries still
 listed work that had shipped as open. The release-by-release record is the
 [Releases](#releases) table, and what remains is [What is left](#what-is-left).*
 
-**Nothing sits unreleased.** v0.10.2 is the latest release. Since v0.9.78:
+**Nothing sits unreleased.** v0.10.3 is the latest release. Since v0.9.78:
 - **v0.9.79:** one program, `LANcast.exe`, with the tray always present
   ([ADR 0080](adr/0080-one-executable-two-roles.md)), and a scan can be cancelled.
 - **v0.9.80–v0.9.81:** collections continue the way shows do, an About tab,
@@ -242,6 +242,7 @@ is watching that keeps running.
 
 | Version | Date | What shipped |
 |---|---|---|
+| **v0.10.3** | 2026-11-02 | **Music by album, track and genre, and smooth visualizers.** A music library shown as Artists, Albums or Tracks, with genres read from the tags and rolled up onto albums and artists, genre/year/decade facets per level and per-level sorts ([ADR 0114](adr/0114-a-music-library-is-browsed-at-three-levels.md), #1003); combined genre tags (`Indie / Alternative`) stay as written, by decision. Every track on an artist's page (#1002). Visualizers draw on the screen's own vertical blank instead of rAF at the main monitor's rate, and a 9,000-track queue no longer re-renders per tick ([ADR 0113](adr/0113-a-visualizer-keeps-the-screens-time.md), #999), with the mini-player keeping its shuffle. Now Playing's artist links to the artist; a photosensitivity warning; the phone filter panel kept on screen (#1003). RetroAchievements hardcore rules built and switched off, the full User-Agent, a privacy policy and the core licence list (ADR 0112 steps 5–6, #1000, #1001). Schema 87 → 88, one-way; a rescan fills the genres |
 | **v0.10.2** | 2026-11-02 | **Achievements while you play, and friends who can reach you.** In-play RetroAchievements in the desktop player ([ADR 0112](adr/0112-achievements-are-earned-through-the-server.md)), built in steps: libretro memory maps in the host (#993; mGBA 11 regions, Mesen 64, Mupen 18, BlastEm system RAM only, bsnes nothing); rcheevos v12.5.0 vendored, with LANcast's shim, built in CI into `lancast-cheevos.dll` and shipped in the zip, installer and updater list (#994, #995); and the server door, unlock queue, player runtime, pop-up, menu page, progress in save states and the profile switch (#989). Casual only, every RetroAchievements call through the server, the token never on the player. Proven with a real account on Super Mario 64: an unlock accepted by RetroAchievements. SNES earns nothing (bsnes exposes no memory). **Invites carry the public name** (#997): a peer invite now starts with the public certificate's name on 443, after Georgia's server, on an IPv4-only network, had no address that reached Aither. A crash record now names the site for crashes Go writes no `fatal error` for (#991). Schema 86 → 87, one-way. In-app updates from 0.10.1 don't bring the new DLL: 0.10.1's updater only knows its own file list |
 | **v0.10.1** | 2026-11-01 | **Smooth films on the TV.** The crash about an hour into a matched film (the Go callback limit, #987) and crash logs (#986); uncomposed video: the page leaves the screen once the controls fade so the film reaches the TV directly, with films opening fullscreen while matching is on ([ADR 0111](adr/0111-the-page-leaves-the-screen-over-a-film.md), #988); HDR to an HDR display, off by default (#980); built-in TMDB and OpenSubtitles keys ([ADR 0110](adr/0110-lancast-carries-its-own-provider-keys.md), #983); settings search and pictures in Report an issue (#985). Schema 86 unchanged |
 | **v0.10.0** | 2026-11-01 | **Frame-rate matching.** The player's screen switches to the film's own rate and back (#979, #981), with a stutter fix for desks with several monitors. First two-digit minor version. Schema 86 unchanged |
