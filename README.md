@@ -280,7 +280,7 @@ a change to the installer itself needs the installer.
 | [docs/privacy.md](docs/privacy.md) | Everything LANcast sends beyond your network, to whom, and when |
 | [docs/cores.md](docs/cores.md) | Every emulator core, its licence and its source |
 | [docs/roadmap.md](docs/roadmap.md) | Every release, every area's status, and what each pass taught |
-| [docs/adr/](docs/adr/) | 112 decision records — why things are the way they are |
+| [docs/adr/](docs/adr/) | 113 decision records — why things are the way they are |
 
 The `*-plan.md` files in `docs/` are the plans particular areas were built
 from. They are kept as written rather than revised, so they record what was
