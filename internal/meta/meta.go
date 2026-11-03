@@ -88,6 +88,10 @@ type Candidate struct {
 	 * for albums (ADR 0115, step 3) and its docs, not before.
 	 */
 	Artist string `json:"-"`
+	// ArtistNames are each credited artist's name, as credited and as the
+	// catalogue knows them ("Тату" and "t.A.T.u."), so one name in a
+	// collaboration or an artist credited in another script still agrees.
+	ArtistNames []string `json:"-"`
 	// ReleaseType is an album candidate's kind of record ("Album", "Single",
 	// "Compilation"…), which breaks a tie between same-named records (Decide).
 	// Off the wire for the same reason as Artist.

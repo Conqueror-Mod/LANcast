@@ -24,6 +24,7 @@ import (
 	"math"
 	"net/http"
 	"net/url"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -379,6 +380,7 @@ func candidates(resp searchResponse) []meta.Candidate {
 			Title:       rg.Title,
 			Year:        yearOf(rg.FirstReleaseDate),
 			Artist:      creditString(rg.ArtistCredit),
+			ArtistNames: creditNames(rg.ArtistCredit),
 			ReleaseType: releaseType(rg.PrimaryType, rg.SecondaryTypes),
 		})
 	}
@@ -432,6 +434,20 @@ func creditString(cs []artistCredit) string {
 		b.WriteString(c.JoinPhrase)
 	}
 	return strings.TrimSpace(b.String())
+}
+
+// creditNames is every name the credit uses for its artists: as credited,
+// and as MusicBrainz names the artist, when they differ.
+func creditNames(cs []artistCredit) []string {
+	var out []string
+	for _, c := range cs {
+		for _, n := range []string{c.Name, c.Artist.Name} {
+			if n != "" && !slices.Contains(out, n) {
+				out = append(out, n)
+			}
+		}
+	}
+	return out
 }
 
 func creditArtists(cs []artistCredit) []meta.MusicArtist {

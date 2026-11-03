@@ -2,6 +2,7 @@ package meta
 
 import (
 	"strings"
+	"unicode"
 
 	"lancast/internal/media"
 )
@@ -129,8 +130,12 @@ const (
 	// artistFloor is the artist agreement below which a candidate is another
 	// artist's record, however well its title matches.
 	artistFloor = 0.80
-	// wrongArtistCap holds a wrong artist's record under the review band, so
-	// it is neither applied nor offered as a probable match.
+	// titleFloor is the same for the title: the right artist's other record
+	// is not this one. Measured: シド's "Shout at the Devil" scored into
+	// review for a live album of theirs on the artist alone.
+	titleFloor = 0.75
+	// wrongArtistCap holds another record under the review band, so it is
+	// neither applied nor offered as a probable match.
 	wrongArtistCap = ThresholdReview - 0.05
 )
 
@@ -146,10 +151,10 @@ const (
  * neutral, which keeps an exact title out of the silent band.
  */
 func scoreAlbum(q Query, c Candidate) Breakdown {
-	t := titleScore(q.Title, c.Title)
+	t := albumTitleScore(q.Title, media.AlbumBaseTitle(c.Title))
 	a := 0.5
 	if q.Artist != "" {
-		a = titleScore(q.Artist, c.Artist)
+		a = artistScore(q.Artist, append([]string{c.Artist}, c.ArtistNames...))
 	}
 	y := albumYearScore(q.Year, c.Year)
 	b := Breakdown{
@@ -158,13 +163,105 @@ func scoreAlbum(q Query, c Candidate) Breakdown {
 		Artist: a,
 		Total:  clamp(t*albumWeightTitle + a*albumWeightArtist + y*albumWeightYear),
 	}
-	if q.Artist != "" && a < artistFloor && b.Total > wrongArtistCap {
+	wrong := t < titleFloor || q.Artist != "" && a < artistFloor
+	if wrong && b.Total > wrongArtistCap {
 		b.Total = wrongArtistCap
 	}
 	if q.Year != 0 && c.Year != 0 {
 		b.YearGap = abs(q.Year - c.Year)
 	}
 	return b
+}
+
+/*
+ * albumText is normalize for music: every script's letters, not only a to z.
+ *
+ * normalize keeps a-z and 0-9, which is right for the film titles it was
+ * written for and blind to "Страшно" and "夜更けと雨と", which it reduces
+ * to nothing, so an exact Cyrillic match scored zero (measured, ADR 0115).
+ * Built on the same SortTitle, so the two agree on everything Latin.
+ */
+func albumText(s string) string {
+	var b strings.Builder
+	space := false
+	for _, r := range strings.ToLower(media.SortTitle(s)) {
+		switch {
+		case unicode.IsLetter(r) || unicode.IsDigit(r):
+			b.WriteRune(r)
+			space = false
+		case unicode.IsSpace(r):
+			if !space && b.Len() > 0 {
+				b.WriteRune(' ')
+				space = true
+			}
+		}
+	}
+	return strings.TrimSpace(b.String())
+}
+
+func albumTitleScore(a, b string) float64 {
+	na, nb := albumText(a), albumText(b)
+	if na == "" || nb == "" {
+		return 0
+	}
+	if na == nb {
+		return 1
+	}
+	return jaroWinkler(na, nb)
+}
+
+// artistScore is the best agreement between the album's artist and any name
+// the candidate credits.
+func artistScore(local string, names []string) float64 {
+	best := 0.0
+	for _, n := range names {
+		if s := artistAgreement(local, n); s > best {
+			best = s
+		}
+	}
+	return best
+}
+
+/*
+ * artistAgreement compares two artist names by their words, not their
+ * letters.
+ *
+ * The title measure rewards a shared opening, which is right for titles and
+ * wrong for names: measured, "Billy the Kit" came within reach of Billy Joel
+ * and "Fueled By Ramen" of "Fueled by Fire". Names agree when they are equal,
+ * when they share most of their words, or when every word of a name of two or
+ * more is in the other ("Biz Markie" in "The Diabolical Biz Markie"). A
+ * near-identical spelling still counts ("Blut Engel", "Blutengel"), at a
+ * similarity high enough that a different first name cannot reach it.
+ */
+func artistAgreement(a, b string) float64 {
+	na, nb := albumText(a), albumText(b)
+	if na == "" || nb == "" {
+		return 0
+	}
+	if na == nb {
+		return 1
+	}
+	wa, wb := strings.Fields(na), strings.Fields(nb)
+	inB := map[string]bool{}
+	for _, w := range wb {
+		inB[w] = true
+	}
+	shared := 0
+	for _, w := range wa {
+		if inB[w] {
+			shared++
+		}
+	}
+	union := len(wa) + len(wb) - shared
+	best := float64(shared) / float64(union)
+	if len(wa) >= 2 && shared == len(wa) && best < 0.9 {
+		best = 0.9
+	}
+	if jw := jaroWinkler(na, nb); jw >= 0.95 && jw > best {
+		best = jw
+	}
+	return best
 }
 
 // albumYearScore is gentler than a film's. A film's year is its one release;
