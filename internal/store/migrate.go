@@ -6,7 +6,7 @@ import (
 )
 
 // CurrentSchemaVersion is the revision this build expects.
-const CurrentSchemaVersion = 88
+const CurrentSchemaVersion = 89
 
 // migration is one forward step. There are deliberately no down migrations:
 // rolling a media library's schema backwards loses data that a rescan cannot
@@ -187,6 +187,19 @@ var migrations = []migration{
 	{version: 88, sql: `UPDATE media_item SET group_artist = NULL, group_album = NULL,
 		group_dir = NULL, group_album_from_folder = NULL, group_album_at_root = NULL
 		WHERE kind = 'track'`},
+	// Albums identified by MusicBrainz (ADR 0115): what kind of record an
+	// album is, and the artist its credit names. Albums and artists were
+	// created "matched" with a score of 1 and stamped as enriched, which was
+	// never true; nothing had matched them. They become what they are,
+	// unmatched and waiting, so matching reaches the ones already scanned.
+	// A locked one is left alone, as everywhere.
+	{version: 89, sql: `UPDATE media_item SET match_state = 'unmatched', match_score = 0,
+		metadata_updated_at = NULL
+		WHERE kind IN ('album', 'artist') AND match_state != 'locked'
+		  AND (provider IS NULL OR provider = '')`, columns: []column{
+		{"media_item", "release_type", "TEXT"},
+		{"media_item", "artist_external_id", "TEXT"},
+	}},
 }
 
 // migrate brings the database up to CurrentSchemaVersion.

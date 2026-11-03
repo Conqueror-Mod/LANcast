@@ -302,6 +302,9 @@ func (w *Worker) processBatch(ctx context.Context, items []store.Item) (int, err
 // pending deliberately and will be retried later.
 func (w *Worker) enrichOne(ctx context.Context, item store.Item) (bool, error) {
 	kind := meta.Kind(item.Kind)
+	if isMusic(kind) {
+		return w.enrichMusic(ctx, item)
+	}
 
 	locked, err := w.st.LockedFields(ctx, item.ID)
 	if err != nil {

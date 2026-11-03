@@ -225,11 +225,28 @@ func (s *Store) ItemRatings(ctx context.Context, itemID int64) ([]ItemRating, er
 // file, by its own worker, and no provider in the registry can search for one.
 //
 // A comic is the fourth (ADR 0101): no provider in the registry knows comics.
-const enrichableKinds = `kind NOT IN (` + unmatchableKinds + `)`
+//
+// Albums and artists are the fifth case, and the first to leave the list: the
+// day the comment above anticipated came with MusicBrainz (ADR 0115). They are
+// enrichable while music matching is on, and a track still is not.
+func (s *Store) enrichableKinds() string {
+	if s.musicMatching.Load() {
+		return `kind NOT IN (` + unmatchableKinds + `)`
+	}
+	return enrichableKindsNoMusic
+}
+
+// enrichableKindsNoMusic is the queue with music matching off.
+const enrichableKindsNoMusic = `kind NOT IN (` + unmatchableKinds + `, ` + musicKinds + `)`
 
 // unmatchableKinds are the kinds no provider can ever answer for, as an SQL
 // list: the one list enrichment, the review queue and re-parsing all exclude.
-const unmatchableKinds = `'track', 'album', 'artist', 'photo', 'gallery', 'rom', 'comic'`
+const unmatchableKinds = `'track', 'photo', 'gallery', 'rom', 'comic'`
+
+// musicKinds are matched by MusicBrainz and by nothing else (ADR 0115). They
+// are never re-parsed (re-parsing guesses a video's filename), and not yet in
+// the review queue: its Fix match searches films until it learns albums.
+const musicKinds = `'album', 'artist'`
 
 // PendingEnrichment returns items awaiting metadata. The queue is a query
 // rather than a table, which makes it restart-safe by construction.
@@ -254,7 +271,7 @@ func (s *Store) PendingEnrichmentFrom(ctx context.Context, limit, offset int) ([
 	}
 	rows, err := s.db.QueryContext(ctx, `SELECT `+itemCols+` FROM media_item
 		WHERE metadata_updated_at IS NULL AND missing = 0 AND match_state != 'locked'
-		  AND `+enrichableKinds+`
+		  AND `+s.enrichableKinds()+`
 		ORDER BY added_at LIMIT ? OFFSET ?`, limit, offset)
 	if err != nil {
 		return nil, fmt.Errorf("pending enrichment: %w", err)
@@ -282,7 +299,7 @@ func (s *Store) PendingCount(ctx context.Context) (int, error) {
 	err := s.db.QueryRowContext(ctx, `
 		SELECT COUNT(*) FROM media_item
 		WHERE metadata_updated_at IS NULL AND missing = 0 AND match_state != 'locked'
-		  AND `+enrichableKinds).Scan(&n)
+		  AND `+s.enrichableKinds()).Scan(&n)
 	if err != nil {
 		return 0, fmt.Errorf("pending count: %w", err)
 	}
@@ -353,7 +370,7 @@ func (s *Store) ReparseTargets(ctx context.Context, libraryID int64, force bool)
 	// searching for back into the enrichment queue.
 	// Nor anything no provider matches: re-parsing guesses a *video*
 	// filename, and a comic or a photo has no such guess to improve.
-	where := ` WHERE i.missing = 0 AND i.kind != 'season' AND i.kind NOT IN (` + unmatchableKinds + `)
+	where := ` WHERE i.missing = 0 AND i.kind != 'season' AND i.kind NOT IN (` + unmatchableKinds + `, ` + musicKinds + `)
 		AND i.match_state IN ('review','unmatched')`
 
 	// A row that has already been re-parsed is not offered again, and this is
@@ -507,7 +524,7 @@ func (s *Store) ApplyGuess(ctx context.Context, itemID int64, g Guess) (bool, er
  * match on one is worth correcting, and a person can do it — which is the test
  * for belonging here.
  */
-const notReviewable = `kind != 'season' AND ` + enrichableKinds
+const notReviewable = `kind != 'season' AND ` + enrichableKindsNoMusic
 
 /*
  * And nothing no provider can match: a comic, a photo, a track, a game.
