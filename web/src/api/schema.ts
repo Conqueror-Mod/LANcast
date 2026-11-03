@@ -13599,7 +13599,10 @@ export interface operations {
     };
     getLibraryFacets: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description The level to describe (ADR 0114). Absent: the library's top level, as the default grid shows it. `album` or `track`: every album or track in the library, for a music library shown as Albums or Tracks. **A closed set**, unlike the listing's `kind`; anything else is a 400. */
+                kind?: "album" | "track";
+            };
             header?: never;
             path: {
                 /** @description The library's id. */

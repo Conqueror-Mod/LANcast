@@ -590,6 +590,47 @@ func (s *Store) ReplaceGenres(ctx context.Context, itemID int64, names []string)
 	return tx.Commit()
 }
 
+// replaceTagGenres is ReplaceGenres for genres read from a file's tags.
+//
+// Taggers disagree about case: one album says "Hip-Hop", the next "hip-hop".
+// The genre table is case-sensitive, so each spelling was a genre of its own and
+// the filter offered both. A tag's genre joins an existing genre of the same
+// name in any case, and only a name nobody has used yet becomes a new one.
+func (s *Store) replaceTagGenres(ctx context.Context, itemID int64, names []string) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("replace tag genres: %w", err)
+	}
+	defer tx.Rollback()
+	if _, err := tx.ExecContext(ctx, `DELETE FROM item_genre WHERE item_id = ?`, itemID); err != nil {
+		return fmt.Errorf("replace tag genres: %w", err)
+	}
+	for _, name := range names {
+		if name == "" {
+			continue
+		}
+		var id int64
+		// The exact spelling first, then any case of it.
+		err := tx.QueryRowContext(ctx, `
+			SELECT id FROM genre WHERE name = ? COLLATE NOCASE
+			ORDER BY name = ? DESC, id LIMIT 1`, name, name).Scan(&id)
+		if errors.Is(err, sql.ErrNoRows) {
+			res, ierr := tx.ExecContext(ctx, `INSERT INTO genre (name) VALUES (?)`, name)
+			if ierr != nil {
+				return fmt.Errorf("replace tag genres: %w", ierr)
+			}
+			id, _ = res.LastInsertId()
+		} else if err != nil {
+			return fmt.Errorf("replace tag genres: %w", err)
+		}
+		if _, err := tx.ExecContext(ctx,
+			`INSERT OR IGNORE INTO item_genre (item_id, genre_id) VALUES (?, ?)`, itemID, id); err != nil {
+			return fmt.Errorf("replace tag genres: %w", err)
+		}
+	}
+	return tx.Commit()
+}
+
 // Genres returns an item's genre names.
 func (s *Store) Genres(ctx context.Context, itemID int64) ([]string, error) {
 	rows, err := s.db.QueryContext(ctx, `

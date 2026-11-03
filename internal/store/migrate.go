@@ -6,7 +6,7 @@ import (
 )
 
 // CurrentSchemaVersion is the revision this build expects.
-const CurrentSchemaVersion = 87
+const CurrentSchemaVersion = 88
 
 // migration is one forward step. There are deliberately no down migrations:
 // rolling a media library's schema backwards loses data that a rescan cannot
@@ -181,6 +181,12 @@ var migrations = []migration{
 	// Achievements earned while playing (ADR 0112): the sealed login token,
 	// and unlocks kept while RetroAchievements cannot be reached.
 	{version: 87, sql: schemaRevision87, columns: []column{{"retro_account", "connect_token_sealed", "BLOB"}}},
+	// Music genres from tags (ADR 0114): read from every file since the start
+	// and never kept. The grouping keys are dropped, as in 86, so the next scan
+	// of each music library reads every file's tags once and stores its genres.
+	{version: 88, sql: `UPDATE media_item SET group_artist = NULL, group_album = NULL,
+		group_dir = NULL, group_album_from_folder = NULL, group_album_at_root = NULL
+		WHERE kind = 'track'`},
 }
 
 // migrate brings the database up to CurrentSchemaVersion.

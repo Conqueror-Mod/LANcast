@@ -58,7 +58,7 @@ cmd/lancast/       LANcast.exe: the app (window + tray) and, by subcommand, the
                    server (ADR 0080). The window itself is internal/clientwindow,
                    internal/webview2 and internal/certpin — not subdirectories
                    of this one, which is only the entrypoint and its bindings.
-docs/adr/          decision records (113 and counting — read before re-deciding)
+docs/adr/          decision records (114 and counting — read before re-deciding)
 ```
 
 ## Rules
