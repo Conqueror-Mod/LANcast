@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useRef, useState } from "react";
+import { createContext, memo, useCallback, useContext, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useItem } from "@/api/hooks";
 import type { MediaStream } from "@/api/types";
 import "./QueuePanel.css";
@@ -14,14 +14,28 @@ import "./QueuePanel.css";
 // A row asks for its item only once it is near enough to be seen (RowSight
 // below). "Shuffle the whole library" is a queue of 1,600 tracks, none of them
 // cached, and asking for all of them at once broke playback itself.
-export function QueuePanel({
-  ids,
-  currentID,
-  onPick,
-  upNext = [],
-  onDrop,
-  inline = false,
-}: {
+/*
+ * How much of a long queue is on the page at once.
+ *
+ * Every row used to be rendered, and re-rendered on every tick of the
+ * playback clock (about four a second), because the panel had no way to tell
+ * a new position in the song from a new queue. On "shuffle the whole library"
+ * that is 9,000 rows, each with a query subscription: one re-render measured
+ * 690 ms in the test DOM, against 50 ms for 500 rows, and that work landed on
+ * the same thread as the visualizer's frames. Reported by Chris as jitter
+ * while a whole library was shuffled and none on an album.
+ *
+ * So the list is memoised (a new position in the song re-renders nothing),
+ * and past WINDOW_FROM rows only a window around the playing track is drawn,
+ * growing by WINDOW_STEP as either end comes near view. Numbers stay the
+ * queue's own, so track 41 of 9,000 still reads 41.
+ */
+export const WINDOW_FROM = 300;
+export const WINDOW_BEFORE = 30;
+export const WINDOW_AFTER = 150;
+export const WINDOW_STEP = 200;
+
+interface PanelProps {
   /**
    * Laid out on the page (Now Playing's column) rather than as a popover over
    * the player. It scrolls itself and follows the track that is playing.
@@ -42,6 +56,55 @@ export function QueuePanel({
   upNext?: number[];
   /** Drops one entry from that lane, by position. */
   onDrop?: (at: number) => void;
+}
+
+const NO_LANE: number[] = [];
+
+/*
+ * The callers hand over fresh arrow functions on every render, which would
+ * defeat any memo. The wrapper keeps the latest in a ref and gives the list
+ * callbacks that never change, so the list re-renders only for what it shows.
+ */
+export function QueuePanel({ ids, currentID, onPick, upNext = NO_LANE, onDrop, inline = false }: PanelProps) {
+  const pickRef = useRef(onPick);
+  pickRef.current = onPick;
+  const dropRef = useRef(onDrop);
+  dropRef.current = onDrop;
+  const pick = useCallback((id: number, at: number) => pickRef.current(id, at), []);
+  const drop = useCallback((at: number) => dropRef.current?.(at), []);
+  return (
+    <QueueList
+      ids={ids}
+      currentID={currentID}
+      upNext={upNext}
+      inline={inline}
+      onPick={pick}
+      onDrop={onDrop ? drop : undefined}
+    />
+  );
+}
+
+/** Which slice of `ids` is drawn: everything for a short queue, a window for a long one. */
+export function initialWindow(length: number, at: number): [number, number] {
+  if (length <= WINDOW_FROM) return [0, length];
+  const centre = at < 0 ? 0 : at;
+  return [Math.max(0, centre - WINDOW_BEFORE), Math.min(length, centre + WINDOW_AFTER)];
+}
+
+const QueueList = memo(function QueueList({
+  ids,
+  currentID,
+  onPick,
+  upNext,
+  onDrop,
+  inline,
+}: {
+  ids: number[];
+  currentID: number;
+  onPick: (id: number, at: number) => void;
+  upNext: number[];
+  onDrop?: (at: number) => void;
+  inline: boolean;
 }) {
   /*
    * Open the panel on the track that is playing, not on the top of the list.
@@ -59,6 +122,40 @@ export function QueuePanel({
   const currentRow = useRef<HTMLButtonElement>(null);
   const panel = useRef<HTMLDivElement>(null);
   const sight = useRowSight(panel);
+  const at = ids.indexOf(currentID);
+
+  const [win, setWin] = useState<{ ids: number[]; range: [number, number] }>(() => ({
+    ids,
+    range: initialWindow(ids.length, at),
+  }));
+  // A new queue, or a playing track outside what is drawn: centre on it again.
+  let [from, to] = win.range;
+  if (win.ids !== ids || (at >= 0 && (at < from || at >= to))) {
+    [from, to] = initialWindow(ids.length, at);
+    setWin({ ids, range: [from, to] });
+  }
+
+  // Rows added above would push everything down under the reader; the scroll
+  // is moved by what was added, so the row they were looking at stays put.
+  const heightBefore = useRef<number | null>(null);
+  const grow = useCallback((up: boolean) => {
+    setWin((w) => {
+      const [f, t] = w.range;
+      if (up) {
+        heightBefore.current = panel.current?.scrollHeight ?? null;
+        return { ids: w.ids, range: [Math.max(0, f - WINDOW_STEP), t] };
+      }
+      return { ids: w.ids, range: [f, Math.min(w.ids.length, t + WINDOW_STEP)] };
+    });
+  }, []);
+  useLayoutEffect(() => {
+    const box = panel.current;
+    if (box && heightBefore.current !== null) {
+      box.scrollTop += box.scrollHeight - heightBefore.current;
+    }
+    heightBefore.current = null;
+  }, [from]);
+
   useEffect(() => {
     if (inline) return;
     currentRow.current?.scrollIntoView({ block: "center" });
@@ -89,6 +186,7 @@ export function QueuePanel({
     box.scrollTop += row.getBoundingClientRect().top - box.getBoundingClientRect().top;
   }, [inline, currentID]);
 
+  const shown = ids.slice(from, to);
   return (
     <RowSightContext.Provider value={sight}>
     <div
@@ -112,9 +210,11 @@ export function QueuePanel({
                 key={`${id}@${i}`}
                 id={id}
                 position={i + 1}
+                at={-1}
+                lane={i}
                 current={false}
-                onPick={() => onPick(id, -1)}
-                onDrop={onDrop && (() => onDrop(i))}
+                onPick={onPick}
+                onDrop={onDrop}
               />
             ))}
           </div>
@@ -125,22 +225,47 @@ export function QueuePanel({
         <span className="queue__count">{ids.length}</span>
       </div>
       <div className="queue__list">
-        {ids.map((id, i) => (
-          <QueueRow
-            key={id}
-            id={id}
-            position={i + 1}
-            current={id === currentID}
-            rowRef={id === currentID ? currentRow : undefined}
-            // The row's position, not just its id: two rows in a playlist can
-            // carry the same track, and only the position says which was
-            // pressed.
-            onPick={() => onPick(id, i)}
-          />
-        ))}
+        {from > 0 && <QueueMore count={from} up onGrow={grow} />}
+        {shown.map((id, k) => {
+          const i = from + k;
+          return (
+            <QueueRow
+              key={id}
+              id={id}
+              position={i + 1}
+              // The row's position, not just its id: two rows in a playlist can
+              // carry the same track, and only the position says which was
+              // pressed.
+              at={i}
+              current={id === currentID}
+              rowRef={id === currentID ? currentRow : undefined}
+              onPick={onPick}
+            />
+          );
+        })}
+        {to < ids.length && <QueueMore count={ids.length - to} up={false} onGrow={grow} />}
       </div>
     </div>
     </RowSightContext.Provider>
+  );
+});
+
+/*
+ * The edge of a window: grows it when it comes near view, and is a button for
+ * anything that cannot scroll it there (no IntersectionObserver, a remote).
+ */
+function QueueMore({ count, up, onGrow }: { count: number; up: boolean; onGrow: (up: boolean) => void }) {
+  const own = useRef<HTMLButtonElement>(null);
+  const sight = useContext(RowSightContext);
+  useEffect(() => {
+    if (!sight || !own.current) return;
+    return sight(own.current, () => onGrow(up));
+    // A new count is a new edge, to be watched afresh.
+  }, [sight, count, up, onGrow]);
+  return (
+    <button ref={own} className="queue__more" onClick={() => onGrow(up)}>
+      {up ? `${count.toLocaleString()} earlier` : `${count.toLocaleString()} more`}
+    </button>
   );
 }
 
@@ -216,9 +341,11 @@ function useSeen(el: React.RefObject<Element>): boolean {
   return seen || !measurable;
 }
 
-function QueueRow({
+const QueueRow = memo(function QueueRow({
   id,
   position,
+  at,
+  lane,
   current,
   rowRef,
   onPick,
@@ -226,11 +353,15 @@ function QueueRow({
 }: {
   id: number;
   position: number;
+  /** Its place in the order, for onPick; -1 on the hand-queued lane. */
+  at: number;
+  /** Its place in the lane, for onDrop. */
+  lane?: number;
   current: boolean;
   rowRef?: React.RefObject<HTMLButtonElement>;
-  onPick: () => void;
+  onPick: (id: number, at: number) => void;
   /** Present only on the hand-queued lane, where taking one back off is safe. */
-  onDrop?: () => void;
+  onDrop?: (at: number) => void;
 }) {
   const own = useRef<HTMLButtonElement>(null);
   const seen = useSeen(own);
@@ -252,7 +383,7 @@ function QueueRow({
       role="menuitem"
       ref={setRef}
       className={"queue__row" + (current ? " is-current" : "")}
-      onClick={onPick}
+      onClick={() => onPick(id, at)}
       aria-current={current ? "true" : undefined}
     >
       <span className="queue__num">{position}</span>
@@ -266,13 +397,13 @@ function QueueRow({
     </button>
   );
 
-  if (!onDrop) return row;
+  if (!onDrop || lane === undefined) return row;
   return (
     <div className="queue__line">
       {row}
       <button
         className="queue__drop"
-        onClick={onDrop}
+        onClick={() => onDrop(lane)}
         aria-label={`Remove ${item?.title ?? `item ${position}`} from up next`}
         title="Remove from up next"
       >
@@ -280,7 +411,7 @@ function QueueRow({
       </button>
     </div>
   );
-}
+});
 
 // audioLabel names a track the way a person would choose one: language first,
 // then what makes it different from its neighbours.

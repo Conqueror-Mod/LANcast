@@ -72,6 +72,35 @@
   background: rgba(242, 245, 251, 0.04);
 }
 
+/*
+ * The edge of a long queue's window (QueuePanel.tsx): quiet, because it is a
+ * count rather than a track, and focusable like a row, because a remote has
+ * no scroll wheel to bring the next rows in with.
+ */
+.queue__more {
+  display: block;
+  flex-shrink: 0;
+  width: 100%;
+  padding: 8px 12px 8px 44px;
+  background: none;
+  border: none;
+  border-left: 2px solid transparent;
+  text-align: left;
+  font-size: 12px;
+  color: var(--text-faint);
+  cursor: pointer;
+}
+
+.queue__more:hover {
+  background: rgba(242, 245, 251, 0.05);
+}
+
+.queue__more:focus {
+  outline: none;
+  border-left-color: var(--gold);
+  box-shadow: 0 0 0 2px var(--gold-ring) inset;
+}
+
 .queue__num {
   font-size: 11px;
   color: var(--text-faint);
