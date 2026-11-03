@@ -3891,6 +3891,12 @@ export interface paths {
          *     **The search spans both film and television**, regardless of the item's own kind. A TV miniseries scanned into a movie library can only be corrected if the search can reach the provider's TV data; a movie-scoped search returns only the wrong, same-named film.
          *
          *     **A game (`kind` `rom`) is searched in the installed ROM database instead** (ADR 0073), never the film and TV providers: on its own console, by the words of `q` (all of them must be in the name), or of the filename's title when `q` is omitted. Each candidate's `ExternalID` and `Title` are the DAT name whole — region and revision tags included, since they are what tells one line from the next — its `Kind` is `rom`, `Overview` is the genre, and `PosterURL` is the box art's address. `Breakdown.title` is the only measure.
+         *
+         *     **An album (`kind` `album`) is searched in MusicBrainz** (ADR 0115) by its title, without a trailing edition note such as "(Deluxe Edition)", and by its album artist, and scored on both (`Breakdown.artist`). `q` replaces the title and drops the year; `artist` replaces the artist. A MusicBrainz id, or an address with one in it, in `q` returns that release group alone, scored against the album as it stands.
+         *
+         *     **An artist (`kind` `artist`) is never searched by name.** Its candidates are the artists its albums are credited to, each one's `Score` (and `Breakdown.total`) being its share of those albums; the current answer is listed even with no votes. `q` is ignored. To change what an artist is, fix its albums.
+         *
+         *     Both are `409` `music_matching_off` while the `match_music` setting is off: off means nothing is asked of MusicBrainz.
          */
         get: operations["searchMatchCandidates"];
         put?: never;
@@ -3922,6 +3928,8 @@ export interface paths {
          *     Audited as `item.match`.
          *
          *     **For a game (`kind` `rom`),** `provider` must be `libretro-db` and `external_id` a DAT name on the game's own console, as `/candidates` returned it. It is applied as an automatic match is — locked fields honoured, box art fetched — and then locked. A name the installed database does not list there is `400` `not_found`.
+         *
+         *     **For an album or an artist (`kind` `album` or `artist`),** `provider` must be `musicbrainz` and `external_id` a MusicBrainz id: a release group for an album, an artist for an artist (ADR 0115). **The tags still win:** the album keeps its title and artist, and a year or genres are filled only where it has none; what changes is its identity, its release type and the artist it is credited to. It is then locked. **Correcting an album sends its artist back to be voted on again** from its albums' credits, unless that artist is locked. `400` `not_found` is an id MusicBrainz does not know; `409` `music_matching_off` while the `match_music` setting is off.
          */
         post: operations["applyMatch"];
         delete?: never;
@@ -8620,6 +8628,8 @@ export interface components {
             total: number;
             /** @description |wanted - got| in years, 0 when either is unknown. */
             year_gap: number;
+            /** @description **An album only** (ADR 0115): how far the candidate's artist credit agrees with the album artist, 0..1, by shared words. Absent for every other kind. An album is weighted title 0.55, artist 0.30, year 0.15, and an artist below 0.80 caps the total at 0.50 whatever the title says. `popularity` is 0: MusicBrainz has none. */
+            artist?: number;
         };
         /**
          * @description **The field names here are PascalCase, and that is the published contract rather than an accident to be worked around.** The server serialises its provider candidate type directly and `docs/api.md` has always documented these names, so server, document and client agree. Renaming them would be a breaking change under ADR 0018 and would need `/api/v2`.
@@ -8629,8 +8639,12 @@ export interface components {
         MatchCandidate: {
             Provider: string;
             ExternalID: string;
-            /** @description `movie` or `show`; `rom` for a game. */
+            /** @description `movie` or `show`; `rom` for a game; `album` or `artist` for music. */
             Kind: string;
+            /** @description **An album only:** the record's artist credit as MusicBrainz prints it ("Jay-Z & Linkin Park"). Absent for every other kind. */
+            Artist?: string;
+            /** @description **An album only:** what kind of record it is — `Album`, `EP`, `Single`, `Broadcast`, or a secondary type that says more (`Compilation`, `Live`, `Soundtrack`, `Remix`…). Absent for every other kind. */
+            ReleaseType?: string;
             Title: string;
             Year: number;
             Overview: string;
@@ -16719,6 +16733,8 @@ export interface operations {
             query?: {
                 /** @description Overrides the title and drops the year, for a fresh user-driven search. A provider id or URL targets exactly. For a game, the words to find in the ROM database's names. */
                 q?: string;
+                /** @description **An album only:** the artist to search with, replacing the album artist. For a folder whose tags name the label, or nobody, as the artist. */
+                artist?: string;
             };
             header?: never;
             path: {
@@ -16741,7 +16757,7 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
-            /** @description A game whose console is not known (`no_platform`): there is nothing to search. */
+            /** @description A game whose console is not known (`no_platform`): there is nothing to search. An album or an artist while music matching is off (`music_matching_off`). */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -16750,7 +16766,16 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description A game, and the ROM database is not installed (`unavailable`). */
+            /** @description An album or an artist, and MusicBrainz could not be reached (`unavailable`). */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description A game, and the ROM database is not installed (`unavailable`). An album or an artist, and MusicBrainz is busy (`busy`): try again shortly. */
             503: {
                 headers: {
                     [name: string]: unknown;
@@ -16790,7 +16815,25 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
-            /** @description A game, and the ROM database is not installed (`unavailable`). */
+            /** @description An album or an artist while music matching is off (`music_matching_off`). */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description An album or an artist, and MusicBrainz could not be reached (`unavailable`). */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description A game, and the ROM database is not installed (`unavailable`). An album or an artist, and MusicBrainz is busy (`busy`). */
             503: {
                 headers: {
                     [name: string]: unknown;

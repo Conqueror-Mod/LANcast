@@ -32,6 +32,7 @@ function ScoreBar({
   total,
   showYear,
   titleOnly = false,
+  album = false,
 }: {
   breakdown: ScoreBreakdown;
   total: number;
@@ -40,11 +41,15 @@ function ScoreBar({
   // and a DAT's year is not what somebody searches by). Meters for the
   // others would sit at zero and read as a poor match.
   titleOnly?: boolean;
+  // An album is scored on its title, its artist and its year (ADR 0115).
+  // MusicBrainz has no popularity, so that meter would sit at zero too.
+  album?: boolean;
 }) {
   return (
     <div className="fixmatch__break">
       <span className="fixmatch__total">{scorePct(total)} match</span>
       <Meter label="Title" v={breakdown.title} />
+      {album && <Meter label="Artist" v={breakdown.artist ?? 0} />}
       {showYear && !titleOnly && (
         <Meter
           label="Year"
@@ -52,15 +57,26 @@ function ScoreBar({
           note={breakdown.year_gap ? `${breakdown.year_gap}y off` : undefined}
         />
       )}
-      {!titleOnly && <Meter label="Popularity" v={breakdown.popularity} />}
+      {!titleOnly && !album && <Meter label="Popularity" v={breakdown.popularity} />}
     </div>
   );
 }
 
-// What a candidate is, for the label beside its title.
-function kindLabel(kind: string): string {
-  if (kind === "rom") return "Game";
-  return kind === "show" || kind === "episode" || kind === "season" ? "TV" : "Movie";
+// What a candidate is, for the label beside its title. An album says what
+// kind of record it is, since "Album" against "Single" is often the choice.
+function kindLabel(c: MatchCandidate): string {
+  if (c.Kind === "rom") return "Game";
+  if (c.Kind === "album") return c.ReleaseType || "Album";
+  if (c.Kind === "artist") return "Artist";
+  return c.Kind === "show" || c.Kind === "episode" || c.Kind === "season" ? "TV" : "Movie";
+}
+
+// The page a MusicBrainz candidate is, so the record can be checked there
+// before it is chosen.
+function musicBrainzURL(c: MatchCandidate): string | null {
+  if (c.Provider !== "musicbrainz") return null;
+  const kind = c.Kind === "artist" ? "artist" : "release-group";
+  return `https://musicbrainz.org/${kind}/${encodeURIComponent(c.ExternalID)}`;
 }
 
 // Correcting an item's identity: search a provider, pick the right title, and
@@ -72,7 +88,23 @@ export function FixMatch({ item, onClose }: { item: Item; onClose: () => void })
   // year server-side, which would blank out the year sub-score and hide the very
   // thing the breakdown exists to show. A user-typed search still sends ?q=.
   const [query, setQuery] = useState<string | null>("");
-  const candidates = useCandidates(item.id, query);
+  // An album is searched by its artist too, and a folder tagged with the
+  // label as its artist needs that replaced (ADR 0115). Empty is the album's
+  // own artist.
+  const isAlbum = item.kind === "album";
+  // An artist is never searched by name: its candidates are the artists its
+  // albums credit, so it has no search box at all.
+  const isArtist = item.kind === "artist";
+  const [artistText, setArtistText] = useState("");
+  const [artistQuery, setArtistQuery] = useState("");
+  const candidates = useCandidates(item.id, query, artistQuery);
+  const search = () => {
+    setQuery(text.trim());
+    setArtistQuery(artistText.trim());
+  };
+  const currentLink = item.provider === "musicbrainz" && item.external_id
+    ? musicBrainzURL({ Provider: item.provider, ExternalID: item.external_id, Kind: item.kind } as MatchCandidate)
+    : null;
   const apply = useApplyMatch(item.id);
   const unlock = useUnlockField(item.id);
 
@@ -131,9 +163,15 @@ export function FixMatch({ item, onClose }: { item: Item; onClose: () => void })
         </div>
 
         <p className="fixmatch__current">
-          {item.provider && item.external_id
-            ? `Currently ${item.provider} #${item.external_id}`
-            : "Not matched"}
+          {currentLink ? (
+            <a href={currentLink} target="_blank" rel="noreferrer noopener">
+              Currently MusicBrainz #{item.external_id}
+            </a>
+          ) : item.provider && item.external_id ? (
+            `Currently ${item.provider} #${item.external_id}`
+          ) : (
+            "Not matched"
+          )}
           {item.match_state ? ` · ${item.match_state}` : ""}
         </p>
 
@@ -162,21 +200,42 @@ export function FixMatch({ item, onClose }: { item: Item; onClose: () => void })
           </div>
         )}
 
-        <div className="fixmatch__search">
-          <input
-            className="fixmatch__input"
-            value={text}
-            placeholder="Search by title"
-            onChange={(e) => setText(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") setQuery(text.trim());
-            }}
-            autoFocus
-          />
-          <button className="fixmatch__go" onClick={() => setQuery(text.trim())}>
-            Search
-          </button>
-        </div>
+        {isArtist ? (
+          <p className="fixmatch__msg fixmatch__why">
+            An artist is identified by its albums, not by its name — several
+            artists share most names. These are the artists its albums are
+            credited to. If none is right, fix the albums.
+          </p>
+        ) : (
+          <div className="fixmatch__search">
+            <input
+              className="fixmatch__input"
+              value={text}
+              placeholder={isAlbum ? "Album title, or a MusicBrainz link" : "Search by title"}
+              aria-label={isAlbum ? "Album title" : "Title"}
+              onChange={(e) => setText(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") search();
+              }}
+              autoFocus
+            />
+            {isAlbum && (
+              <input
+                className="fixmatch__input fixmatch__input--artist"
+                value={artistText}
+                placeholder="Artist (blank: the album artist)"
+                aria-label="Artist"
+                onChange={(e) => setArtistText(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") search();
+                }}
+              />
+            )}
+            <button className="fixmatch__go" onClick={search}>
+              Search
+            </button>
+          </div>
+        )}
 
         {candidates.isFetching && <p className="fixmatch__msg">Searching…</p>}
         {candidates.isError && (
@@ -218,18 +277,30 @@ export function FixMatch({ item, onClose }: { item: Item; onClose: () => void })
                   <div className="fixmatch__cand-title">
                     {c.Title}
                     {c.Year ? <span className="fixmatch__year"> ({c.Year})</span> : null}
-                    <span className="fixmatch__kind">{kindLabel(c.Kind)}</span>
+                    <span className="fixmatch__kind">{kindLabel(c)}</span>
                     {current && <span className="fixmatch__current-tag">current</span>}
                   </div>
+                  {c.Artist && <div className="fixmatch__artist">{c.Artist}</div>}
                   {c.Overview && (
                     <div className="fixmatch__overview">{c.Overview}</div>
                   )}
-                  <ScoreBar
-                    breakdown={c.Breakdown}
-                    total={c.Score}
-                    showYear={item.kind !== "episode"}
-                    titleOnly={c.Kind === "rom"}
-                  />
+                  {c.Kind === "artist" ? (
+                    // A share of votes, not a likeness: there is nothing to
+                    // meter but how many of its albums say so.
+                    <div className="fixmatch__share">
+                      {c.Score > 0
+                        ? `Credited on ${scorePct(c.Score)} of its matched albums`
+                        : "No matched album credits this artist"}
+                    </div>
+                  ) : (
+                    <ScoreBar
+                      breakdown={c.Breakdown}
+                      total={c.Score}
+                      showYear={item.kind !== "episode"}
+                      titleOnly={c.Kind === "rom"}
+                      album={c.Kind === "album"}
+                    />
+                  )}
                 </div>
               </button>
             );

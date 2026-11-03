@@ -169,6 +169,23 @@
   font-size: 13px;
 }
 
+/* A source's credit (ADR 0115): small, quiet, and never gold, which means
+   where you are and nothing else. The links are plain underlined text. */
+.detail__credit {
+  margin-top: 4px;
+  color: var(--text-faint);
+  font-size: 11px;
+}
+.detail__credit a {
+  color: inherit;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.detail__credit a:hover,
+.detail__credit a:focus-visible {
+  color: var(--text-secondary);
+}
+
 /* How many times this has been watched. Muted and typographic, like the
    genres above it — never gold, which means where you are and nothing else,
    and never a badge, because a rewatch count is something you read when you

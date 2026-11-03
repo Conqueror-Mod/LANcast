@@ -244,8 +244,7 @@ const enrichableKindsNoMusic = `kind NOT IN (` + unmatchableKinds + `, ` + music
 const unmatchableKinds = `'track', 'photo', 'gallery', 'rom', 'comic'`
 
 // musicKinds are matched by MusicBrainz and by nothing else (ADR 0115). They
-// are never re-parsed (re-parsing guesses a video's filename), and not yet in
-// the review queue: its Fix match searches films until it learns albums.
+// are never re-parsed: re-parsing guesses a video's filename.
 const musicKinds = `'album', 'artist'`
 
 // PendingEnrichment returns items awaiting metadata. The queue is a query
@@ -524,7 +523,16 @@ func (s *Store) ApplyGuess(ctx context.Context, itemID int64, g Guess) (bool, er
  * match on one is worth correcting, and a person can do it — which is the test
  * for belonging here.
  */
-const notReviewable = `kind != 'season' AND ` + enrichableKindsNoMusic
+const notReviewable = `kind != 'season' AND kind NOT IN (` + unmatchableKinds + `)
+	AND NOT (kind = 'artist' AND match_state = 'unmatched')`
+
+/*
+ * Albums are reviewable: Fix match searches MusicBrainz for them (ADR 0115).
+ * An artist is only when its albums disagree. Its candidates are the artists
+ * its albums credit, never a name search, so an artist none of its albums
+ * identified has nothing to offer a person; fixing one of its albums is how
+ * it gets an answer.
+ */
 
 /*
  * And nothing no provider can match: a comic, a photo, a track, a game.

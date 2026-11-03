@@ -59,9 +59,9 @@ type Breakdown struct {
 	Year       float64 `json:"year"`       // year agreement, 0..1 (1.0 for episodes: n/a)
 	Popularity float64 `json:"popularity"` // popularity, 0..1
 	Total      float64 `json:"total"`      // the weighted sum, 0..1
-	// Artist is an album's artist agreement, 0..1. Not on the wire until the
-	// Fix match screen for albums documents it (ADR 0115, step 3).
-	Artist  float64 `json:"-"`
+	// Artist is an album's artist agreement, 0..1, and absent for every other
+	// kind (an album's Popularity is 0: MusicBrainz has none).
+	Artist  float64 `json:"artist,omitempty"`
 	YearGap int     `json:"year_gap"` // |want-got| years, 0 when either is unknown
 }
 

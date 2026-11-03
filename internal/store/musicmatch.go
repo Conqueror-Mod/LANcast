@@ -31,10 +31,14 @@ type AlbumMatch struct {
 	// Year and Genres fill only an album that has none.
 	Year   int
 	Genres []string
+	// Confirmed is a person's choice in Fix match: it is applied even over a
+	// locked match, and locks the identity (State is ignored). Fields stay
+	// gap-only, as for every match: the tags still win.
+	Confirmed bool
 }
 
 // ApplyAlbumMatch writes a match onto an album. A locked album is left as it
-// is; a locked year or genres field likewise.
+// is unless the match is Confirmed; a locked year or genres field likewise.
 func (s *Store) ApplyAlbumMatch(ctx context.Context, itemID int64, m AlbumMatch) error {
 	locked, err := s.LockedFields(ctx, itemID)
 	if err != nil {
@@ -54,10 +58,10 @@ func (s *Store) ApplyAlbumMatch(ctx context.Context, itemID int64, m AlbumMatch)
 			release_type = NULLIF(?, ''), artist_external_id = NULLIF(?, ''),
 			year = CASE WHEN (year IS NULL OR year = 0) AND ? > 0 THEN ? ELSE year END,
 			metadata_updated_at = ?
-		WHERE id = ? AND kind = 'album' AND match_state != 'locked'`,
-		m.Provider, m.ExternalID, m.State, m.Score,
+		WHERE id = ? AND kind = 'album' AND (match_state != 'locked' OR ?)`,
+		m.Provider, m.ExternalID, confirmedState(m.State, m.Confirmed), m.Score,
 		m.ReleaseType, m.ArtistID, year, year,
-		time.Now().Unix(), itemID)
+		time.Now().Unix(), itemID, m.Confirmed)
 	if err != nil {
 		return fmt.Errorf("apply album match: %w", err)
 	}
@@ -65,6 +69,30 @@ func (s *Store) ApplyAlbumMatch(ctx context.Context, itemID int64, m AlbumMatch)
 		return nil
 	}
 	return s.fillGenres(ctx, itemID, m.Genres, isLocked["genres"])
+}
+
+func confirmedState(state string, confirmed bool) string {
+	if confirmed {
+		return "locked"
+	}
+	return state
+}
+
+/*
+ * RequeueArtistOf puts an album's artist back in the queue, after a person
+ * changed what the album is. The artist is voted from its albums' credits, so
+ * a corrected album may change the count. A locked artist is left alone.
+ */
+func (s *Store) RequeueArtistOf(ctx context.Context, albumID int64) error {
+	_, err := s.db.ExecContext(ctx, `
+		UPDATE media_item SET metadata_updated_at = NULL
+		WHERE kind = 'artist' AND match_state != 'locked'
+		  AND id = (SELECT parent_id FROM media_item WHERE id = ? AND kind = 'album')`,
+		albumID)
+	if err != nil {
+		return fmt.Errorf("requeue artist: %w", err)
+	}
+	return nil
 }
 
 // fillGenres gives an item genres only when it has none and they are not
@@ -145,6 +173,8 @@ type ArtistMatch struct {
 	State      string
 	Score      float64
 	Genres     []string
+	// Confirmed is a person's choice, as for AlbumMatch.
+	Confirmed bool
 }
 
 // ApplyArtistMatch writes an identity onto an artist, and genres only if it
@@ -157,8 +187,9 @@ func (s *Store) ApplyArtistMatch(ctx context.Context, itemID int64, m ArtistMatc
 	res, err := s.db.ExecContext(ctx, `
 		UPDATE media_item SET provider = ?, external_id = ?, match_state = ?,
 			match_score = ?, metadata_updated_at = ?
-		WHERE id = ? AND kind = 'artist' AND match_state != 'locked'`,
-		m.Provider, m.ExternalID, m.State, m.Score, time.Now().Unix(), itemID)
+		WHERE id = ? AND kind = 'artist' AND (match_state != 'locked' OR ?)`,
+		m.Provider, m.ExternalID, confirmedState(m.State, m.Confirmed), m.Score,
+		time.Now().Unix(), itemID, m.Confirmed)
 	if err != nil {
 		return fmt.Errorf("apply artist match: %w", err)
 	}
