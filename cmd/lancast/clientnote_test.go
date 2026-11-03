@@ -4,6 +4,9 @@ import (
 	"bytes"
 	"fmt"
 	"log/slog"
+	"os"
+	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -131,5 +134,33 @@ func TestNotesAreQuietAndCeilinged(t *testing.T) {
 	tick(61 * time.Second)
 	if !n.note("warn", "error", "after the minute") {
 		t.Error("the ceiling did not lift after a minute")
+	}
+}
+
+// The page's list of areas (NoteArea in web/src/lib/clientNote.ts) is this
+// one's. An area added on one side only is a note the page sends and the log
+// refuses without a word, which is the silence the binding exists to end.
+func TestPageNoteAreasMatchTheBinding(t *testing.T) {
+	src, err := os.ReadFile(filepath.Join("..", "..", "web", "src", "lib", "clientNote.ts"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	decl := regexp.MustCompile(`export type NoteArea =([^;]*);`).FindSubmatch(src)
+	if decl == nil {
+		t.Fatal("no NoteArea type in clientNote.ts")
+	}
+	page := map[string]bool{}
+	for _, m := range regexp.MustCompile(`"([a-z]+)"`).FindAllSubmatch(decl[1], -1) {
+		page[string(m[1])] = true
+	}
+	for area := range noteAreas {
+		if !page[area] {
+			t.Errorf("area %q is accepted here but the page cannot send it", area)
+		}
+	}
+	for area := range page {
+		if !noteAreas[area] {
+			t.Errorf("the page sends area %q, which the binding refuses", area)
+		}
 	}
 }

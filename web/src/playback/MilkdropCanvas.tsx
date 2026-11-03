@@ -15,6 +15,8 @@ import {
 } from "./milkdropStage";
 import { shaderFaults, withDefaultShaders } from "./milkdropShaders";
 import { trailSize } from "./trailMath";
+import { createFrameRecorder, type FrameRecorder } from "./frameRecord";
+import { driveFrames } from "./frameDriver";
 
 /*
  * The MilkDrop stage (ADR 0091, steps d and e).
@@ -159,6 +161,9 @@ export function MilkdropCanvas({ preset, ids, running, calm, analyser: analyserR
   const loadToken = useRef(0);
   const slowTimer = useRef(0);
   const status = useMilkdropStatus();
+  // The running loop's recorder, so a preset load can be marked in its window:
+  // a load compiles shaders and WebAssembly, the likeliest cause of a hitch.
+  const recRef = useRef<FrameRecorder | null>(null);
 
   useEffect(
     () => () => {
@@ -262,6 +267,7 @@ export function MilkdropCanvas({ preset, ids, running, calm, analyser: analyserR
           faults.map((f) => `${f.stage}: ${f.log}`).join("; "),
         );
         setShaderFallback(id, stages);
+        recRef.current?.event("shader-fallback");
         /*
          * The reload compiles the preset's equations again, which awaits
          * WebAssembly: frames would draw the broken program meanwhile. So the
@@ -277,6 +283,7 @@ export function MilkdropCanvas({ preset, ids, running, calm, analyser: analyserR
         window.clearTimeout(slowTimer.current);
         e.loaded = id;
         readyRef.current = true;
+        recRef.current?.event("preset");
         setMilkdropStatus("ready");
         for (const near of presetNeighbours(id, idsRef.current)) {
           // A failure here is the real load's to report, not the prefetch's.
@@ -307,13 +314,10 @@ export function MilkdropCanvas({ preset, ids, running, calm, analyser: analyserR
     let td: Uint8Array<ArrayBuffer> = new Uint8Array(0);
     const samples = new Uint8Array(BUTTERCHURN_SAMPLES);
     const levels = { timeByteArray: samples, timeByteArrayL: samples, timeByteArrayR: samples };
-    let last = -1;
-    let id = 0;
+    const rec = createFrameRecorder("milkdrop");
+    recRef.current = rec;
 
-    const frame = (now: number) => {
-      id = requestAnimationFrame(frame);
-      const dt = last < 0 ? 1 / 60 : Math.min(0.1, (now - last) / 1000);
-      last = now;
+    const draw = (dt: number) => {
       const node = analyserRef.current();
       if (!node) return;
       // The engine is made in the background (above); until it has the
@@ -330,6 +334,7 @@ export function MilkdropCanvas({ preset, ids, running, calm, analyser: analyserR
         e.w = w;
         e.h = h;
       }
+      rec.size(w, h);
       if (td.length !== node.fftSize) td = new Uint8Array(node.fftSize);
       node.getByteTimeDomainData(td);
       newestSamples(td, samples);
@@ -347,8 +352,11 @@ export function MilkdropCanvas({ preset, ids, running, calm, analyser: analyserR
       }
       pass.frame(e.out, w, h, dt, limitRate(calmRef.current));
     };
-    id = requestAnimationFrame(frame);
-    return () => cancelAnimationFrame(id);
+    const driver = driveFrames("milkdrop", draw, rec);
+    return () => {
+      driver.stop();
+      if (recRef.current === rec) recRef.current = null;
+    };
   }, [running, analyserRef]);
 
   /*
