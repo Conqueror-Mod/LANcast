@@ -203,9 +203,10 @@ is in the [Feature backlog](#feature-backlog) entry it names.*
 
 - **Audiobooks** — [ADR 0116](adr/0116-an-audiobook-is-its-own-library.md),
   accepted 2026-11-03: a library kind of its own, books as one item whether one
-  file or a folder of parts, chapters, speed per book, a sleep timer. Waiting
-  on the test library (115 Star Trek audiobooks) arriving, so its tags can be
-  read before step 1.
+  file or a folder of parts, chapters, speed per book, a sleep timer. **Step 1
+  is on main, unreleased**: the kind, books made from folders, and a grid with
+  covers. The test library (12 Star Trek books) was read first, and showed the
+  details live in folder names rather than tags. Step 2 is playing a book.
 
 **Feature backlog, not yet planned.**
 - Libraries and media: **ebooks** beyond comics (EPUB),
@@ -1113,10 +1114,10 @@ group is not priority.
   207 are their own bucket. Marked folders are excluded from it entirely
   (ADR 0051, amended). Face grouping, the large piece when this was written,
   has since been built (ADR 0052).
-- **Audiobooks** — not built; **accepted** as
+- **Audiobooks** — step 1 built (the kind, books from folders, a grid); **accepted** as
   [ADR 0116](adr/0116-an-audiobook-is-its-own-library.md) (2026-11-03), its own
   library kind, with the owner's nine answers recorded in it. The test library
-  is 115 Star Trek audiobooks; their tags are read before step 1 is built. Checking
+  is 12 Star Trek books, read before step 1 was built. Checking
   the code for it corrected this entry: resume by position already works for
   any audio, chapters are already read from a file on demand (#949), and both
   players already carry a playback rate. What is missing is a place for books,
