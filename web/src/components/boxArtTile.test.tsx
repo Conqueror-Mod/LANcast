@@ -90,6 +90,17 @@ describe("box art", () => {
     expect(art.querySelectorAll("img")).toHaveLength(1);
   });
 
+  // A book is square like a record, and an abridged one says so where its
+  // unabridged twin says only its part count (ADR 0116).
+  it("frames a book square and marks it abridged", () => {
+    render(item({ kind: "book", platform: undefined, title: "Emissary", child_count: 4, edition: "Abridged" }));
+    const art = host.querySelector(".poster-tile__art")!;
+    expect(art.classList.contains("poster-tile__art--square")).toBe(true);
+    expect(host.querySelector(".poster-tile__year")?.textContent).toBe("Abridged · 4 parts");
+    render(item({ kind: "book", platform: undefined, title: "Emissary", child_count: 4 }));
+    expect(host.querySelector(".poster-tile__year")?.textContent).toBe("4 parts");
+  });
+
   it("still names a game with no box art", () => {
     render(item({ artwork: {} }));
     expect(host.querySelector(".poster-tile__placeholder")?.textContent).toContain("Bubsy II");

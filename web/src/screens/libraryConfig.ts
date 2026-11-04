@@ -213,6 +213,18 @@ const COMICS: LibraryKindConfig = {
   ],
 };
 
+// An audiobooks library's top level is books (ADR 0116). The author, narrator
+// and series filters are step 3; sorting by title and by when a book arrived
+// is what the files support today.
+const AUDIOBOOKS: LibraryKindConfig = {
+  searchPlaceholder: "Search books",
+  sorts: [
+    { value: "title", label: "Title" },
+    { value: "added", label: "Recently added" },
+    { value: "year", label: "Year" },
+  ],
+};
+
 export function configForKind(kind: string | undefined): LibraryKindConfig {
   switch (kind) {
     case "show":
@@ -225,6 +237,8 @@ export function configForKind(kind: string | undefined): LibraryKindConfig {
       return RETRO;
     case "comics":
       return COMICS;
+    case "audiobooks":
+      return AUDIOBOOKS;
     default:
       return MOVIE;
   }
@@ -246,6 +260,7 @@ export const LIBRARY_KINDS: { value: string; label: string }[] = [
   // somebody looking for their Steam list into the add-library form.
   { value: "retro", label: "Retro games" },
   { value: "comics", label: "Comics" },
+  { value: "audiobooks", label: "Audiobooks" },
   { value: "other", label: "Other" },
 ];
 

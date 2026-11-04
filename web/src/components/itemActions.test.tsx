@@ -314,6 +314,18 @@ describe("what a poster offers", () => {
   });
 
   /*
+   * A book is not played until ADR 0116 step 2 builds its player: Play would
+   * hand its parts to the film player, and a part queued alone is the
+   * "playlist of chapters" that ADR names as the trap.
+   */
+  it("offers a book and its parts their page and nothing to play", () => {
+    expect(labels(item({ kind: "book", child_count: 4 } as Partial<Item>))).toEqual([
+      "Go to details",
+    ]);
+    expect(labels(item({ kind: "book_part" }))).toEqual(["Go to details"]);
+  });
+
+  /*
    * Removal deletes files from disk when the server allows it, so it is behind
    * the same admin gate the track row uses. These run without an authenticated
    * admin, so its absence here is the assertion: the gate is real, not decor.

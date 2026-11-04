@@ -41,6 +41,7 @@ import {
   isContainer,
   childLabel,
   childCountLabel,
+  isBook,
   isComic,
   isPicture,
   isROM,
@@ -403,7 +404,7 @@ function detailActions(o: {
   out.push(...o.collections);
   // Anything that plays on its own can go in a playlist; a container cannot,
   // since a playlist holds entries, not albums. Pictures do not play at all.
-  if (!o.container && !isPicture(item) && !isROM(item) && !isComic(item)) {
+  if (!o.container && !isPicture(item) && !isROM(item) && !isComic(item) && !isBook(item)) {
     out.push({ label: "Add to playlist", onSelect: o.addToPlaylist });
   }
   // Anything with a file of its own can be taken away; a container has none,
@@ -481,10 +482,12 @@ export function Detail() {
   // An album is asked for in the order it plays; everything else takes the
   // default. Without this a record arrives alphabetically (see useChildren).
   const isAlbum = item?.kind === "album";
+  // A book's parts likewise, in the order they play (ADR 0116).
+  const isBookItem = item?.kind === "book";
   const { data: parentChildren } = useChildren(
     itemID,
     container && !isCollection,
-    isAlbum ? "track" : undefined,
+    isAlbum || isBookItem ? "track" : undefined,
   );
   const { data: members } = useCollectionMembers(
     itemID,
@@ -643,8 +646,10 @@ export function Detail() {
     // A ROM is identified by its hash against a DAT (ADR 0073); Fix match
     // searches film and TV providers that have never heard of it.
     !isROM(item) &&
-    // Nor has any provider heard of a comic (ADR 0101).
+    // Nor has any provider heard of a comic (ADR 0101), nor of a book in
+    // this version (ADR 0116).
     !isComic(item) &&
+    !isBook(item) &&
     // A playlist has no provider identity to correct. It is a list somebody
     // named, and the only thing a search could do with "Road Trip" is offer the
     // film — the same reason a collection and a season are excluded, arrived at
@@ -660,6 +665,8 @@ export function Detail() {
     // A gallery is a folder the scanner invented and sweeps when it empties,
     // exactly like an artist. A photo is a real file and keeps the option.
     item.kind !== "gallery" &&
+    // A book is its folder, assembled by the scanner; its parts are the files.
+    item.kind !== "book" &&
     // A playlist gets its own delete, below. This dialog is about files: for a
     // playlist imported from disk, "delete from disk" would remove the .m3u and
     // "remove from library" would add it to the ignore list — two filesystem
@@ -674,7 +681,9 @@ export function Detail() {
   // is something you press play on. The viewer replaces this in the next phase
   // (ADR 0028).
   const playableChildren = (children ?? []).filter(
-    (c) => !isContainer(c) && !isPicture(c),
+    // A book's parts wait for the book player (ADR 0116 step 2): handed to
+    // the film player they would play as chapters of nothing.
+    (c) => !isContainer(c) && !isPicture(c) && !isBook(c),
   );
 
   /*
@@ -828,6 +837,11 @@ export function Detail() {
     // "Compilation", "Live". Not "Album": on an album's own page it says
     // nothing the page does not.
     isAlbum && item.release_type && item.release_type !== "Album" ? item.release_type : "",
+    // A book: its author, its place in its series, and whether it is
+    // abridged — "John Peel · Deep Space Nine #7 · Abridged" (ADR 0116).
+    isBookItem ? (item.artist ?? "") : "",
+    isBookItem && item.series ? item.series + (item.episode ? ` #${item.episode}` : "") : "",
+    isBookItem ? (item.edition ?? "") : "",
     item.year ? String(item.year) : "",
     runtime(item.duration_ms),
     item.content_rating ?? "",
@@ -921,7 +935,7 @@ export function Detail() {
               <img
                 className={
                   "detail__poster" +
-                  (isMusic ? " detail__poster--square" : isROM(item) ? " detail__poster--box" : "")
+                  (isMusic || isBook(item) ? " detail__poster--square" : isROM(item) ? " detail__poster--box" : "")
                 }
                 src={poster}
                 alt=""
@@ -1149,7 +1163,7 @@ export function Detail() {
                   note, not a control: nothing here can be pressed yet. */}
               {isROM(item) && !item.missing && <RetroActions item={item} />}
               {isComic(item) && !item.missing && <ComicActions item={item} />}
-              {!container && !isPicture(item) && !isROM(item) && !isComic(item) && !item.missing &&
+              {!container && !isPicture(item) && !isROM(item) && !isComic(item) && !isBook(item) && !item.missing &&
                 (resumeSeconds({
                   positionMs: item.progress?.position_ms,
                   watched: item.progress?.watched,

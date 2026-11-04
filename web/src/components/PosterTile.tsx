@@ -5,6 +5,18 @@ import { PointMenu, type MenuAction, type MenuPoint } from "./Menu";
 import { useFocusable } from "@/focus/FocusController";
 import { acknowledge, useCanReveal, useObscured } from "@/lib/sensitiveAck";
 import { containerCountLabel, isROM, isSquareArt } from "@/lib/kind";
+
+/*
+ * An abridged book says so on its tile (ADR 0116), ahead of its part count:
+ * abridged and unabridged recordings of one book are two books side by side,
+ * and two tiles with the same cover and title are otherwise told apart by
+ * opening both.
+ */
+function bookLabel(item: Item): string | null {
+  if (item.kind !== "book" || !item.edition) return null;
+  const n = containerCountLabel(item);
+  return n ? `${item.edition} · ${n}` : item.edition;
+}
 import { episodeLabel, rating } from "@/lib/format";
 import { collectionStanding, isWatched, watchedLabel } from "@/lib/watchedMark";
 import type { Item } from "@/api/types";
@@ -187,7 +199,7 @@ export function PosterTile({
   const standing = collectionStanding(item);
   const pct = standing ? standing.pct : progressPct(item);
   // A container shows how much it holds ("3 seasons"); a leaf shows its year.
-  const count = standing ? standing.label : containerCountLabel(item);
+  const count = standing ? standing.label : bookLabel(item) ?? containerCountLabel(item);
   /*
    * An episode says which episode it is, in place of the year.
    *

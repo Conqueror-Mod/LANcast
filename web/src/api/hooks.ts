@@ -3164,6 +3164,9 @@ export function playableKindFor(
     case "picture":
     case "retro":
     case "comics":
+    // Playing a book is ADR 0116 step 2. Until then a book is not a film:
+    // the default below would hand its parts to the video player.
+    case "audiobooks":
     case "other":
       return null;
     default:
