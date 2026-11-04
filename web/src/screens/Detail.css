@@ -645,3 +645,76 @@
   font-size: 14px;
   line-height: 1.4;
 }
+
+/* A book's chapters (ADR 0116 step 2): a numbered list, like a record's
+   tracks. The chapter playing now is said in words, not in gold, which means
+   focus and nothing else (design.md). */
+.detail__book-note {
+  color: var(--text-muted);
+  margin: 0;
+}
+.book-chapters {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  max-width: 760px;
+}
+.book-chapters li {
+  flex-shrink: 0;
+}
+.book-chapters__row {
+  display: flex;
+  align-items: baseline;
+  gap: 14px;
+  width: 100%;
+  padding: 10px 12px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-secondary);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  outline: none;
+}
+.book-chapters__row:hover {
+  background: rgba(190, 208, 255, 0.06);
+  color: var(--text-primary);
+}
+.book-chapters__row:focus-visible {
+  box-shadow: 0 0 0 2px var(--gold);
+  color: var(--text-primary);
+}
+.book-chapters__row--current {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+.book-chapters__n {
+  flex-shrink: 0;
+  width: 2ch;
+  text-align: right;
+  color: var(--text-faint);
+  font-variant-numeric: tabular-nums;
+}
+.book-chapters__title {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.book-chapters__now {
+  flex-shrink: 0;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+.book-chapters__len {
+  flex-shrink: 0;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}

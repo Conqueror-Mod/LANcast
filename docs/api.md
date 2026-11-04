@@ -1444,7 +1444,21 @@ turned round. A part's `title` is its own title tag when the parts' titles
 differ, else `Part N`. Covers are the album cover pass's, plus any picture in
 the book's own folder.
 
-A book does not play yet (ADR 0116 step 2), is not matched by any provider,
+| Route | Purpose |
+|---|---|
+| `GET /api/items/{id}/book` | The book's `parts` laid end to end (`id`, `title`, `start_ms`, `duration_ms`), its `chapters`, `duration_ms`, `ready`, and the caller's `position_ms`, `watched` and `speed` |
+| `PUT /api/items/{id}/speed` | `{speed}` from 0.75 to 2 → `204`. The caller's speed for this book; absent until chosen, which plays at 1× |
+
+**A book plays as one item.** A player streams each part from
+`/api/stream/{part id}` in turn and writes progress against **the book**
+(`PUT /api/items/{book id}/progress`, on the book's own clock), never a part, so
+the Continue shelf lists the book and a book counts once when it finishes. A
+book is finished within its last minute rather than at a film's percentage.
+Chapters are a one-file book's own when it carries them, else one per part.
+`ready` is false while any part is unprobed. Choosing a speed is not a place:
+it puts nothing on the Continue shelf.
+
+A book is not matched by any provider,
 cannot be shared with a paired server, and is not offered over DLNA. **An
 account with a content limit sees no books**, for the reason it sees no comics.
 

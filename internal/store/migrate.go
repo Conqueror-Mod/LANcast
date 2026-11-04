@@ -6,7 +6,7 @@ import (
 )
 
 // CurrentSchemaVersion is the revision this build expects.
-const CurrentSchemaVersion = 89
+const CurrentSchemaVersion = 90
 
 // migration is one forward step. There are deliberately no down migrations:
 // rolling a media library's schema backwards loses data that a rescan cannot
@@ -200,6 +200,10 @@ var migrations = []migration{
 		{"media_item", "release_type", "TEXT"},
 		{"media_item", "artist_external_id", "TEXT"},
 	}},
+	// A book's speed, per person (ADR 0116 step 2). On the play state beside
+	// the position, because it is a fact about one account's listening, not
+	// about the book. NULL is "never chosen", which plays at 1×.
+	{version: 90, columns: []column{{"playback_state", "speed", "REAL"}}},
 }
 
 // migrate brings the database up to CurrentSchemaVersion.

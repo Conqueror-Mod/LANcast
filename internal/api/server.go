@@ -883,6 +883,10 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("PUT /api/items/{id}/progress", s.putProgress)
 	// The marks a file carries, for the scrub bar; read on first ask, cached.
 	mux.HandleFunc("GET /api/items/{id}/chapters", s.itemChapters)
+	// A book's parts on one timeline, and the caller's place and speed in it
+	// (ADR 0116 step 2).
+	mux.HandleFunc("GET /api/items/{id}/book", s.bookInfo)
+	mux.HandleFunc("PUT /api/items/{id}/speed", s.putSpeed)
 	// A film's extras, found in its folder and never imported (ADR 0098).
 	mux.HandleFunc("GET /api/items/{id}/extras", s.listExtras)
 	// Pre-roll (ADR 0099): whether a clip plays before a film, and the clip.

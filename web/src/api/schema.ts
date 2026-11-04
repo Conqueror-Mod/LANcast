@@ -426,6 +426,46 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/items/{id}/book": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * A book's parts on one timeline, and the caller's place in it
+         * @description ADR 0116 step 2. A book is one item however many files it is: its parts are laid end to end, each with its `start_ms` on the book's timeline, and progress is written against **the book** with `PUT /items/{id}/progress`, never against a part; a book is finished within its last minute. `chapters` are the file's own for a one-file book that carries them, else one per part. `ready` is false while any part is unprobed, because a part of unknown length cannot place the ones after it. `speed` is the caller's last choice for this book, absent when they never chose one (a book never played starts at 1×).
+         */
+        get: operations["bookInfo"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/items/{id}/speed": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Keep the caller's speed for one book
+         * @description ADR 0116. Per book and per person, kept beside the play state; choosing a speed is not a place, so it puts nothing on the Continue shelf. From 0.75 to 2.
+         */
+        put: operations["putSpeed"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/items/{id}/chapters": {
         parameters: {
             query?: never;
@@ -8234,6 +8274,40 @@ export interface components {
             end_ms: number;
             title: string;
         };
+        BookPart: {
+            /**
+             * Format: int64
+             * @description The part's own item id: what `/stream/{id}` plays.
+             */
+            id: number;
+            title: string;
+            /**
+             * Format: int64
+             * @description Where the part begins on the book's timeline.
+             */
+            start_ms: number;
+            /**
+             * Format: int64
+             * @description 0 while unprobed.
+             */
+            duration_ms: number;
+        };
+        BookInfo: {
+            /** Format: int64 */
+            duration_ms: number;
+            ready: boolean;
+            parts: components["schemas"]["BookPart"][];
+            chapters: components["schemas"]["Chapter"][];
+            /**
+             * Format: int64
+             * @description The caller's place on the book's timeline.
+             */
+            position_ms: number;
+            /** @description Finished: within its last minute, not at a film's percentage. */
+            watched: boolean;
+            /** @description Absent when never chosen. */
+            speed?: number;
+        };
         ChapterList: {
             chapters: components["schemas"]["Chapter"][];
         };
@@ -10686,6 +10760,90 @@ export interface operations {
             };
             401: components["responses"]["Unauthorized"];
             404: components["responses"]["NotFound"];
+        };
+    };
+    bookInfo: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The book */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BookInfo"];
+                };
+            };
+            /** @description Not a book (`not_a_book`) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description No such item */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    putSpeed: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    speed: number;
+                };
+            };
+        };
+        responses: {
+            /** @description Kept */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Out of range, or not a book (`not_a_book`) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description No such item */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
         };
     };
     itemChapters: {

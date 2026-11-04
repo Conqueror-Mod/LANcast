@@ -11,9 +11,12 @@ import {
   useUnrated,
   fetchLibraryTracks,
   playableKindFor,
+  useContinueWatching,
   type PlayableKind,
 } from "@/api/hooks";
 import { PosterTile } from "@/components/PosterTile";
+import { Shelf } from "@/components/Shelf";
+import type { MenuAction } from "@/components/Menu";
 import { SensitiveReveal } from "@/lib/sensitiveAck";
 import { useItemActions } from "@/components/itemActions";
 import { startOf } from "@/playback/queueOrder";
@@ -44,6 +47,24 @@ const FACET_KEYS = FILTER_PARAM_KEYS;
 // rather than two divergent screens.
 // Library kinds whose items a certificate describes (store/ceiling.go).
 const RATABLE_LIBRARIES = new Set(["movie", "show", "retro"]);
+
+/*
+ * Continue Listening for one audiobooks library (ADR 0116, answer 7): the
+ * library's own shelf, so a half-heard book neither pushes songs off music's
+ * shelf nor sits among films. The same /api/continue every shelf reads,
+ * narrowed to this library's books.
+ */
+function BookShelf({
+  libraryID,
+  actions,
+}: {
+  libraryID: number;
+  actions: (item: Item) => MenuAction[];
+}) {
+  const { data } = useContinueWatching(50);
+  const books = (data ?? []).filter((i) => i.kind === "book" && i.library_id === libraryID);
+  return <Shelf title="Continue Listening" items={books} itemActions={actions} />;
+}
 
 export function LibraryView({
   library,
@@ -426,6 +447,9 @@ export function LibraryView({
           )}
           onClose={() => setViewerOpen(false)}
         />
+      )}
+      {library.kind === "audiobooks" && (
+        <BookShelf libraryID={library.id} actions={gridActions} />
       )}
       <div className="browse__header">
         <div className="browse__heading">

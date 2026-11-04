@@ -256,8 +256,10 @@ export function Home() {
    * and it is not dropped back into Continue Watching either, where it would
    * be the same tile the split exists to remove.
    */
+  // A book is on its own library's shelf (ADR 0116, answer 7), never among
+  // films or songs.
   const continueVideo = resumable.filter(
-    (i) => !isMusic(i) && i.kind !== "show",
+    (i) => !isMusic(i) && i.kind !== "show" && i.kind !== "book",
   );
   const nextUp = resumable.filter((i) => i.kind === "show" && i.next_episode);
   const continueAudio = resumable.filter(isMusic);

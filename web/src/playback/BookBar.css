@@ -1,0 +1,210 @@
+/* The book player's bar (ADR 0116 step 2). Pinned to the foot of the window
+   beside the rail; above the phone tab bar where there is one. Gold is focus
+   only, as everywhere (design.md). */
+.book-bar {
+  position: fixed;
+  left: var(--rail-collapsed);
+  right: 0;
+  bottom: calc(var(--tabbar-h) + env(safe-area-inset-bottom, 0px));
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  min-height: 68px;
+  padding: 8px 20px;
+  background: rgba(7, 11, 24, 0.94);
+  backdrop-filter: blur(12px);
+  border-top: 1px solid rgba(190, 208, 255, 0.1);
+  box-shadow: var(--rim);
+  color: var(--text-primary);
+}
+
+.book-bar--note {
+  justify-content: center;
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+}
+
+/* The page keeps its last row clear of the bar. */
+.book-bar-open .app-shell__main {
+  padding-bottom: calc(var(--tabbar-h) + env(safe-area-inset-bottom, 0px) + 96px);
+}
+
+.book-bar__book {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  flex: 0 1 260px;
+  color: inherit;
+  text-decoration: none;
+  border-radius: var(--radius-tile);
+  outline: none;
+}
+.book-bar__book:focus-visible {
+  box-shadow: 0 0 0 2px var(--gold);
+}
+
+.book-bar__cover {
+  flex-shrink: 0;
+  width: 48px;
+  height: 48px;
+  border-radius: 4px;
+  object-fit: cover;
+}
+.book-bar__cover--empty {
+  background: var(--space-raised);
+}
+
+.book-bar__titles {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.book-bar__title,
+.book-bar__chapter {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.book-bar__title {
+  font-weight: 600;
+}
+.book-bar__chapter {
+  font-size: 0.82rem;
+  color: var(--text-muted);
+}
+
+.book-bar__controls {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.book-bar__btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  outline: none;
+}
+.book-bar__btn svg {
+  width: 18px;
+  height: 18px;
+  fill: currentColor;
+  stroke: currentColor;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.book-bar__btn:hover {
+  color: var(--text-primary);
+  background: rgba(190, 208, 255, 0.08);
+}
+.book-bar__btn:focus-visible {
+  color: var(--text-primary);
+  box-shadow: 0 0 0 2px var(--gold);
+}
+.book-bar__btn--skip span {
+  font-size: 0.78rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.book-bar__btn--play {
+  width: 44px;
+  height: 44px;
+  background: rgba(244, 247, 253, 0.12);
+  color: var(--text-primary);
+}
+.book-bar__close svg {
+  fill: none;
+}
+
+.book-bar__scrub {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.book-bar__time {
+  flex-shrink: 0;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+.book-bar__range {
+  flex: 1 1 auto;
+  min-width: 60px;
+  accent-color: var(--text-secondary);
+}
+.book-bar__range:focus-visible {
+  outline: 2px solid var(--gold);
+  outline-offset: 2px;
+}
+
+.book-bar__speed select {
+  background: rgba(244, 247, 253, 0.06);
+  color: var(--text-primary);
+  border: 1px solid rgba(190, 208, 255, 0.14);
+  border-radius: 6px;
+  padding: 4px 6px;
+  font: inherit;
+  font-size: 0.85rem;
+  outline: none;
+}
+.book-bar__speed select:focus-visible {
+  box-shadow: 0 0 0 2px var(--gold);
+}
+
+.book-bar .visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+/* Narrower than a wide window: the bar wraps into two rows — the book and
+   its controls, then the scrubber under them — rather than squeezing the
+   scrubber until its times run into the speed menu. */
+@media (max-width: 1100px) {
+  .book-bar {
+    flex-wrap: wrap;
+    gap: 6px 10px;
+    padding: 8px 12px;
+  }
+  .book-bar__book {
+    flex: 1 1 0;
+  }
+  .book-bar__scrub {
+    order: 3;
+    flex-basis: 100%;
+  }
+  .book-bar-open .app-shell__main {
+    padding-bottom: calc(var(--tabbar-h) + env(safe-area-inset-bottom, 0px) + 150px);
+  }
+}
+/* A phone: the rail is gone, so the bar runs edge to edge, and the chapter
+   skips give way to the 15/30 skips every listener reaches for first. */
+@media (max-width: 860px) {
+  .book-bar {
+    left: 0;
+  }
+}
+@media (max-width: 520px) {
+  .book-bar__controls .book-bar__btn:first-child,
+  .book-bar__controls .book-bar__btn:last-child {
+    display: none;
+  }
+}

@@ -220,7 +220,7 @@ counts once when it finishes, not once per part.
    into title, author and series, and a browse grid with covers. **Built**;
    the narrator moved to step 3, for the reason above.
 2. Playing a book: resume by default, chapters list and chapter skip, 15/30
-   skips, speed per book.
+   skips, speed per book. **Built**; see "Step 2, as built" below.
 3. The sleep timer, the narrator read from tags, and the author, narrator and
    series filters.
 
@@ -229,6 +229,42 @@ test libraries, and the 115 books' tags are read and reported. Whether they
 are `.m4b` files or folders of parts, and where author, narrator and series
 really sit, decides the details of step 1, not its shape: both forms of book
 are planned.
+
+## Step 2, as built (2026-11-03)
+
+**A book plays in a small player of its own, beside the main one, not as a
+mode of it.** "The music player, plus" above assumed the music player could
+carry a book. It cannot without bending everything else: the main player is
+built around one file per item, and its position, resume, progress writes,
+queue and the desktop's mpv path all take the element's clock to be the
+item's clock. A book of seven parts breaks that in every one of those places
+at once. So the book player is one audio element, one clock laid over all the
+parts, and a bar along the foot of the window that stays while you browse. It
+holds no queue, which answers this ADR's trap by construction: there is
+nowhere for a chapter to be queued. The two players never sound together:
+starting a book stops the main player, and the main player starting pauses
+the book.
+
+- **The server lays a book out** (`GET /api/items/{id}/book`): its parts end to
+  end with each one's start on the book's clock, its chapters, and the
+  caller's place and speed. Chapters are a one-file book's own when it has
+  them, else one per part.
+- **Progress is written against the book**, on the book's clock, never against
+  a part. The progress route accepts a book (it refused every container
+  before) and calls it **finished within its last minute**, not at a film's
+  percentage: 90% of a ten-hour book is an hour unheard.
+- **Speed is per book and per person**, a nullable `speed` on
+  `playback_state` (schema 90). Absent until chosen, which plays at 1×.
+  Choosing a speed is not a place, so it puts nothing on the Continue shelf.
+- **Resume is the default**: Play carries on from five seconds before the
+  saved place. **Start over sits beside it** as a second button, the way a
+  comic's does, rather than in the menu as written above; it is still never a
+  question.
+- **Continue Listening for books is the audiobooks library's own shelf**, at
+  the top of the library. Home's shelves and its spotlight leave books out.
+- **Not in step 2**: the desktop app plays books through its web view, not
+  mpv; there is no volume control on the bar (the system's is used); media
+  keys are the main player's only. None of these is needed to listen.
 
 ## Answered by the owner, 2026-11-03
 

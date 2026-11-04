@@ -11,6 +11,7 @@ import { ApiFailure, apiGet, apiPost, apiSend, apiUpload } from "./client";
 import type { PreviewSheets } from "@/lib/previews";
 import { addPasskey, signInWithPasskey } from "@/lib/webauthn";
 import type {
+  BookInfo,
   BackupFile,
   HistorySample,
   Invite,
@@ -1102,6 +1103,20 @@ export function useSetComicPlace(id: number) {
       const pages = qc.getQueryData<ComicPages>(["comic-pages", id])?.pages;
       if (pages !== undefined && page === pages - 1) invalidateWatchState(qc);
     },
+  });
+}
+
+/*
+ * A book's parts on one timeline, and the caller's place and speed in it
+ * (ADR 0116 step 2). Keyed ["book", id]: the book player invalidates it when
+ * listening stops, so the page behind the bar shows the new place.
+ */
+export function useBookInfo(id: number, enabled = true) {
+  return useQuery({
+    queryKey: ["book", id],
+    queryFn: ({ signal }) =>
+      apiGet<BookInfo>(`/api/items/${id}/book`, signal),
+    enabled: enabled && id > 0,
   });
 }
 
@@ -3321,6 +3336,8 @@ export function invalidateWatchState(qc: QueryClient) {
     "watchlist",
     // ...and puts it on Rate what you've watched.
     "to-rate",
+    // A book's place and finish live on its own route (ADR 0116 step 2).
+    "book",
   ]) {
     qc.invalidateQueries({ queryKey: [key] });
   }

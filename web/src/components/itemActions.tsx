@@ -19,6 +19,7 @@ import {
 import { usePlayback } from "@/playback/PlaybackProvider";
 import { apiGet } from "@/api/client";
 import { isBook, isComic, isContainer, isMusic, isPicture, isROM, watchedVerb } from "@/lib/kind";
+import { useBookPlayer } from "@/playback/BookPlayer";
 import { startOf } from "@/playback/queueOrder";
 import { AddToPlaylist } from "./AddToPlaylist";
 import { RemoveDialog } from "./RemoveDialog";
@@ -203,6 +204,7 @@ export function useItemActions(): ItemActions {
   const navigate = useNavigate();
   const setWatched = useSetWatchedByID();
   const pb = usePlayback();
+  const book = useBookPlayer();
   const qc = useQueryClient();
   const isAdmin = useIsAdmin();
   const [playlistFor, setPlaylistFor] = useState<Item | null>(null);
@@ -402,9 +404,35 @@ export function useItemActions(): ItemActions {
         ];
       }
 
-      // A book plays once ADR 0116 step 2 builds its player; until then play,
-      // queue and playlist would hand its parts to the film player. A part is
-      // a file and can be removed; the book is its folder.
+      /*
+       * A book plays in the book player, as one item (ADR 0116 step 2): never
+       * queued, never added to a playlist, and its parts never offered alone,
+       * which is how a book becomes a playlist of its chapters. Play resumes;
+       * Start over is beside it, not a question. A part is a file and can be
+       * removed; the book is its folder.
+       */
+      if (item.kind === "book" && book) {
+        const started = (item.progress?.position_ms ?? 0) > 0 && !item.progress?.watched;
+        const verb = watchedVerb(item);
+        const seen = item.progress?.watched ?? false;
+        return [
+          {
+            label: started ? "Continue listening" : "Play",
+            onSelect: () => void book.play(item.id, started ? undefined : 0),
+          },
+          ...(started
+            ? [{ label: "Start over", onSelect: () => void book.play(item.id, 0) }]
+            : []),
+          {
+            label: seen ? `Mark as ${verb.negated}` : `Mark as ${verb.past}`,
+            onSelect: () => setWatched.mutate({ itemID: item.id, watched: !seen }),
+          },
+          {
+            label: "Go to details",
+            onSelect: () => navigate(`/item/${item.id}`),
+          },
+        ];
+      }
       if (isBook(item)) {
         return [
           {
@@ -563,6 +591,7 @@ export function useItemActions(): ItemActions {
       navigate,
       setWatched,
       pb,
+      book,
       isAdmin,
       gathering,
       playContainer,
