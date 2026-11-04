@@ -1065,6 +1065,27 @@ func (s *Scanner) reconcileLibrary(ctx context.Context, lib store.Library, p *Pr
 		return s.st.TouchLibraryScanned(ctx, lib.ID)
 	}
 
+	// Books group by folder, read from tags and folder names together
+	// (ADR 0116), and take none of the video passes below: "Emissary 1of4" is
+	// a part of a book, not a multi-part film.
+	if lib.Kind == media.LibraryAudiobooks {
+		if err := s.reconcileBooks(ctx, lib, p); err != nil {
+			s.log.Warn("book reconciliation failed", "library", lib.ID, "error", err)
+		}
+		if n, err := s.st.PruneEmptyContainers(ctx, lib.ID); err != nil {
+			s.log.Warn("pruning empty containers failed", "library", lib.ID, "error", err)
+		} else if n > 0 {
+			s.log.Info("pruned empty containers", "library", lib.ID, "count", n)
+		}
+		if marked, restored, err := s.st.ReconcileMissingContainers(ctx, lib.ID); err != nil {
+			s.log.Warn("reconciling missing books failed", "library", lib.ID, "error", err)
+		} else if marked > 0 || restored > 0 {
+			s.log.Info("books followed their parts",
+				"library", lib.ID, "now_missing", marked, "restored", restored)
+		}
+		return s.st.TouchLibraryScanned(ctx, lib.ID)
+	}
+
 	// A retro library has no hierarchy to reconcile (ADR 0073): every ROM is
 	// a top-level game, and the video passes below would re-parse its name
 	// looking for seasons and parts. Identification is the identify worker's,
@@ -1422,6 +1443,8 @@ func reinterpreted(stored string, parsed media.Kind) bool {
 		return stored != "rom"
 	case media.KindComic:
 		return stored != "comic"
+	case media.KindBookPart:
+		return stored != "book_part"
 	default:
 		return stored != "other"
 	}

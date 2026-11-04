@@ -875,7 +875,7 @@ should be able to show them side by side without explaining the gap.
 
 ### `POST /api/libraries`
 
-`kind` is one of `movie`, `show`, `music`, `picture`, `retro`, `comics`, `other`. Every path must
+`kind` is one of `movie`, `show`, `music`, `picture`, `retro`, `comics`, `audiobooks`, `other`. Every path must
 exist and be a directory; all are validated **before** anything is inserted, so
 a typo in the third location does not leave a half-made library behind.
 
@@ -1067,7 +1067,8 @@ the body. Scans are never queued.
 
 **`kind` is permanent.** It decides which files are scanned at all — a `music`
 library indexes audio, a `picture` library images, a `retro` library ROMs and
-disc images, a `comics` library `.cbz`, `.cb7` and `.pdf` comics, everything else video — and
+disc images, a `comics` library `.cbz`, `.cb7` and `.pdf` comics, an `audiobooks`
+library audio including `.m4b`, everything else video — and
 it biases matching between films and TV. There is no endpoint to change it:
 altering it would mean a rescan re-litigating identity for an entire library,
 which is what field locking exists to prevent. Remove the library and add it
@@ -1422,6 +1423,30 @@ or missing archive is `503` on all three.
 **An account with a content limit sees no comics** until an administrator rates
 one by hand on its page. Nothing rates them otherwise, and an unrated title is
 hidden from a limited account, as an unrated film is.
+
+### Audiobooks
+
+An `audiobooks` library ([ADR 0116](adr/0116-an-audiobook-is-its-own-library.md))
+indexes the audio a music library does, and `.m4b`, which only this kind takes.
+**Every book is a `book` item over one or more `book_part` items**: a folder
+holding audio and no folders of audio is one book and its files are the parts;
+a file at the library's root, or beside folders of books, is a book of one
+part. The browse grid's top level is books; a book's parts are its children,
+and `sort=track` lists them in the order they play.
+
+A book's `title` is its folder's name with a leading number and an
+abridgement mark taken off, its `series` the folder above (when that is not
+the root) and its `episode` the number in it: `Deep Space Nine/03 - Warped -
+Abridged/` is *Warped*, Deep Space Nine #3. `edition` is `"Abridged"` when the
+name says so; abridged and unabridged recordings are two books. `artist` is
+the author: the parts' album artist tag, else their artist tag, `Last, First`
+turned round. A part's `title` is its own title tag when the parts' titles
+differ, else `Part N`. Covers are the album cover pass's, plus any picture in
+the book's own folder.
+
+A book does not play yet (ADR 0116 step 2), is not matched by any provider,
+cannot be shared with a paired server, and is not offered over DLNA. **An
+account with a content limit sees no books**, for the reason it sees no comics.
 
 ### `GET /api/items/{id}/photo`
 

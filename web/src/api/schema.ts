@@ -6671,7 +6671,7 @@ export interface components {
             /** Format: int64 */
             id: number;
             name: string;
-            /** @description **An open set.** `movie`, `show`, `music`, `picture` and `retro` today; a new kind is an additive change, so a client with an exhaustive switch is relying on a guarantee this contract does not give. */
+            /** @description **An open set.** `movie`, `show`, `music`, `picture`, `retro`, `comics` and `audiobooks` today; a new kind is an additive change, so a client with an exhaustive switch is relying on a guarantee this contract does not give. */
             kind: string;
             /**
              * @description The library's first location.
@@ -6820,15 +6820,15 @@ export interface components {
             id: number;
             /** Format: int64 */
             library_id: number;
-            /** @description **An open set** (ADR 0018). `movie`, `episode`, `show`, `season`, `serial`, `part`, `chapter`, `collection`, `artist`, `album`, `track`, `gallery`, `photo`, `playlist`, `rom` and `other` today. New kinds arrive without a major version, so a client with an exhaustive switch is relying on a guarantee this contract does not give. */
+            /** @description **An open set** (ADR 0018). `movie`, `episode`, `show`, `season`, `serial`, `part`, `chapter`, `collection`, `artist`, `album`, `track`, `gallery`, `photo`, `playlist`, `rom`, `comic`, `book`, `book_part` and `other` today. New kinds arrive without a major version, so a client with an exhaustive switch is relying on a guarantee this contract does not give. */
             kind: string;
             title: string;
             year: number | null;
-            /** @description On a track, read in the music sense (ADR 0024): `series` is the album, `season` the disc, `episode` the track number. */
+            /** @description On a track, read in the music sense (ADR 0024): `series` is the album, `season` the disc, `episode` the track number. On a `book` (ADR 0116), `series` is the series it belongs to and `episode` its number in it; on a `book_part`, `episode` is the part's place in its book. */
             series: string | null;
             season: number | null;
             episode: number | null;
-            /** @description A music track's own performer, present only on music. Distinct from the album artist that groups the record — on a compilation they differ, which is the whole reason both exist. */
+            /** @description A music track's own performer, present only on music, and a `book`'s author (ADR 0116). Distinct from the album artist that groups the record — on a compilation they differ, which is the whole reason both exist. */
             artist?: string | null;
             /**
              * @description The edition marker the filename claimed (ADR 0042), or absent.

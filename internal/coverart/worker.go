@@ -192,7 +192,11 @@ func (w *Worker) processAlbum(ctx context.Context, album store.Item) bool {
 		return false
 	}
 
-	img, err := w.res.ForAlbum(ctx, paths)
+	find := w.res.ForAlbum
+	if album.Kind == "book" {
+		find = w.res.ForBook
+	}
+	img, err := find(ctx, paths)
 	switch {
 	case errors.Is(err, ErrNoArt):
 		// The ordinary outcome for a lot of albums. Stamped so it is not asked

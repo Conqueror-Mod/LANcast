@@ -241,7 +241,7 @@ const enrichableKindsNoMusic = `kind NOT IN (` + unmatchableKinds + `, ` + music
 
 // unmatchableKinds are the kinds no provider can ever answer for, as an SQL
 // list: the one list enrichment, the review queue and re-parsing all exclude.
-const unmatchableKinds = `'track', 'photo', 'gallery', 'rom', 'comic'`
+const unmatchableKinds = `'track', 'photo', 'gallery', 'rom', 'comic', 'book', 'book_part'`
 
 // musicKinds are matched by MusicBrainz and by nothing else (ADR 0115). They
 // are never re-parsed: re-parsing guesses a video's filename.

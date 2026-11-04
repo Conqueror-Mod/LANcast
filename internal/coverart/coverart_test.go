@@ -354,3 +354,22 @@ func TestSharedWithOtherAlbums(t *testing.T) {
 		t.Error("non-audio files were counted as another album's tracks")
 	}
 }
+
+// A book's cover is whatever picture its folder holds, front before back, and
+// never a format the cache cannot store (ADR 0116).
+func TestPickAnyImageTakesTheFirstStorablePicture(t *testing.T) {
+	for _, c := range []struct {
+		names []string
+		want  string
+	}{
+		{[]string{"Emissary2.jpg", "Emissary1.jpg", "Emissary 1of4.mp3"}, "Emissary1.jpg"},
+		{[]string{"Legends of the Ferengi.gif", "Legends of the Ferengi.jpg"}, "Legends of the Ferengi.jpg"},
+		{[]string{"Objective Bajor.JPG"}, "Objective Bajor.JPG"},
+		{[]string{"rule10.png", "rule2.png"}, "rule2.png"},
+		{[]string{"only.gif", "notes.txt"}, ""},
+	} {
+		if got := PickAnyImage(c.names); got != c.want {
+			t.Errorf("PickAnyImage(%v) = %q, want %q", c.names, got, c.want)
+		}
+	}
+}

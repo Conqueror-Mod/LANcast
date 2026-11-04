@@ -182,6 +182,13 @@ func (s *Server) putShare(w http.ResponseWriter, r *http.Request) {
 			"comics libraries cannot be shared with another server")
 		return
 	}
+	// Nor audiobooks (ADR 0116), which stay on this server until somebody
+	// asks for them elsewhere.
+	if l.Kind == media.LibraryAudiobooks {
+		writeError(w, http.StatusBadRequest, "not_shareable",
+			"audiobook libraries cannot be shared with another server")
+		return
+	}
 	if body.Ceiling != "" && !ceilingApplies(l.Kind) {
 		writeError(w, http.StatusBadRequest, "bad_request",
 			"nothing in this library carries a certificate, so a limit would do nothing")

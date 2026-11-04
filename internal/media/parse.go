@@ -156,6 +156,8 @@ func IsScannable(path, libKind string) bool {
 		return IsROM(path)
 	case LibraryComics:
 		return IsComic(path)
+	case LibraryAudiobooks:
+		return IsBookAudio(path)
 	default:
 		return IsVideo(path)
 	}
@@ -359,6 +361,13 @@ func Parse(root, path, libKind string) Info {
 	if libKind == LibraryComics {
 		title, year := ComicTitle(path)
 		return Info{Kind: KindComic, Title: title, Year: year, Series: ComicSeries(root, path)}
+	}
+
+	// A book's part is named by the book it belongs to, which only the whole
+	// folder can tell (ADR 0116); the scan groups the parts after the walk.
+	// "Emissary 1of4" must not reach the season and episode heuristics below.
+	if libKind == LibraryAudiobooks {
+		return Info{Kind: KindBookPart, Title: tidy(base)}
 	}
 
 	if m := reSeasonEp.FindStringSubmatch(base); m != nil {
