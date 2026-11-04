@@ -309,6 +309,64 @@ func (r *Resolver) ForAlbum(ctx context.Context, trackPaths []string) (*Image, e
 	return nil, ErrNoArt
 }
 
+// ForBook finds a cover for a book (ADR 0116), given its parts in order.
+//
+// Everything ForAlbum looks for, then one thing more: **any picture in the
+// book's own folder**. Book rips name their covers after the book —
+// `Emissary1.jpg`, `rule1.jpg`, `Objective Bajor.JPG`, all from the test
+// library — where a ripped album says `cover.jpg`. Only the book's own folder
+// is searched this way, never the series folder above it, which holds no audio
+// and whose picture, if any, is the series'. A folder whose audio belongs to
+// other books too gives nothing, for the reason sharedWithOtherAlbums gives.
+func (r *Resolver) ForBook(ctx context.Context, partPaths []string) (*Image, error) {
+	img, err := r.ForAlbum(ctx, partPaths)
+	if err == nil || !errors.Is(err, ErrNoArt) || len(partPaths) == 0 {
+		return img, err
+	}
+	dir := filepath.Dir(partPaths[0])
+	entries, rerr := os.ReadDir(dir)
+	if rerr != nil {
+		return nil, ErrNoArt
+	}
+	names := make([]string, 0, len(entries))
+	for _, e := range entries {
+		if !e.IsDir() {
+			names = append(names, e.Name())
+		}
+	}
+	if sharedWithOtherAlbums(names, dir, partPaths) {
+		return nil, ErrNoArt
+	}
+	name := PickAnyImage(names)
+	if name == "" {
+		return nil, ErrNoArt
+	}
+	full := filepath.Join(dir, name)
+	body, rerr := readImage(full)
+	if rerr != nil {
+		return nil, ErrNoArt
+	}
+	return &Image{Bytes: body, Source: SourceSidecar, From: full}, nil
+}
+
+// PickAnyImage chooses the first storable picture in a folder, read in the
+// order a person would ("Emissary1.jpg" before "Emissary2.jpg", which is the
+// front before the back), or "" if there is none. A format the artwork cache
+// cannot store — the test library's one `.gif` — is passed over.
+func PickAnyImage(names []string) string {
+	sorted := append([]string(nil), names...)
+	sort.SliceStable(sorted, func(i, j int) bool { return media.NaturalLess(sorted[i], sorted[j]) })
+	for _, n := range sorted {
+		ext := strings.ToLower(filepath.Ext(n))
+		for _, ok := range sidecarExts {
+			if ext == ok {
+				return n
+			}
+		}
+	}
+	return ""
+}
+
 // sharedWithOtherAlbums reports whether a directory holds audio that does not
 // belong to this album — which makes any image in it a directory's picture
 // rather than this record's cover.
@@ -331,7 +389,7 @@ func sharedWithOtherAlbums(names []string, dir string, trackPaths []string) bool
 		}
 	}
 	for _, n := range names {
-		if !media.IsAudio(n) {
+		if !media.IsBookAudio(n) {
 			continue
 		}
 		ours--

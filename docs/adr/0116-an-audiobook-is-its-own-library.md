@@ -54,10 +54,12 @@ around artist → album → track. Retro and comics showed that a kind of its ow
 costs little here: a kind in `internal/media`, a scan rule, a library config in
 the client.
 
-A book is **one item**, whatever it is made of:
+A book is **one item**, whatever it is made of, and **always a `book` row over
+one or more `book_part` rows** (amended at step 1, below), so a one-file book
+and a forty-part rip play, resume and count the same way:
 
-- **One file** (`.m4b`, `.m4a`, `.mp3`): the book is the file, and its
-  chapters are the file's chapters.
+- **One file** (`.m4b`, `.m4a`, `.mp3`): a book of one part, and its chapters
+  are the file's chapters.
 - **A folder of parts** (`01.mp3`, `02.mp3`, … the common rip): the book is
   the folder, a container like an album, and its parts are children played in
   order. Each part is a chapter, named from its title tag or else its file.
@@ -87,6 +89,67 @@ All filename and tag guessing lives in `internal/media`, as ever.
   finds the book under each of them.
 - **Cover**: embedded art, else `cover.jpg` beside it, which is the existing
   cover pass unchanged.
+
+#### What the test library's files hold, read 2026-11-03, and what changed
+
+The rules above were assumptions. Every file in `TEST AUDIOBOOK LIBRARY` was
+read with ffprobe before step 1 was built, and most of them did not hold:
+
+- **12 books, not 115**: 37 MP3s, 33 hours. No `.m4b`, **no embedded chapters
+  and no embedded art** in any file.
+- **The album tag is on 9 of 37 files, and wrong where present**: "performed
+  live", "Star Trek", "Ferengi". Title tags read "Emissary 1of4" and "DS9 -
+  Fallen Heroes". **The folder name is the only reliable title.**
+- **The author is tagged once**: album artist "Peel, John" on *Objective
+  Bajor*. The artist tag is "Star Trek" or "Alien Voices" everywhere else —
+  a franchise or a label, not a writer.
+- **No file names a narrator.** Two put "by L. Nimoy and J. de Lancie" in a
+  comment, which is not safe to parse; the other comments are volume
+  normalisation data.
+- **Series and number are folders**: `Deep Space Nine/03 - Warped - Abridged`.
+  Gateways is the exception, numbered only in its filename (`_Bk7_`).
+- **"Abridged" is only ever in a folder name**, on 7 of the 12.
+- **Covers are loose images named after the book** (`Emissary1.jpg`,
+  `rule1.jpg`, `Objective Bajor.JPG`), never `cover.jpg`.
+
+So step 1 reads the details this way instead:
+
+- **Title**: the book folder's name, with a leading "NN - " and an
+  abridgement mark taken off, and the series' name taken off the front when
+  it is followed by a separator ("Gateways - What Lay Beyond" is *What Lay
+  Beyond*). For a book of one loose file, its title tag, else its filename.
+- **Series**: the folder above the book's, when that is not the library's
+  root. **Number**: the folder's leading number, else "Book N" / "BkN" in
+  the folder or first part's name. A sub-series number ("Millennium, Book 1")
+  stays in the title, as answer 4 allows.
+- **Author**: the album artist the parts agree on, else the artist tag, with
+  "Last, First" turned round; else, in an `Author/Series/Book` layout, the
+  folder above the series. The artist fallback gives "Star Trek" for 11 of
+  the 12 test books; the owner chose it over leaving the author empty.
+- **Abridged** from the folder or file name, stored as the book's `edition`.
+- **Narrator: deferred to step 3.** Nothing in the test library carries one,
+  so nothing at step 1 could be checked against a real file. Step 3 reads
+  the composer and `narrator` tags, stores every narrator as a credit, and
+  builds the filter on them.
+- **Part order**: by track number when every part has a different one, else
+  by filename in natural order ("disc 2" before "disc 10").
+- **Cover**: the album cover pass, then **any picture in the book's own
+  folder**, first in natural order. Never the series folder's, and never in a
+  folder whose audio belongs to other books too.
+
+**Which files make one book is the folder, and only the folder.** A folder
+holding audio and no folders of audio is one book. Files at the library's
+root, or beside folders of books, are each a book of their own. A folder is
+never split because its files' titles differ, because the ordinary rip names
+its files after chapters. The cost is visible in the test library:
+`Alien Voices/` holds two separate recordings loose in one folder and reads as
+one two-part book, whose parts keep their own titles. Moving each into a folder
+of its own makes them two books.
+
+Books need **no schema change**. The wide table's columns already fit: the
+author is `artist`, as an album's maker is; the series is `series` and the
+number `episode`, as an episode's are; "Abridged" is `edition`. A part's place
+in its book is its `episode`.
 
 **No provider in the first version.** No phone-home, and no key. Audible has
 no public API. Open Library is a candidate for later. Like MusicBrainz for
@@ -153,11 +216,13 @@ counts once when it finishes, not once per part.
 
 ## Steps, each mergeable on its own
 
-1. The kind, the scan rules (one file or a folder of parts), tags into title,
-   author, narrator and series, and a browse grid with covers.
+1. The kind, the scan rules (one file or a folder of parts), tags and folders
+   into title, author and series, and a browse grid with covers. **Built**;
+   the narrator moved to step 3, for the reason above.
 2. Playing a book: resume by default, chapters list and chapter skip, 15/30
    skips, speed per book.
-3. The sleep timer, and the author, narrator and series filters.
+3. The sleep timer, the narrator read from tags, and the author, narrator and
+   series filters.
 
 Before step 1: `devseed` creates `TEST AUDIOBOOK LIBRARY` like the other
 test libraries, and the 115 books' tags are read and reported. Whether they

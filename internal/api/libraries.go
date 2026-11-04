@@ -45,6 +45,8 @@ var validKinds = map[string]bool{
 	"retro": true,
 	// Comic book archives (ADR 0101).
 	"comics": true,
+	// Audiobooks, a book a folder of parts or a single file (ADR 0116).
+	"audiobooks": true,
 }
 
 func (s *Server) createLibrary(w http.ResponseWriter, r *http.Request) {

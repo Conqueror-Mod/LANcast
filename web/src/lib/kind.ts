@@ -28,6 +28,9 @@ const CONTAINER_KINDS = new Set([
   // path to.
   "artist",
   "album",
+  // A book holds its parts (ADR 0116), even when it has only one: a one-file
+  // book is still a book over a part, so it plays and counts the same way.
+  "book",
 ]);
 
 // isContainer decides whether an item should present its children rather than a
@@ -58,6 +61,8 @@ export function childLabel(childKind: string | undefined): string {
       return "Tracks";
     case "photo":
       return "Photos";
+    case "book_part":
+      return "Parts";
     default:
       return "Contents";
   }
@@ -101,6 +106,8 @@ function containerNoun(kind: string): string {
     // was honest about the schema and useless on a tile.
     case "playlist":
       return "track";
+    case "book":
+      return "part";
     default:
       return "item";
   }
@@ -154,6 +161,12 @@ export function isROM(item: Item): boolean {
   return item.kind === "rom";
 }
 
+// A book or one of its parts (ADR 0116). Played by the music player once
+// step 2 is built; until then a book is shown and not played.
+export function isBook(item: Item): boolean {
+  return item.kind === "book" || item.kind === "book_part";
+}
+
 // A comic (ADR 0101): read in LANcast's own reader, never handed to a player.
 export function isComic(item: Item): boolean {
   return item.kind === "comic";
@@ -177,6 +190,10 @@ const SQUARE_ART_KINDS = new Set([
   // film split was made to avoid. Square crops all of them equally.
   "gallery",
   "photo",
+  // A book cover is square more often than not (ADR 0116), and an audiobook
+  // cover almost always is.
+  "book",
+  "book_part",
 ]);
 
 // isSquareArt picks the tile's aspect ratio from what the art actually is.

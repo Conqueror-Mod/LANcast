@@ -18,7 +18,7 @@ import {
 } from "@/api/hooks";
 import { usePlayback } from "@/playback/PlaybackProvider";
 import { apiGet } from "@/api/client";
-import { isComic, isContainer, isMusic, isPicture, isROM, watchedVerb } from "@/lib/kind";
+import { isBook, isComic, isContainer, isMusic, isPicture, isROM, watchedVerb } from "@/lib/kind";
 import { startOf } from "@/playback/queueOrder";
 import { AddToPlaylist } from "./AddToPlaylist";
 import { RemoveDialog } from "./RemoveDialog";
@@ -399,6 +399,19 @@ export function useItemActions(): ItemActions {
             onSelect: () => navigate(`/item/${item.id}`),
           },
           ...remove,
+        ];
+      }
+
+      // A book plays once ADR 0116 step 2 builds its player; until then play,
+      // queue and playlist would hand its parts to the film player. A part is
+      // a file and can be removed; the book is its folder.
+      if (isBook(item)) {
+        return [
+          {
+            label: "Go to details",
+            onSelect: () => navigate(`/item/${item.id}`),
+          },
+          ...(item.kind === "book_part" ? remove : []),
         ];
       }
 

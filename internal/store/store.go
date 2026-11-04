@@ -3526,6 +3526,9 @@ func (s *Store) ApplyTrackTags(ctx context.Context, itemID int64, t TrackTags) e
 // re-import update the playlist rather than accumulate a second one.
 var derivedContainerKinds = map[string]bool{
 	"artist": true, "album": true, "gallery": true, "playlist": true,
+	// A book over its parts (ADR 0116). Born matched, like a gallery: no
+	// provider identifies books in this version, so there is nothing to wait for.
+	"book": true,
 }
 
 func (s *Store) EnsureDerivedContainer(ctx context.Context, libraryID int64, kind, path, title, sortTitle string, parentID *int64) (int64, error) {

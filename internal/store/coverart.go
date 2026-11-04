@@ -22,7 +22,7 @@ func (s *Store) PendingCoverArt(ctx context.Context, limit int) ([]Item, error) 
 		limit = 100
 	}
 	rows, err := s.db.QueryContext(ctx, `SELECT `+itemCols+` FROM media_item
-		WHERE kind = 'album' AND cover_checked_at IS NULL AND missing = 0
+		WHERE kind IN ('album', 'book') AND cover_checked_at IS NULL AND missing = 0
 		ORDER BY added_at LIMIT ?`, limit)
 	if err != nil {
 		return nil, fmt.Errorf("pending cover art: %w", err)
@@ -48,7 +48,7 @@ func (s *Store) PendingCoverArt(ctx context.Context, limit int) ([]Item, error) 
 func (s *Store) PendingCoverArtCount(ctx context.Context) (int, error) {
 	var n int
 	err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM media_item
-		WHERE kind = 'album' AND cover_checked_at IS NULL AND missing = 0`).Scan(&n)
+		WHERE kind IN ('album', 'book') AND cover_checked_at IS NULL AND missing = 0`).Scan(&n)
 	if err != nil {
 		return 0, fmt.Errorf("pending cover art count: %w", err)
 	}
@@ -66,7 +66,7 @@ func (s *Store) PendingCoverArtCount(ctx context.Context) (int, error) {
 // which is why ordering an album reads like ordering a TV season.
 func (s *Store) AlbumTrackPaths(ctx context.Context, albumID int64) ([]string, error) {
 	rows, err := s.db.QueryContext(ctx, `SELECT path FROM media_item
-		WHERE parent_id = ? AND kind = 'track' AND missing = 0 AND path IS NOT NULL
+		WHERE parent_id = ? AND kind IN ('track', 'book_part') AND missing = 0 AND path IS NOT NULL
 		ORDER BY COALESCE(season, 0), COALESCE(episode, 0), title`, albumID)
 	if err != nil {
 		return nil, fmt.Errorf("album track paths: %w", err)
@@ -108,7 +108,7 @@ func (s *Store) MarkArtworkChecked(ctx context.Context, itemID int64) error {
 // already gave up on, because the pending query is "cover_checked_at IS NULL"
 // and theirs is set.
 func (s *Store) ClearCoverArtChecks(ctx context.Context, libraryID int64) (int64, error) {
-	q := `UPDATE media_item SET cover_checked_at = NULL WHERE kind = 'album'`
+	q := `UPDATE media_item SET cover_checked_at = NULL WHERE kind IN ('album', 'book')`
 	args := []any{}
 	if libraryID > 0 {
 		q += ` AND library_id = ?`
