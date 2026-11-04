@@ -1,6 +1,6 @@
 import { useDevice } from "./device";
 import type { Item } from "@/api/types";
-import { isMusic, isPicture } from "./kind";
+import { isBook, isMusic, isPicture } from "./kind";
 
 /*
  * What the homepage spotlight shows.
@@ -51,7 +51,10 @@ export function usePinnedHero(): [number, (id: number) => void] {
  */
 export function heroEligible(item: Item | undefined | null): boolean {
   if (!item) return false;
-  return !!item.artwork?.fanart && !item.missing && !isMusic(item) && !isPicture(item);
+  // A book plays in the book player, never the hero's (ADR 0116).
+  return (
+    !!item.artwork?.fanart && !item.missing && !isMusic(item) && !isPicture(item) && !isBook(item)
+  );
 }
 
 function firstEligible(items: Item[] | undefined): Item | undefined {

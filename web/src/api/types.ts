@@ -413,6 +413,8 @@ export type OptimizedVersion = components["schemas"]["OptimizedVersion"];
 export type BackupsResponse = components["schemas"]["BackupList"];
 export type PrerollAnswer = components["schemas"]["PrerollAnswer"];
 export type ChapterList = components["schemas"]["ChapterList"];
+/** A book on one timeline (ADR 0116 step 2). */
+export type BookInfo = components["schemas"]["BookInfo"];
 export type Extra = components["schemas"]["Extra"];
 export type ExtraList = components["schemas"]["ExtraList"];
 export type RestoreStarted = components["schemas"]["RestoreStarted"];

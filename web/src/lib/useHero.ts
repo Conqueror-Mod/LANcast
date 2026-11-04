@@ -1,6 +1,6 @@
 import { useItem, useItems, useContinueWatching } from "@/api/hooks";
 import type { Item } from "@/api/types";
-import { isMusic, isPicture } from "./kind";
+import { isBook, isMusic, isPicture } from "./kind";
 import {
   pickHero,
   seedGenres,
@@ -56,7 +56,7 @@ export function useHeroSpotlight(recent: Item[] | undefined): HeroPick | null {
    */
   const wanted = mode === "recommended";
   const watchable = (continueWatching ?? []).find(
-    (i) => !isMusic(i) && !isPicture(i),
+    (i) => !isMusic(i) && !isPicture(i) && !isBook(i),
   );
   const seedID = wanted ? (watchable?.id ?? 0) : 0;
   const { data: seed } = useItem(seedID);

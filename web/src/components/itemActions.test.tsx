@@ -18,6 +18,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter, useLocation } from "react-router-dom";
 import { FocusProvider } from "@/focus/FocusController";
 import { PlaybackProvider } from "@/playback/PlaybackProvider";
+import { BookProvider } from "@/playback/BookPlayer";
 import { useItemActions } from "./itemActions";
 import type { Item } from "@/api/types";
 
@@ -75,10 +76,12 @@ beforeEach(async () => {
       <QueryClientProvider client={client}>
         <FocusProvider>
           <PlaybackProvider>
-            <MemoryRouter>
-              <Probe />
-              <LocationProbe />
-            </MemoryRouter>
+            <BookProvider>
+              <MemoryRouter>
+                <Probe />
+                <LocationProbe />
+              </MemoryRouter>
+            </BookProvider>
           </PlaybackProvider>
         </FocusProvider>
       </QueryClientProvider>,
@@ -314,14 +317,20 @@ describe("what a poster offers", () => {
   });
 
   /*
-   * A book is not played until ADR 0116 step 2 builds its player: Play would
-   * hand its parts to the film player, and a part queued alone is the
-   * "playlist of chapters" that ADR names as the trap.
+   * A book plays in the book player, as one item (ADR 0116 step 2): Play
+   * resumes, Start over sits beside it once started, and nothing queues it
+   * or adds it to a playlist. A part alone is never offered to play — that is
+   * the "playlist of chapters" the ADR names as the trap.
    */
-  it("offers a book and its parts their page and nothing to play", () => {
+  it("offers a book its own play, and a part nothing to play", () => {
     expect(labels(item({ kind: "book", child_count: 4 } as Partial<Item>))).toEqual([
+      "Play",
+      "Mark as played",
       "Go to details",
     ]);
+    expect(
+      labels(item({ kind: "book", child_count: 4, progress: { position_ms: 600_000, watched: false } } as Partial<Item>)),
+    ).toEqual(["Continue listening", "Start over", "Mark as played", "Go to details"]);
     expect(labels(item({ kind: "book_part" }))).toEqual(["Go to details"]);
   });
 

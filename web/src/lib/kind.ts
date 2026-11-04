@@ -137,6 +137,7 @@ export function isMusic(item: Item): boolean {
  */
 export function watchedVerb(item: Item): { past: string; negated: string } {
   if (isComic(item)) return { past: "read", negated: "unread" };
+  if (isBook(item)) return { past: "played", negated: "unplayed" };
   return isMusic(item)
     ? { past: "played", negated: "unplayed" }
     : { past: "watched", negated: "unwatched" };

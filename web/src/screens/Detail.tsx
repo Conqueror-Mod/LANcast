@@ -50,7 +50,7 @@ import {
 import { platformLabel } from "@/lib/platforms";
 import { retroAvailability } from "@/playback/retro";
 import { WEB_STATE_PREFIX, webStateCore } from "@/playback/retroWeb";
-import { useComicPages, useCollectionFilms, useGameSaves, useItemCollections, useOnWatchlist, useSetWatchlist, useOptimized, useSetOptimized, optimizedOf } from "@/api/hooks";
+import { useBookInfo, useComicPages, useCollectionFilms, useGameSaves, useItemCollections, useOnWatchlist, useSetWatchlist, useOptimized, useSetOptimized, optimizedOf } from "@/api/hooks";
 import type { OptimizedList } from "@/api/types";
 import { useQuery } from "@tanstack/react-query";
 import type { Item } from "@/api/types";
@@ -86,20 +86,25 @@ import { TagItem } from "@/components/TagItem";
 import { PointMenu, type MenuAction, type MenuPoint } from "@/components/Menu";
 import { collectionsMenu } from "@/lib/collectionsMenu";
 import type { Credit } from "@/api/types";
+import { useBookPlayer } from "@/playback/BookPlayer";
+import { chapterAt, clock } from "@/playback/bookTimeline";
+import { startedFloorMs } from "@/playback/resumePoint";
 import "./Detail.css";
 
 function PlayButton({
   onPlay,
   label = "Play",
+  icon = "▶",
 }: {
   onPlay: () => void;
   label?: string;
+  icon?: string;
 }) {
   const focusable = useFocusable(onPlay);
   return (
     <button {...focusable} className="detail__play" onClick={onPlay}>
       <span className="detail__play-icon" aria-hidden="true">
-        ▶
+        {icon}
       </span>
       {label}
     </button>
@@ -387,7 +392,8 @@ function detailActions(o: {
   // arrives there unasked, and its page has to be able to say no.
   if (o.onShelf) {
     out.push({
-      label: o.isMusic ? "Remove from Continue Listening" : "Remove from Continue Watching",
+      label:
+        o.isMusic || isBook(item) ? "Remove from Continue Listening" : "Remove from Continue Watching",
       onSelect: o.forget,
     });
   }
@@ -436,7 +442,9 @@ function watchedAction(
   marking: boolean,
 ): MenuAction {
   const verb = watchedVerb(item);
-  if (!isContainer(item)) {
+  // A book is one item over its parts (ADR 0116): finishing it is the book's
+  // own flag, and its parts are never marked one by one.
+  if (!isContainer(item) || item.kind === "book") {
     const seen = item.progress?.watched ?? false;
     return {
       label: seen ? `Mark as ${verb.negated}` : `Mark as ${verb.past}`,
@@ -1163,6 +1171,7 @@ export function Detail() {
                   note, not a control: nothing here can be pressed yet. */}
               {isROM(item) && !item.missing && <RetroActions item={item} />}
               {isComic(item) && !item.missing && <ComicActions item={item} />}
+              {isBookItem && !item.missing && <BookActions item={item} />}
               {!container && !isPicture(item) && !isROM(item) && !isComic(item) && !isBook(item) && !item.missing &&
                 (resumeSeconds({
                   positionMs: item.progress?.position_ms,
@@ -1299,7 +1308,8 @@ export function Detail() {
                   container,
                   isMusic,
                   isPlaylist,
-                  onShelf: !container && (onTheShelf ?? []).some((i) => i.id === item.id),
+                  onShelf:
+                    (!container || isBookItem) && (onTheShelf ?? []).some((i) => i.id === item.id),
                   forget: () => forgetPlace.mutate({ itemID: item.id, watched: false }),
                   download: () => {
                     const filename = downloadFilename(item);
@@ -1404,7 +1414,9 @@ export function Detail() {
           />
         )}
 
-        {container && children && children.length > 0 && (
+        {isBookItem && <BookChapters item={item} />}
+
+        {container && !isBookItem && children && children.length > 0 && (
           <section className="detail__children">
             <span className="section-label">
               {childLabel(children[0]?.kind)}
@@ -1598,6 +1610,116 @@ function ComicActions({ item }: { item: Item }) {
     </>
   ) : (
     <PlayButton label="Read" onPlay={() => navigate(`/read/${item.id}`)} />
+  );
+}
+
+/*
+ * A book's buttons (ADR 0116 step 2). Resume is the default, not an offer:
+ * the big button carries on from the saved place, and Start over sits beside
+ * it the way a comic's does, rather than a question asked on every press.
+ */
+function BookActions({ item }: { item: Item }) {
+  const player = useBookPlayer();
+  const { data: info } = useBookInfo(item.id);
+  if (!player || !info) return null;
+  if (!info.ready) {
+    return <p className="detail__book-note">Measuring this book. It can be played in a minute.</p>;
+  }
+  if (player.bookID === item.id) {
+    return (
+      <PlayButton
+        label={player.playing ? "Pause" : "Resume"}
+        icon={player.playing ? "❚❚" : "▶"}
+        onPlay={player.toggle}
+      />
+    );
+  }
+  const started =
+    !info.watched && info.position_ms >= startedFloorMs(info.duration_ms) && info.position_ms < info.duration_ms;
+  if (!started) {
+    return (
+      <PlayButton
+        label={info.watched ? "Listen again" : "Play"}
+        onPlay={() => void player.play(item.id, 0)}
+      />
+    );
+  }
+  return (
+    <>
+      <PlayButton
+        label={`Continue listening · ${clock(info.duration_ms - info.position_ms)} left`}
+        onPlay={() => void player.play(item.id)}
+      />
+      <SecondaryButton
+        label="Start over"
+        className="detail__play detail__play--secondary"
+        onPress={() => void player.play(item.id, 0)}
+      />
+    </>
+  );
+}
+
+function BookChapterRow({
+  index,
+  title,
+  length,
+  current,
+  onPick,
+}: {
+  index: number;
+  title: string;
+  length: number;
+  current: boolean;
+  onPick: () => void;
+}) {
+  const focusable = useFocusable(onPick);
+  return (
+    <li>
+      <button
+        {...focusable}
+        className={"book-chapters__row" + (current ? " book-chapters__row--current" : "")}
+        aria-current={current ? "true" : undefined}
+        aria-label={`Chapter ${index + 1}: ${title}, ${clock(length)}${current ? ", playing" : ""}`}
+        onClick={onPick}
+      >
+        <span className="book-chapters__n">{index + 1}</span>
+        <span className="book-chapters__title">{title}</span>
+        {current && <span className="book-chapters__now">Playing</span>}
+        <span className="book-chapters__len">{clock(length)}</span>
+      </button>
+    </li>
+  );
+}
+
+/*
+ * A book's chapters, in place of its parts drawn as tiles: a chapter is a
+ * place in the book, not a thing to open. Choosing one plays the book from
+ * there; the one playing now is marked in words, never in gold (design.md).
+ */
+function BookChapters({ item }: { item: Item }) {
+  const player = useBookPlayer();
+  const { data: info } = useBookInfo(item.id);
+  if (!player || !info || info.chapters.length === 0) return null;
+  const here = player.bookID === item.id;
+  const now = here ? chapterAt(info.chapters, player.timeMs) : -1;
+  return (
+    <section className="detail__children">
+      <span className="section-label">Chapters</span>
+      <ol className="book-chapters">
+        {info.chapters.map((ch, i) => (
+          <BookChapterRow
+            key={`${ch.start_ms}-${i}`}
+            index={i}
+            title={ch.title}
+            length={ch.end_ms - ch.start_ms}
+            current={i === now}
+            onPick={() =>
+              here ? player.seekTo(ch.start_ms) : void player.play(item.id, ch.start_ms)
+            }
+          />
+        ))}
+      </ol>
+    </section>
   );
 }
 

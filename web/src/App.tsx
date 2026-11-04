@@ -34,6 +34,8 @@ import { Setup, Login, JoinWithInvite, JoinWhileSignedIn } from "@/screens/Auth"
 import { MiniPlayer } from "@/components/MiniPlayer";
 import { PlaybackProvider } from "@/playback/PlaybackProvider";
 import { TogetherProvider } from "@/playback/TogetherProvider";
+import { BookProvider } from "@/playback/BookPlayer";
+import { BookBar } from "@/playback/BookBar";
 import { JoinRequestPrompt } from "@/components/JoinRequestPrompt";
 import { useAuthStatus, useForgetEndedSession } from "@/api/hooks";
 import { ServerEvents } from "@/api/serverEvents";
@@ -78,6 +80,9 @@ export function App() {
   // client scope, docs/music-client-plan.md).
   return (
     <PlaybackProvider>
+      {/* Books play in their own small player beside this one (ADR 0116
+          step 2); inside it, so each can stop the other. */}
+      <BookProvider>
       <TogetherProvider>
       {/* One stream for the signed-in window (ADR 0079). Outside the router's
           routes so it lives as long as the session does, not a screen. */}
@@ -156,12 +161,14 @@ export function App() {
         </Routes>
         {/* Outside Routes: it is what you see *instead of* the player screen. */}
         <MiniPlayer />
+        <BookBar />
         {/* A friend on another server asking to join what is playing. Outside
             Routes for the same reason as the mini player: it has to reach the
             host on whatever screen they are on. */}
         <JoinRequestPrompt />
       </AppShell>
       </TogetherProvider>
+      </BookProvider>
     </PlaybackProvider>
   );
 }
