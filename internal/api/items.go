@@ -940,6 +940,24 @@ func (s *Server) putProgress(w http.ResponseWriter, r *http.Request) {
 	// No container format means no file: the same test the store uses to
 	// tell a folder-shaped row from a playable one (ReconcileMissingContainers).
 	// Not an empty path -- a show's path is its folder, an artist's a key.
+	// A book is the exception, and the reason is ADR 0116's trap: it is one
+	// item however many files it is, so its place is written against the
+	// book and never against a part. Its length is its parts', and it is
+	// finished within its last minute rather than at a percentage.
+	if it.Kind == "book" {
+		watched, err := s.bookProgress(r, it, req.PositionMS, req.Watched)
+		if err != nil {
+			s.writeInternal(w, err, "book progress")
+			return
+		}
+		if err := s.st.SaveProgress(r.Context(), id, s.userID(r), req.PositionMS, watched); err != nil {
+			s.writeInternal(w, err, "save progress")
+			return
+		}
+		s.recordWatching(s.userID(r), it)
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
 	if it.Container == nil || *it.Container == "" {
 		writeError(w, http.StatusBadRequest, "not_playable",
 			"this item has no file and no play state of its own; mark its episodes or tracks instead")

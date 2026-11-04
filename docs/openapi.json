@@ -763,6 +763,125 @@
         }
       }
     },
+    "/items/{id}/book": {
+      "get": {
+        "operationId": "bookInfo",
+        "summary": "A book's parts on one timeline, and the caller's place in it",
+        "description": "ADR 0116 step 2. A book is one item however many files it is: its parts are laid end to end, each with its `start_ms` on the book's timeline, and progress is written against **the book** with `PUT /items/{id}/progress`, never against a part; a book is finished within its last minute. `chapters` are the file's own for a one-file book that carries them, else one per part. `ready` is false while any part is unprobed, because a part of unknown length cannot place the ones after it. `speed` is the caller's last choice for this book, absent when they never chose one (a book never played starts at 1×).",
+        "tags": [
+          "Items"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The book",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BookInfo"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Not a book (`not_a_book`)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such item",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/items/{id}/speed": {
+      "put": {
+        "operationId": "putSpeed",
+        "summary": "Keep the caller's speed for one book",
+        "description": "ADR 0116. Per book and per person, kept beside the play state; choosing a speed is not a place, so it puts nothing on the Continue shelf. From 0.75 to 2.",
+        "tags": [
+          "Items"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "speed"
+                ],
+                "properties": {
+                  "speed": {
+                    "type": "number",
+                    "minimum": 0.75,
+                    "maximum": 2
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": "Kept"
+          },
+          "400": {
+            "description": "Out of range, or not a book (`not_a_book`)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such item",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/items/{id}/chapters": {
       "get": {
         "operationId": "itemChapters",
@@ -19139,6 +19258,80 @@
           },
           "title": {
             "type": "string"
+          }
+        }
+      },
+      "BookPart": {
+        "type": "object",
+        "required": [
+          "id",
+          "title",
+          "start_ms",
+          "duration_ms"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "format": "int64",
+            "description": "The part's own item id: what `/stream/{id}` plays."
+          },
+          "title": {
+            "type": "string"
+          },
+          "start_ms": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Where the part begins on the book's timeline."
+          },
+          "duration_ms": {
+            "type": "integer",
+            "format": "int64",
+            "description": "0 while unprobed."
+          }
+        }
+      },
+      "BookInfo": {
+        "type": "object",
+        "required": [
+          "duration_ms",
+          "ready",
+          "parts",
+          "chapters",
+          "position_ms",
+          "watched"
+        ],
+        "properties": {
+          "duration_ms": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "ready": {
+            "type": "boolean"
+          },
+          "parts": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/BookPart"
+            }
+          },
+          "chapters": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Chapter"
+            }
+          },
+          "position_ms": {
+            "type": "integer",
+            "format": "int64",
+            "description": "The caller's place on the book's timeline."
+          },
+          "watched": {
+            "type": "boolean",
+            "description": "Finished: within its last minute, not at a film's percentage."
+          },
+          "speed": {
+            "type": "number",
+            "description": "Absent when never chosen."
           }
         }
       },

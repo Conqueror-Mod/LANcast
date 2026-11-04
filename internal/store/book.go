@@ -2,6 +2,8 @@ package store
 
 import (
 	"context"
+	"database/sql"
+	"errors"
 	"fmt"
 	"slices"
 	"strings"
@@ -107,4 +109,50 @@ func nullIfZero(n int) any {
 		return nil
 	}
 	return n
+}
+
+// BookParts returns a book's present parts in the order they play (ADR 0116).
+// A part's place is its `episode`, written by the scan.
+func (s *Store) BookParts(ctx context.Context, bookID int64) ([]Item, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT `+itemCols+` FROM media_item
+		 WHERE parent_id = ? AND kind = 'book_part' AND missing = 0
+		 ORDER BY COALESCE(episode, 0), sort_title`, bookID)
+	if err != nil {
+		return nil, fmt.Errorf("book parts: %w", err)
+	}
+	defer rows.Close()
+	return scanItems(rows)
+}
+
+// PlaybackSpeed is the rate this account last chose for this item, and false
+// when it never chose one. A book never played starts at 1× (ADR 0116, answer
+// 9), so "never chose" is an answer, not a default to fill in here.
+func (s *Store) PlaybackSpeed(ctx context.Context, itemID int64, userID string) (float64, bool, error) {
+	var v sql.NullFloat64
+	err := s.db.QueryRowContext(ctx,
+		`SELECT speed FROM playback_state WHERE item_id = ? AND user_id = ?`,
+		itemID, userID).Scan(&v)
+	if errors.Is(err, sql.ErrNoRows) {
+		return 0, false, nil
+	}
+	if err != nil {
+		return 0, false, fmt.Errorf("playback speed: %w", err)
+	}
+	return v.Float64, v.Valid, nil
+}
+
+// SetPlaybackSpeed keeps an account's rate for one item beside its position:
+// speed is per book and per person (ADR 0116), so it lives on the play state,
+// not on the item. A row made here holds no position, which is no position.
+func (s *Store) SetPlaybackSpeed(ctx context.Context, itemID int64, userID string, speed float64) error {
+	_, err := s.db.ExecContext(ctx, `
+		INSERT INTO playback_state (item_id, user_id, position_ms, watched, updated_at, speed)
+		VALUES (?, ?, 0, 0, ?, ?)
+		ON CONFLICT(item_id, user_id) DO UPDATE SET speed = excluded.speed`,
+		itemID, userID, time.Now().Unix(), speed)
+	if err != nil {
+		return fmt.Errorf("set playback speed: %w", err)
+	}
+	return nil
 }
