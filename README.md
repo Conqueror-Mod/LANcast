@@ -4,10 +4,10 @@ A self-hosted media server and library service. Plex's streamlined
 functionality, Kodi's customizability and versatility, and neither one's
 compromises.
 
-> **Status: v0.10.3 · M0–M4 built and released.** Point it at a folder and it
+> **Status: v0.10.4 · M0–M4 built and released.** Point it at a folder and it
 > scans, identifies, and plays — direct play, remux, or transcode, with working
-> seek and resume and hardware encoding. Films, TV, **music**, **pictures** and
-> **comics** are all first-class. Real metadata, artwork, ratings, subtitles,
+> seek and resume and hardware encoding. Films, TV, **music**, **pictures**,
+> **comics** and **audiobooks** are all first-class. Real metadata, artwork, ratings, subtitles,
 > playlists, multi-user accounts with per-account library and rating limits,
 > invite links, HTTPS, passkeys, two-factor sign-in, a sandboxed plugin
 > runtime, a native desktop window, servers that pair with each other, and a
