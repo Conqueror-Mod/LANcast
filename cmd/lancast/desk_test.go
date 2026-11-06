@@ -48,6 +48,36 @@ func TestOpeningBeforeTheWindowExistsCreatesIt(t *testing.T) {
 	}
 }
 
+/*
+ * The tray's pages are at the window's address, not localhost.
+ *
+ * Reported 2026-11-06: About loaded https://127.0.0.1:8080 while the window
+ * was at the public name. A page load there is another site, signed out, with
+ * no passkey that works. The script's fallback is that page load, so it must
+ * carry the public name; and so must a destination chosen before the window
+ * existed.
+ */
+func TestTheTrayFollowsTheWindowToItsPublicName(t *testing.T) {
+	d := newDesk("https://127.0.0.1:8080", false)
+	d.open(d.at("/settings?pane=about")) // chosen at login, before any window
+	d.setBase("https://media.example.net:8080")
+
+	w := &fakeWindow{}
+	d.attach(w)
+	if len(w.navigated) != 1 || w.navigated[0] != "https://media.example.net:8080/settings?pane=about" {
+		t.Fatalf("the waiting destination went to %v; want the public name", w.navigated)
+	}
+
+	d.open(d.at("/settings?pane=about"))
+	if len(w.evals) != 1 {
+		t.Fatalf("evals %v; an open window should route in place", w.evals)
+	}
+	js := w.evals[0]
+	if strings.Contains(js, "127.0.0.1") || !strings.Contains(js, `"https://media.example.net:8080/settings?pane=about"`) {
+		t.Fatalf("the page-load fallback is not at the public name:\n%s", js)
+	}
+}
+
 // Pressing Open twice while the window is being made asks for one window.
 func TestOneWindowIsAskedForAtATime(t *testing.T) {
 	d := newDesk("x", false)

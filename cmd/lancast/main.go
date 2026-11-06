@@ -388,6 +388,8 @@ func runWindow(l *launcher, d *desk) {
 		if name := publicNameOf(url, pin); name != "" {
 			l.publicName = name
 			winURL = l.windowURL(l.addr)
+			// The tray's pages too, or About signs you out (desk.setBase).
+			d.setBase(winURL)
 			slog.Info("opening the server at its public name", "name", name)
 		}
 	}
