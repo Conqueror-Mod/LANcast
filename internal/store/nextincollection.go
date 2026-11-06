@@ -106,8 +106,11 @@ func nextInSequence(items []Item, touched []int64) (next NextEpisode, from int) 
 		}
 	}
 	if inProgress >= 0 {
+		// from is still the film finished most recently (or -1): a resumed
+		// film can stand in a collection's shelf row, and that row says what
+		// it follows (collectionNext).
 		it := items[inProgress]
-		return NextEpisode{Item: &it, Resume: true, Started: true}, -1
+		return NextEpisode{Item: &it, Resume: true, Started: true}, latest
 	}
 	for i := latest + 1; i < len(items); i++ {
 		if p := items[i].Progress; p != nil && p.Watched {
@@ -144,25 +147,35 @@ func (s *Store) progressUpdatedAt(ctx context.Context, itemID int64, userID stri
  * it draws its own poster. Absent when:
  *
  *   - the collection is exhausted, or nothing follows;
- *   - the next film is already in progress, because then it is on the shelf
- *     on its own account, with its bar;
+ *   - the next film is in progress and still inside the shelf's window
+ *     (sinceUnix), because then it is on the shelf on its own account, with
+ *     its bar;
  *   - the next film's own state was written after that finish. That is how
  *     "Remove from Continue Watching" works here with nothing new to store
  *     removing writes the film's state (unwatched, position zero), which is
  *     later than the finish, and finishing another film in the collection
  *     later brings the row back for the film after that one.
+ *
+ * A film in progress but older than the window is NOT on the shelf on its
+ * own account, so the collection's row offers it. Without this the two left
+ * it to each other and neither showed it. Reported 2026-11-06: Jurassic Park
+ * finished, Jurassic World paused a month before, and Home offered nothing
+ * from the franchise while the after-film screen offered Jurassic World.
  */
-func (s *Store) collectionNext(ctx context.Context, collectionID, finishedAt int64, userID string) (*Item, bool, error) {
+func (s *Store) collectionNext(ctx context.Context, collectionID, finishedAt, sinceUnix int64, userID string) (*Item, bool, error) {
 	next, after, err := s.nextInCollection(ctx, collectionID, userID)
 	if err != nil {
 		return nil, false, err
 	}
-	if next.Item == nil || next.Exhausted || next.Resume || after == nil {
+	if next.Item == nil || next.Exhausted || after == nil {
 		return nil, false, nil
 	}
 	at, err := s.progressUpdatedAt(ctx, next.Item.ID, userID)
 	if err != nil {
 		return nil, false, err
+	}
+	if next.Resume && (sinceUnix == 0 || at >= sinceUnix) {
+		return nil, false, nil
 	}
 	if at >= finishedAt {
 		return nil, false, nil
