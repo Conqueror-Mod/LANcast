@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"testing"
+	"time"
 )
 
 func seq(states ...string) ([]Item, []int64) {
@@ -169,4 +170,93 @@ func TestContinueWatchingOffersTheNextFilmInACollection(t *testing.T) {
 	if got := shelf(); len(got) != 0 {
 		t.Fatalf("a finished franchise is still on the shelf: %v", got)
 	}
+}
+
+/*
+ * The report of 2026-11-06 in its own shape: Jurassic Park finished today,
+ * Jurassic World paused a month ago, and a four-week shelf. The paused film is
+ * the collection's next (a film in progress wins), it is too old to be on the
+ * shelf on its own account, and the collection's row used to step aside for
+ * it anyway, so nothing from the franchise showed at all.
+ */
+func TestAFilmPausedBeforeTheWindowIsOfferedByItsCollection(t *testing.T) {
+	ctx := context.Background()
+	st := newStore(t)
+	lib := mustLibrary(t, st)
+
+	id := func(path, title string) int64 {
+		if _, err := st.UpsertItem(ctx, file(lib.ID, path, title)); err != nil {
+			t.Fatal(err)
+		}
+		known, _ := st.KnownFiles(ctx, lib.ID)
+		return known[path].ID
+	}
+	park := id(`C:\m\jp.mkv`, "Jurassic Park")
+	lost := id(`C:\m\lw.mkv`, "The Lost World")
+	world := id(`C:\m\jw.mkv`, "Jurassic World")
+	coll, _, err := st.EnsureCollection(ctx, lib.ID, "tmdb", "328", "Jurassic Park Collection", "Jurassic Park Collection")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, f := range []int64{park, lost, world} {
+		if err := st.AddToCollection(ctx, f, coll, 0); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	now := time.Now().Unix()
+	window := now - 28*24*3600
+	if err := st.SaveProgress(ctx, world, "local", 3_087_835, false); err != nil {
+		t.Fatal(err)
+	}
+	backdate := func(item, at int64) {
+		if _, err := st.db.ExecContext(ctx,
+			`UPDATE playback_state SET updated_at = ? WHERE item_id = ? AND user_id = 'local'`, at, item); err != nil {
+			t.Fatal(err)
+		}
+	}
+	backdate(world, now-30*24*3600)
+	if err := st.SaveProgress(ctx, park, "local", 0, true); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := st.ContinueWatching(ctx, "local", 20, window)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 1 || got[0].ID != world {
+		t.Fatalf("shelf = %v; want Jurassic World (%d), offered by its collection", shelfIDs(got), world)
+	}
+	if c := got[0].ContinuesFrom; c == nil || c.CollectionID != coll || c.AfterID != park {
+		t.Fatalf("continues_from = %+v; want collection %d after Jurassic Park", c, coll)
+	}
+	if got[0].Progress == nil || got[0].Progress.PositionMS != 3_087_835 {
+		t.Errorf("the offered film lost its place: %+v", got[0].Progress)
+	}
+	// The shelf and the collection's own button agree.
+	next, err := st.NextInCollectionFor(ctx, coll, "local")
+	if err != nil || next.Item == nil || next.Item.ID != world || !next.Resume {
+		t.Fatalf("NextInCollectionFor = %+v, %v; want Jurassic World, resumed", next, err)
+	}
+
+	// Positive control: inside the window it is on the shelf on its own
+	// account, once, and not as the collection's row.
+	backdate(world, now-60)
+	backdate(park, now-30)
+	got, err = st.ContinueWatching(ctx, "local", 20, window)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 1 || got[0].ID != world || got[0].ContinuesFrom != nil {
+		t.Fatalf("recent pause: shelf = %v (continues_from %+v); want Jurassic World once, on its own account",
+			shelfIDs(got), got[0].ContinuesFrom)
+	}
+}
+
+func shelfIDs(items []Item) []int64 {
+	out := make([]int64, 0, len(items))
+	for _, it := range items {
+		out = append(out, it.ID)
+	}
+	return out
 }

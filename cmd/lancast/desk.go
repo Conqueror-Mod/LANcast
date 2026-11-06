@@ -51,6 +51,40 @@ func newDesk(base string, browser bool) *desk {
 		openReq: make(chan struct{}, 1), exitReq: make(chan struct{})}
 }
 
+/*
+ * at is a page of this server at the address the window uses, for the tray's
+ * items. Read when the item is chosen, not when the tray starts: the tray
+ * starts before the window has asked the server for its public name.
+ */
+func (d *desk) at(path string) string {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	return d.base + path
+}
+
+/*
+ * setBase moves the tray to the address the window opened at: the server's
+ * public name, where passkeys work (publicname.go).
+ *
+ * Reported 2026-11-06: About in the tray loaded https://127.0.0.1:8080 while
+ * the window was at the public name. That is another site to the browser, so
+ * it was signed out there, and a passkey, which belongs to the public name,
+ * could not sign it back in; only the authenticator code could. It goes
+ * through a page load whenever the page cannot route in place (the sign-in
+ * page, or a window the tray is creating), which is exactly when somebody is
+ * trying to get in.
+ */
+func (d *desk) setBase(base string) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	// A tray item chosen before the window existed is waiting under the old
+	// address; it goes where the window is going.
+	if rest, ok := strings.CutPrefix(d.pending, d.base); ok && strings.HasPrefix(rest, "/") {
+		d.pending = base + rest
+	}
+	d.base = base
+}
+
 // useBrowser switches to the browser after the fact, for the paths that find
 // out at window time that there will be no window.
 func (d *desk) useBrowser() {

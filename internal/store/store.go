@@ -3210,7 +3210,7 @@ func (s *Store) ContinueWatching(ctx context.Context, userID string, limit int, 
 			break
 		}
 		if r.kind == rowCollection {
-			next, ok, err := s.collectionNext(ctx, r.id, r.updated, userID)
+			next, ok, err := s.collectionNext(ctx, r.id, r.updated, sinceUnix, userID)
 			if err != nil {
 				return nil, fmt.Errorf("continue watching: %w", err)
 			}
