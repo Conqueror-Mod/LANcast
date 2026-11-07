@@ -1,6 +1,6 @@
 # ADR 0117 — Play on another of your own devices
 
-Date: 2026-11-07 · Status: **proposed**, built on the same day for review · Related: [ADR 0079](0079-the-server-says-when-something-changed.md), [ADR 0086](0086-a-tv-browses-as-somebody.md), Watch Together (`internal/together`)
+Date: 2026-11-07 · Status: **accepted** 2026-11-07 · Related: [ADR 0079](0079-the-server-says-when-something-changed.md), [ADR 0086](0086-a-tv-browses-as-somebody.md), Watch Together (`internal/together`)
 
 ## Context
 
@@ -27,6 +27,8 @@ The pieces are already in the tree:
   command only has to call one of them.
 
 ## Decision
+
+**Accepted by the owner on 2026-11-07**, as built (PR #1018).
 
 ### 1. A *player* is a signed-in window that offers itself
 
