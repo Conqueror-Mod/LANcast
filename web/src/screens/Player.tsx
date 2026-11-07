@@ -21,6 +21,7 @@ import { PlaybackStats } from "@/components/PlaybackStats";
 import { PlaybackSettings } from "@/components/PlaybackSettings";
 import { QueuePanel } from "@/components/QueuePanel";
 import { TogetherPanel } from "@/components/TogetherPanel";
+import { useJoinRequestShowing } from "@/components/JoinRequestPrompt";
 import { AddToPlaylist } from "@/components/AddToPlaylist";
 import { SkipGlyph } from "@/components/SkipGlyph";
 import {
@@ -710,6 +711,7 @@ export function Player() {
    * the screen, so Windows can send the film to the TV without composing it
    * (ADR 0111). Only while a native film is up, so browsing sends nothing.
    */
+  const joinRequest = useJoinRequestShowing();
   const overlayAsk = pb.native
     ? overlayKeptBy({
         native: pb.native,
@@ -723,6 +725,7 @@ export function Player() {
         introSkipped: showIntroSkipped,
         stats: showStats,
         stillWatching: !!pb.stillWatching,
+        joinRequest,
       })
     : null;
   useEffect(() => {
