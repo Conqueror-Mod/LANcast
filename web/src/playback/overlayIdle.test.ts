@@ -33,6 +33,7 @@ describe("overlayKeptBy", () => {
     [{ introSkipped: true }, "intro skipped"],
     [{ stats: true }, "stats"],
     [{ stillWatching: true }, "still watching"],
+    [{ joinRequest: true }, "join request"],
   ])("%o keeps the overlay up", (change, reason) => {
     expect(overlayKeptBy({ ...idle, ...change })).toBe(reason);
   });

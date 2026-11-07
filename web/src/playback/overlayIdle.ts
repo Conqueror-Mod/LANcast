@@ -23,6 +23,8 @@ export interface OverlayState {
   introSkipped: boolean;
   stats: boolean;
   stillWatching: boolean;
+  /** A friend is asking to join (JoinRequestPrompt), drawn over the film. */
+  joinRequest?: boolean;
 }
 
 /**
@@ -41,6 +43,7 @@ export function overlayKeptBy(s: OverlayState): string {
   if (s.introSkipped) return "intro skipped";
   if (s.stats) return "stats";
   if (s.stillWatching) return "still watching";
+  if (s.joinRequest) return "join request";
   return "";
 }
 

@@ -29,7 +29,7 @@ vi.mock("@/playback/PlaybackProvider", () => ({
 }));
 
 import { TogetherProvider, useTogetherRoom } from "@/playback/TogetherProvider";
-import { JoinRequestPrompt } from "./JoinRequestPrompt";
+import { JoinRequestPrompt, useJoinRequestShowing } from "./JoinRequestPrompt";
 
 let host: HTMLDivElement;
 let root: Root;
@@ -188,6 +188,57 @@ describe("a friend asking to join", () => {
     expect(calls.some((c) => c.method === "POST" && c.url === "/api/together/requests/q1/decline")).toBe(true);
     expect(calls.some((c) => c.url === "/api/together" && c.method === "POST")).toBe(false);
     expect(host.textContent).not.toContain("would like to watch");
+  });
+});
+
+/*
+ * Over a native film the desktop window takes the page off the screen while
+ * nothing is drawn on it (ADR 0111), and the prompt is drawn on it. The player
+ * learns it is showing from this hook, which must follow the prompt and never
+ * poll on its own.
+ */
+describe("whether the player knows a request is showing", () => {
+  let showing: boolean[] = [];
+  function Probe() {
+    showing.push(useJoinRequestShowing());
+    return null;
+  }
+
+  it("is true while the prompt asks and false once it is answered", async () => {
+    showing = [];
+    mockServer();
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    await act(async () => {
+      root.render(
+        <QueryClientProvider client={qc}>
+          <TogetherProvider>
+            <JoinRequestPrompt />
+            <Probe />
+          </TogetherProvider>
+        </QueryClientProvider>,
+      );
+    });
+    await flush();
+    expect(showing.at(-1)).toBe(true);
+    await press("Not now");
+    await flush();
+    expect(showing.at(-1)).toBe(false);
+  });
+
+  it("asks the server nothing by itself", async () => {
+    showing = [];
+    mockServer();
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    await act(async () => {
+      root.render(
+        <QueryClientProvider client={qc}>
+          <Probe />
+        </QueryClientProvider>,
+      );
+    });
+    await flush();
+    expect(showing.at(-1)).toBe(false);
+    expect(calls.some((c) => c.url === "/api/together/requests")).toBe(false);
   });
 });
 

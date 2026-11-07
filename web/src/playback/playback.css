@@ -475,6 +475,14 @@ html.lancast-native-video:has(.playback--full) .playback__native-cues,
 html.lancast-native-video:has(.playback--full) .playback__native-cues * {
   visibility: visible;
 }
+/* A friend asking to join (federation Phase 5) lives outside .player, so the
+   rule above hid it over a native film: the one screen it exists for. Its
+   children too, because `body *` sets hidden on each of them, not only the
+   box. Found from the same bug in ADR 0117's "Playing from" notice. */
+html.lancast-native-video:has(.playback--full) .join-prompt,
+html.lancast-native-video:has(.playback--full) .join-prompt * {
+  visibility: visible;
+}
 html.lancast-native-video .playback__video {
   visibility: hidden !important;
 }
