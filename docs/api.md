@@ -4791,7 +4791,8 @@ streams; `202`.
 
 ```json
 { "action": "play", "item_id": 87, "queue": [87, 88, 89],
-  "position_ms": 1284000, "from_start": false, "from_player": "a81kq0zz9wpd" }
+  "position_ms": 1284000, "from_start": false, "from_player": "a81kq0zz9wpd",
+  "from_name": "Phone" }
 ```
 
 | `action` | needs |
@@ -4801,8 +4802,12 @@ streams; `202`.
 | `volume` | `volume`, 0 to 1 |
 | `pause`, `resume`, `stop`, `next`, `previous` | nothing |
 
-`from_player` is the sending window's own player id, if it is one; the player
-is told that player's name as `from`. A `from` in the body is ignored. A command
+`from` tells the player who sent it. It is the sending player's own name when
+`from_player` names one of the caller's live players. Otherwise it is
+`from_name`, what the sending device calls itself, cleaned as a player's name
+is. Failing both, it is the server's description of the caller's browser, as
+Authorized devices shows it. A `from` in the body is ignored. A name the
+caller supplies is shown only on its own account's windows. A command
 that does not fit its action is `400 bad_request`; a player that is not the
 caller's, or not live, is `404 not_found`.
 

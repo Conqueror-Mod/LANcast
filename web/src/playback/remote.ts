@@ -168,12 +168,18 @@ export function useRemotePlayers(enabled: boolean, poll = true) {
   });
 }
 
-/** Sends one command to one of your players, naming this window as the sender. */
+/*
+ * Sends one command to one of your players, naming this window as the
+ * sender: by its player id when it offers itself, and always by the name it
+ * was given, so a phone used only as a remote is still named on the screen
+ * it sent to.
+ */
 export function sendCommand(playerID: string, cmd: RemoteCommandRequest): Promise<void> {
   const self = getRemoteDevice();
   return apiSend(`/api/remote/players/${encodeURIComponent(playerID)}/commands`, "POST", {
     ...cmd,
     from_player: self.enabled ? self.id : undefined,
+    from_name: self.name,
   });
 }
 

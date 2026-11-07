@@ -187,7 +187,7 @@ difference: a new player, or a new name, item or play state. Position alone is
 not a change; a controller extrapolates it (ADR 0117 §4).
 */
 func (m *Manager) Report(user, id string, r Report) (p Player, changed bool) {
-	r.Name = cleanName(r.Name)
+	r.Name = CleanName(r.Name)
 	switch r.Kind {
 	case KindDesktop, KindBrowser, KindPhone:
 	default:
@@ -370,8 +370,10 @@ func (m *Manager) announce(users []string) {
 	}
 }
 
-// cleanName trims a player's name to something a list can show.
-func cleanName(s string) string {
+// CleanName trims a device's name to something a list can show: control
+// characters out, spaces trimmed, at most 60 runes, "Unnamed device" for
+// nothing at all.
+func CleanName(s string) string {
 	r := []rune{}
 	for _, c := range s {
 		if c < 0x20 || c == 0x7f {

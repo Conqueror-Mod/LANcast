@@ -7918,6 +7918,8 @@ export interface components {
             volume?: number;
             /** @description The sending window's own player id, if it is one. The player is told that player's name as `from`. */
             from_player?: string;
+            /** @description What the sending device calls itself. Used for `from` when `from_player` is not one of the caller's live players; failing both, the server describes the caller's browser. */
+            from_name?: string;
         };
         RemoteCommand: {
             /** @enum {string} */

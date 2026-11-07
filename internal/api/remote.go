@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"strings"
 
+	"lancast/internal/auth"
 	"lancast/internal/remote"
 )
 
@@ -111,6 +112,9 @@ func (s *Server) sendPlayerCommand(w http.ResponseWriter, r *http.Request) {
 		// FromPlayer is the sending window's own player id, if it has one,
 		// so the receiving window can say where the film came from.
 		FromPlayer string `json:"from_player"`
+		// FromName is what the sending device calls itself, for a sender
+		// that is not offering itself as a player.
+		FromName string `json:"from_name"`
 	}
 	// A play command's queue can be a whole randomized library.
 	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 512<<10)).Decode(&req); err != nil {
@@ -119,10 +123,7 @@ func (s *Server) sendPlayerCommand(w http.ResponseWriter, r *http.Request) {
 	}
 	user := s.userID(r)
 	cmd := req.Command
-	cmd.From = ""
-	if validPlayerID(req.FromPlayer) {
-		cmd.From = s.remote.Name(user, req.FromPlayer)
-	}
+	cmd.From = senderName(s.remote, user, req.FromPlayer, req.FromName, r.UserAgent())
 	if err := s.remote.Send(user, id, cmd); err != nil {
 		switch {
 		case errors.Is(err, remote.ErrNotFound):
@@ -162,6 +163,32 @@ func (s *Server) takePlayerCommands(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Cache-Control", "no-store")
 	writeJSON(w, http.StatusOK, map[string]any{"commands": cmds})
+}
+
+/*
+ * senderName is what the receiving window says a command came from.
+ *
+ * The sender's own player name when it is one, since that is the name its
+ * owner gave it and sees in the list. Otherwise the name the device calls
+ * itself, which every window has whether or not it offers itself: a phone
+ * used only as a remote is still "Chris's phone", not "another device".
+ * Failing both, the same description Authorized devices shows for the
+ * session's browser.
+ *
+ * A name the client supplies is taken at its word. It can only ever be shown
+ * on the same account's own windows, so there is nobody to mislead but the
+ * person who typed it.
+ */
+func senderName(m *remote.Manager, user, fromPlayer, fromName, ua string) string {
+	if validPlayerID(fromPlayer) {
+		if n := m.Name(user, fromPlayer); n != "" {
+			return n
+		}
+	}
+	if strings.TrimSpace(fromName) != "" {
+		return remote.CleanName(fromName)
+	}
+	return auth.DeviceName(ua)
 }
 
 // badCommandMessage is the reason after the sentinel, for the error envelope.

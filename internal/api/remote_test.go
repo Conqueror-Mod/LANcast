@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"testing"
 
+	"lancast/internal/auth"
 	"lancast/internal/remote"
 )
 
@@ -199,5 +200,60 @@ func TestAPauseReachesAnOpenWindow(t *testing.T) {
 	h.do(t, "PUT", "/api/remote/players/"+tvID, map[string]any{"name": "TV", "item_id": 3, "paused": true}).Body.Close()
 	if topics := nextTopics(t, r); !has(topics, TopicPlayers) {
 		t.Fatalf("pausing published %v", topics)
+	}
+}
+
+// A phone used only as a remote is not a player, and the window it sends to
+// should still say which device it was: the name the phone gave itself, or
+// failing that the description Authorized devices shows for its browser.
+func TestASenderThatIsNotAPlayerIsStillNamed(t *testing.T) {
+	h := newHarness(t)
+	h.do(t, "PUT", "/api/remote/players/"+tvID, map[string]any{"name": "TV"}).Body.Close()
+
+	take := func() remote.Command {
+		t.Helper()
+		var body struct {
+			Commands []remote.Command `json:"commands"`
+		}
+		decode(t, h.do(t, "GET", "/api/remote/players/"+tvID+"/commands", nil), &body)
+		if len(body.Commands) != 1 {
+			t.Fatalf("took %+v", body.Commands)
+		}
+		return body.Commands[0]
+	}
+
+	h.do(t, "POST", "/api/remote/players/"+tvID+"/commands",
+		map[string]any{"action": "pause", "from_name": "  Chris's phone\n"}).Body.Close()
+	if got := take().From; got != "Chris's phone" {
+		t.Fatalf("from = %q, want the name the device gave itself", got)
+	}
+
+	// A from_player that is not live falls through to the name, not to "".
+	h.do(t, "POST", "/api/remote/players/"+tvID+"/commands",
+		map[string]any{"action": "pause", "from_player": "gone-0123456789", "from_name": "Tablet"}).Body.Close()
+	if got := take().From; got != "Tablet" {
+		t.Fatalf("from = %q, want Tablet", got)
+	}
+
+	// Nothing given: the server's own description of the browser.
+	h.do(t, "POST", "/api/remote/players/"+tvID+"/commands", map[string]any{"action": "pause"}).Body.Close()
+	if got := take().From; got == "" {
+		t.Fatal("an unnamed sender came through with no name at all")
+	}
+}
+
+func TestSenderNameFromTheBrowser(t *testing.T) {
+	m := remote.New()
+	ua := "Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Mobile Safari/537.36"
+	if got := senderName(m, "u", "", "", ua); got != auth.DeviceName(ua) {
+		t.Fatalf("got %q, want %q", got, auth.DeviceName(ua))
+	}
+	m.Report("u", "phone-01234567", remote.Report{Name: "Pocket"})
+	if got := senderName(m, "u", "phone-01234567", "Ignored", ua); got != "Pocket" {
+		t.Fatalf("a live player is named %q, want its own name", got)
+	}
+	// Another account's player id names nothing here.
+	if got := senderName(m, "v", "phone-01234567", "", ua); got == "Pocket" {
+		t.Fatal("another account's player lent its name")
 	}
 }

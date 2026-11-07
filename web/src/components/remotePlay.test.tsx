@@ -251,6 +251,10 @@ describe("the remote", () => {
     const post = calls.find((c) => c.method === "POST");
     expect(post?.url).toBe("/api/remote/players/tv-0123456789/commands");
     expect(post?.body).toMatchObject({ action: "play", item_id: 7, queue: [7, 8], position_ms: 61_000 });
+    // Named even though this window does not offer itself, so the screen it
+    // sent to can say which device it was.
+    expect(post?.body).toMatchObject({ from_name: getRemoteDevice().name });
+    expect(post?.body?.from_player).toBeUndefined();
     expect(after).toHaveBeenCalled();
   });
 
