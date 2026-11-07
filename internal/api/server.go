@@ -1091,9 +1091,28 @@ func (s *Server) countRequests(next http.Handler) http.Handler {
 
 func logRequests(log *slog.Logger, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		log.Debug("request", "method", r.Method, "path", r.URL.Path)
+		if !(r.Method == http.MethodGet && polledPaths[r.URL.Path]) {
+			log.Debug("request", "method", r.Method, "path", r.URL.Path)
+		}
 		next.ServeHTTP(w, r)
 	})
+}
+
+/*
+ * polledPaths are asked on a timer by every open window and phone, and say
+ * nothing about what anybody did. Their request lines are left out.
+ *
+ * Measured on Aither, 2026-11-07, with Debug logging on: these three were 79%
+ * of lancastd.log (health 41%, together requests 28%, activity 10%), so the
+ * log and its one previous file held about six hours. Two reports in a row
+ * (phone music stalling, a passkey sign-in refused) lost their evidence to
+ * that before anybody looked. Only their request lines go: a refusal or
+ * error on these routes is still logged where it happens.
+ */
+var polledPaths = map[string]bool{
+	"/api/health":            true,
+	"/api/together/requests": true,
+	"/api/activity":          true,
 }
 
 func (s *Server) health(w http.ResponseWriter, r *http.Request) {
