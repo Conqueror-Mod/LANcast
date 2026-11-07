@@ -27,6 +27,21 @@ import "./JoinRequestPrompt.css";
 
 const POLL_MS = 3000;
 
+const requestsKey = ["together-requests"] as const;
+const fetchRequests = ({ signal }: { signal: AbortSignal }) =>
+  apiGet<{ requests: TogetherRequest[] }>("/api/together/requests", signal);
+
+/**
+ * Whether the prompt has a request to show, for the player: over a native
+ * film the window takes the page off the screen when nothing is drawn on it
+ * (ADR 0111), and this prompt is drawn on it. Reads the prompt's own cache and
+ * never fetches; the prompt polls.
+ */
+export function useJoinRequestShowing(): boolean {
+  const q = useQuery({ queryKey: requestsKey, queryFn: fetchRequests, enabled: false });
+  return (q.data?.requests?.length ?? 0) > 0;
+}
+
 export function JoinRequestPrompt() {
   const pb = usePlayback();
   const t = useTogetherRoom();
@@ -36,11 +51,10 @@ export function JoinRequestPrompt() {
   const watching = pb.itemID > 0 && !pb.isAudio;
 
   const requests = useQuery({
-    queryKey: ["together-requests"],
+    queryKey: requestsKey,
     enabled: watching,
     refetchInterval: watching ? POLL_MS : false,
-    queryFn: ({ signal }) =>
-      apiGet<{ requests: TogetherRequest[] }>("/api/together/requests", signal),
+    queryFn: fetchRequests,
   });
 
   const req = watching ? requests.data?.requests?.[0] : undefined;
@@ -72,7 +86,7 @@ export function JoinRequestPrompt() {
   const left = Math.max(0, Math.round(length - since));
 
   // The prompt answers a list; after answering, the list is what changed.
-  const settle = () => qc.invalidateQueries({ queryKey: ["together-requests"] });
+  const settle = () => qc.invalidateQueries({ queryKey: requestsKey });
 
   /*
    * Yes, into this window's room, opening one around the film when there is

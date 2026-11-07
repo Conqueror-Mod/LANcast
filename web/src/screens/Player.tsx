@@ -23,6 +23,7 @@ import { QueuePanel } from "@/components/QueuePanel";
 import { TogetherPanel } from "@/components/TogetherPanel";
 import { RemotePanel } from "@/components/RemotePanel";
 import { canSend, useRemoteNotice } from "@/playback/remote";
+import { useJoinRequestShowing } from "@/components/JoinRequestPrompt";
 import { AddToPlaylist } from "@/components/AddToPlaylist";
 import { SkipGlyph } from "@/components/SkipGlyph";
 import {
@@ -722,6 +723,7 @@ export function Player() {
    * (ADR 0111). Only while a native film is up, so browsing sends nothing.
    */
   const remoteNotice = useRemoteNotice();
+  const joinRequest = useJoinRequestShowing();
   const overlayAsk = pb.native
     ? overlayKeptBy({
         native: pb.native,
@@ -736,6 +738,7 @@ export function Player() {
         stats: showStats,
         stillWatching: !!pb.stillWatching,
         remoteNotice: remoteNotice != null,
+        joinRequest,
       })
     : null;
   useEffect(() => {
