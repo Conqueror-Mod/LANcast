@@ -475,6 +475,12 @@ html.lancast-native-video:has(.playback--full) .playback__native-cues,
 html.lancast-native-video:has(.playback--full) .playback__native-cues * {
   visibility: visible;
 }
+/* "Playing from Chris's Android" (ADR 0117) arrives exactly as a native film
+   opens, and lives outside .player, so the rule above hid it: the server and
+   the window both logged the sender and nothing appeared (2026-11-07). */
+html.lancast-native-video:has(.playback--full) .remote-notice {
+  visibility: visible;
+}
 html.lancast-native-video .playback__video {
   visibility: hidden !important;
 }
