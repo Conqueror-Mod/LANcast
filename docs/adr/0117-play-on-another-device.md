@@ -111,6 +111,15 @@ current position, with the same queue, then stops here. From an item page,
   claiming it would open a film moved at minute forty on a trailer. The seek
   to the sent moment waits until the new item is playing and has settled for
   600 ms, so the new source's own start cannot land after it and undo it.
+- **"Playing from …" holds the page up over a film for its four seconds.**
+  Over a full-screen native film the desktop window hides the page while
+  nothing is drawn over the picture (ADR 0111). The notice was not on that
+  list, so it was hidden with the page: in the first test as the service the
+  server and the window both logged "from Chris's Android" and nobody saw it.
+  It is on the list now (`overlayKeptBy`, "remote notice"). The cost is the
+  overlay's wake-and-hide once, at the start of a film that is still loading.
+  The sender is named even when it is not offering itself: the name it gave
+  itself in Settings, else the server's description of its browser.
 - **Volume is sent on release**, not on every step of a drag: each step would
   be a command for the device to collect.
 - **Books are not sent.** They play in their own player (ADR 0116), which this

@@ -23,6 +23,8 @@ export interface OverlayState {
   introSkipped: boolean;
   stats: boolean;
   stillWatching: boolean;
+  /** "Playing from …": something just arrived from another device (ADR 0117). */
+  remoteNotice?: boolean;
 }
 
 /**
@@ -41,6 +43,7 @@ export function overlayKeptBy(s: OverlayState): string {
   if (s.introSkipped) return "intro skipped";
   if (s.stats) return "stats";
   if (s.stillWatching) return "still watching";
+  if (s.remoteNotice) return "remote notice";
   return "";
 }
 

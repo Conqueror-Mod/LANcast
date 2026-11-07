@@ -48,7 +48,7 @@ vi.mock("@/playback/PlaybackProvider", () => ({
 
 import { RemotePlayerHost } from "./RemotePlayerHost";
 import { RemotePanel } from "./RemotePanel";
-import { resetRemoteDeviceForTests, setRemoteDevice, getRemoteDevice } from "@/playback/remote";
+import { resetRemoteDeviceForTests, setRemoteDevice, getRemoteDevice, setRemoteNotice } from "@/playback/remote";
 
 let host: HTMLDivElement;
 let root: Root;
@@ -129,6 +129,7 @@ function press(label: string) {
 beforeEach(() => {
   localStorage.clear();
   resetRemoteDeviceForTests();
+  act(() => setRemoteNotice(null));
   host = document.createElement("div");
   document.body.appendChild(host);
   root = createRoot(host);

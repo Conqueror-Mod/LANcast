@@ -269,3 +269,33 @@ export function runCommand(cmd: RemoteCommand, pb: Playable): CommandEffect {
       return { kind: "ignored", reason: `unknown action ${String(cmd.action)}` };
   }
 }
+
+/*
+ * "Playing from Chris's Android": the word a player shows when something
+ * arrives from another device.
+ *
+ * A store rather than the host's own state, because the player screen has to
+ * know it is up. Over a full-screen native film the desktop window takes the
+ * page off the screen while nothing is drawn over the picture (ADR 0111), and
+ * a notice the player did not know about was hidden with it: the server and
+ * the window both logged the sender's name and nobody saw it (2026-11-07).
+ */
+let notice: string | null = null;
+const noticeListeners = new Set<(n: string | null) => void>();
+
+export function setRemoteNotice(next: string | null) {
+  notice = next;
+  for (const fn of noticeListeners) fn(notice);
+}
+
+export function useRemoteNotice(): string | null {
+  const [n, setN] = useState(notice);
+  useEffect(() => {
+    noticeListeners.add(setN);
+    setN(notice);
+    return () => {
+      noticeListeners.delete(setN);
+    };
+  }, []);
+  return n;
+}

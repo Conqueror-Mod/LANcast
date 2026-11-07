@@ -1,10 +1,17 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { apiGet, apiPost, ApiFailure } from "@/api/client";
 import type { RemoteCommand, RemotePlayer } from "@/api/types";
 import { onTopic } from "@/api/serverEvents";
 import { usePlayback } from "@/playback/PlaybackProvider";
-import { deviceKind, REPORT_MS, runCommand, useRemoteDevice } from "@/playback/remote";
+import {
+  deviceKind,
+  REPORT_MS,
+  runCommand,
+  setRemoteNotice,
+  useRemoteDevice,
+  useRemoteNotice,
+} from "@/playback/remote";
 import { clientNote } from "@/lib/clientNote";
 import "./RemotePlayerHost.css";
 
@@ -28,7 +35,8 @@ export function RemotePlayerHost() {
   const pb = usePlayback();
   const navigate = useNavigate();
   const [device] = useRemoteDevice();
-  const [notice, setNotice] = useState<string | null>(null);
+  // Shared, so the player keeps its overlay up while this shows (ADR 0111).
+  const notice = useRemoteNotice();
 
   // Read through refs so the timers are not rebuilt on every frame of
   // playback, which is how often displayTime changes.
@@ -59,7 +67,7 @@ export function RemotePlayerHost() {
               continuing: effect.seekMS !== null,
             },
           });
-          setNotice(cmd.from ? `Playing from ${cmd.from}` : "Playing from another device");
+          setRemoteNotice(cmd.from ? `Playing from ${cmd.from}` : "Playing from another device");
           clientNote("info", "remote", `play ${effect.itemID} from ${cmd.from || "another device"}`);
         } else if (effect.kind === "ignored") {
           clientNote("info", "remote", `ignored ${cmd.action}: ${effect.reason}`);
@@ -148,7 +156,7 @@ export function RemotePlayerHost() {
 
   useEffect(() => {
     if (!notice) return;
-    const t = setTimeout(() => setNotice(null), NOTICE_MS);
+    const t = setTimeout(() => setRemoteNotice(null), NOTICE_MS);
     return () => clearTimeout(t);
   }, [notice]);
 

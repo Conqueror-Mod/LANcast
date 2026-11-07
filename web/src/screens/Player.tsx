@@ -22,7 +22,7 @@ import { PlaybackSettings } from "@/components/PlaybackSettings";
 import { QueuePanel } from "@/components/QueuePanel";
 import { TogetherPanel } from "@/components/TogetherPanel";
 import { RemotePanel } from "@/components/RemotePanel";
-import { canSend } from "@/playback/remote";
+import { canSend, useRemoteNotice } from "@/playback/remote";
 import { AddToPlaylist } from "@/components/AddToPlaylist";
 import { SkipGlyph } from "@/components/SkipGlyph";
 import {
@@ -721,6 +721,7 @@ export function Player() {
    * the screen, so Windows can send the film to the TV without composing it
    * (ADR 0111). Only while a native film is up, so browsing sends nothing.
    */
+  const remoteNotice = useRemoteNotice();
   const overlayAsk = pb.native
     ? overlayKeptBy({
         native: pb.native,
@@ -734,6 +735,7 @@ export function Player() {
         introSkipped: showIntroSkipped,
         stats: showStats,
         stillWatching: !!pb.stillWatching,
+        remoteNotice: remoteNotice != null,
       })
     : null;
   useEffect(() => {
