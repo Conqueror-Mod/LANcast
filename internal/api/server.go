@@ -37,6 +37,7 @@ import (
 	"lancast/internal/photo"
 	"lancast/internal/presence"
 	"lancast/internal/probe"
+	"lancast/internal/remote"
 	"lancast/internal/retro/identify"
 	"lancast/internal/retro/retrodb"
 	"lancast/internal/scan"
@@ -336,6 +337,9 @@ type Server struct {
 	// dependency the caller may forget to wire is a feature that is absent in
 	// exactly the builds nobody tested.
 	together *together.Manager
+	// remote holds the windows that offered themselves to their owner's other
+	// windows (ADR 0117). In memory and created here, for the same reason.
+	remote *remote.Manager
 	/*
 	 * prober inspects a single source on demand — a live channel — as opposed
 	 * to `probes`, which is the worker that walks the library.
@@ -406,6 +410,7 @@ func New(d Deps) *Server {
 		tfBook:            newTwoFactorBook(),
 		crashes:           crashlog.New(d.DataDir, Version),
 		together:          together.New(),
+		remote:            remote.New(),
 		prober:            probe.New(),
 		events:            events.New(0),
 		presets:           milkdrop.NewStore(filepath.Join(d.DataDir, "visualizers", "milkdrop")),
@@ -433,6 +438,9 @@ func New(d Deps) *Server {
 	s.together.OnSweep = func(e together.Event) {
 		s.log.Info("watch together: "+e.Kind, "room", e.RoomID, "item", e.ItemID, "member", e.Name)
 	}
+	// A window that closed without saying so is noticed by the sweep; its
+	// owner's other windows are told it has gone.
+	s.remote.OnGone = func(user string) { s.events.PublishTo(user, TopicPlayers) }
 	return s
 }
 
@@ -943,6 +951,14 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/together/requests", s.listTogetherRequests)
 	mux.HandleFunc("POST /api/together/requests/{id}/accept", s.acceptTogetherRequest)
 	mux.HandleFunc("POST /api/together/requests/{id}/decline", s.declineTogetherRequest)
+
+	// Play on another of your own devices (ADR 0117). Every route is the
+	// caller's own players only; remote.go says why there is no admin view.
+	mux.HandleFunc("GET /api/remote/players", s.listPlayers)
+	mux.HandleFunc("PUT /api/remote/players/{id}", s.reportPlayer)
+	mux.HandleFunc("DELETE /api/remote/players/{id}", s.removePlayer)
+	mux.HandleFunc("POST /api/remote/players/{id}/commands", s.sendPlayerCommand)
+	mux.HandleFunc("GET /api/remote/players/{id}/commands", s.takePlayerCommands)
 
 	mux.HandleFunc("GET /api/review", s.reviewQueue)
 	// Admin-only because it returns paths, which every other item response

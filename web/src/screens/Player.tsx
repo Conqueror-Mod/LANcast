@@ -21,6 +21,8 @@ import { PlaybackStats } from "@/components/PlaybackStats";
 import { PlaybackSettings } from "@/components/PlaybackSettings";
 import { QueuePanel } from "@/components/QueuePanel";
 import { TogetherPanel } from "@/components/TogetherPanel";
+import { RemotePanel } from "@/components/RemotePanel";
+import { canSend } from "@/playback/remote";
 import { AddToPlaylist } from "@/components/AddToPlaylist";
 import { SkipGlyph } from "@/components/SkipGlyph";
 import {
@@ -30,6 +32,7 @@ import {
   SettingsGlyph,
   QueueGlyph,
   TogetherGlyph,
+  CastGlyph,
   NightGlyph,
   DialogueGlyph,
   PipGlyph,
@@ -103,10 +106,17 @@ export function Player() {
     queue?: number[];
     shuffle?: boolean;
     fromStart?: boolean;
+    /*
+     * Carried on from another of your devices at a given moment (ADR 0117).
+     * Not a fresh start, so no pre-roll: a film moved here at minute forty
+     * must not open on a trailer.
+     */
+    continuing?: boolean;
   } | null;
   const stateQueue = handoff?.queue;
   const stateShuffle = handoff?.shuffle;
   const fromStart = !!handoff?.fromStart;
+  const continuing = !!handoff?.continuing;
 
   const queueParam = searchParams.get("queue");
   const { play, setShuffle } = pb;
@@ -145,7 +155,7 @@ export function Player() {
   });
   useEffect(() => {
     if (!itemID) return;
-    if (playingRef.current === itemID) {
+    if (playingRef.current === itemID || continuing) {
       setGate({ id: itemID, clip: null, ready: true });
       return;
     }
@@ -165,7 +175,7 @@ export function Player() {
     return () => {
       live = false;
     };
-  }, [itemID, fromStart]);
+  }, [itemID, fromStart, continuing]);
   const gateOpen = gate.id === itemID && gate.ready;
 
   useEffect(() => {
@@ -274,6 +284,7 @@ export function Player() {
         (pb.audioTracks.find((t) => t.default) ?? pb.audioTracks[0])?.index);
   const [queueOpen, setQueueOpen] = useState(false);
   const [togetherOpen, setTogetherOpen] = useState(false);
+  const [remoteOpen, setRemoteOpen] = useState(false);
   /*
    * The phone's overflow (docs/design.md, Phone). Fourteen controls do not fit
    * 375px, and seven of them sat off the right edge where nothing could reach
@@ -1276,6 +1287,36 @@ export function Player() {
                   </button>
                   {togetherOpen && (
                     <TogetherPanel onClose={() => setTogetherOpen(false)} />
+                  )}
+                </div>
+              )}
+              {/* Play on another of your devices (ADR 0117): what is playing
+                  moves there at this moment, with its queue, and stops here. */}
+              {canSend(pb.item) && (
+                <div className="player__menu">
+                  <button
+                    className={"player__icon" + (remoteOpen ? " is-on" : "")}
+                    onClick={() => setRemoteOpen((o) => !o)}
+                    aria-label="Play on another device"
+                    aria-expanded={remoteOpen}
+                    title="Play on another device"
+                  >
+                    <CastGlyph />
+                  </button>
+                  {remoteOpen && (
+                    <RemotePanel
+                      onClose={() => setRemoteOpen(false)}
+                      send={{
+                        label: "Move here",
+                        itemID: pb.itemID,
+                        queue: pb.shuffle ? pb.playOrder : pb.queue,
+                        positionMS: pb.displayTime * 1000,
+                        after: () => {
+                          setRemoteOpen(false);
+                          stopAndLeave();
+                        },
+                      }}
+                    />
                   )}
                 </div>
               )}

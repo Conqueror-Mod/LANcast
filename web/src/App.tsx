@@ -33,6 +33,8 @@ import { Stub } from "@/screens/Stub";
 import { Setup, Login, JoinWithInvite, JoinWhileSignedIn } from "@/screens/Auth";
 import { MiniPlayer } from "@/components/MiniPlayer";
 import { PlaybackProvider } from "@/playback/PlaybackProvider";
+import { RemotePlayerHost } from "@/components/RemotePlayerHost";
+import { Devices } from "@/screens/Devices";
 import { TogetherProvider } from "@/playback/TogetherProvider";
 import { BookProvider } from "@/playback/BookPlayer";
 import { BookBar } from "@/playback/BookBar";
@@ -152,6 +154,7 @@ export function App() {
           <Route path="/addons" element={<Addons />} />
           <Route path="/live" element={<LiveTV />} />
           <Route path="/people" element={<People />} />
+          <Route path="/devices" element={<Devices />} />
           <Route path="/settings" element={<Settings />} />
           <Route path="/join" element={<JoinWhileSignedIn name={auth.user?.name ?? ""} />} />
           <Route
@@ -166,6 +169,9 @@ export function App() {
             Routes for the same reason as the mini player: it has to reach the
             host on whatever screen they are on. */}
         <JoinRequestPrompt />
+        {/* This window as a player for your other devices (ADR 0117).
+            Inside the router, since a play command opens the player. */}
+        <RemotePlayerHost />
       </AppShell>
       </TogetherProvider>
       </BookProvider>

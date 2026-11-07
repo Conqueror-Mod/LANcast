@@ -37,6 +37,7 @@ internal/subtitle/ discovery, WebVTT conversion
 internal/playlist/ .m3u parsing and import (pure parser + importer)
 internal/livetv/   channel lists and EPG (its own parser, not playlist's)
 internal/together/ synchronised rooms, in memory, within one server
+internal/remote/   your windows as players for your other windows (ADR 0117)
 internal/identity/ this server's Ed25519 identity (ADR 0044) — never regenerated
 internal/peer/     pairing: invites in and out, addresses, mutual state
 internal/presence/ who is watching what, across paired servers (ADR 0045)
@@ -58,7 +59,7 @@ cmd/lancast/       LANcast.exe: the app (window + tray) and, by subcommand, the
                    server (ADR 0080). The window itself is internal/clientwindow,
                    internal/webview2 and internal/certpin — not subdirectories
                    of this one, which is only the entrypoint and its bindings.
-docs/adr/          decision records (116 and counting — read before re-deciding)
+docs/adr/          decision records (117 and counting — read before re-deciding)
 ```
 
 ## Rules
