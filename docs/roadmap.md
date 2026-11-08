@@ -1,6 +1,6 @@
 # Roadmap
 
-Last updated: 2026-11-03 · **v0.10.3 released, MusicBrainz albums on main · M0–M4 built.** The React client executes the design
+Last updated: 2026-11-07 · **v0.10.6 released, nothing unreleased on main · M0–M4 built.** The React client executes the design
 system and the client-UX backlog is closed. Observability (match, review, scan
 diagnostics), an audit log and CI are in place. Transport security (TLS) and
 multi-user accounts (admin/member roles) are built, and branding & splash shipped.
@@ -17,16 +17,30 @@ way down. Details in the areas below; what the pass taught is at the end.
 The 2026-10-26 pass found this file fifteen days and seventeen releases
 behind: the Releases table stopped at v0.9.78, and three backlog entries still
 listed work that had shipped as open. The release-by-release record is the
-[Releases](#releases) table, and what remains is [What is left](#what-is-left).*
+[Releases](#releases) table, and what remains is [What is left](#what-is-left).
+Refreshed again 2026-11-07, after v0.10.6: the file had stopped at v0.10.3.*
 
-**On main, unreleased:** albums identified by MusicBrainz
-([ADR 0115](adr/0115-albums-are-identified-by-musicbrainz.md), #1005–#1008 and
-the cover step): background matching with the tags still winning, Fix match for
-albums and artists, a Type filter on the Albums level, and covers from the
-Cover Art Archive for albums with none. Schema 89, one-way; the first pass over
-a large library takes about two hours at MusicBrainz's one request a second.
+**On main, unreleased:** nothing. Main is v0.10.6.
 
-v0.10.3 is the latest release. Since v0.9.78:
+v0.10.6 is the latest release. Since v0.9.78:
+- **v0.10.6:** play on another of your own devices
+  ([ADR 0117](adr/0117-play-on-another-device.md)), a friend's join request
+  shown over a full-screen film, and friends' posters on a shared library
+  served again.
+- **v0.10.5:** a half-watched film in a collection returns to Home when an
+  earlier one is finished, the tray opens pages at the window's own address
+  (so it no longer signs the window out), and a Debug log that holds about a
+  day instead of a few hours.
+- **v0.10.4:** audiobooks, steps 1 and 2
+  ([ADR 0116](adr/0116-an-audiobook-is-its-own-library.md)), and albums
+  identified by MusicBrainz
+  ([ADR 0115](adr/0115-albums-are-identified-by-musicbrainz.md)). Schema 90,
+  one-way.
+- **v0.10.0–v0.10.3:** frame-rate matching, uncomposed video and HDR on the
+  TV, in-play RetroAchievements
+  ([ADR 0112](adr/0112-achievements-are-earned-through-the-server.md)), and
+  music by artist, album, track and genre
+  ([ADR 0114](adr/0114-a-music-library-is-browsed-at-three-levels.md)).
 - **v0.9.79:** one program, `LANcast.exe`, with the tray always present
   ([ADR 0080](adr/0080-one-executable-two-roles.md)), and a scan can be cancelled.
 - **v0.9.80–v0.9.81:** collections continue the way shows do, an About tab,
@@ -167,7 +181,10 @@ federation between servers, Watch Together, installed games, plugins,
 semantic photo search, retro games, DLNA, optimized versions and music
 visualizers, and webhooks; and from v0.9.98 comics (CBZ and PDF), chapters and
 previews on the scrub bar, extras, pre-roll, two-factor sign-in, invite links and
-the dashboard's history. The schema is at **revision 85**.
+the dashboard's history; and by v0.10.6 in-play RetroAchievements, frame-rate
+matching, music browsed by album, track and genre, albums identified by
+MusicBrainz, audiobooks, and playing on another of your own devices. The schema
+is at **revision 90**.
 The [Areas](#areas) tables hold the status of each piece, and the
 [Releases](#releases) table records when each one landed. What is left is
 breadth, and it is listed in the [Feature backlog](#feature-backlog).
@@ -177,18 +194,31 @@ breadth, and it is listed in the [Feature backlog](#feature-backlog).
 *Everything on this list is unbuilt or unwatched. The detail behind each line
 is in the [Feature backlog](#feature-backlog) entry it names.*
 
+**Open faults from use.** Reported by the owner 2026-11-03 and 2026-11-06,
+diagnosed as far as the evidence went. Each lost its server log to Debug
+rotation; since v0.10.5 the log holds about a day, so the next step for each
+is to reproduce it and copy the log at once.
+- **Continue Watching emptied itself.** No data was lost (the pre-update
+  backup and the live database agree, 224 rows in progress), so it is a query
+  or a stale list. Unknown: whether it happened before or after the update to
+  v0.10.4, which changed `/api/continue` to leave books out, and on which
+  device.
+- **Music stalled loading on a phone.** No evidence survived. Reproduce, then
+  read the `/api/stream` request times and the "music on deck/element" lines.
+- **The encoder stays held after a guest stops a film.** No player ends its
+  HLS session on stop; the session lives until ten minutes unread, by design,
+  so a pause can resume. Reproduce and wait fifteen minutes: reaped at ten
+  means an explicit end-on-stop is worth building (relayed for guests, so a
+  new federation route through `peerAuthenticated` and the guest gate); never
+  reaped means something keeps reading it.
+- **A sign-in at the public name was refused** (2026-11-04). The tray half was
+  fixed in v0.10.5; why the window's own sign-in failed is not known, and no
+  code fault was found. Next time, grep `login refused` with `method=passkey`.
+
 **Next, once decided.**
-- **A friend joins without being reachable** — [plan](lighter-join-plan.md)
-  (#836), decided 2026-10-27. **Option A is built**
-  ([ADR 0103](adr/0103-a-friend-who-cannot-be-reached-says-who-is-there.md)):
-  a server sends its roster to its peers, so only the host has to be
-  reachable. Proven in the two-server harness with the friend's server
-  unreachable; **a friend on another network is owed before release**.
-  **Option C is built too**
-  ([ADR 0104](adr/0104-a-friend-is-invited-by-a-link-that-works-once.md)):
-  Settings › Users & access › **Invite a friend** makes a link that creates one
-  member account, once, for 7 days, with its limits set before anything is
-  seen. Schema 84.
+- **Audiobooks step 3** — the sleep timer, narrators, and filters by author,
+  narrator and series ([ADR 0116](adr/0116-an-audiobook-is-its-own-library.md)).
+  The only accepted plan with steps still unbuilt.
 - **In-play RetroAchievements** — unlocks while you play (rcheevos). **Shipped
   in v0.10.2** ([ADR 0112](adr/0112-achievements-are-earned-through-the-server.md)):
   casual (softcore), in the desktop player, through the server, which holds the token
@@ -201,25 +231,15 @@ is in the [Feature backlog](#feature-backlog) entry it names.*
   names what is still open (leaderboard trackers, queued leaderboard entries). The
   application can go in from 2027-02-02.
 
-- **Audiobooks** — [ADR 0116](adr/0116-an-audiobook-is-its-own-library.md),
-  accepted 2026-11-03: a library kind of its own, books as one item whether one
-  file or a folder of parts, chapters, speed per book, a sleep timer. **Step 1
-  is on main, unreleased**: the kind, books made from folders, and a grid with
-  covers. The test library (12 Star Trek books) was read first, and showed the
-  details live in folder names rather than tags. **Step 2 is on main too**:
-  books play in a player of their own, resume by default, with chapters,
-  15/30 skips and speed per book (schema 90). Step 3 is the sleep timer,
-  narrators and the filters.
-
 **Feature backlog, not yet planned.**
 - Libraries and media: **ebooks** beyond comics (EPUB),
   `.cbr` comics, and photo **bursts**. Loudness levelling from ReplayGain tags
   is built ([ADR 0108](adr/0108-music-is-levelled-by-its-own-replaygain.md));
   measuring untagged tracks is not.
 - Playback: **Chromecast and AirPlay**, and **offline downloads** (the client half).
-  **Play on another of your own devices** is built
-  ([ADR 0117](adr/0117-play-on-another-device.md), unreleased): send a film
-  from the phone to the LANcast window and drive it like a remote.
+  **Play on another of your own devices** shipped in v0.10.6
+  ([ADR 0117](adr/0117-play-on-another-device.md)); audiobooks, games,
+  comics, photos and live channels cannot be sent yet.
 - Social: **Last.fm and Trakt scrobbling**.
 - Operations: **bandwidth limits**, and **granular sharing** by label or
   on a friend's server (confirm somebody needs it first).
@@ -238,10 +258,18 @@ step 6, which is now native HLS against MSE, and
 is watching that keeps running.
 
 **Built, not yet watched working.**
-- **MusicBrainz albums** (ADR 0115) as the installed service, and its first
-  pass over the real library. Measured beforehand on 300 random albums of it
-  (285 matched, 7 review, 8 unmatched) and run live over the test library in
-  a dev build (202 of 218 matched), but never as the service.
+- **MusicBrainz albums** (ADR 0115): the first pass over the real library has
+  run as the service since v0.10.4, and its results have not been looked at.
+  Measured beforehand on 300 random albums of it (285 matched, 7 review, 8
+  unmatched) and over the test library in a dev build (202 of 218 matched).
+- **Audiobooks** (ADR 0116) heard with sound, and as the installed service.
+- **A friend's join request over a full-screen film** (v0.10.6): never seen
+  live, since it needs a friend's server to send one.
+- **A friend on another network** for roster push
+  ([ADR 0103](adr/0103-a-friend-who-cannot-be-reached-says-who-is-there.md))
+  and an invite link opened on a phone
+  ([ADR 0104](adr/0104-a-friend-is-invited-by-a-link-that-works-once.md)),
+  both shipped in v0.9.98 and proven only in the two-server harness.
 - **Extras** (#950), the one piece of the second unattended batch not seen
   working: an MKV extra played in the desktop window. Chapters, pre-roll,
   two-factor sign-in and the comics reader (CBZ and PDF) all passed as the
@@ -266,6 +294,9 @@ is watching that keeps running.
 
 | Version | Date | What shipped |
 |---|---|---|
+| **v0.10.6** | 2026-11-07 | **Play on another device.** One of your own windows plays a film, an episode or a song sent from another signed in as the same account, at the moment it was at, with the rest of the queue and no pre-roll ([ADR 0117](adr/0117-play-on-another-device.md), #1018): **Move here** in the player, **Play on…** on an item's page, and a **Devices** remote. In memory, no schema; never across accounts or servers. The desktop window offers itself by default, a browser or phone opts in. A friend's join request now shows over a full-screen film (#1019), and friends see posters on a shared library again (#1020). Schema 90 unchanged |
+| **v0.10.5** | 2026-11-07 | **Fixes from use.** Finishing a film in a collection offers a half-watched later one even when it has fallen out of Continue Watching's window (#1014, with Spotlight in #1015); the tray opens pages at the window's own address, so it no longer lands on `127.0.0.1` and signs the window out (#1014); the three request lines every window repeats on a timer leave the Debug log, which now holds about a day (#1015). Schema 90 unchanged |
+| **v0.10.4** | 2026-11-03 | **Audiobooks and MusicBrainz albums.** An audiobooks library ([ADR 0116](adr/0116-an-audiobook-is-its-own-library.md), #1010–#1012): a folder is one book and its files its parts, details from folder names, `.m4b` indexed, a player bar with chapters, 15/30 skips and speed per book, and a Continue Listening shelf per library. Albums identified by MusicBrainz ([ADR 0115](adr/0115-albums-are-identified-by-musicbrainz.md), #1005–#1009): background matching with the tags still winning, Fix match for albums and artists, a Type filter, and covers from the Cover Art Archive. Schema 90, one-way |
 | **v0.10.3** | 2026-11-02 | **Music by album, track and genre, and smooth visualizers.** A music library shown as Artists, Albums or Tracks, with genres read from the tags and rolled up onto albums and artists, genre/year/decade facets per level and per-level sorts ([ADR 0114](adr/0114-a-music-library-is-browsed-at-three-levels.md), #1003); combined genre tags (`Indie / Alternative`) stay as written, by decision. Every track on an artist's page (#1002). Visualizers draw on the screen's own vertical blank instead of rAF at the main monitor's rate, and a 9,000-track queue no longer re-renders per tick ([ADR 0113](adr/0113-a-visualizer-keeps-the-screens-time.md), #999), with the mini-player keeping its shuffle. Now Playing's artist links to the artist; a photosensitivity warning; the phone filter panel kept on screen (#1003). RetroAchievements hardcore rules built and switched off, the full User-Agent, a privacy policy and the core licence list (ADR 0112 steps 5–6, #1000, #1001). Schema 87 → 88, one-way; a rescan fills the genres |
 | **v0.10.2** | 2026-11-02 | **Achievements while you play, and friends who can reach you.** In-play RetroAchievements in the desktop player ([ADR 0112](adr/0112-achievements-are-earned-through-the-server.md)), built in steps: libretro memory maps in the host (#993; mGBA 11 regions, Mesen 64, Mupen 18, BlastEm system RAM only, bsnes nothing); rcheevos v12.5.0 vendored, with LANcast's shim, built in CI into `lancast-cheevos.dll` and shipped in the zip, installer and updater list (#994, #995); and the server door, unlock queue, player runtime, pop-up, menu page, progress in save states and the profile switch (#989). Casual only, every RetroAchievements call through the server, the token never on the player. Proven with a real account on Super Mario 64: an unlock accepted by RetroAchievements. SNES earns nothing (bsnes exposes no memory). **Invites carry the public name** (#997): a peer invite now starts with the public certificate's name on 443, after Georgia's server, on an IPv4-only network, had no address that reached Aither. A crash record now names the site for crashes Go writes no `fatal error` for (#991). Schema 86 → 87, one-way. In-app updates from 0.10.1 don't bring the new DLL: 0.10.1's updater only knows its own file list |
 | **v0.10.1** | 2026-11-01 | **Smooth films on the TV.** The crash about an hour into a matched film (the Go callback limit, #987) and crash logs (#986); uncomposed video: the page leaves the screen once the controls fade so the film reaches the TV directly, with films opening fullscreen while matching is on ([ADR 0111](adr/0111-the-page-leaves-the-screen-over-a-film.md), #988); HDR to an HDR display, off by default (#980); built-in TMDB and OpenSubtitles keys ([ADR 0110](adr/0110-lancast-carries-its-own-provider-keys.md), #983); settings search and pictures in Report an issue (#985). Schema 86 unchanged |
@@ -1120,7 +1151,8 @@ group is not priority.
   207 are their own bucket. Marked folders are excluded from it entirely
   (ADR 0051, amended). Face grouping, the large piece when this was written,
   has since been built (ADR 0052).
-- **Audiobooks** — steps 1 and 2 built (books from folders, a grid, and playing); **accepted** as
+- **Audiobooks** — steps 1 and 2 shipped in v0.10.4 (books from folders, a grid, and playing);
+  step 3 (sleep timer, narrators, filters) is open; **accepted** as
   [ADR 0116](adr/0116-an-audiobook-is-its-own-library.md) (2026-11-03), its own
   library kind, with the owner's nine answers recorded in it. The test library
   is 12 Star Trek books, read before step 1 was built. Checking
@@ -1669,7 +1701,7 @@ group is not priority.
   survive a reset, because a reset cannot restore them and losing the first
   would lock the operator out of their own server.
 - ~~**Check for updates** with an **auto-update** toggle.~~ — **built,
-  unreleased on `main`.** Signed releases, an update check on by default, and a
+  shipped in v0.6.2.** Signed releases, an update check on by default, and a
   download-verify-stage path that swaps the binary in on shutdown. What remains
   is the first release cut *with* the signing key in place, which is the only
   thing that can prove the published half end to end.
@@ -1909,7 +1941,7 @@ group is not priority.
   transcription in place of the real tracks, and speed, audio track and queue
   disappear. Document PiP renders our own player instead. The clock — the fault
   that started it — was fixed without the rework, by reporting the true timeline
-  through MediaSession (`72619a6`, unreleased). First piece of work is the
+  through MediaSession (`72619a6`, shipped in v0.6.8). First piece of work is the
   acceptance test the ADR asks for, before any feature code: proving the media
   element survives an imperative cross-document move under React re-render.
 
@@ -2120,8 +2152,9 @@ group is not priority.
   Chromecast itself, so LANcast contacts nothing, but a custom receiver would
   need registering with Google. AirPlay has no official server-side
   specification and is the heavier of the two. Each is its own ADR.
-- **Play on another of your own devices** — built, unreleased
-  ([ADR 0117](adr/0117-play-on-another-device.md)). The owner's "screen share
+- **Play on another of your own devices** — shipped in v0.10.6
+  ([ADR 0117](adr/0117-play-on-another-device.md)), proven phone to desktop
+  as the installed service. The owner's "screen share
   / casting" item, read on 2026-11-07 as Plex's "play on": one LANcast window
   sends a film or a song to another window signed in as the same account, at
   the moment it was at, and controls it from a remote panel. In memory, no
