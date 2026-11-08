@@ -199,8 +199,11 @@ is in the [Feature backlog](#feature-backlog) entry it names.*
 
 **Open faults from use.** Reported by the owner 2026-11-03 and 2026-11-06,
 diagnosed as far as the evidence went. The two still open each lost its
-server log to Debug rotation; since v0.10.5 the log holds about a day, so the
-next step for each is to reproduce it and copy the log at once.
+server log to Debug rotation. v0.10.5 quieted the polling, then v0.10.6's
+play-on-another-device heartbeat and a router's DLNA searches filled it again,
+to eleven hours by 2026-11-08; with those left out too (on main, unreleased)
+it holds about 28. The next step for each is to reproduce it and copy the log
+at once.
 - ~~**Continue Watching emptied itself.**~~ **Fixed in v0.10.7 (#1025).** Home read one mixed list of 20 and split it afterwards, so
   half-played songs took the films' places: 16 of the newest 20 rows were
   tracks on the owner's library. `/api/continue?shelf=` now gives each shelf

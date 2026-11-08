@@ -15,6 +15,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -1107,7 +1108,7 @@ func (s *Server) countRequests(next http.Handler) http.Handler {
 
 func logRequests(log *slog.Logger, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if !(r.Method == http.MethodGet && polledPaths[r.URL.Path]) {
+		if !polled(r) {
 			log.Debug("request", "method", r.Method, "path", r.URL.Path)
 		}
 		next.ServeHTTP(w, r)
@@ -1129,6 +1130,37 @@ var polledPaths = map[string]bool{
 	"/api/health":            true,
 	"/api/together/requests": true,
 	"/api/activity":          true,
+	/*
+	 * Measured again on 2026-11-08, after v0.10.6: the log held eleven hours.
+	 * The settings dashboard asks for conversions and history every few
+	 * seconds while it is open, a paired server asks who is watching, and
+	 * Prometheus scrapes on its own clock. None of those says anything
+	 * anybody did.
+	 */
+	"/api/transcodes":          true,
+	"/api/dashboard/history":   true,
+	"/api/federation/presence": true,
+	"/api/metrics":             true,
+	"/api/remote/players":      true,
+}
+
+/*
+ * polled reports whether a request is one a timer sends.
+ *
+ * Besides the GETs above, a window that offers itself to your other devices
+ * (ADR 0117) reports in with PUT /api/remote/players/{id} every five seconds:
+ * 28% of the log on its own. Its commands, and a player leaving, are still
+ * logged; only the report is quiet.
+ */
+func polled(r *http.Request) bool {
+	switch r.Method {
+	case http.MethodGet:
+		return polledPaths[r.URL.Path]
+	case http.MethodPut:
+		id, ok := strings.CutPrefix(r.URL.Path, "/api/remote/players/")
+		return ok && id != "" && !strings.Contains(id, "/")
+	}
+	return false
 }
 
 func (s *Server) health(w http.ResponseWriter, r *http.Request) {
