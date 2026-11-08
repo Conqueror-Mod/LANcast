@@ -58,6 +58,9 @@ export type SubtitleTrack = components["schemas"]["SubtitleTrack"];
 export type MediaStream = components["schemas"]["MediaStream"];
 
 export type Item = components["schemas"]["Item"];
+// The home page's resume console (ADR 0118).
+export type ResumeCard = components["schemas"]["ResumeCard"];
+export type ResumeConsole = components["schemas"]["ResumeConsole"];
 
 /** Exact duplicate photos (ADR 0075). */
 export type Duplicates = components["schemas"]["Duplicates"];

@@ -1,0 +1,181 @@
+/* The resume console (ADR 0118 §2). One card height; art keeps its shape in a
+   fixed column so the text lines up down the list. */
+
+.resume {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+}
+
+.resume__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.resume__title {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+
+.resume__all {
+  font-size: 13px;
+  color: var(--text-muted);
+  text-decoration: none;
+}
+.resume__all:hover,
+.resume__all:focus-visible {
+  color: var(--text-primary);
+}
+
+.resume__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+/* In a flex column, items shrink before they overflow; a card collapsing to
+   nothing with every style applied is the trap this prevents. */
+.resume__item {
+  flex-shrink: 0;
+  min-width: 0;
+}
+
+/* 5 / 4 / 3 cards (ADR 0118 §2). The server sends five; narrower screens show
+   fewer, and See all reaches the rest. */
+@media (max-width: 1199px) {
+  .resume__item:nth-child(n + 5) {
+    display: none;
+  }
+}
+@media (max-width: 767px) {
+  .resume__item:nth-child(n + 4) {
+    display: none;
+  }
+}
+
+.resume-card {
+  --resume-h: 64px;
+  display: grid;
+  grid-template-columns: 72px minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  min-height: var(--resume-h);
+  padding: 6px 10px 6px 6px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-tile);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    border-color var(--dur-fast),
+    box-shadow var(--dur-fast),
+    background-color var(--dur-fast);
+}
+
+/* Gold means where you are, and the card is the thing you are on. The panel
+   around it never takes the ring (ADR 0118 §5). */
+.resume-card:focus,
+.resume-card:hover {
+  outline: none;
+  border-color: var(--gold);
+  box-shadow: 0 0 0 4px var(--gold-ring);
+  background-color: rgba(255, 255, 255, 0.03);
+}
+
+.resume-card__art {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: var(--resume-h);
+}
+
+.resume-card__art img,
+.resume-card__placeholder {
+  display: block;
+  border-radius: 4px;
+  box-shadow: var(--elev-1);
+  background: linear-gradient(165deg, var(--space-raised), var(--space-void));
+}
+
+.resume-card__art--tall img,
+.resume-card__art--tall .resume-card__placeholder {
+  height: 100%;
+  aspect-ratio: 2 / 3;
+  object-fit: cover;
+}
+.resume-card__art--square img,
+.resume-card__art--square .resume-card__placeholder {
+  height: 100%;
+  aspect-ratio: 1;
+  object-fit: contain;
+}
+.resume-card__art--wide img,
+.resume-card__art--wide .resume-card__placeholder {
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  object-fit: cover;
+}
+
+.resume-card__text {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.resume-card__title,
+.resume-card__detail {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.resume-card__title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.resume-card__detail {
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+/* Progress is neutral, never gold: gold is focus and nothing else. */
+.resume-card__bar {
+  display: block;
+  height: 3px;
+  margin-top: 3px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.1);
+  overflow: hidden;
+}
+.resume-card__bar > span {
+  display: block;
+  height: 100%;
+  background: var(--text-secondary);
+}
+
+/* See all: two columns of the same cards where there is room, and every card
+   shown -- the narrow-screen limits above are the console's, not this page's. */
+.resume__list--all {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 360px), 1fr));
+  gap: 8px 16px;
+}
+.resume__list--all .resume__item {
+  display: block;
+}

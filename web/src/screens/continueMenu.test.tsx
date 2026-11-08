@@ -1,5 +1,6 @@
 /*
- * The right-click menu on a Continue shelf.
+ * The right-click menu on the home page's resume console (ADR 0118), which
+ * carries the Continue shelves' menu over unchanged.
  *
  * The thing worth testing here is not that a menu opens. It is that the two
  * items send *different* writes, because they mean different things and the
@@ -70,6 +71,27 @@ const show = {
   },
 };
 
+const album = {
+  id: 20,
+  title: "An Album",
+  kind: "album",
+  library_id: 2,
+  artwork: {},
+};
+
+const comic = { id: 30, title: "A Comic", kind: "comic", library_id: 4, artwork: {} };
+const game = { id: 40, title: "A Game", kind: "rom", library_id: 5, artwork: {} };
+
+// The console's cards: an album card resumes its track, so its menu writes to
+// the track.
+const cards = [
+  { kind: "video", touched_at: 5, item: film },
+  { kind: "music", touched_at: 4, item: album, track: { item: track, number: 3, of: 10 } },
+  { kind: "show", touched_at: 3, item: show },
+  { kind: "comic", touched_at: 2, item: comic, page: { page: 4, pages: 20, updated_at: 2 } },
+  { kind: "game", touched_at: 1, item: game },
+];
+
 let host: HTMLDivElement;
 let root: Root;
 let writes: { url: string; body: Record<string, unknown> }[];
@@ -99,6 +121,7 @@ function mount() {
           user: { id: "u1", name: "dana", role: "admin" },
         });
       }
+      if (url.includes("/api/resume")) return json({ cards, more: false });
       if (url.includes("/api/continue")) return json({ items: [film, track, show] });
       if (url.includes("/api/items/50/episodes")) {
         return json({
@@ -150,8 +173,8 @@ async function render() {
 
 /** The tile whose accessible name is `title`, from any shelf. */
 function tile(title: string): HTMLElement {
-  const el = [...host.querySelectorAll("button.poster-tile")].find(
-    (b) => b.getAttribute("aria-label") === title,
+  const el = [...host.querySelectorAll("button.resume-card")].find((b) =>
+    b.getAttribute("aria-label")?.startsWith(title + ","),
   );
   if (!el) throw new Error(`no tile for ${title}`);
   return el as HTMLElement;
@@ -175,19 +198,17 @@ function clickItem(label: string): void {
   act(() => b.click());
 }
 
-describe("the Continue shelf menu", () => {
-  it("does not open on tiles that were given no actions", async () => {
+describe("the Continue menu", () => {
+  it("is not open until asked for", async () => {
     mount();
     await render();
-    // The hero is drawn from the same list and dropped from the shelf beneath
-    // it, so a film and a track is enough to leave one of each on screen.
     expect(menuItems().length).toBe(0);
   });
 
   it("opens on right-click", async () => {
     mount();
     await render();
-    rightClick(tile("A Song"));
+    rightClick(tile("An Album"));
     expect(menuItems().length).toBeGreaterThan(0);
   });
 
@@ -199,7 +220,7 @@ describe("the Continue shelf menu", () => {
     mount();
     await render();
 
-    rightClick(tile("A Song"));
+    rightClick(tile("An Album"));
     clickItem("Mark as played");
     await act(async () => {
       await new Promise((r) => setTimeout(r, 5));
@@ -209,8 +230,8 @@ describe("the Continue shelf menu", () => {
     expect(marked?.body.watched).toBe(true);
 
     writes = [];
-    rightClick(tile("A Song"));
-    clickItem("Remove from Continue Listening");
+    rightClick(tile("An Album"));
+    clickItem("Remove from Continue");
     await act(async () => {
       await new Promise((r) => setTimeout(r, 5));
     });
@@ -223,22 +244,22 @@ describe("the Continue shelf menu", () => {
   });
 
   /*
-   * "Mark as watched" on a song, or "Remove from Continue Watching" on the
-   * listening shelf, is the interface reading from the wrong half of itself.
+   * "Mark as watched" on a song is the interface reading from the wrong half
+   * of itself.
    */
   it("says watched or played to match what the item is", async () => {
     mount();
     await render();
 
-    rightClick(tile("A Song"));
+    rightClick(tile("An Album"));
     let labels = menuItems().map((i) => i.textContent?.trim());
     expect(labels).toContain("Mark as played");
-    expect(labels).toContain("Remove from Continue Listening");
+    expect(labels).toContain("Remove from Continue");
 
     rightClick(tile("A Film"));
     labels = menuItems().map((i) => i.textContent?.trim());
     expect(labels).toContain("Mark as watched");
-    expect(labels).toContain("Remove from Continue Watching");
+    expect(labels).toContain("Remove from Continue");
   });
 
   /*
@@ -274,14 +295,14 @@ describe("the Continue shelf menu", () => {
 });
 
 /*
- * A show on Next up is marked through its episodes.
+ * A show in progress is marked through its episodes.
  *
  * Its place on the shelf is decided by what its episodes say; the show row
  * has no play state of its own. The menu used to write to the show row, which
  * the server accepted and the shelf ignored: both items reported success and
  * the show stayed exactly where it was.
  */
-describe("the Next up menu", () => {
+describe("a show's menu", () => {
   it("marks every episode, never the show row", async () => {
     mount();
     await render();
@@ -310,5 +331,28 @@ describe("the Next up menu", () => {
     const labels = menuItems().map((i) => i.textContent?.trim());
     expect(labels).toContain("Mark all as unwatched");
     expect(labels.some((l) => l?.startsWith("Remove"))).toBe(false);
+  });
+});
+
+/*
+ * A comic is listed while its page is saved, and a game while it has a save.
+ * A "Remove" that cleared a play position would report success and leave the
+ * card exactly where it was -- the fault the show's menu above once had.
+ */
+describe("a comic's and a game's menus", () => {
+  it("a comic leaves by being read, and offers no Remove", async () => {
+    mount();
+    await render();
+    rightClick(tile("A Comic"));
+    const labels = menuItems().map((i) => i.textContent?.trim());
+    expect(labels).toContain("Mark as read");
+    expect(labels.some((l) => l?.startsWith("Remove"))).toBe(false);
+  });
+
+  it("a game offers only its page", async () => {
+    mount();
+    await render();
+    rightClick(tile("A Game"));
+    expect(menuItems().map((i) => i.textContent?.trim())).toEqual(["Go to details"]);
   });
 });

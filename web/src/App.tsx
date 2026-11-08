@@ -19,6 +19,7 @@ import { Settings } from "@/screens/Settings";
 import { Review } from "@/screens/Review";
 import { Profile } from "@/screens/Profile";
 import { Favourites, TagItems } from "@/screens/Marked";
+import { ContinueAll } from "@/screens/ContinueAll";
 import { WatchHistory } from "@/screens/WatchHistory";
 import { Downloads } from "@/screens/Downloads";
 import { Games } from "@/screens/Games";
@@ -93,6 +94,7 @@ export function App() {
         <Routes>
           <Route path="/" element={<Home />} />
           <Route path="/search" element={<Search />} />
+          <Route path="/continue" element={<ContinueAll />} />
           <Route path="/library/:id" element={<Browse />} />
           {/*
             Somebody else's library, on its own path rather than /library/:id

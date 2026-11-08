@@ -8,24 +8,22 @@ import {
   useRecentlyAddedMusic,
   useRecentPhotos,
   useItems,
-  useSetWatchedByID,
   useWatchlist,
+  useResume,
   useToRate,
   useItemCollections,
   watchlistItems,
 } from "@/api/hooks";
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { usePlayback } from "@/playback/PlaybackProvider";
 import { Shelf } from "@/components/Shelf";
 import type { MenuAction } from "@/components/Menu";
 import { HomeHero } from "@/components/HomeHero";
+import { ResumeConsole } from "@/components/ResumeConsole";
 import { collectionsMenu } from "@/lib/collectionsMenu";
 import { HomeMasthead } from "@/components/HomeMasthead";
-import { useMarkAll } from "@/components/itemActions";
-import { isMusic, watchedVerb } from "@/lib/kind";
 import type { Item, Library } from "@/api/types";
-import { showContinueTarget } from "@/lib/continueShow";
+import { useContinueMenu } from "@/lib/useContinueMenu";
 import { useHeroSpotlight } from "@/lib/useHero";
 import "./Home.css";
 
@@ -92,13 +90,13 @@ function UnwatchedShelf({
 export function Home() {
   const { data: libraries } = useLibraries();
   /*
-   * A list per shelf, for the reason Recently Added has two below: one mixed
-   * list let half-played songs take the films' places. Watching feeds both
-   * Continue Watching and Next up, hence the deeper limit; the spotlight asks
-   * for the same key, so it is one request.
+   * Continue Watching feeds the spotlight's resume mode and tells the
+   * spotlight whether its title is in progress; the spotlight asks for the
+   * same key, so it is one request. What is in progress is drawn by the
+   * resume console below (ADR 0118), which asks the server for every kind.
    */
   const { data: continueWatching } = useContinueWatching("watching", HOME_WATCHING_LIMIT);
-  const { data: continueListening } = useContinueWatching("music");
+  const { data: resume } = useResume();
   // Deeper than the row can show, because the one list is split into two. On a
   // library where a scan just added 200 tracks, the top 20 by date are all
   // music and "Recently Added" would be empty while New Music overflowed.
@@ -126,97 +124,8 @@ export function Home() {
     (l) => l.kind === "movie" || l.kind === "show",
   );
 
-  const setWatched = useSetWatchedByID();
   const navigate = useNavigate();
-  const pb = usePlayback();
-
-  /*
-   * What a right-click offers on a Continue shelf.
-   *
-   * Two ways off the shelf, and they are not the same thing said twice. An item
-   * is on it because a position was saved and the watched flag is not set, so
-   * it leaves either by admitting it was finished or by forgetting the
-   * position — and those disagree about whether you have seen it.
-   *
-   * A single "Remove" would have to pick one silently. For a film abandoned
-   * twenty minutes in, marking it watched is a lie the library then repeats
-   * every time it filters by unwatched; for one finished on another device,
-   * forgetting the position throws away the fact you watched it. Both are
-   * offered because both are things people mean.
-   *
-   * The wording carries the difference rather than a tooltip: one says what it
-   * records, the other names the shelf and claims nothing about whether it was
-   * seen.
-   *
-   * And it says *watched* or *played* to match what the thing is. The same two
-   * writes serve an album track and a film, but "Mark as watched" on a song and
-   * "Remove from Continue Watching" on the Continue Listening shelf are both
-   * the interface reading from the wrong half of itself — small, and exactly
-   * the kind of small that makes a feature feel bolted on.
-   */
-  const { markAll, marking } = useMarkAll();
-
-  const continueActions = (item: Item): MenuAction[] => {
-    /*
-     * A show on Next up is marked through its episodes.
-     *
-     * The show row has no play state of its own: the shelf decides a show's
-     * place from what its episodes say. These menu items used to write to the
-     * show row, which the server accepted and the shelf ignored — "Mark as
-     * watched" and "Remove" both reported success and left the show where it
-     * was. The grid's container menu already marks every episode; this is the
-     * same code.
-     *
-     * There is no "Remove" here, deliberately. A show is on the shelf because
-     * of any episode activity, finished episodes included, and the only way to
-     * take it off without claiming it was all watched is to forget those
-     * episodes too. That is what "Mark all as unwatched" says out loud, where
-     * a "Remove" would have done it quietly.
-     */
-    if (item.kind === "show") {
-      return [
-        {
-          label: "Mark all as watched",
-          disabled: marking,
-          onSelect: () => void markAll(item, true),
-        },
-        {
-          label: "Mark all as unwatched",
-          disabled: marking,
-          onSelect: () => void markAll(item, false),
-        },
-        {
-          label: "Go to details",
-          onSelect: () => navigate(`/item/${item.id}`),
-        },
-      ];
-    }
-    const audio = isMusic(item);
-    return [
-      {
-        label: `Mark as ${watchedVerb(item).past}`,
-        onSelect: () => setWatched.mutate({ itemID: item.id, watched: true }),
-      },
-      {
-        label: audio
-          ? "Remove from Continue Listening"
-          : "Remove from Continue Watching",
-        onSelect: () => setWatched.mutate({ itemID: item.id, watched: false }),
-      },
-      {
-        label: "Play next",
-        onSelect: () => pb.playNextUp(item.id),
-      },
-      {
-        label: "Add to queue",
-        onSelect: () => pb.addToQueue(item.id),
-      },
-      {
-        label: "Go to details",
-        onSelect: () => navigate(`/item/${item.id}`),
-      },
-    ];
-  };
+  const { continueActions, resumeActions, resumeOpen } = useContinueMenu();
 
   /*
    * Which item is in the spotlight, and why.
@@ -240,37 +149,13 @@ export function Home() {
   const withoutHero = (items: Item[] | undefined) =>
     hero ? (items ?? []).filter((i) => i.id !== hero.item.id) : (items ?? []);
 
-  // Watching and listening are separate hubs. One mixed row put a half-played
-  // track between two films, and because a track carries no cover the row read
-  // as broken films rather than as music — the fault looked like missing
-  // artwork when it was actually a missing distinction.
-  //
-  // Recently Added splits for a second reason on top of that one: a sleeve is
-  // square and a poster is 2:3, so a mixed row is also a ragged row — the
-  // tiles stop sharing a baseline and the shelf reads as broken alignment
-  // rather than as two kinds of thing.
-  const resumable = withoutHero(continueWatching);
   /*
-   * Films on one shelf, television on another.
-   *
-   * The server's Continue Watching answers with a show, not an episode, for
-   * a series in progress — the tile carries `next_episode` and pressing it
-   * continues the show. Mixed in with half-watched films that was a row of
-   * posters in which a show you finished an episode of looked exactly like a
-   * film you abandoned. Next up takes the shows and draws the episode itself:
-   * its still, its title, which show and which episode.
-   *
-   * A show with no next episode is not offered — there is nothing to play —
-   * and it is not dropped back into Continue Watching either, where it would
-   * be the same tile the split exists to remove.
+   * The console in place of Continue Watching, Next up and Continue
+   * Listening (ADR 0118 §2). The spotlight's title is left out of it, for the
+   * reason it was left out of the shelf beneath: the same thing twice, side by
+   * side, is a page that looks generated rather than arranged.
    */
-  // A book is on its own library's shelf (ADR 0116, answer 7), never among
-  // films or songs.
-  const continueVideo = resumable.filter(
-    (i) => !isMusic(i) && i.kind !== "show" && i.kind !== "book",
-  );
-  const nextUp = resumable.filter((i) => i.kind === "show" && i.next_episode);
-  const continueAudio = (continueListening ?? []).filter(isMusic);
+  const resumeCards = (resume?.cards ?? []).filter((c) => !hero || c.item.id !== hero.item.id);
 
   // Already the right kinds, so only the hero has to be taken out of the video
   // row; the music row cannot contain it.
@@ -287,55 +172,12 @@ export function Home() {
    */
   const onThisDay = memories?.items ?? [];
 
-  /*
-   * Pressing a show on this shelf continues the show; pressing a film opens
-   * the film, which is what the default already does.
-   *
-   * The tile carries `next_episode` so it can draw the right title and bar,
-   * and deliberately does not use it to decide what to play — showContinueTarget
-   * re-asks the server, because this list is up to ten seconds old and landing
-   * on an episode already finished is the exact failure that endpoint refuses
-   * to cache against.
-   *
-   * A failure here navigates to the show instead of dying silently: the shelf
-   * is not a page that can grow an error banner, and the show page can both
-   * explain itself and offer Play.
-   */
-  const continueOpen = (item: Item) => {
-    /*
-     * A collection's next film opens its page knowing which collection it
-     * continues, so Play there carries on through the franchise rather than
-     * stopping after the one film (Detail's continueLeaf).
-     */
-    if (item.kind === "movie" && item.continues_from) {
-      const collectionID = item.continues_from.collection_id;
-      return () => navigate(`/item/${item.id}`, { state: { collectionID } });
-    }
-    if (item.kind !== "show") return undefined;
-    return () => {
-      void (async () => {
-        try {
-          const target = await showContinueTarget(item.id);
-          if (target.kind !== "play") {
-            navigate(`/item/${item.id}`);
-            return;
-          }
-          navigate(`/watch/${target.episodeID}`, {
-            state: { queue: target.queue },
-          });
-        } catch {
-          navigate(`/item/${item.id}`);
-        }
-      })();
-    };
-  };
-
   const { data: watchlist } = useWatchlist();
   const { data: toRate } = useToRate();
 
   const hasAnything =
     (continueWatching?.length ?? 0) > 0 ||
-    (continueListening?.length ?? 0) > 0 ||
+    (resume?.cards.length ?? 0) > 0 ||
     (recentlyAddedVideo?.length ?? 0) > 0 ||
     (recentlyAddedMusic?.length ?? 0) > 0 ||
     (libraries?.length ?? 0) > 0;
@@ -368,20 +210,13 @@ export function Home() {
           )}
         />
       )}
+      <ResumeConsole
+        cards={resumeCards}
+        more={resume?.more ?? false}
+        actions={resumeActions}
+        open={resumeOpen}
+      />
       <div className="home__shelves">
-        <Shelf
-          title="Continue Watching"
-          items={continueVideo}
-          itemActions={continueActions}
-          itemOpen={continueOpen}
-        />
-        <Shelf
-          title="Next up"
-          items={nextUp}
-          itemActions={continueActions}
-          itemOpen={continueOpen}
-          wide
-        />
         {/* What you meant to watch, after what you are in the middle of
             (ADR 0085). Newest first, and empty means no shelf. */}
         <Shelf title="Watchlist" items={watchlistItems(watchlist)} />
@@ -391,11 +226,6 @@ export function Home() {
           title="Rate what you've watched"
           items={toRate?.items ?? []}
           itemFooter={(item) => <QuickRate item={item} />}
-        />
-        <Shelf
-          title="Continue Listening"
-          items={continueAudio}
-          itemActions={continueActions}
         />
         <Shelf title="Recently Added" items={recentVideo} />
         <Shelf title="New Music" items={recentAudio} />

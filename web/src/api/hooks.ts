@@ -31,6 +31,7 @@ import type {
   NearCopies,
   PhotoPlaces,
   RetroDatabase,
+  ResumeConsole,
   WebCores,
 } from "./types";
 import { isContainer } from "@/lib/kind";
@@ -1100,6 +1101,8 @@ export function useSetComicPlace(id: number) {
     mutationFn: (page: number) => apiSend(`/api/items/${id}/place`, "PUT", { page }).then(() => page),
     onSuccess: (page) => {
       qc.invalidateQueries({ queryKey: ["comic-pages", id], refetchType: "none" });
+      // Where you are in it is what the resume console shows.
+      qc.invalidateQueries({ queryKey: ["continue", "resume"] });
       const pages = qc.getQueryData<ComicPages>(["comic-pages", id])?.pages;
       if (pages !== undefined && page === pages - 1) invalidateWatchState(qc);
     },
@@ -1437,6 +1440,27 @@ export function useContinueWatching(shelf: ContinueShelf, limit = 20) {
     queryFn: ({ signal }) =>
       apiGet<{ items: Item[] }>(`/api/continue?shelf=${shelf}&limit=${limit}`, signal).then(
         (r) => r.items,
+      ),
+    staleTime: 10_000,
+  });
+}
+
+/*
+ * The resume console: everything in progress, across kinds (ADR 0118).
+ *
+ * Keyed under ["continue"] so every write that already refreshes the Continue
+ * shelves -- progress, mark watched, a scan, the event stream -- refreshes
+ * this too. A sibling key such as ["resume"] would be reached by none of them,
+ * and the console would keep showing a film somebody had just finished.
+ */
+export function useResume(all = false) {
+  return useQuery({
+    queryKey: ["continue", "resume", all],
+    queryFn: ({ signal }) =>
+      apiGet<Partial<ResumeConsole>>(all ? "/api/resume?all=true" : "/api/resume", signal).then(
+        // An answer of any other shape is an empty console, never a home page
+        // that fails to draw.
+        (r): ResumeConsole => ({ cards: r.cards ?? [], more: r.more ?? false }),
       ),
     staleTime: 10_000,
   });
