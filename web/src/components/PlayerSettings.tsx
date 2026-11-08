@@ -12,188 +12,192 @@ import { PhotosensitivityWarning } from "./PhotosensitivityWarning";
 import { deviceKind, useRemoteDevice } from "@/playback/remote";
 
 /*
- * This device › Player: the player's own preferences, settable before
- * anything plays (docs/settings-plan.md, step 2).
+ * The player's own preferences, settable before anything plays
+ * (docs/settings-plan.md, step 2).
  *
  * They lived only in the player's panel, so the first chance to set a quality
  * or turn on night mode was after a film had started. Same preferences, same
  * store (playback/prefs): change one here and the panel shows it, and the
  * other way round. What needs something playing — the audio stream, speed,
  * which subtitle track — stays in the panel, because it is about *this* film.
+ *
+ * Four panes under This device since Settings 3.0 step 2: Video, Music & Now
+ * Playing, Theater output and Remote play. They were one pane holding four
+ * subjects. All four are owned by the device (ADR 0120); the two rows on
+ * Video that follow your account say so.
  */
-export function PlayerSettings() {
+export function VideoSettings() {
   const [prefs, setPrefs] = usePrefs();
   return (
-    <>
-      <section className="settings__section">
-        <span className="section-label">Films and episodes</span>
-        <label className="set-row">
-          <span>Quality on this device</span>
-          <select
-            className="set-input"
-            value={prefs.quality}
-            onChange={(e) => setPrefs({ quality: e.target.value })}
-          >
-            {QUALITIES.map((q) => (
-              <option key={q.id} value={q.id}>
-                {q.label}
-              </option>
-            ))}
-          </select>
-        </label>
-        {prefs.quality !== DEFAULTS.quality && (
-          <p className="set-row__sub">
-            Anything above this is converted on the server before it is sent. The
-            server&rsquo;s own limit, if it has one, still applies on top.
-          </p>
-        )}
-        <label className="set-row">
-          <span>Night mode</span>
-          <select
-            className="set-input"
-            value={prefs.nightVideo ? "on" : "off"}
-            onChange={(e) => setPrefs({ nightVideo: e.target.value === "on" })}
-          >
-            <option value="off">Off</option>
-            <option value="on">On</option>
-          </select>
-        </label>
+    <section className="settings__section">
+      <span className="section-label">Films and episodes</span>
+      <label className="set-row">
+        <span>Quality on this device</span>
+        <select
+          className="set-input"
+          value={prefs.quality}
+          onChange={(e) => setPrefs({ quality: e.target.value })}
+        >
+          {QUALITIES.map((q) => (
+            <option key={q.id} value={q.id}>
+              {q.label}
+            </option>
+          ))}
+        </select>
+      </label>
+      {prefs.quality !== DEFAULTS.quality && (
         <p className="set-row__sub">
-          Lifts quiet speech and tames loud scenes. Where a film&rsquo;s sound cannot
-          take it, the player says so and leaves it alone.
+          Anything above this is converted on the server before it is sent. The
+          server&rsquo;s own limit, if it has one, still applies on top.
         </p>
-        <label className="set-row">
-          <span>Dialogue boost</span>
-          <select
-            className="set-input"
-            value={String(prefs.dialogueVideo)}
-            onChange={(e) => setPrefs({ dialogueVideo: Number(e.target.value) })}
-          >
-            {DIALOGUE_LEVELS.map((label, level) => (
-              <option key={level} value={level}>
-                {label}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="set-toggle">
-          <input
-            type="checkbox"
-            checked={prefs.autoPlay}
-            onChange={(e) => setPrefs({ autoPlay: e.target.checked })}
-          />
-          Play the next episode or track automatically
-        </label>
-        <SkipIntrosToggle />
-      </section>
+      )}
+      <label className="set-row">
+        <span>Night mode</span>
+        <select
+          className="set-input"
+          value={prefs.nightVideo ? "on" : "off"}
+          onChange={(e) => setPrefs({ nightVideo: e.target.value === "on" })}
+        >
+          <option value="off">Off</option>
+          <option value="on">On</option>
+        </select>
+      </label>
+      <p className="set-row__sub">
+        Lifts quiet speech and tames loud scenes. Where a film&rsquo;s sound cannot
+        take it, the player says so and leaves it alone.
+      </p>
+      <label className="set-row">
+        <span>Dialogue boost</span>
+        <select
+          className="set-input"
+          value={String(prefs.dialogueVideo)}
+          onChange={(e) => setPrefs({ dialogueVideo: Number(e.target.value) })}
+        >
+          {DIALOGUE_LEVELS.map((label, level) => (
+            <option key={level} value={level}>
+              {label}
+            </option>
+          ))}
+        </select>
+      </label>
+      <label className="set-toggle">
+        <input
+          type="checkbox"
+          checked={prefs.autoPlay}
+          onChange={(e) => setPrefs({ autoPlay: e.target.checked })}
+        />
+        Play the next episode or track automatically
+      </label>
+      <SkipIntrosToggle />
+    </section>
+  );
+}
 
-      <PlayOnThisDevice />
-
-      <TheaterOutput />
-
-      <section className="settings__section">
-        <span className="section-label">Music</span>
-        <label className="set-row">
-          <span>Night mode</span>
-          <select
-            className="set-input"
-            value={prefs.nightMusic ? "on" : "off"}
-            onChange={(e) => setPrefs({ nightMusic: e.target.value === "on" })}
-          >
-            <option value="off">Off</option>
-            <option value="on">On</option>
-          </select>
-        </label>
-        <label className="set-row">
-          <span>Equaliser</span>
-          <select
-            className="set-input"
-            value={prefs.eqPreset}
-            onChange={(e) => {
-              const p = EQ_PRESETS.find((x) => x.id === e.target.value);
-              if (p) setPrefs({ eqPreset: p.id, eq: [...p.gains] });
-            }}
-          >
-            {EQ_PRESETS.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.label}
-              </option>
-            ))}
-            {prefs.eqPreset === "custom" && <option value="custom">Custom</option>}
-          </select>
-        </label>
-        <p className="set-row__sub">
-          The individual bands are in the player&rsquo;s settings while music plays.
-        </p>
-        <label className="set-row">
-          <span>Crossfade between albums</span>
-          <select
-            className="set-input"
-            value={String(prefs.crossfade)}
-            onChange={(e) => setPrefs({ crossfade: Number(e.target.value) })}
-          >
-            {CROSSFADES.map((s) => (
-              <option key={s} value={s}>
-                {s === 0 ? "Off" : `${s} s`}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="set-row">
-          <span>Even out loudness</span>
-          <select
-            className="set-input"
-            value={prefs.loudness}
-            onChange={(e) => setPrefs({ loudness: e.target.value as LevelMode })}
-          >
-            {LEVEL_MODES.map((m) => (
-              <option key={m.id} value={m.id}>
-                {m.label}
-              </option>
-            ))}
-          </select>
-        </label>
-        <p className="set-row__sub">
-          Uses the ReplayGain your tagger measured, so loud records play nearer the level of quiet
-          ones. It only turns music down, and a track without the tag plays as it is. By album
-          keeps an album&rsquo;s quiet songs quieter than its loud ones.
-        </p>
-        <label className="set-toggle">
-          <input
-            type="checkbox"
-            checked={prefs.taper}
-            onChange={(e) => setPrefs({ taper: e.target.checked })}
-          />
-          Fade in at the start and out at the end of a listening session
-        </label>
-        <label className="set-row">
-          <span>Now Playing shows</span>
-          <select
-            className="set-input"
-            value={prefs.stage}
-            onChange={(e) => setPrefs({ stage: e.target.value as Stage })}
-          >
-            {/* The trails need WebGL2; the stage switcher does not offer them without it either. */}
-            {STAGES.filter((s) => s.tier < 2 || webgl2Supported()).map((s) => (
-              <option key={s.id} value={s.id}>
-                {s.label}
-              </option>
-            ))}
-          </select>
-        </label>
-        {/* Half the motion (docs/now-playing-plan.md, Photosensitivity). On
-            regardless while the system asks for reduced motion. */}
-        <label className="set-toggle">
-          <input
-            type="checkbox"
-            checked={prefs.vizCalm}
-            onChange={(e) => setPrefs({ vizCalm: e.target.checked })}
-          />
-          Calm visualizers: half the motion
-        </label>
-        <PhotosensitivityWarning />
-      </section>
-    </>
+export function MusicSettings() {
+  const [prefs, setPrefs] = usePrefs();
+  return (
+    <section className="settings__section">
+      <span className="section-label">Music</span>
+      <label className="set-row">
+        <span>Night mode</span>
+        <select
+          className="set-input"
+          value={prefs.nightMusic ? "on" : "off"}
+          onChange={(e) => setPrefs({ nightMusic: e.target.value === "on" })}
+        >
+          <option value="off">Off</option>
+          <option value="on">On</option>
+        </select>
+      </label>
+      <label className="set-row">
+        <span>Equaliser</span>
+        <select
+          className="set-input"
+          value={prefs.eqPreset}
+          onChange={(e) => {
+            const p = EQ_PRESETS.find((x) => x.id === e.target.value);
+            if (p) setPrefs({ eqPreset: p.id, eq: [...p.gains] });
+          }}
+        >
+          {EQ_PRESETS.map((p) => (
+            <option key={p.id} value={p.id}>
+              {p.label}
+            </option>
+          ))}
+          {prefs.eqPreset === "custom" && <option value="custom">Custom</option>}
+        </select>
+      </label>
+      <p className="set-row__sub">
+        The individual bands are in the player&rsquo;s settings while music plays.
+      </p>
+      <label className="set-row">
+        <span>Crossfade between albums</span>
+        <select
+          className="set-input"
+          value={String(prefs.crossfade)}
+          onChange={(e) => setPrefs({ crossfade: Number(e.target.value) })}
+        >
+          {CROSSFADES.map((s) => (
+            <option key={s} value={s}>
+              {s === 0 ? "Off" : `${s} s`}
+            </option>
+          ))}
+        </select>
+      </label>
+      <label className="set-row">
+        <span>Even out loudness</span>
+        <select
+          className="set-input"
+          value={prefs.loudness}
+          onChange={(e) => setPrefs({ loudness: e.target.value as LevelMode })}
+        >
+          {LEVEL_MODES.map((m) => (
+            <option key={m.id} value={m.id}>
+              {m.label}
+            </option>
+          ))}
+        </select>
+      </label>
+      <p className="set-row__sub">
+        Uses the ReplayGain your tagger measured, so loud records play nearer the level of quiet
+        ones. It only turns music down, and a track without the tag plays as it is. By album
+        keeps an album&rsquo;s quiet songs quieter than its loud ones.
+      </p>
+      <label className="set-toggle">
+        <input
+          type="checkbox"
+          checked={prefs.taper}
+          onChange={(e) => setPrefs({ taper: e.target.checked })}
+        />
+        Fade in at the start and out at the end of a listening session
+      </label>
+      <label className="set-row">
+        <span>Now Playing shows</span>
+        <select
+          className="set-input"
+          value={prefs.stage}
+          onChange={(e) => setPrefs({ stage: e.target.value as Stage })}
+        >
+          {/* The trails need WebGL2; the stage switcher does not offer them without it either. */}
+          {STAGES.filter((s) => s.tier < 2 || webgl2Supported()).map((s) => (
+            <option key={s.id} value={s.id}>
+              {s.label}
+            </option>
+          ))}
+        </select>
+      </label>
+      {/* Half the motion (docs/now-playing-plan.md, Photosensitivity). On
+          regardless while the system asks for reduced motion. */}
+      <label className="set-toggle">
+        <input
+          type="checkbox"
+          checked={prefs.vizCalm}
+          onChange={(e) => setPrefs({ vizCalm: e.target.checked })}
+        />
+        Calm visualizers: half the motion
+      </label>
+      <PhotosensitivityWarning />
+    </section>
   );
 }
 
@@ -206,10 +210,16 @@ export function PlayerSettings() {
  * showed night mode to a client that refused it, which made an evening of
  * listening test nothing. In a browser there is no native player, and nothing
  * here would do anything, so the section is not drawn at all.
+ *
+ * Its own pane since Settings 3.0 step 2, offered only in the desktop window
+ * (DESKTOP_ONLY in Settings.tsx). A desktop player that can do neither still
+ * gets a sentence saying so when `explain` is set, because a pane that opens
+ * on nothing reads as broken. Nothing is said until the player has answered,
+ * so the sentence never flashes on a player that can.
  */
-function TheaterOutput() {
+export function TheaterOutput({ explain = false }: { explain?: boolean }) {
   const [prefs, setPrefs] = usePrefs();
-  const [features, setFeatures] = useState<string[]>([]);
+  const [features, setFeatures] = useState<string[] | null>(null);
   useEffect(() => {
     let live = true;
     void nativeFeatures().then((f) => {
@@ -219,9 +229,20 @@ function TheaterOutput() {
       live = false;
     };
   }, []);
-  const refresh = features.includes("refresh");
-  const hdr = features.includes("hdr");
-  if (!refresh && !hdr) return null;
+  const refresh = !!features?.includes("refresh");
+  const hdr = !!features?.includes("hdr");
+  if (!refresh && !hdr) {
+    if (!explain || features === null) return null;
+    return (
+      <section className="settings__section">
+        <span className="section-label">Theater output</span>
+        <p className="set-row__sub">
+          This window&rsquo;s player cannot change the display, so there is nothing to set here.
+          Frame-rate matching and HDR output appear here on a player that can do them.
+        </p>
+      </section>
+    );
+  }
   return (
     <section className="settings__section">
       <span className="section-label">Theater output</span>
@@ -444,9 +465,10 @@ function SkipIntrosToggle() {
 
 /*
  * Whether your other devices can send things here (ADR 0117). Per device,
- * like everything on this pane: it is a fact about this screen.
+ * like everything on this pane: it is a fact about this screen. This device ›
+ * Remote play.
  */
-function PlayOnThisDevice() {
+export function RemotePlaySettings() {
   const [device, setDevice] = useRemoteDevice();
   const [name, setName] = useState(device.name);
   useEffect(() => setName(device.name), [device.name]);

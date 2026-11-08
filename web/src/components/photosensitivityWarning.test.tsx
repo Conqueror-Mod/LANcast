@@ -1,13 +1,13 @@
 /*
  * The photosensitivity warning (PhotosensitivityWarning.tsx), beside the Calm
- * switch in This device › Player, where anybody who watches a visualizer can
+ * switch in This device › Music & Now Playing, where anybody who watches a visualizer can
  * find it, not only an administrator.
  */
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { PlayerSettings } from "./PlayerSettings";
+import { MusicSettings } from "./PlayerSettings";
 import { MilkdropSettings } from "./MilkdropSettings";
 
 declare global {
@@ -42,7 +42,7 @@ async function render() {
   await act(async () => {
     root.render(
       <QueryClientProvider client={qc}>
-        <PlayerSettings />
+        <MusicSettings />
       </QueryClientProvider>,
     );
   });
