@@ -1,8 +1,9 @@
 # Settings 3.0: a place for everything LANcast learned to do since
 
-Status: proposal, 2026-11-08. Nothing here is built. It is written while
+Status: accepted, 2026-11-08. Nothing here is built. It is written while
 v0.10.10 (Homepage 2.0, part two) is being finished, so that Settings 3.0 can
-start on the release after it. Decisions for Chris are in §6.
+start on the release after it. Chris's decisions are in §7; each took the
+recommendation.
 
 The first settings plan ([settings-plan.md](settings-plan.md), "Settings
 2.0") asked what was missing and how to reorganise around it. Every step of it
@@ -184,7 +185,11 @@ Each step is one PR or a small stack, and leaves Settings working.
 6. **Per-library options**, starting with comic reading direction and
    metadata language. Schema change, so an ADR.
 7. **Storage overview.** Read-only.
-8. The rest of 2d, as Chris chooses.
+
+**Parked** (§7, decision 5): local networks, a quality cap for viewers away
+from home, per-account transcoding caps, sign-in policy, the diagnostics
+bundle, self-tests and editable schedules. Each comes back when someone needs
+it, not on a timetable.
 
 Steps 1–2 are client only and can follow v0.10.10 straight away. Step 3 is
 the natural next release, because it finishes what Homepage 2.0 started.
@@ -203,3 +208,21 @@ the natural next release, because it finishes what Homepage 2.0 started.
    remote caps until a remote viewer actually needs one.
 6. **Your own list.** Settings 2.0 got better from it — what is on it this
    time?
+
+## 7. Decisions taken (2026-11-08)
+
+1. **The rule in §3 is adopted, all five points**, including account
+   defaults for device settings (point 4) and media preferences belonging to
+   the media (point 5). It is written up as an ADR at step 2.
+2. **Spotlight and spoilers move to the account.** Step 3's carry-over reads
+   the old `localStorage` value once, so nobody's setting resets. Where two
+   devices disagree, the first device to carry over wins.
+3. **Player splits four ways:** Video · Music & Now Playing · Theater output ·
+   Remote play.
+4. **Comic reading direction is per library, with a per-series override.**
+5. **Build** metadata language and region, per-library options, and the
+   storage overview. **Park** the rest of §2d (listed under §5). Metadata
+   language reverses the fixed `en-US` in `internal/meta/tmdb`, so step 5
+   needs its own ADR saying why the metadata language may now differ from
+   the interface's.
+6. **Chris's list:** nothing for now. It can be added to this section later.
