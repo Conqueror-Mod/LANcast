@@ -1,6 +1,6 @@
 # Roadmap
 
-Last updated: 2026-11-08 · **v0.10.7 released, nothing unreleased on main · M0–M4 built.** The React client executes the design
+Last updated: 2026-11-08 · **v0.10.8 released, nothing unreleased on main · M0–M4 built.** The React client executes the design
 system and the client-UX backlog is closed. Observability (match, review, scan
 diagnostics), an audit log and CI are in place. Transport security (TLS) and
 multi-user accounts (admin/member roles) are built, and branding & splash shipped.
@@ -20,9 +20,10 @@ listed work that had shipped as open. The release-by-release record is the
 [Releases](#releases) table, and what remains is [What is left](#what-is-left).
 Refreshed again 2026-11-07, after v0.10.6: the file had stopped at v0.10.3.*
 
-**On main, unreleased:** nothing. Main is v0.10.7.
+**On main, unreleased:** nothing. Main is v0.10.8.
 
-v0.10.7 is the latest release. Since v0.9.78:
+v0.10.8 is the latest release. Since v0.9.78:
+- **v0.10.8:** a Debug log that holds about 28 hours rather than 11.
 - **v0.10.7:** audiobooks step 3 (a sleep timer, narrators, and filters by
   author, narrator and series), Continue Watching with a list of its own, and
   a film watched with a friend starting in seconds rather than minutes.
@@ -201,7 +202,7 @@ is in the [Feature backlog](#feature-backlog) entry it names.*
 diagnosed as far as the evidence went. The two still open each lost its
 server log to Debug rotation. v0.10.5 quieted the polling, then v0.10.6's
 play-on-another-device heartbeat and a router's DLNA searches filled it again,
-to eleven hours by 2026-11-08; with those left out too (on main, unreleased)
+to eleven hours by 2026-11-08; with those left out too (v0.10.8)
 it holds about 28. The next step for each is to reproduce it and copy the log
 at once.
 - ~~**Continue Watching emptied itself.**~~ **Fixed in v0.10.7 (#1025).** Home read one mixed list of 20 and split it afterwards, so
@@ -299,6 +300,7 @@ is watching that keeps running.
 
 | Version | Date | What shipped |
 |---|---|---|
+| **v0.10.8** | 2026-11-08 | **A log that keeps its evidence.** After v0.10.6 the Debug log held eleven hours: the play-on-another-device report (`PUT /api/remote/players/{id}`, every 5 s per window) was 28% of it and a router's SSDP searches for an internet gateway 25%. Their request lines go, with the GETs a timer sends (transcodes, dashboard history, federation presence, metrics, remote players); a DLNA search LANcast answers is still logged, one it ignores once per sender and target (#1028). Replayed, 60% fewer lines: about 28 hours. Schema 90 unchanged |
 | **v0.10.7** | 2026-11-08 | **Audiobooks finished, and a shelf of films again.** ADR 0116 step 3 (#1026): a sleep timer of 15 to 60 minutes or end of chapter, counted only while playing and fading out; narrators read from the composer or narrator tag, every voice of a full cast kept, stored as `narrator` credits; filters by author, narrator and series, and "Read by" on a book's page. Libraries are read once more for narrators at their next scan. Continue Watching asks per shelf (#1025), so half-played songs no longer push films off it. A film watched with a friend starts in seconds: the guest's server waits as long for the playlist as the host holds it, and a friend's app sends what it can decode (#1024). Schema 90 unchanged |
 | **v0.10.6** | 2026-11-07 | **Play on another device.** One of your own windows plays a film, an episode or a song sent from another signed in as the same account, at the moment it was at, with the rest of the queue and no pre-roll ([ADR 0117](adr/0117-play-on-another-device.md), #1018): **Move here** in the player, **Play on…** on an item's page, and a **Devices** remote. In memory, no schema; never across accounts or servers. The desktop window offers itself by default, a browser or phone opts in. A friend's join request now shows over a full-screen film (#1019), and friends see posters on a shared library again (#1020). Schema 90 unchanged |
 | **v0.10.5** | 2026-11-07 | **Fixes from use.** Finishing a film in a collection offers a half-watched later one even when it has fallen out of Continue Watching's window (#1014, with Spotlight in #1015); the tray opens pages at the window's own address, so it no longer lands on `127.0.0.1` and signs the window out (#1014); the three request lines every window repeats on a timer leave the Debug log, which now holds about a day (#1015). Schema 90 unchanged |
