@@ -249,3 +249,47 @@ func TestRevision53SeedsOneEstimatedRowPerFinishedVideo(t *testing.T) {
 		t.Errorf("seeded = %+v, want one estimated row dated from the state row", vs)
 	}
 }
+
+/*
+ * Audiobooks and comics are logged too (ADR 0119): both have a clear finish,
+ * and a dated record of it is what On this day reads a year later. Each keeps
+ * its own kind on the row, so the Trakt export can still leave them out.
+ */
+func TestAFinishedBookAndComicAreLogged(t *testing.T) {
+	ctx := context.Background()
+	st, me, _ := viewingFixture(t)
+	add := func(kind, libKind, name, ext string) int64 {
+		t.Helper()
+		lib, err := st.CreateLibrary(ctx, name+" library", libKind, t.TempDir())
+		if err != nil {
+			t.Fatal(err)
+		}
+		id, err := st.UpsertItem(ctx, ScanFile{
+			LibraryID: lib.ID, Path: filepath.Join(lib.Path, name+ext), Kind: kind,
+			Title: name, SortTitle: name, Container: ext[1:], SizeBytes: 1, MTime: 1,
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return id
+	}
+	book := add("book", "audiobook", "Dune", ".m4b")
+	comic := add("comic", "comic", "Saga 01", ".cbz")
+
+	for _, id := range []int64{book, comic} {
+		if err := st.SaveProgress(ctx, id, me, 0, true); err != nil {
+			t.Fatal(err)
+		}
+	}
+	vs, _, err := st.Viewings(ctx, me, 100, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	kinds := map[string]bool{}
+	for _, v := range vs {
+		kinds[v.Kind] = true
+	}
+	if len(vs) != 2 || !kinds["book"] || !kinds["comic"] {
+		t.Errorf("logged %+v, want one book row and one comic row", vs)
+	}
+}

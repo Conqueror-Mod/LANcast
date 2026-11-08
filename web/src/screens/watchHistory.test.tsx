@@ -113,6 +113,17 @@ describe("watch history", () => {
     expect(ep.textContent).toContain("Futurama · S01E01");
   });
 
+  it("says a finished book or comic is one, so it does not read as a film", async () => {
+    viewings = [
+      row(5, { kind: "book", title: "Dune", year: 1965 }),
+      row(4, { kind: "comic", title: "Saga 01", year: null }),
+    ];
+    await render();
+    const rows = [...host.querySelectorAll(".profile__row")].map((r) => r.textContent ?? "");
+    expect(rows.find((t) => t.includes("Dune"))).toContain("Audiobook · 1965");
+    expect(rows.find((t) => t.includes("Saga 01"))).toContain("Comic");
+  });
+
   it("offers both downloads", async () => {
     await render();
     const hrefs = [...host.querySelectorAll<HTMLAnchorElement>(".profile__exportlinks a")].map((a) =>

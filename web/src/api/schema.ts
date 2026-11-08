@@ -9495,7 +9495,7 @@ export interface components {
              * @description Null once the item has been deleted from the library.
              */
             item_id: number | null;
-            /** @description `movie` or `episode` today. An open set. */
+            /** @description `movie`, `episode`, `book` or `comic` today (books and comics from v0.10.10, ADR 0119). An open set. */
             kind: string;
             title: string;
             year: number | null;
