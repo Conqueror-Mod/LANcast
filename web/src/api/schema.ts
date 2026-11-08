@@ -1039,6 +1039,54 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/home/shelves": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Your shelves pinned to Home, in order
+         * @description Shelves you pinned from a library grid (ADR 0119). Each is a library and the grid query it was pinned with; fetch its items with `GET /items?library_id=…&` + `query`, so the account's ceiling and hidden libraries apply as on the grid. A shelf over a library since kept from you is left out, and kept in case access returns. `max` is how many one account may pin.
+         */
+        get: operations["listHomeShelves"];
+        put?: never;
+        /**
+         * Pin a library view to Home
+         * @description Pins at the end of your list. `query` may hold only the parameters the library grid sets (filters, `person`, `sort`, `show`, `initial`, `q`); anything else, such as `library_id`, `limit` or `kind`, is `400`, so a shelf is only ever a listing you could have asked for by hand. The query is stored in a canonical order. The title is trimmed and must be 1 to 80 characters.
+         */
+        post: operations["addHomeShelf"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/home/shelves/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The shelf's id. */
+                id: number;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Unpin a shelf */
+        delete: operations["deleteHomeShelf"];
+        options?: never;
+        head?: never;
+        /**
+         * Rename or move a pinned shelf
+         * @description Send `title`, `position` or both. `position` is 0-based and clamped to the list; the other shelves close up around it. Another account's shelf is `404`.
+         */
+        patch: operations["patchHomeShelf"];
+        trace?: never;
+    };
     "/items/{id}/playback": {
         parameters: {
             query?: never;
@@ -8647,6 +8695,32 @@ export interface components {
             } | null;
             items: components["schemas"]["Item"][];
         };
+        HomeShelf: {
+            /** Format: int64 */
+            id: number;
+            /** @description 0-based, dense. */
+            position: number;
+            title: string;
+            /** Format: int64 */
+            library_id: number;
+            /** @description The grid query it was pinned with, e.g. `decade=1980&genre=Action`. Empty for the whole library. */
+            query: string;
+        };
+        HomeShelves: {
+            shelves: components["schemas"]["HomeShelf"][];
+            /** @description How many shelves one account may pin (12). */
+            max: number;
+        };
+        HomeShelfRequest: {
+            /** Format: int64 */
+            library_id: number;
+            title: string;
+            query?: string;
+        };
+        HomeShelfPatch: {
+            title?: string;
+            position?: number;
+        };
         ResumeCard: {
             /**
              * @description `video` is a film or a collection's next film; `game` is a retro game with a save on the server.
@@ -12192,6 +12266,114 @@ export interface operations {
                 };
             };
             401: components["responses"]["Unauthorized"];
+        };
+    };
+    listHomeShelves: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The shelves, possibly none. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HomeShelves"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+        };
+    };
+    addHomeShelf: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["HomeShelfRequest"];
+            };
+        };
+        responses: {
+            /** @description Pinned. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HomeShelf"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            /** @description Already at the limit of 12 shelves (`shelf_limit`). */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    deleteHomeShelf: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The shelf's id. */
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Unpinned. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    patchHomeShelf: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The shelf's id. */
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["HomeShelfPatch"];
+            };
+        };
+        responses: {
+            /** @description Changed. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
         };
     };
     getPlaybackDecision: {

@@ -30,6 +30,8 @@ interface Props {
   wide?: boolean;
   /** Something under each tile: the stars on Rate what you've watched. */
   itemFooter?: (item: Item) => ReactNode;
+  /** Controls at the end of the heading: a pinned shelf's menu (ADR 0119). */
+  headerActions?: ReactNode;
 }
 
 // A horizontally scrolling hub row. The header pairs a wide-tracked label with a
@@ -44,6 +46,7 @@ export function Shelf({
   itemOpen,
   wide = false,
   itemFooter,
+  headerActions,
 }: Props) {
   const track = useRef<HTMLDivElement>(null);
   const [reach, setReach] = useState<Edges>({ left: false, right: false });
@@ -102,6 +105,7 @@ export function Shelf({
             All
           </Link>
         )}
+        {headerActions}
       </div>
       <div className="shelf__viewport">
         {/*

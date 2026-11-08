@@ -257,6 +257,11 @@ func (s *Store) DeleteUser(ctx context.Context, id string) error {
 	if _, err := tx.ExecContext(ctx, `DELETE FROM viewing WHERE user_id = ?`, id); err != nil {
 		return fmt.Errorf("delete user viewings: %w", err)
 	}
+	// Shelves they pinned to Home (ADR 0119): no foreign key on user_id, so
+	// they go by hand like the rest of this list.
+	if _, err := tx.ExecContext(ctx, `DELETE FROM home_shelf WHERE user_id = ?`, id); err != nil {
+		return fmt.Errorf("delete user home shelves: %w", err)
+	}
 	// Where they are in each comic (ADR 0101).
 	if _, err := tx.ExecContext(ctx, `DELETE FROM comic_place WHERE user_id = ?`, id); err != nil {
 		return fmt.Errorf("delete user comic places: %w", err)

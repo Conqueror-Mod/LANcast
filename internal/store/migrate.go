@@ -6,7 +6,7 @@ import (
 )
 
 // CurrentSchemaVersion is the revision this build expects.
-const CurrentSchemaVersion = 90
+const CurrentSchemaVersion = 91
 
 // migration is one forward step. There are deliberately no down migrations:
 // rolling a media library's schema backwards loses data that a rescan cannot
@@ -204,6 +204,7 @@ var migrations = []migration{
 	// the position, because it is a fact about one account's listening, not
 	// about the book. NULL is "never chosen", which plays at 1×.
 	{version: 90, columns: []column{{"playback_state", "speed", "REAL"}}},
+	{version: 91, sql: schemaRevision91},
 }
 
 // migrate brings the database up to CurrentSchemaVersion.
@@ -2568,4 +2569,38 @@ CREATE TABLE IF NOT EXISTS invite (
     created_at         INTEGER NOT NULL,
     expires_at         INTEGER NOT NULL
 );
+`
+
+/*
+ * Revision 91 — shelves you pin to Home (ADR 0119 §2).
+ *
+ * A pinned shelf is a saved library view: one library, the query its grid
+ * understood, and a title. Per account, so it follows you to the TV and the
+ * phone, which is the reason it is a table and not a device setting.
+ *
+ * `library_id` and `query` are nullable and `builtin` exists from the start,
+ * for the second step ADR 0119 decided: a row naming a built-in shelf ("hide
+ * Unwatched in Movies") with no query. Nothing writes one yet; the column is
+ * here so that step needs no second migration.
+ *
+ * No foreign key on user_id, like viewing: an unsecured loopback server keeps
+ * its rows under 'local', which has no account row. Deleting an account
+ * removes them by hand (DeleteUser). Deleting a library removes its shelves
+ * by the cascade.
+ *
+ * No UNIQUE on (user_id, position): moving a shelf rewrites positions inside
+ * one transaction, and a unique index would refuse the intermediate state.
+ */
+const schemaRevision91 = `
+CREATE TABLE IF NOT EXISTS home_shelf (
+    id         INTEGER PRIMARY KEY,
+    user_id    TEXT    NOT NULL,
+    position   INTEGER NOT NULL,
+    title      TEXT    NOT NULL,
+    library_id INTEGER REFERENCES library(id) ON DELETE CASCADE,
+    query      TEXT,
+    builtin    TEXT,
+    created_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_home_shelf_user ON home_shelf(user_id, position);
 `

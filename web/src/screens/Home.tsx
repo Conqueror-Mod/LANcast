@@ -24,6 +24,7 @@ import type { MenuAction } from "@/components/Menu";
 import { HomeHero } from "@/components/HomeHero";
 import { ResumeConsole } from "@/components/ResumeConsole";
 import { NewThisWeek } from "@/components/NewThisWeek";
+import { PinnedShelves } from "@/components/PinnedShelves";
 import { FriendsPanel, MemoryPanel, showFriends } from "@/components/BridgePanels";
 import { collectionsMenu } from "@/lib/collectionsMenu";
 import { HomeMasthead } from "@/components/HomeMasthead";
@@ -259,6 +260,8 @@ export function Home() {
           items={toRate?.items ?? []}
           itemFooter={(item) => <QuickRate item={item} />}
         />
+        {/* The views you pinned from a library grid, in your order (ADR 0119 §2). */}
+        <PinnedShelves libraries={libraries} />
         {/* What arrived in the last seven days, and nothing older (ADR 0118). */}
         <NewThisWeek
           rows={{

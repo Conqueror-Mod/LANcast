@@ -1907,6 +1907,41 @@ The Suggested spotlight's fallback when nothing is in progress
 - The account's content-rating ceiling and hidden libraries apply as on
   `GET /api/items`.
 
+### Pinned shelves: `/api/home/shelves`
+
+Shelves you pin to Home from a library grid, kept per account so they follow
+you to every screen ([ADR 0119](adr/0119-homepage-2-part-two.md) §2).
+
+| Method | Path | Body | Answer |
+|---|---|---|---|
+| `GET` | `/api/home/shelves` | | `{ "shelves": [HomeShelf], "max": 12 }` |
+| `POST` | `/api/home/shelves` | `{ "library_id", "title", "query" }` | `201` HomeShelf |
+| `PATCH` | `/api/home/shelves/{id}` | `{ "title"?, "position"? }` | `204` |
+| `DELETE` | `/api/home/shelves/{id}` | | `204` |
+
+```json
+{ "shelves": [ { "id": 3, "position": 0, "title": "Eighties action",
+                 "library_id": 1, "query": "decade=1980&genre=Action&watched=false" } ],
+  "max": 12 }
+```
+
+- **A shelf is a saved library view.** Its items come from
+  `GET /api/items?library_id=…&` plus its `query`, so the content-rating
+  ceiling and hidden libraries apply exactly as on the grid.
+- **`query` holds only what the grid sets:** its filters, `person`, `sort`,
+  `show`, `initial` and `q`. Anything else (`library_id`, `limit`, `kind`,
+  `parent_id`…) is `400`, so a shelf can never ask for more than a person could
+  by hand. It is stored in a canonical order.
+- **Titles** are trimmed and 1 to 80 characters.
+- **At most 12 per account.** A thirteenth is `409` with code `shelf_limit`.
+- **Order** is `position`, 0-based and dense. A `PATCH` with `position` moves
+  the shelf there (clamped to the list) and closes the others up around it.
+- **A library you cannot open** is `404` when pinning. A shelf over a library
+  later kept from you is left out of the list, and kept in case access returns.
+  Deleting a library deletes its shelves; deleting an account deletes its
+  shelves.
+- Another account's shelf is `404`, exactly as one that does not exist.
+
 ### `GET /api/memories`
 
 Photographs taken on **today's date in an earlier year**, newest first — the

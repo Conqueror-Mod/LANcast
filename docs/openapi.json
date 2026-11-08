@@ -2555,6 +2555,144 @@
           }
         }
       },
+      "/home/shelves": {
+        "get": {
+          "operationId": "listHomeShelves",
+          "tags": [
+            "items"
+          ],
+          "summary": "Your shelves pinned to Home, in order",
+          "description": "Shelves you pinned from a library grid (ADR 0119). Each is a library and the grid query it was pinned with; fetch its items with `GET /items?library_id=…&` + `query`, so the account's ceiling and hidden libraries apply as on the grid. A shelf over a library since kept from you is left out, and kept in case access returns. `max` is how many one account may pin.",
+          "responses": {
+            "200": {
+              "description": "The shelves, possibly none.",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HomeShelves"
+                  }
+                }
+              }
+            },
+            "401": {
+              "$ref": "#/components/responses/Unauthorized"
+            }
+          }
+        },
+        "post": {
+          "operationId": "addHomeShelf",
+          "tags": [
+            "items"
+          ],
+          "summary": "Pin a library view to Home",
+          "description": "Pins at the end of your list. `query` may hold only the parameters the library grid sets (filters, `person`, `sort`, `show`, `initial`, `q`); anything else, such as `library_id`, `limit` or `kind`, is `400`, so a shelf is only ever a listing you could have asked for by hand. The query is stored in a canonical order. The title is trimmed and must be 1 to 80 characters.",
+          "requestBody": {
+            "required": true,
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HomeShelfRequest"
+                }
+              }
+            }
+          },
+          "responses": {
+            "201": {
+              "description": "Pinned.",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HomeShelf"
+                  }
+                }
+              }
+            },
+            "400": {
+              "$ref": "#/components/responses/BadRequest"
+            },
+            "401": {
+              "$ref": "#/components/responses/Unauthorized"
+            },
+            "404": {
+              "$ref": "#/components/responses/NotFound"
+            },
+            "409": {
+              "description": "Already at the limit of 12 shelves (`shelf_limit`).",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/ErrorEnvelope"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "/home/shelves/{id}": {
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "The shelf's id.",
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "patch": {
+          "operationId": "patchHomeShelf",
+          "tags": [
+            "items"
+          ],
+          "summary": "Rename or move a pinned shelf",
+          "description": "Send `title`, `position` or both. `position` is 0-based and clamped to the list; the other shelves close up around it. Another account's shelf is `404`.",
+          "requestBody": {
+            "required": true,
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HomeShelfPatch"
+                }
+              }
+            }
+          },
+          "responses": {
+            "204": {
+              "description": "Changed."
+            },
+            "400": {
+              "$ref": "#/components/responses/BadRequest"
+            },
+            "401": {
+              "$ref": "#/components/responses/Unauthorized"
+            },
+            "404": {
+              "$ref": "#/components/responses/NotFound"
+            }
+          }
+        },
+        "delete": {
+          "operationId": "deleteHomeShelf",
+          "tags": [
+            "items"
+          ],
+          "summary": "Unpin a shelf",
+          "responses": {
+            "204": {
+              "description": "Unpinned."
+            },
+            "401": {
+              "$ref": "#/components/responses/Unauthorized"
+            },
+            "404": {
+              "$ref": "#/components/responses/NotFound"
+            }
+          }
+        }
+      },
     "/items/{id}/playback": {
       "parameters": [
         {
@@ -20240,6 +20378,86 @@
               "items": {
                 "$ref": "#/components/schemas/Item"
               }
+            }
+          }
+        },
+        "HomeShelf": {
+          "type": "object",
+          "required": [
+            "id",
+            "position",
+            "title",
+            "library_id",
+            "query"
+          ],
+          "properties": {
+            "id": {
+              "type": "integer",
+              "format": "int64"
+            },
+            "position": {
+              "type": "integer",
+              "description": "0-based, dense."
+            },
+            "title": {
+              "type": "string"
+            },
+            "library_id": {
+              "type": "integer",
+              "format": "int64"
+            },
+            "query": {
+              "type": "string",
+              "description": "The grid query it was pinned with, e.g. `decade=1980&genre=Action`. Empty for the whole library."
+            }
+          }
+        },
+        "HomeShelves": {
+          "type": "object",
+          "required": [
+            "shelves",
+            "max"
+          ],
+          "properties": {
+            "shelves": {
+              "type": "array",
+              "items": {
+                "$ref": "#/components/schemas/HomeShelf"
+              }
+            },
+            "max": {
+              "type": "integer",
+              "description": "How many shelves one account may pin (12)."
+            }
+          }
+        },
+        "HomeShelfRequest": {
+          "type": "object",
+          "required": [
+            "library_id",
+            "title"
+          ],
+          "properties": {
+            "library_id": {
+              "type": "integer",
+              "format": "int64"
+            },
+            "title": {
+              "type": "string"
+            },
+            "query": {
+              "type": "string"
+            }
+          }
+        },
+        "HomeShelfPatch": {
+          "type": "object",
+          "properties": {
+            "title": {
+              "type": "string"
+            },
+            "position": {
+              "type": "integer"
             }
           }
         },

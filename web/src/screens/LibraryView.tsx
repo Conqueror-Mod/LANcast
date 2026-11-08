@@ -23,11 +23,13 @@ import { startOf } from "@/playback/queueOrder";
 import { PhotoBanner } from "@/components/PhotoBanner";
 import { PhotoViewer } from "@/components/PhotoViewer";
 import { FilterBar } from "@/components/FilterBar";
+import { PinShelfButton } from "@/components/PinShelfButton";
 import { AlphabetRail } from "@/components/AlphabetRail";
 import { TileSizeSlider } from "@/components/TileSizeSlider";
 import { useInfiniteScroll } from "@/lib/useInfiniteScroll";
 import { tileWidth, useTileSize } from "@/lib/tileSize";
 import { FILTER_PARAM_KEYS } from "@/lib/browseFilters";
+import { libraryItemQuery } from "@/lib/libraryQuery";
 import { ShuffleGlyph } from "@/components/PlayerGlyphs";
 import type { Item, Library } from "@/api/types";
 import { levelFor, type LibraryKindConfig } from "./libraryConfig";
@@ -214,53 +216,14 @@ export function LibraryView({
     fetchNextPage,
     hasNextPage,
     isFetchingNextPage,
-  } = useInfiniteItems({
-    libraryID,
-    q,
-    sort,
-    genres,
-    decades: decades.map(Number),
-    contentRatings,
-    unwatched,
-    years: years.map(Number),
-    resolutions,
-    platforms,
-    releaseTypes,
-    people: people.map(Number),
-    actors: actors.map(Number),
-    directors: directors.map(Number),
-    narrators: narrators.map(Number),
-    authors,
-    series: seriesNames,
-    collections: collections.map(Number),
-    faceClusters: faceClusters.map(Number),
-    minRating,
-    status,
+  } = useInfiniteItems(
     /*
-     * Containers that group items are not in the grid.
-     *
-     * They group things rather than being them, and a franchise tile beside its
-     * own members made a curated shelf read as an unsorted one. Each has its own
-     * page.
-     *
-     * Playlists were missing from this list and it showed: every `.m3u` a scene
-     * release ships was imported, and every one of them stood in the *artist*
-     * grid as a tile with a release-folder name, beside the artists whose tracks
-     * were on it. Not restricted to movie libraries any more either, which is
-     * how a music library came to be the one place this rule did not apply.
-     *
-     * Except while searching, where hiding a matching collection or playlist
-     * would be the search lying about what is here.
+     * One definition of what this URL lists, shared with a shelf pinned from
+     * it (ADR 0119), so the two cannot describe different things. Grouping
+     * containers stay out except while searching; see libraryItemQuery.
      */
-    // Must stay the same set the server's library count excludes
-    // (store.GroupingKinds), or the sidebar number and this grid describe
-    // different things — which is exactly what "1,381 items" beside a grid of
-    // 1,211 was.
-    excludeKind: q ? undefined : "collection,playlist",
-    initial: initial || undefined,
-    // Every album or track in the library rather than its top level.
-    kind: level?.kind,
-  });
+    libraryItemQuery(libraryID, params, config),
+  );
 
   // Every control lives in the URL, so a filtered view is linkable and survives
   // reload. Single-valued keys set/clear; an empty value removes the key.
@@ -678,6 +641,16 @@ export function LibraryView({
           <button className="browse__clear" onClick={clearFilters}>
             Clear
           </button>
+        )}
+        {/* A filtered or re-sorted view is one worth keeping (ADR 0119 §2). */}
+        {(filtered || params.has("sort")) && (
+          <PinShelfButton
+            libraryID={libraryID}
+            libraryName={library.name}
+            params={params}
+            castNames={castNames}
+            faceNames={faceNames}
+          />
         )}
       </div>
       </div>

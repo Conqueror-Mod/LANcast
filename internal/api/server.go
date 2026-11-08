@@ -639,6 +639,11 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/resume", s.resume)
 	// The Suggested spotlight's fallback: from what you finished (ADR 0119).
 	mux.HandleFunc("GET /api/home/suggestion", s.homeSuggestion)
+	// Shelves you pin to Home, per account (ADR 0119 §2).
+	mux.HandleFunc("GET /api/home/shelves", s.listHomeShelves)
+	mux.HandleFunc("POST /api/home/shelves", s.addHomeShelf)
+	mux.HandleFunc("PATCH /api/home/shelves/{id}", s.patchHomeShelf)
+	mux.HandleFunc("DELETE /api/home/shelves/{id}", s.deleteHomeShelf)
 	// Photographs from today's date in an earlier year (ADR 0028).
 	mux.HandleFunc("GET /api/memories", s.memories)
 	mux.HandleFunc("GET /api/profile", s.profile)
