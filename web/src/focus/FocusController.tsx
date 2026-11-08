@@ -36,6 +36,13 @@ interface Entry {
    * away from it; the element is not recoverable from the rect.
    */
   onMenu?: (el: HTMLElement) => void;
+  /*
+   * Leave the element's own tabIndex alone. A focus zone's native controls
+   * set this: a form keeps its Tab order for a keyboard or a screen reader,
+   * and arrows reach the same controls besides. Roving tabindex is for grids,
+   * where one Tab stop among two thousand tiles is the point.
+   */
+  keepTab?: boolean;
 }
 
 interface FocusAPI {
@@ -64,11 +71,19 @@ const KEY_TO_DIR: Record<string, Dir> = {
 // so navigation prefers the visually aligned neighbour.
 function nearest(
   from: DOMRect,
+  fromEl: HTMLElement,
   dir: Dir,
   entries: Map<string, Entry>,
   self: string,
   scope: HTMLElement | null,
 ): HTMLElement | null {
+  /*
+   * Up and down stay inside the column they start in. A form laid out as a
+   * nav beside a pane (Settings) otherwise sends Down from the pane's last
+   * row into whichever nav item happens to sit lower on the screen. Left and
+   * right are how a column is left.
+   */
+  const column = dir === "up" || dir === "down" ? fromEl.closest("[data-focus-column]") : null;
   const fx = from.left + from.width / 2;
   const fy = from.top + from.height / 2;
 
@@ -78,7 +93,12 @@ function nearest(
   for (const [id, { el }] of entries) {
     if (id === self) continue;
     if (scope && !scope.contains(el)) continue;
+    if (column && !column.contains(el)) continue;
+    // A disabled control cannot take focus, and moving to one would leave
+    // focus where it was; a control with no box is not on screen.
+    if ((el as HTMLButtonElement).disabled) continue;
     const r = el.getBoundingClientRect();
+    if (r.width === 0 && r.height === 0) continue;
     const cx = r.left + r.width / 2;
     const cy = r.top + r.height / 2;
     const dx = cx - fx;
@@ -166,15 +186,15 @@ export function FocusProvider({ children }: { children: ReactNode }) {
 
   const setCurrent = useCallback((id: string | null) => {
     const prev = currentID.current;
-    if (prev && prev !== id) {
+    // Moving onto a zone control leaves the roving stop where it was, so the
+    // grid or rail behind it stays one Tab away rather than becoming unreachable.
+    const next = id ? entries.current.get(id) : undefined;
+    if (prev && prev !== id && !next?.keepTab) {
       const p = entries.current.get(prev);
-      if (p) p.el.tabIndex = -1;
+      if (p && !p.keepTab) p.el.tabIndex = -1;
     }
     currentID.current = id;
-    if (id) {
-      const e = entries.current.get(id);
-      if (e) e.el.tabIndex = 0;
-    }
+    if (next && !next.keepTab) next.el.tabIndex = 0;
   }, []);
 
   const register = useCallback(
@@ -183,7 +203,7 @@ export function FocusProvider({ children }: { children: ReactNode }) {
       // The first focusable to appear becomes the tab stop, so the page is
       // keyboard-reachable without a click.
       if (currentID.current === null) setCurrent(id);
-      else entry.el.tabIndex = -1;
+      else if (!entry.keepTab) entry.el.tabIndex = -1;
     },
     [setCurrent],
   );
@@ -247,7 +267,31 @@ export function FocusProvider({ children }: { children: ReactNode }) {
           !["checkbox", "radio", "button", "submit"].includes(
             (ae as HTMLInputElement).type,
           )));
-    if (typing && (KEY_TO_DIR[e.key] || e.key === "Enter")) return;
+    /*
+     * Inside a focus zone (a form, such as Settings) a remote has to be able to
+     * leave a control, or one dropdown is a dead end. So there:
+     * - a closed dropdown gives every arrow back to navigation, and Enter opens
+     *   it, where the browser's own list takes the keys;
+     * - a text box or a slider gives up and down back, and keeps left and right
+     *   for its cursor or its value.
+     * Outside a zone nothing changes.
+     */
+    if (typing && ae!.closest("[data-focus-zone]") && ae!.tagName !== "TEXTAREA") {
+      if (ae!.tagName === "SELECT") {
+        if (e.key === "Enter") {
+          e.preventDefault();
+          try {
+            (ae as HTMLSelectElement).showPicker();
+          } catch {
+            // A browser without showPicker keeps Space and Alt+Down for this.
+          }
+          return;
+        }
+        // Arrows fall through to navigation below.
+      } else if (e.key !== "ArrowUp" && e.key !== "ArrowDown") {
+        return;
+      }
+    } else if (typing && (KEY_TO_DIR[e.key] || e.key === "Enter")) return;
 
     const id = currentID.current;
     const scope = scopes.current[scopes.current.length - 1] ?? null;
@@ -296,7 +340,7 @@ export function FocusProvider({ children }: { children: ReactNode }) {
 
     const dir = KEY_TO_DIR[e.key];
     if (!dir) return;
-    const target = nearest(entry.el.getBoundingClientRect(), dir, entries.current, id, scope);
+    const target = nearest(entry.el.getBoundingClientRect(), entry.el, dir, entries.current, id, scope);
     if (target) {
       e.preventDefault();
       target.focus();
@@ -386,6 +430,75 @@ export function useFocusScope(): (el: HTMLElement | null) => void {
     (el: HTMLElement | null) => {
       remove.current?.();
       remove.current = el ? api.pushScope(el) : undefined;
+    },
+    [api],
+  );
+}
+
+const ZONE_FOCUSABLE =
+  "button, a[href], input:not([type=hidden]), select, textarea, [tabindex]:not([tabindex='-1'])";
+
+/*
+ * useFocusZone registers every native control inside an element, as it
+ * appears, so arrows and a remote reach them.
+ *
+ * For a form, where registering each control by hand would mean touching every
+ * row of every pane, and where a new row added later would quietly be out of
+ * reach. Settings is the case it was written for: dozens of panes, hundreds of
+ * plain buttons, switches and dropdowns, none of which were registered, so on
+ * a TV the whole screen could not be moved through at all.
+ *
+ * Anything already registered (a useFocusable inside the zone) is left to its
+ * owner. Zone controls keep their own Tab order (keepTab). A switch is
+ * flipped by Enter, since a remote's OK sends Enter and a checkbox only
+ * answers Space; buttons and links already answer Enter themselves.
+ *
+ * Without a FocusProvider (a test that renders one screen) it does nothing.
+ */
+export function useFocusZone(): (el: HTMLElement | null) => void {
+  const api = useContext(FocusContext);
+  const cleanup = useRef<(() => void) | undefined>(undefined);
+  return useCallback(
+    (root: HTMLElement | null) => {
+      cleanup.current?.();
+      cleanup.current = undefined;
+      if (!root || !api) return;
+      root.dataset.focusZone = "";
+      const mine = new Map<string, HTMLElement>();
+      let n = 0;
+      const sync = () => {
+        for (const [id, el] of mine) {
+          if (!root.contains(el)) {
+            api.unregister(id);
+            mine.delete(id);
+            // Cleared so the element is taken up again if it comes back.
+            delete el.dataset.focusId;
+          }
+        }
+        for (const el of root.querySelectorAll<HTMLElement>(ZONE_FOCUSABLE)) {
+          if (el.dataset.focusId) continue;
+          const id = `zone-${(n += 1)}-${Math.random().toString(36).slice(2, 8)}`;
+          el.dataset.focusId = id;
+          const toggle =
+            el instanceof HTMLInputElement && (el.type === "checkbox" || el.type === "radio")
+              ? () => el.click()
+              : undefined;
+          api.register(id, { el, onSelect: toggle, keepTab: true });
+          mine.set(id, el);
+        }
+      };
+      sync();
+      const observer = new MutationObserver(sync);
+      observer.observe(root, { childList: true, subtree: true });
+      cleanup.current = () => {
+        observer.disconnect();
+        for (const [id, el] of mine) {
+          api.unregister(id);
+          delete el.dataset.focusId;
+        }
+        mine.clear();
+        delete root.dataset.focusZone;
+      };
     },
     [api],
   );

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type RefObject } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useIsAdmin } from "@/api/hooks";
+import { useFocusZone } from "@/focus/FocusController";
 import {
   ACCOUNT_PANES,
   DEVICE_PANES,
@@ -190,6 +191,7 @@ export function Settings() {
   };
 
   useFoundSetting(paneRef, found);
+  const zone = useFocusZone();
 
   const navGroup = (label: string, panes: Pane[]) =>
     panes.length > 0 && (
@@ -211,11 +213,16 @@ export function Settings() {
     );
 
   return (
-    <div className="settings">
+    /*
+     * A focus zone, so arrow keys and a TV remote move through the nav and
+     * every pane's controls (ADR 0004). None of them registered before, and
+     * on a TV Settings could not be moved through at all (settings-3-plan §8).
+     */
+    <div className="settings" ref={zone}>
       <h1 className="settings__title">Settings</h1>
 
       <div className="settings__layout">
-        <nav className="settings__nav" aria-label="Settings categories">
+        <nav className="settings__nav" aria-label="Settings categories" data-focus-column>
           <input
             ref={searchRef}
             className="set-input settings__search"
@@ -291,7 +298,7 @@ export function Settings() {
           )}
         </nav>
 
-        <div className="settings__pane" ref={paneRef}>
+        <div className="settings__pane" ref={paneRef} data-focus-column>
           {View && <View />}
         </div>
       </div>
