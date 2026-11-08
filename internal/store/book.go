@@ -156,3 +156,126 @@ func (s *Store) SetPlaybackSpeed(ctx context.Context, itemID int64, userID strin
 	}
 	return nil
 }
+
+// RoleNarrator is the credit role a book's readers hold (ADR 0116 step 3).
+const RoleNarrator = "narrator"
+
+/*
+ * SetBookNarrators makes a book's narrator credits exactly these names, in
+ * this order.
+ *
+ * Only the narrator rows are replaced: anything else credited on the book is
+ * left where it is. A `credits` lock leaves all of them alone, the rule every
+ * locked field follows (CLAUDE.md). People are keyed by name under the
+ * "tags" provider, so the same reader across forty books is one person, and
+ * the narrator filter finds every one of them by that person's id.
+ *
+ * Nothing is written when the names already match, so a rescan of an
+ * unchanged book leaves the table untouched.
+ */
+func (s *Store) SetBookNarrators(ctx context.Context, bookID int64, names []string) error {
+	locked, err := s.LockedFields(ctx, bookID)
+	if err != nil {
+		return err
+	}
+	if slices.Contains(locked, "credits") {
+		return nil
+	}
+	have, err := s.bookNarratorNames(ctx, bookID)
+	if err != nil {
+		return err
+	}
+	if slices.Equal(have, names) {
+		return nil
+	}
+
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("set book narrators: %w", err)
+	}
+	defer tx.Rollback()
+	if _, err := tx.ExecContext(ctx,
+		`DELETE FROM credit WHERE item_id = ? AND role = ?`, bookID, RoleNarrator); err != nil {
+		return fmt.Errorf("set book narrators: %w", err)
+	}
+	for i, n := range names {
+		if n == "" {
+			continue
+		}
+		if _, err := tx.ExecContext(ctx,
+			`INSERT OR IGNORE INTO person (provider, external_id, name) VALUES ('tags', ?, ?)`,
+			n, n); err != nil {
+			return fmt.Errorf("set book narrators: %w", err)
+		}
+		if _, err := tx.ExecContext(ctx, `
+			INSERT OR REPLACE INTO credit (item_id, person_id, role, ord)
+			VALUES (?, (SELECT id FROM person WHERE provider = 'tags' AND external_id = ?), ?, ?)`,
+			bookID, n, RoleNarrator, i); err != nil {
+			return fmt.Errorf("set book narrators: %w", err)
+		}
+	}
+	return tx.Commit()
+}
+
+func (s *Store) bookNarratorNames(ctx context.Context, bookID int64) ([]string, error) {
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT p.name FROM credit c JOIN person p ON p.id = c.person_id
+		WHERE c.item_id = ? AND c.role = ? ORDER BY c.ord`, bookID, RoleNarrator)
+	if err != nil {
+		return nil, fmt.Errorf("book narrators: %w", err)
+	}
+	defer rows.Close()
+	var out []string
+	for rows.Next() {
+		var n string
+		if err := rows.Scan(&n); err != nil {
+			return nil, fmt.Errorf("book narrators: %w", err)
+		}
+		out = append(out, n)
+	}
+	return out, rows.Err()
+}
+
+/*
+ * BookTagsRev is the revision of the book pass's tag rules a library was last
+ * read with, or 0 for never.
+ *
+ * The book pass skips a library when nothing on disk changed, which is right
+ * for a rescan and wrong the first time the pass reads a tag it ignored
+ * before: the narrator arrived with step 3, and an unchanged library would
+ * otherwise never be read for it. Kept in meta, per library, so no schema
+ * changes for a marker.
+ */
+func (s *Store) BookTagsRev(ctx context.Context, libraryID int64) (int, error) {
+	var v string
+	err := s.db.QueryRowContext(ctx,
+		`SELECT value FROM meta WHERE key = ?`, bookTagsKey(libraryID)).Scan(&v)
+	if errors.Is(err, sql.ErrNoRows) {
+		return 0, nil
+	}
+	if err != nil {
+		return 0, fmt.Errorf("book tags rev: %w", err)
+	}
+	var n int
+	if _, err := fmt.Sscan(v, &n); err != nil {
+		// Unreadable is never, which the next pass repairs.
+		return 0, nil
+	}
+	return n, nil
+}
+
+// SetBookTagsRev records that a library's books were read under rev.
+func (s *Store) SetBookTagsRev(ctx context.Context, libraryID int64, rev int) error {
+	_, err := s.db.ExecContext(ctx, `
+		INSERT INTO meta (key, value) VALUES (?, ?)
+		ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
+		bookTagsKey(libraryID), fmt.Sprint(rev))
+	if err != nil {
+		return fmt.Errorf("set book tags rev: %w", err)
+	}
+	return nil
+}
+
+func bookTagsKey(libraryID int64) string {
+	return fmt.Sprintf("book_tags_rev:%d", libraryID)
+}

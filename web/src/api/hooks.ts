@@ -1642,6 +1642,11 @@ export interface ItemQuery {
   actors?: number[];
   /** Person ids restricted to directing credits. */
   directors?: number[];
+  /** Person ids restricted to narrating credits: books (ADR 0116 step 3). */
+  narrators?: number[];
+  /** Authors and series of books, by name, as the facets list them. */
+  authors?: string[];
+  series?: string[];
   /** Collection ids; membership, not parenthood. */
   collections?: number[];
   /*
@@ -1685,6 +1690,9 @@ function itemsParams({
   people = [],
   actors = [],
   directors = [],
+  narrators = [],
+  authors = [],
+  series = [],
   collections = [],
   faceClusters = [],
   minRating = 0,
@@ -1716,6 +1724,9 @@ function itemsParams({
   for (const p of people) params.append("person", String(p));
   for (const a of actors) params.append("actor", String(a));
   for (const d of directors) params.append("director", String(d));
+  for (const n of narrators) params.append("narrator", String(n));
+  for (const a of authors) params.append("author", a);
+  for (const s of series) params.append("series", s);
   for (const c of collections) params.append("collection", String(c));
   for (const c of faceClusters) params.append("face_cluster", String(c));
   if (minRating > 0) params.set("min_rating", String(minRating));

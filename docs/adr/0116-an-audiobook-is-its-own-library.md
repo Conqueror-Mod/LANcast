@@ -227,8 +227,19 @@ counts once when it finishes, not once per part.
    a pause does not spend them. "End of chapter" is a place on the book's
    clock, checked on every time update, and a skip into another chapter moves
    it to that chapter's end. The last ten seconds fade, then the book pauses,
-   which writes the place, and the listener's volume is put back. The narrator
-   and the filters are still to come.
+   which writes the place, and the listener's volume is put back. **The
+   narrator and the filters are built too** (2026-11-08), with **no schema
+   change**: a narrator is a row in the existing `credit` table with role
+   `narrator`, under a person keyed by name, so one reader across forty books
+   is one person. Read from a `narrator` tag where any part has one, else the
+   composer tag; every name is kept, a full cast included, split on `;`, `/`,
+   `&`, "and", and a comma between two whole names (one comma between single
+   words is "Nimoy, Leonard"). A `credits` lock keeps them. The book pass
+   records the revision of its tag rules per library in `meta`, so a library
+   read before narrators existed is read once more at its next scan, changed
+   or not. The listing takes `narrator=` (a person id, like `director=`) and
+   `author=` / `series=` (names), and the facets list the authors and series.
+   A book's page says "Read by …".
 
 Before step 1: `devseed` creates `TEST AUDIOBOOK LIBRARY` like the other
 test libraries, and the 115 books' tags are read and reported. Whether they

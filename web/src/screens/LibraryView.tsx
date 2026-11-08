@@ -102,6 +102,9 @@ export function LibraryView({
   const people = params.getAll("person");
   const actors = params.getAll("actor");
   const directors = params.getAll("director");
+  const narrators = params.getAll("narrator");
+  const authors = params.getAll("author");
+  const seriesNames = params.getAll("series");
   const collections = params.getAll("collection");
   /*
    * Face groups (ADR 0052), set from the People page rather than the bar.
@@ -176,6 +179,9 @@ export function LibraryView({
         people: people.map(Number),
         actors: actors.map(Number),
         directors: directors.map(Number),
+        narrators: narrators.map(Number),
+        authors,
+        series: seriesNames,
         collections: collections.map(Number),
         faceClusters: faceClusters.map(Number),
         minRating,
@@ -223,6 +229,9 @@ export function LibraryView({
     people: people.map(Number),
     actors: actors.map(Number),
     directors: directors.map(Number),
+    narrators: narrators.map(Number),
+    authors,
+    series: seriesNames,
     collections: collections.map(Number),
     faceClusters: faceClusters.map(Number),
     minRating,
@@ -370,6 +379,7 @@ export function LibraryView({
     ...people,
     ...actors,
     ...directors,
+    ...narrators,
   ]);
   const castNames = useMemo(() => {
     const m = new Map<string, string>();
@@ -420,6 +430,9 @@ export function LibraryView({
     people.length > 0 ||
     actors.length > 0 ||
     directors.length > 0 ||
+    narrators.length > 0 ||
+    authors.length > 0 ||
+    seriesNames.length > 0 ||
     collections.length > 0 ||
     faceClusters.length > 0 ||
     minRating > 0 ||
@@ -651,6 +664,7 @@ export function LibraryView({
         <FilterBar
           libraryID={libraryID}
           cast={!!config.cast}
+          narrators={!!config.narrators}
           facets={facets}
           params={params}
           castNames={castNames}

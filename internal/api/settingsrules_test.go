@@ -315,3 +315,32 @@ func TestContinueShelfParameter(t *testing.T) {
 	}
 	wantError(t, h.do(t, "GET", "/api/continue?shelf=films", nil), 400, "bad_request")
 }
+
+// The book filters reach the store: a bad narrator id is refused like a bad
+// director, and an author or series nobody has narrows to nothing rather than
+// being ignored (ADR 0116 step 3).
+func TestBookFilterParameters(t *testing.T) {
+	h := newHarness(t)
+	h.addFile(t, "film.mkv", []byte("f"))
+	count := func(path string) int {
+		t.Helper()
+		var body struct {
+			Items []struct{} `json:"items"`
+		}
+		decode(t, h.do(t, "GET", path, nil), &body)
+		return len(body.Items)
+	}
+	if n := count("/api/items"); n != 1 {
+		t.Fatalf("unfiltered = %d, want the film", n)
+	}
+	if n := count("/api/items?author=Nobody"); n != 0 {
+		t.Errorf("author filter ignored: %d items", n)
+	}
+	if n := count("/api/items?series=Nothing"); n != 0 {
+		t.Errorf("series filter ignored: %d items", n)
+	}
+	if n := count("/api/items?narrator=999"); n != 0 {
+		t.Errorf("narrator filter ignored: %d items", n)
+	}
+	wantError(t, h.do(t, "GET", "/api/items?narrator=abc", nil), 400, "bad_request")
+}

@@ -97,6 +97,13 @@ type Tags struct {
 	Disc        int
 	Year        int
 
+	// Composer and Narrator are read for audiobooks (ADR 0116 step 3), whose
+	// rippers and Audible exports put the narrator in the composer tag. A
+	// `narrator` tag, where a tagger wrote one, is the better answer. Neither
+	// is part of Empty: they do not name a track.
+	Composer string
+	Narrator string
+
 	// Loudness is the file's ReplayGain, if a tagger measured it (ADR 0108).
 	// Not part of Empty: a file carrying only gain tags still has no title.
 	Loudness Loudness
@@ -599,6 +606,9 @@ func parseTags(raw map[string]string) Tags {
 		Album:       first("album"),
 		AlbumArtist: first("albumartist", "ensemble", "band"),
 		Genre:       first("genre"),
+		Composer:    first("composer"),
+		// "narratedby" is how a "Narrated By" frame normalises.
+		Narrator: first("narrator", "narratedby"),
 	}
 	t.Track = leadingNumber(first("track", "tracknumber"))
 	t.Disc = leadingNumber(first("disc", "discnumber", "disk"))

@@ -20,7 +20,7 @@ globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
 const base: Facets = {
   initials: [],
-  platforms: [],
+  platforms: [], authors: [], series: [],
   genres: [],
   decades: [],
   content_ratings: [],

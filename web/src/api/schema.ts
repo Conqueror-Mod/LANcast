@@ -7676,6 +7676,10 @@ export interface components {
             resolutions: components["schemas"]["ResolutionBucket"][];
             /** @description Consoles present in a retro library (ADR 0073), alphabetical; a client orders them for display. Empty in every other library, so a Console filter exists only where it can narrow something. */
             platforms: string[];
+            /** @description Authors among an audiobooks library's books (ADR 0116 step 3), alphabetical. Empty in every other library and at the album and track levels. */
+            authors: string[];
+            /** @description Series among an audiobooks library's books (ADR 0116 step 3), alphabetical. Empty in every other library and at the album and track levels. */
+            series: string[];
             /** @description The kinds of record among a music library's matched albums (ADR 0115), most common first. **Only when the facets are asked for at the album level** (`kind=album`); empty otherwise, and empty until some album is matched, so a Type filter exists only where it can narrow something. */
             release_types?: string[];
             /** @description Most-populated first. */
@@ -11691,6 +11695,12 @@ export interface operations {
                 actor?: number[];
                 /** @description The person filter scoped to directing credits. **Repeatable.** Repeatable filters are OR within a facet and AND across facets: two genres widen the grid, adding a decade narrows it. A blank value is dropped rather than treated as a filter for the empty string. */
                 director?: number[];
+                /** @description Books read by these people (ADR 0116 step 3): the person filter scoped to narrating credits, which come from a book's composer or narrator tag. Every voice of a full-cast recording is credited, so each finds the book. **Repeatable**, OR within the facet. */
+                narrator?: number[];
+                /** @description Books by these authors, by name, exactly as `authors` in the facets lists them (ADR 0116 step 3). **Repeatable**, OR within the facet. An unknown name matches nothing. */
+                author?: string[];
+                /** @description Books in these series, by name, exactly as `series` in the facets lists them (ADR 0116 step 3). **Repeatable**, OR within the facet. An unknown name matches nothing. */
+                series?: string[];
                 /**
                  * @description Restrict to photographs a **face group** appears in (ADR 0052) — the payoff for naming somebody on the People page.
                  *
@@ -14003,7 +14013,7 @@ export interface operations {
             query?: {
                 /** @description Prefix-or-word match, so `vance` finds Ada Vance and `ada v` finds her too. */
                 q?: string;
-                /** @description Scopes the search to one side of the camera (`actor`, `director`). **Unvalidated on purpose**: an unknown role matches nobody and returns an empty list, which is the truthful answer — rejecting it would turn a filter nobody can satisfy into an error page. */
+                /** @description Scopes the search to one credit role: `actor` or `director`, or `narrator` in an audiobooks library. **Unvalidated on purpose**: an unknown role matches nobody and returns an empty list, which is the truthful answer — rejecting it would turn a filter nobody can satisfy into an error page. */
                 role?: string;
                 /**
                  * @description **Repeatable**, and resolves specific people *instead of* searching — which is what lets a filter pill render a name. Filter state lives in the URL, so a bookmarked `?person=12` arrives with an id and nothing else, and a pill reading "person 12" is not a filter anybody can read.

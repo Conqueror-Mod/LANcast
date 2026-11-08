@@ -553,6 +553,11 @@ func (s *Server) listItems(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "bad_request", "invalid director")
 		return
 	}
+	narrators, ok := parseInt64s(q["narrator"])
+	if !ok {
+		writeError(w, http.StatusBadRequest, "bad_request", "invalid narrator")
+		return
+	}
 	collections, ok := parseInt64s(q["collection"])
 	if !ok {
 		writeError(w, http.StatusBadRequest, "bad_request", "invalid collection")
@@ -636,10 +641,15 @@ func (s *Server) listItems(w http.ResponseWriter, r *http.Request) {
 		Resolutions: nonEmpty(q["resolution"]),
 		// Unknown consoles are dropped rather than refused, for the reason
 		// resolution keys are: a bookmark should widen, not break the page.
-		Platforms:      knownPlatforms(q["platform"]),
-		PersonIDs:      people,
-		ActorIDs:       actors,
-		DirectorIDs:    directors,
+		Platforms:   knownPlatforms(q["platform"]),
+		PersonIDs:   people,
+		ActorIDs:    actors,
+		DirectorIDs: directors,
+		NarratorIDs: narrators,
+		// Books by author and series (ADR 0116 step 3), by name: an unknown
+		// one matches nothing, like a release type.
+		Authors:        nonEmpty(q["author"]),
+		Series:         nonEmpty(q["series"]),
 		CollectionIDs:  collections,
 		FaceClusterIDs: faceClusters,
 		MinRating:      minRating,

@@ -1510,7 +1510,7 @@ sorted; decades, years and resolutions are widest/newest-first.
   "years": [2019, 2003, 1994],
   "resolutions": [{ "key": "uhd", "label": "4K", "min_width": 3000, "max_width": 0 },
                   { "key": "hd1080", "label": "1080p", "min_width": 1700, "max_width": 2999 }],
-  "platforms": [],
+  "platforms": [], "authors": [], "series": [],
   "has_in_progress": true, "has_unmatched": false }
 ```
 
@@ -1526,6 +1526,11 @@ years for a row of chips and exactly the right number for a searchable list.
 
 `platforms` are the consoles present in a retro library (ADR 0073), and empty
 in every other kind.
+
+`authors` and `series` are those present among an audiobooks library's books
+(ADR 0116 step 3), alphabetical, and empty in every other kind and at the album
+and track levels. They are the values `author` and `series` take on the
+listing.
 
 `resolutions` are **buckets over the probed width**, not a stored field —
 nothing in the database says "4K". Bucketed on width because height is what
@@ -1556,7 +1561,8 @@ prefix-or-word match, so `vance` finds Ada Vance and `ada v` finds her too;
 { "people": [{ "id": 12, "name": "Ada Vance", "role": "actor", "items": 9 }] }
 ```
 
-`role` scopes the search to one side of the camera (`actor`, `director`).
+`role` scopes the search to one credit role: `actor` or `director`, or
+`narrator` in an audiobooks library (ADR 0116 step 3).
 Unvalidated on purpose: an unknown role matches nobody and returns an empty
 list, which is the truthful answer — rejecting it would turn a filter nobody can
 satisfy into an error page.
@@ -1617,6 +1623,8 @@ rather than matching everybody.
 | `release_type` | Restrict albums to some kinds of record (ADR 0115), by the values `release_type` carries: `Album`, `EP`, `Single`, `Compilation`, `Live`, `Soundtrack`… **Repeatable**, OR within the facet. **A track matches by its album's type**, so Play all over a grid of EPs queues the EPs' tracks. An album not yet matched has no type, so it is left out while a type is chosen; an unknown value matches nothing |
 | `person` | Restrict to items this person is credited on, **in any role**. **Repeatable**; ids come from `/cast`, and a non-numeric value is `400` — an id is machine-generated, so a malformed one means the caller is confused, and widening to the whole library would look like the person matched everything |
 | `actor` / `director` | The same filter scoped to one credit role. **Repeatable**. "Who is in this" and "who made this" are different questions, and `person` answers both without saying which was meant — somebody looking for what Eastwood *directed* does not want what he only acted in. A person who does both matches under both, once in each |
+| `narrator` | Books read by these people (ADR 0116 step 3): the same filter scoped to narrating credits, which a scan reads from a book's composer or `narrator` tag. Every voice of a full-cast recording is credited, so each finds the book. **Repeatable**; ids come from `/cast?role=narrator` |
+| `author` / `series` | Books by these authors, or in these series, by name, as the facets list them (ADR 0116 step 3). **Repeatable**. An unknown name matches nothing |
 | `face_cluster` | Restrict to photographs a **face group** appears in (ADR 0052) — the payoff for naming somebody on the People page. **Not `person`**, which is a film credit: a credit is what a provider said about a film, a face group is a cluster of embeddings this server computed from photographs, and nothing joins them. **Repeatable**, OR within the facet like every other — see below, because the reason is not consistency. A non-numeric value is `400`. **Marked folders are excluded and the caller cannot opt in**: being able to ask who is in a folder you cannot open is the disclosure [ADR 0051](adr/0051-sensitive-content-is-obscured-until-asked-for.md) covers, by another route |
 | `status` | `in_progress` (started, not finished), `unstarted` (nothing begun — no play on the item **or on anything it holds**, so a show qualifies only when none of its episodes has been started; `watched=false` cannot say that, because a show has no play state of its own), or `unmatched` (no provider claimed it). **Single-valued**, because they cannot usefully be combined |
 | `collection` | Restrict to members of a collection. **Repeatable**. Reads the membership table, not `parent_id` — a film belongs to a franchise without being inside it ([ADR 0017](adr/0017-collections-and-multi-part-works.md)) |

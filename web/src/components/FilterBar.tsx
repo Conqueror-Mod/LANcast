@@ -7,6 +7,7 @@ import {
   activePills,
   castRowLabel,
   matchCollections,
+  matchNames,
   matchYears,
   ratingSteps,
   type FilterCategory,
@@ -34,6 +35,7 @@ import "./FilterBar.css";
 export function FilterBar({
   libraryID,
   cast = false,
+  narrators = false,
   facets,
   params,
   castNames,
@@ -46,6 +48,8 @@ export function FilterBar({
   /** Whether this library kind has a cast at all — see LibraryKindConfig. A
    *  photograph never will, so the two chips could only say "nobody". */
   cast?: boolean;
+  /** Whether items here have narrators (books, ADR 0116 step 3). */
+  narrators?: boolean;
   facets?: Facets;
   params: URLSearchParams;
   /** Names for the person ids in the URL, so a bookmarked filter renders as a
@@ -105,6 +109,12 @@ export function FilterBar({
       case "actor":
       case "director":
         return cast;
+      case "narrator":
+        return narrators;
+      case "author":
+        return (facets?.authors?.length ?? 0) > 0;
+      case "series":
+        return (facets?.series?.length ?? 0) > 0;
       case "genre":
         return (facets?.genres?.length ?? 0) > 0;
       case "decade":
@@ -327,6 +337,14 @@ function FilterPanel({
             ),
           )}
 
+        {(category.key === "author" || category.key === "series") &&
+          matchNames(
+            (category.key === "author" ? facets?.authors : facets?.series) ?? [],
+            query,
+          ).map((n) =>
+            chip(n, n, selected.has(n), () => onToggle(category.key, n)),
+          )}
+
         {category.key === "collection" &&
           matchCollections(facets?.collections ?? [], query).map((c) =>
             chip(
@@ -353,7 +371,9 @@ function FilterPanel({
           <StatusOptions params={params} facets={facets} onSet={onSet} />
         )}
 
-        {(category.key === "actor" || category.key === "director") && (
+        {(category.key === "actor" ||
+          category.key === "director" ||
+          category.key === "narrator") && (
           <CastOptions
             libraryID={libraryID}
             query={query}
