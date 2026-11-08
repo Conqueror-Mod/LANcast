@@ -300,6 +300,18 @@ func (s *Server) federationArtwork(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, "not_found", "no such artwork")
 		return
 	}
+	/*
+	 * GetItem never loads artwork, so without this the item always had none
+	 * and every friend's poster was refused: a grid of lettered tiles. Attach
+	 * it the way the listing does, so the check compares against exactly the
+	 * hashes the friend was handed.
+	 */
+	items := []store.Item{*it}
+	if err := s.st.AttachArtwork(r.Context(), items); err != nil {
+		writeError(w, http.StatusNotFound, "not_found", "no such artwork")
+		return
+	}
+	it = &items[0]
 	if !itemHasArtwork(it, r.PathValue("hash")) {
 		/*
 		 * 404, and identical to a hash that does not exist. A refusal that
