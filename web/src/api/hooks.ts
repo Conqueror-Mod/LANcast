@@ -32,6 +32,7 @@ import type {
   PhotoPlaces,
   RetroDatabase,
   ResumeConsole,
+  HomeSuggestion,
   ArtworkTone,
   WebCores,
 } from "./types";
@@ -1480,6 +1481,28 @@ export function useResume(all = false) {
         (r): ResumeConsole => ({ cards: r.cards ?? [], more: r.more ?? false }),
       ),
     staleTime: 10_000,
+  });
+}
+
+/*
+ * The Suggested spotlight's fallback (ADR 0119): films and shows in the genre
+ * you have been finishing, for when nothing is in progress to seed from.
+ * `enabled` keeps it off the wire in every other mode and whenever there is a
+ * seed, so it costs a request only when it is the answer.
+ */
+export function useHomeSuggestion(seed: number, enabled: boolean) {
+  return useQuery({
+    // Under "continue" on purpose: every write that changes what you have
+    // started or finished already invalidates that prefix, and each of them
+    // can change this answer (CLAUDE.md, "a write that changes what a list
+    // holds").
+    queryKey: ["continue", "suggestion", seed],
+    queryFn: ({ signal }) =>
+      apiGet<HomeSuggestion>(`/api/home/suggestion?seed=${seed}`, signal).then(
+        (r): HomeSuggestion => ({ taste: r.taste ?? null, items: r.items ?? [] }),
+      ),
+    enabled,
+    staleTime: 60_000,
   });
 }
 

@@ -1884,6 +1884,29 @@ existing ones:
 The Continue window (`continue_weeks`) applies to every kind, and so do the
 account's limits (the rating ceiling and hidden libraries).
 
+### `GET /api/home/suggestion`
+
+The Suggested spotlight's fallback when nothing is in progress
+([ADR 0119](adr/0119-homepage-2-part-two.md)). It answers from what you
+*finished* rather than what you are part-way through.
+
+```json
+{ "taste": { "genre": "Thriller", "titles": 6 },
+  "items": [ { "id": 812, "kind": "movie", "title": "Heat", "artwork": { "fanart": "…" } } ] }
+```
+
+- **`taste`** is the genre your last 20 finished films and episodes share
+  most, counted by title: a show's episodes count once, as the show, and a
+  film watched five times is one title. Ties go to the genre finished most
+  recently. A genre needs **three titles** before it is reported; below that
+  `taste` is `null` and `items` is empty, so a client never states a pattern
+  that is one film.
+- **`items`** are films and shows carrying that genre that you have not begun,
+  with artwork, up to 20. `?seed=` fixes their shuffle; a client sends one per
+  visit.
+- The account's content-rating ceiling and hidden libraries apply as on
+  `GET /api/items`.
+
 ### `GET /api/memories`
 
 Photographs taken on **today's date in an earlier year**, newest first — the

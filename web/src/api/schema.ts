@@ -1017,6 +1017,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/home/suggestion": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The Suggested spotlight's fallback: films and shows in the genre you have been finishing
+         * @description When nothing is in progress, the Suggested spotlight asks this instead (ADR 0119). `taste` is the genre your last 20 finished films and episodes share most, counted by title (a show's episodes count once, as the show), and how many titles carry it. A genre needs **three titles** before it is reported; below that `taste` is `null` and `items` is empty, and the client falls back as it would with no suggestion at all.
+         *
+         *     `items` are films and shows in that genre that you have not begun, with artwork, shuffled by `seed`. The account's content-rating ceiling and hidden libraries apply as on `GET /items`.
+         */
+        get: operations["getHomeSuggestion"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/items/{id}/playback": {
         parameters: {
             query?: never;
@@ -8615,6 +8637,16 @@ export interface components {
             /** @description Something in progress was left out by the limit or the per-kind cap. */
             more: boolean;
         };
+        HomeSuggestion: {
+            /** @description The genre recent finishes share most, or `null` when none reaches three titles. */
+            taste: {
+                /** @description The genre's name as the library holds it, e.g. `Thriller`. */
+                genre: string;
+                /** @description How many of the recent finished titles carry it; at least 3. */
+                titles: number;
+            } | null;
+            items: components["schemas"]["Item"][];
+        };
         ResumeCard: {
             /**
              * @description `video` is a film or a collection's next film; `game` is a retro game with a save on the server.
@@ -12133,6 +12165,30 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ResumeConsole"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+        };
+    };
+    getHomeSuggestion: {
+        parameters: {
+            query?: {
+                /** @description Fixes the shuffle. A client sends one per visit, so the pick changes between visits and not while the page is open. */
+                seed?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The taste and its candidates, or `taste: null` and no items. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HomeSuggestion"];
                 };
             };
             401: components["responses"]["Unauthorized"];

@@ -129,6 +129,16 @@ describe("a mode with nothing to show falls through", () => {
     expect(pick?.reason).toBe("recent");
   });
 
+  it("attributes a suggestion to what was finished when nothing is in progress", () => {
+    // ADR 0119: a taste is attribution the way a seed is.
+    const taste = { genre: "Thriller", titles: 6 };
+    const pick = pickHero("recommended", { resumable: [], recent, recommended: suggestion, taste });
+    expect(pick?.item.id).toBe(3);
+    expect(pick?.reason).toBe("recommended");
+    expect(pick?.taste).toEqual(taste);
+    expect(pick?.seed).toBeUndefined();
+  });
+
   it("reaches recently added when there is nothing to resume", () => {
     const pick = pickHero("continue", { resumable: [], recent });
     expect(pick?.item.id).toBe(2);
