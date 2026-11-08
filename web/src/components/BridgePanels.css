@@ -56,11 +56,21 @@
   min-width: 0;
 }
 
-.friends__name,
-.friends__status {
+.friends__name {
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
+}
+
+/* Wraps to a second line rather than cutting off: "What they watch can't be
+   seen from here" is the one explanation the row gives, and in a panel a
+   third of the screen wide it lost its ending on the live library. */
+.friends__status {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
 }
 
 .friends__name {
