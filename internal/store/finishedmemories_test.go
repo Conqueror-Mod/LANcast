@@ -55,7 +55,7 @@ func TestFinishedOnThisDayIsTodayInAnEarlierYear(t *testing.T) {
 
 	logAt(t, st, me, heat, takenAt(2), false)
 	logAt(t, st, me, ronin, takenAt(1), false)
-	logAt(t, st, me, thisYear, takenAt(0), false)      // today is not a memory
+	logAt(t, st, me, thisYear, takenAt(0), false)       // today is not a memory
 	logAt(t, st, me, tomorrow, takenAt(1)+86400, false) // a different day
 	logAt(t, st, me, guessed, takenAt(1), true)         // a backfilled date is not a real one
 

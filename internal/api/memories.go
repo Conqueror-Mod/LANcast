@@ -53,7 +53,7 @@ func (s *Server) memories(w http.ResponseWriter, r *http.Request) {
 		"watched": watched,
 		// The date the server resolved, so a client that has been open since
 		// yesterday can notice the shelf it is showing is not today's.
-		"on":      on,
+		"on": on,
 	})
 }
 
