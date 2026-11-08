@@ -63,6 +63,8 @@ export type ResumeCard = components["schemas"]["ResumeCard"];
 export type ResumeConsole = components["schemas"]["ResumeConsole"];
 export type HomeSuggestion = components["schemas"]["HomeSuggestion"];
 export type Taste = NonNullable<HomeSuggestion["taste"]>;
+export type HomeShelf = components["schemas"]["HomeShelf"];
+export type HomeShelves = components["schemas"]["HomeShelves"];
 export type ArtworkTone = components["schemas"]["ArtworkTone"];
 
 /** Exact duplicate photos (ADR 0075). */

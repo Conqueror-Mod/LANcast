@@ -1,0 +1,58 @@
+/* The title question, on RemoveDialog's overlay and panel. */
+
+.shelfdlg__label {
+  display: block;
+  margin: 10px 0 6px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.shelfdlg__input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 10px 12px;
+  border-radius: var(--radius-tile, 8px);
+  border: 1px solid var(--border, rgba(255, 255, 255, 0.12));
+  background: var(--space-sunken, rgba(255, 255, 255, 0.03));
+  color: var(--text-primary);
+  font-size: 15px;
+}
+
+/* Gold is "where you are" (design.md): the field you are typing in. */
+.shelfdlg__input:focus {
+  outline: none;
+  border-color: var(--gold);
+  box-shadow: 0 0 0 3px var(--gold-ring);
+}
+
+.shelfdlg__actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.shelfdlg__actions > * {
+  flex: 1 1 0;
+}
+
+.shelfdlg__save {
+  padding: 9px;
+  border-radius: var(--radius-tile, 8px);
+  border: 1px solid var(--gold-dormant);
+  background: rgba(18, 26, 54, 0.82);
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.shelfdlg__save:hover:not(:disabled),
+.shelfdlg__save:focus-visible {
+  border-color: var(--gold);
+  box-shadow: 0 0 0 3px var(--gold-ring);
+}
+
+.shelfdlg__save:disabled {
+  opacity: 0.5;
+  cursor: default;
+}

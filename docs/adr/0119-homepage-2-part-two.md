@@ -231,6 +231,31 @@ The query is keyed under `["continue", "suggestion", …]`, so every write that
 already refreshes Continue, marking something watched included, refreshes the
 suggestion too.
 
+### Step 3: Pinned shelves (2026-11-08)
+
+Schema 91 adds `home_shelf`: per account, a library, a title, the grid query
+and a dense 0-based position. The `builtin` column is there, empty, for hiding
+built-in shelves later; nothing reads it yet. A library's shelves go with the
+library (`ON DELETE CASCADE`) and an account's with the account.
+
+`GET/POST /api/home/shelves` and `PATCH/DELETE /api/home/shelves/{id}`. A
+pinned query may carry only the keys the grid sets (`shelfParams` in Go,
+`SHELF_PARAM_KEYS` in `web/src/lib/libraryQuery.ts`, which must agree), and is
+stored in a canonical order. A thirteenth shelf is `409 shelf_limit`. A shelf
+over a library later hidden from you is left out of the list and kept.
+
+The grid's own query moved into `libraryItemQuery`, so the grid and a pinned
+shelf build the same request from the same parameters rather than two that
+agree today. "Pin to Home" appears beside Clear once a view is filtered or
+re-sorted; the title starts as the filter pills joined. On Home the pinned
+shelves sit below Rate and above New this week, each with a ⋯ menu at the end
+of its heading: Rename, Move up, Move down, Unpin. A shelf with nothing in it
+today keeps its heading and menu, because a shelf that vanished would take the
+only way to unpin it with it.
+
+The title dialog is portalled to the body. Drawn in place it was clipped to
+the grid's toolbar, which is a containing block for fixed elements.
+
 ## Not proposed
 
 - **A recommender.** Nothing here learns a model, ranks by similarity across

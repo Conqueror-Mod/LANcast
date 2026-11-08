@@ -33,6 +33,8 @@ import type {
   RetroDatabase,
   ResumeConsole,
   HomeSuggestion,
+  HomeShelf,
+  HomeShelves,
   ArtworkTone,
   WebCores,
 } from "./types";
@@ -750,6 +752,8 @@ export function useDeleteLibrary() {
     mutationFn: (libraryID: number) =>
       apiSend(`/api/libraries/${libraryID}`, "DELETE"),
     onSuccess: () => {
+      // Its pinned shelves went with it, by the cascade (ADR 0119).
+      qc.invalidateQueries({ queryKey: ["home-shelves"] });
       qc.invalidateQueries({ queryKey: ["libraries"] });
       qc.invalidateQueries({ queryKey: ["items"] });
       qc.invalidateQueries({ queryKey: ["review"] });
@@ -1503,6 +1507,58 @@ export function useHomeSuggestion(seed: number, enabled: boolean) {
       ),
     enabled,
     staleTime: 60_000,
+  });
+}
+
+/*
+ * Shelves pinned to Home (ADR 0119 §2), per account on the server.
+ *
+ * Their own key, not under "items": pinning, renaming, moving and unpinning
+ * change this list and nothing else, and each mutation below invalidates
+ * exactly it. A shelf's *items* come from useItems, so the invalidations
+ * every library write already makes reach them.
+ */
+export function useHomeShelves() {
+  return useQuery({
+    queryKey: ["home-shelves"],
+    queryFn: ({ signal }) =>
+      apiGet<HomeShelves>("/api/home/shelves", signal).then(
+        (r): HomeShelves => ({ shelves: r.shelves ?? [], max: r.max ?? 12 }),
+      ),
+    staleTime: 60_000,
+  });
+}
+
+export function usePinShelf() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (v: { libraryID: number; title: string; query: string }) =>
+      apiPost<HomeShelf>("/api/home/shelves", {
+        library_id: v.libraryID,
+        title: v.title,
+        query: v.query,
+      }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["home-shelves"] }),
+  });
+}
+
+export function useEditShelf() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (v: { id: number; title?: string; position?: number }) =>
+      apiSend(`/api/home/shelves/${v.id}`, "PATCH", {
+        ...(v.title !== undefined ? { title: v.title } : {}),
+        ...(v.position !== undefined ? { position: v.position } : {}),
+      }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["home-shelves"] }),
+  });
+}
+
+export function useUnpinShelf() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: number) => apiSend(`/api/home/shelves/${id}`, "DELETE"),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["home-shelves"] }),
   });
 }
 

@@ -148,3 +148,32 @@
 .shelf__item--wide {
   width: calc(var(--tile-shelf) * 1.8);
 }
+
+/* A pinned shelf's menu at the end of its heading (ADR 0119 §2): quiet at
+   rest, like "All" beside it. */
+.shelf__menu {
+  padding: 0 6px;
+  border: none;
+  background: none;
+  color: var(--text-muted);
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.shelf__menu:hover {
+  color: var(--text-primary);
+}
+
+.shelf__menu:focus-visible {
+  outline: none;
+  color: var(--gold);
+  box-shadow: 0 0 0 3px var(--gold-ring);
+  border-radius: 4px;
+}
+
+.shelf__none {
+  margin: 0 0 8px;
+  font-size: 13px;
+  color: var(--text-faint);
+}
