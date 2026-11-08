@@ -1823,6 +1823,61 @@ and a client may hold it; what a client must *not* do is play from it. Ask
 described there, and resuming from a list a few seconds old is how a viewer
 lands on an episode they have already finished.
 
+### `GET /api/resume`
+
+The home page's resume console (ADR 0118): everything this account is in the
+middle of, across kinds, newest first. `limit` defaults to 5 (max 100).
+
+**One card per thing you would resume.** The album, not its tracks; the book,
+not its parts; the show, not its episodes; the game, not its saves. A card's
+`kind` is `video` (a film, or a collection's next film), `show`, `music`,
+`book`, `comic` or `game` (a retro game with a save on the server), and `item`
+is what it pictures and opens.
+
+```json
+{ "more": true,
+  "cards": [
+    { "kind": "music", "touched_at": 1762590000,
+      "item": { "id": 3100, "kind": "album", "title": "An Album", "…": "…" },
+      "track": { "item": { "id": 3106, "kind": "track", "…": "…" },
+                 "number": 6, "of": 11 } },
+    { "kind": "comic", "touched_at": 1762580000,
+      "item": { "id": 4410, "kind": "comic", "…": "…" },
+      "page": { "page": 40, "pages": 120, "updated_at": 1762580000 } },
+    { "kind": "show", "touched_at": 1762570000,
+      "item": { "id": 500, "kind": "show", "next_episode": { "…": "…" } } }
+  ] }
+```
+
+**At most two cards of a kind**, so one kind cannot fill the console. `more`
+says whether anything in progress was left out, by the limit or by that cap,
+which is when a client offers See all. `?all=true` lifts the cap and raises
+the default limit to 100: that is the See all page.
+
+Each kind is asked for on its own and merged. In one shared list, an evening of
+half-played songs filled it and left the films off (the fault
+`GET /api/continue`'s `shelf` exists for). Within each kind the rules are the
+existing ones:
+
+- **Video and show** cards are the rows `GET /api/continue?shelf=watching`
+  returns, with the same collapse of episodes to their show and the same
+  `next_episode`. It is for drawing, not deciding: ask
+  `GET /api/items/{id}/continue` on the press.
+- **Music** is Continue Listening's tracks collapsed to their album. The newest
+  track wins, and `track` names it with its `number` and the album's track
+  count (`of`). A track with no album is its own card, with no `track`.
+- **A book** is `shelf=books`.
+- **A comic** is on the console from the first page turn until it is finished.
+  Reaching the last page marks it watched, which takes it off. `page` is the
+  same zero-based place `PUT /api/items/{id}/place` takes.
+- **A game** is any retro game with a save on the server, by its newest save.
+  A game is never finished, so the save is the whole test. Games from Steam
+  and other launchers are read by the desktop app on its own machine, not by
+  the server, so they cannot be here.
+
+The Continue window (`continue_weeks`) applies to every kind, and so do the
+account's limits (the rating ceiling and hidden libraries).
+
 ### `GET /api/memories`
 
 Photographs taken on **today's date in an earlier year**, newest first — the
@@ -5680,7 +5735,7 @@ to "have I watched this".
 | Field | Default | Range | What it does |
 |---|---|---|---|
 | `watched_threshold` | `90` | 50–100 | The percentage of an item's duration past which it counts as watched. Applied on **every** `PUT /api/items/{id}/progress`, so a client that never sends `watched` still gets correct state. An item with no known duration is never marked by it |
-| `continue_weeks` | `16` | 0–520 | Items untouched for this many weeks leave `GET /api/continue`. **0 means never expire**, which is a different answer from "expire now" |
+| `continue_weeks` | `16` | 0–520 | Items untouched for this many weeks leave `GET /api/continue` and `GET /api/resume`. **0 means never expire**, which is a different answer from "expire now" |
 | `continue_limit` | `40` | 1–100 | How many items that shelf holds. A client may ask for fewer with `?limit=`; it **cannot ask for more** |
 | `allow_media_deletion` | `true` | — | When false, `DELETE /api/items/{id}?mode=delete` is **403**. `mode=ignore` is unaffected: it writes no file and deletes nothing from disk |
 | `empty_trash_on_scan` | `false` | — | When true, a finished scan removes the library's rows whose files are gone. **About rows, not files**: it destroys the record — watch history, positions, ratings — of media that has already left the disk, which is why it is off by default. A scan that failed, that could not read one of its locations, or that saw **no files at all** leaves them alone whatever this says; those are the shapes an unmounted drive takes, and *"scanning marks missing, never deletes"* is not relaxed by this setting. Audited like `allow_media_deletion` |

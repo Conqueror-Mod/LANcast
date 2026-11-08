@@ -71,8 +71,9 @@ Rules for what is on it:
   every film off Continue Watching (fixed in #1025). The server takes a window
   per kind and merges them; it never splits one list afterwards.
 - **5 / 4 / 3 cards** on desktop / tablet / phone.
-- **An item untouched for 60 days leaves the console** and stays on the See all
-  page. One rule, stated here, rather than a window chosen per query.
+- **An item leaves the console when it falls outside the Continue window**
+  (`continue_weeks`, 16 by default; see As built). One rule for every kind,
+  not a window chosen per query.
 
 **Progress is said in each kind's own terms:** "1h 12m left", "S2E4 · next",
 "track 6 of 11", "chapter 9 · 3h left", "page 41 of 120", "saved 2 days ago",
@@ -184,13 +185,32 @@ Homepage 2.0 is its own release line; v0.10.8 is reserved for unrelated fixes.
   per account on the server (a schema change with its own ADR); On this day
   beyond photographs.
 
+## As built
+
+### The resume endpoint (2026-11-08)
+
+`GET /api/resume` (`internal/api/resume.go`, `internal/store/resume.go`). Each
+card has a `kind` (`video`, `show`, `music`, `book`, `comic`, `game`), a
+`touched_at`, and the `item` it pictures and opens. A music card adds `track`
+(the track to resume, its number, and the album's count) and a comic card adds
+`page`. `more` says something was left out, and `?all=true` is the See all
+page.
+
+This settles three of the questions listed below, and changes one decision:
+
+- **The staleness rule is the existing Continue window, not 60 days.** The
+  server already had one: `continue_weeks`, 16 by default and set by the
+  administrator. A second window of 60 days would have been two rules that can
+  disagree, which is what §2 says to avoid. So the console uses that setting.
+- **Steam's last-played time *is* readable** (`games.Game.LastPlayed`), but the
+  desktop app reads it, on its own machine, for that machine's Steam account
+  (`cmd/lancast/games.go`). The server has no per-account fact to put on the
+  console, so launcher games are left out. Showing one machine's Steam history
+  to every account on the server would be wrong, not just incomplete.
+- **Retro saves carry no screenshot** (`rom_save` holds bytes and hashes), so a
+  game card uses the game's box art.
+
 ## Not decided here
 
-- **Whether Steam's last-played time can be read locally.** If not, Steam games
-  are left out of the console rather than shown with a guessed time.
-- **Whether every retro save carries a screenshot.** Where one does not, the
-  card uses the game's box art.
-- **The endpoint's path and exact card fields** — settled with the handler and
-  the spec, in the PR that builds it.
-- **The 60-day staleness figure** is a starting value, to be checked against
-  the live library before v0.10.9 ships.
+- **Launcher games on the console.** That would need the desktop app to report
+  per account what it reads locally. It is not planned for v0.10.9.
