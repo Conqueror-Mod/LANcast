@@ -44,6 +44,19 @@
   flex-grow: 1.4;
 }
 
+/* Friends and On this day, side by side wherever they appear. In the row
+   beneath the spotlight the pair takes the two remaining shares. */
+.bridge__pair {
+  display: flex;
+  gap: 16px;
+  flex: 2 1 0;
+  min-width: 0;
+}
+.bridge__pair > .panel {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
 /*
  * A panel is a window cut into the field, not a box laid on it: darker than
  * what is behind it, with the resting gold hairline design.md allows. When
@@ -97,6 +110,9 @@
        panels' foot lines up with the Play button's. */
     margin-bottom: 46px;
   }
+  .bridge--hero .bridge__pair {
+    flex: none;
+  }
   .bridge--hero .hero__body {
     padding-right: calc(var(--bridge-panels) + var(--main-pad) + 32px);
   }
@@ -125,6 +141,20 @@
   /* After the rule above, which it overrides at the same specificity. */
   .bridge__panels > .panel--resume {
     order: -1;
+  }
+  /* One strip you swipe through, a panel at a time. */
+  .bridge__panels > .bridge__pair {
+    order: 1;
+    overflow-x: auto;
+    scroll-snap-type: x mandatory;
+    scrollbar-width: none;
+  }
+  .bridge__pair > .panel {
+    flex: 0 0 86%;
+    scroll-snap-align: start;
+  }
+  .bridge__pair > .panel:only-child {
+    flex-basis: 100%;
   }
   .masthead + .bridge--hero > .hero {
     margin-top: 0;

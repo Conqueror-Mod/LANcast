@@ -11,6 +11,7 @@ import {
   useWatchlist,
   useResume,
   useIsAdmin,
+  usePeerPresence,
   useToRate,
   useItemCollections,
   watchlistItems,
@@ -21,6 +22,7 @@ import { Shelf } from "@/components/Shelf";
 import type { MenuAction } from "@/components/Menu";
 import { HomeHero } from "@/components/HomeHero";
 import { ResumeConsole } from "@/components/ResumeConsole";
+import { FriendsPanel, MemoryPanel, showFriends } from "@/components/BridgePanels";
 import { collectionsMenu } from "@/lib/collectionsMenu";
 import { HomeMasthead } from "@/components/HomeMasthead";
 import type { Item, Library } from "@/api/types";
@@ -174,6 +176,10 @@ export function Home() {
    * second opinion here would be a rule in two places that can disagree.
    */
   const onThisDay = memories?.items ?? [];
+  // Friends on paired servers (ADR 0118 §4). Shown with an empty roster only
+  // to an administrator, who can pair.
+  const { data: peerPresence } = usePeerPresence();
+  const friendsShown = showFriends(peerPresence?.peers, admin);
 
   const { data: watchlist } = useWatchlist();
   const { data: toRate } = useToRate();
@@ -229,6 +235,14 @@ export function Home() {
             open={resumeOpen}
             libraries={libraries}
           />
+          {/* Side by side beneath the console; absent when neither has
+              anything to say, so the column never ends in an empty frame. */}
+          {(friendsShown || onThisDay.length > 0) && (
+            <div className="bridge__pair">
+              {friendsShown && <FriendsPanel peers={peerPresence?.peers ?? []} />}
+              <MemoryPanel items={onThisDay} />
+            </div>
+          )}
         </div>
       </div>
       <div className="home__shelves">
@@ -245,10 +259,6 @@ export function Home() {
         <Shelf title="Recently Added" items={recentVideo} />
         <Shelf title="New Music" items={recentAudio} />
         <Shelf title="Recently Added Photos" items={recentPictures} />
-        {/* After the recent shelves rather than before: "what is new" is the
-            question somebody opened the page with, and "what happened on this
-            date years ago" is the one worth finding once they are here. */}
-        <Shelf title="On this day" items={onThisDay} />
         {unwatchedLibraries.map((lib) => (
           <UnwatchedShelf
             key={lib.id}
