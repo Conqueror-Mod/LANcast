@@ -16,8 +16,11 @@ import (
  * read once more at its next scan, changed or not.
  *
  *   1: the narrator, from the composer or narrator tag (ADR 0116 step 3).
+ *   2: a book in a generic folder ("Audio", "CD1") is named by the folder
+ *      above it. Not a tag, but raising this is what makes a library whose
+ *      files have not moved be grouped again, so its books are re-titled.
  */
-const bookTagsRev = 1
+const bookTagsRev = 2
 
 // reconcileBooks makes books out of an audiobooks library's files (ADR 0116).
 //

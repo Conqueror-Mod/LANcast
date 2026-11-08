@@ -136,6 +136,38 @@ func GroupBooks(root string, files []BookFile) []Book {
 	return books
 }
 
+// A folder name that says how a book is stored rather than what it is:
+// "Audio", "MP3", "CD1", "Disc 2". A rip that keeps its sound beside other
+// things — the Read-Along books keep `Audio` beside `Pages` and a viewer —
+// puts the files in one of these, and the book is the folder above.
+//
+// Deliberately short. "Part 2" and "Volume 2" are left out: a series folder
+// of volumes is a real layout, and reading those as generic would title every
+// volume after its series.
+var reGenericBookFolder = regexp.MustCompile(
+	`(?i)^(?:audio(?:[\s._-]*files)?|audiobook|mp3s?|m4[ab]|aac|flac|ogg|opus|wma|` +
+		`(?:cd|disc|disk|tape)(?:[\s._-]*\d{1,3})?)$`)
+
+// namedBookFolder is the folder that names the book in dir: dir itself, or,
+// when dir is a generic storage folder, the nearest folder above it that is
+// not one. A generic folder sitting at the root keeps its own name, since
+// the library location names no book.
+//
+// The book is still keyed by dir (GroupBooks): only its name moves. Keying
+// it by the folder above would make a new row and prune the old one, and a
+// title somebody locked on the old row would go with it.
+func namedBookFolder(root, dir string) string {
+	named := dir
+	for reGenericBookFolder.MatchString(strings.TrimSpace(filepath.Base(named))) {
+		up := filepath.Dir(named)
+		if up == root || up == named {
+			return dir
+		}
+		named = up
+	}
+	return named
+}
+
 // holdsBookFolders reports whether another folder of audio sits under dir.
 func holdsBookFolders(dir string, dirs []string) bool {
 	prefix := dir + string(filepath.Separator)
@@ -149,14 +181,15 @@ func holdsBookFolders(dir string, dirs []string) bool {
 
 func folderBook(root, dir string, files []BookFile) Book {
 	b := Book{Key: dir, Dir: dir}
-	name := filepath.Base(dir)
+	named := namedBookFolder(root, dir)
+	name := filepath.Base(named)
 
 	name, b.Edition = bookEdition(name)
 	if n, rest, ok := leadingNumber(name); ok {
 		b.Number, name = n, rest
 	}
 
-	rel, err := filepath.Rel(root, filepath.Dir(dir))
+	rel, err := filepath.Rel(root, filepath.Dir(named))
 	var folderAuthor string
 	if err == nil && rel != "." && !strings.HasPrefix(rel, "..") {
 		parts := strings.Split(rel, string(filepath.Separator))
@@ -177,7 +210,7 @@ func folderBook(root, dir string, files []BookFile) Book {
 	}
 	b.Title = stripSeriesPrefix(tidy(name), b.Series)
 	if b.Title == "" {
-		b.Title = tidy(filepath.Base(dir))
+		b.Title = tidy(filepath.Base(named))
 	}
 	b.Author = bookAuthor(files, folderAuthor)
 	b.Narrators = bookNarrators(files)
