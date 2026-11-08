@@ -635,6 +635,8 @@ func (s *Server) Handler() http.Handler {
 
 	mux.HandleFunc("GET /api/items", s.listItems)
 	mux.HandleFunc("GET /api/continue", s.continueWatching)
+	// The home page's resume console: every kind in progress (ADR 0118).
+	mux.HandleFunc("GET /api/resume", s.resume)
 	// Photographs from today's date in an earlier year (ADR 0028).
 	mux.HandleFunc("GET /api/memories", s.memories)
 	mux.HandleFunc("GET /api/profile", s.profile)
@@ -999,6 +1001,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/coverart", s.coverArtStatus)
 	mux.HandleFunc("POST /api/coverart/refresh", s.adminOnly(s.recoverArt))
 	mux.HandleFunc("GET /api/artwork/{hash}", s.serveArtwork)
+	// Which wisps of the field a picture leans toward (ADR 0118 §5).
+	mux.HandleFunc("GET /api/artwork/{hash}/tone", s.artworkTone)
 
 	mux.HandleFunc("GET /api/settings", s.adminOnly(s.getSettings))
 	mux.HandleFunc("GET /api/settings/public-certificate", s.adminOnly(s.getPublicCert))

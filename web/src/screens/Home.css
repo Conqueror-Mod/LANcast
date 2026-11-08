@@ -25,9 +25,29 @@
   pointer-events: none;
 }
 
-.home__empty {
-  color: var(--text-muted);
-  padding: 40px 0;
+.home__welcome {
+  max-width: 560px;
+  margin: 32px 0;
+  padding: 24px 24px 26px;
+}
+
+.home__welcome-title {
+  margin: 0 0 8px;
+  font-size: 22px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.home__welcome-body {
+  margin: 0 0 18px;
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--text-secondary);
+}
+
+.home__welcome-go {
+  display: inline-block;
+  text-decoration: none;
 }
 
 @media (max-width: 860px) {

@@ -12,6 +12,7 @@ import {
 } from "@/api/hooks";
 import { artworkURL } from "@/api/client";
 import type { PeerPerson, PeerPresence, Person } from "@/api/types";
+import { canJoin, statusOf } from "@/lib/presence";
 import "./People.css";
 
 /*
@@ -339,7 +340,7 @@ function PeerPersonRow({
        * and a title is the thing being asked about. Whether they will say yes
        * is theirs to answer, in the moment.
        */}
-      {reachable && person.shares && person.online && person.watching && (
+      {canJoin(person, reachable) && (
         <AskToJoin fingerprint={fingerprint} person={person.id} name={person.name} />
       )}
 
@@ -367,31 +368,3 @@ function PeerPersonRow({
   );
 }
 
-/*
- * The sentence for one person, and a function rather than a ternary in the
- * markup because there are four cases and three of them are easy to collapse by
- * accident.
- *
- * Withholding presence is a *choice* and must never be rendered as an absence
- * or as being offline — the rule the local list already holds itself to. And
- * somebody can only be known to be offline if they share; otherwise there is
- * nothing to know, and "Offline" would be inventing a fact about a person who
- * has told us nothing.
- *
- * It said "Not sharing with you", three lines above a control about sharing
- * *libraries*, on a card that by then carried both halves of that word. It was
- * read — correctly, for the sentence it appeared to be — as "they have shared
- * no libraries", while four of them were sitting in the rail. Presence says
- * what it is about now, and nothing on this card says "sharing" unqualified.
- */
-function statusOf(person: PeerPerson, reachable: boolean, reachesUs = false): string {
-  // A friend whose server sends us its roster but cannot be called (ADR 0103):
-  // what they watch cannot be asked, so "not showing you" would invent a
-  // choice. Checked first for exactly that reason.
-  if (!reachable && reachesUs) return "What they watch can't be seen from here";
-  if (!person.shares) return "Not showing you what they watch";
-  if (!reachable) return "Server not answering";
-  if (!person.online) return "Offline";
-  if (person.watching) return `Watching ${person.watching}`;
-  return "Online";
-}

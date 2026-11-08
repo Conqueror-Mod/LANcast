@@ -31,6 +31,12 @@ func (s *Server) memories(w http.ResponseWriter, r *http.Request) {
 		s.writeInternal(w, err, "apply account limits")
 		return
 	}
+	// The photographs' own thumbnails. Without them every tile fell back to
+	// the filename: the shelf did, and the On this day panel made it plain.
+	if err := s.st.AttachArtwork(r.Context(), items); err != nil {
+		s.writeInternal(w, err, "photo memories artwork")
+		return
+	}
 	writeJSON(w, http.StatusOK, map[string]any{
 		"items": items,
 		// The date the server resolved, so a client that has been open since

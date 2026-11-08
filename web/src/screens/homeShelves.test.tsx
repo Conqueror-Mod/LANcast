@@ -45,6 +45,10 @@ const film = (id: number, title: string, progress?: number) => ({
 
 /** What /api/continue answers with; empty unless a test says otherwise. */
 let continuing: unknown[] = [];
+/** What /api/resume answers with. */
+let resumeCards: unknown[] = [];
+/** The signed-in account's role. */
+let role = "admin";
 
 let host: HTMLDivElement;
 let root: Root;
@@ -66,10 +70,11 @@ function mount(libs: unknown[]) {
         return json({
           authenticated: true,
           configured: true,
-          user: { id: "u1", name: "dana", role: "admin" },
+          user: { id: "u1", name: "dana", role },
         });
       }
       if (url.includes("/api/libraries") && !url.includes("/trending")) return json(libs);
+      if (url.includes("/api/resume")) return json({ cards: resumeCards, more: false });
       if (url.includes("/api/continue")) return json({ items: continuing });
       if (url.includes("/api/items") && url.includes("sort=random")) {
         return json({
@@ -84,6 +89,8 @@ function mount(libs: unknown[]) {
 
 beforeEach(() => {
   continuing = [];
+  resumeCards = [];
+  role = "admin";
   host = document.createElement("div");
   document.body.append(host);
   root = createRoot(host);
@@ -176,13 +183,13 @@ describe("home shelves", () => {
 });
 
 /*
- * Next up: the shows move off Continue Watching and are drawn as the episode.
+ * A show in the resume console (ADR 0118), which replaced the Next up shelf.
  *
- * The server answers Continue Watching with a show for a series in progress,
- * carrying `next_episode`. Mixed with half-watched films that was a poster
- * indistinguishable from a film you abandoned.
+ * The server answers with the show, carrying `next_episode`. The card must
+ * draw that episode -- its still, its code -- not the show's poster, or a show
+ * you finished an episode of looks exactly like a film you abandoned.
  */
-describe("Next up", () => {
+describe("a show in the resume console", () => {
   const show = {
     id: 50,
     title: "A Show",
@@ -201,37 +208,89 @@ describe("Next up", () => {
     },
   };
 
-  const shelf = (label: string) =>
-    [...host.querySelectorAll(".shelf")].find(
-      (s) => s.querySelector(".section-label")?.textContent?.trim() === label,
+  const card = (title: string) =>
+    [...host.querySelectorAll("button.resume-card")].find((b) =>
+      b.getAttribute("aria-label")?.startsWith(title + ","),
     );
 
-  it("takes shows off Continue Watching and draws their next episode", async () => {
-    continuing = [film(9, "Abandoned Film", 60_000), show];
+  it("draws the next episode, not the show's poster", async () => {
+    resumeCards = [
+      { kind: "video", touched_at: 2, item: film(9, "Abandoned Film", 60_000) },
+      { kind: "show", touched_at: 1, item: show },
+    ];
     mount([]);
     await render();
 
-    const cw = shelf("Continue Watching");
-    expect(cw?.textContent).toContain("Abandoned Film");
-    expect(cw?.textContent).not.toContain("A Show");
-
-    const next = shelf("Next up");
-    expect(next, "no Next up shelf").toBeTruthy();
-    expect(next?.textContent).toContain("The Second One");
-    expect(next?.textContent).toContain("A Show · S01E02");
-    // The episode's still, not the show's poster.
-    const img = next?.querySelector("img");
-    expect(img?.getAttribute("src")).toContain("episode-still");
-    expect(next?.querySelector(".poster-tile__art--wide")).toBeTruthy();
+    expect(card("Abandoned Film")).toBeTruthy();
+    const c = card("A Show");
+    expect(c, "no card for the show").toBeTruthy();
+    expect(c!.textContent).toContain("S01E02 · next");
+    expect(c!.querySelector("img")?.getAttribute("src")).toContain("episode-still");
+    expect(c!.querySelector(".resume-card__art--wide")).toBeTruthy();
   });
 
-  // Nothing to play means nothing to offer, and it does not fall back into
-  // Continue Watching as the poster the split removed.
-  it("offers no show that has no next episode", async () => {
-    continuing = [{ ...show, next_episode: undefined }];
+  /*
+   * Home is one of the surfaces where a cover cannot be lifted (ADR 0051), and
+   * the console is on Home: a sensitive card keeps its name, so it can be
+   * found, and shows no picture and no place.
+   */
+  it("covers a sensitive card and offers no way to uncover it", async () => {
+    resumeCards = [
+      {
+        kind: "video",
+        touched_at: 1,
+        item: { ...film(9, "Marked Film", 60_000), sensitive: true, artwork: { poster: "secret" } },
+      },
+    ];
     mount([]);
     await render();
-    expect(shelf("Next up")).toBeUndefined();
-    expect(shelf("Continue Watching")).toBeUndefined();
+    const c = [...host.querySelectorAll("button.resume-card")].find((b) =>
+      b.getAttribute("aria-label")?.startsWith("Marked Film"),
+    );
+    expect(c, "no card").toBeTruthy();
+    expect(c!.querySelector("img")).toBeNull();
+    expect(c!.textContent).toContain("Sensitive");
+    expect(c!.textContent).not.toContain("click to show");
+  });
+
+  // Nothing in progress is no panel at all, rather than a heading over nothing.
+  it("draws no console when nothing is in progress", async () => {
+    mount([]);
+    await render();
+    expect(host.querySelector("section.resume")).toBeNull();
+  });
+});
+
+/*
+ * No state of the first screen is an empty frame (ADR 0118 §3).
+ */
+describe("the first screen with nothing to resume", () => {
+  it("lists the libraries in the console, as places to start", async () => {
+    mount([library(1, "Movies", "movie"), library(2, "Music", "music")]);
+    await render();
+    const panel = host.querySelector("section.resume");
+    expect(panel?.textContent).toContain("Your libraries");
+    const links = [...(panel?.querySelectorAll("a") ?? [])].map((a) => a.getAttribute("href"));
+    expect(links).toEqual(["/library/1", "/library/2"]);
+    // And only there: the masthead no longer carries them.
+    expect(host.querySelector(".masthead .masthead__libs")).toBeNull();
+  });
+
+  it("welcomes a new install with the one thing to do", async () => {
+    mount([]);
+    await render();
+    const welcome = host.querySelector(".home__welcome");
+    expect(welcome?.textContent).toContain("Add your first library");
+    expect(welcome?.querySelector("a")?.getAttribute("href")).toBe("/settings?pane=libraries");
+    expect(host.querySelector("section.resume")).toBeNull();
+  });
+
+  it("offers somebody who cannot add a library no button that would fail", async () => {
+    role = "member";
+    mount([]);
+    await render();
+    const welcome = host.querySelector(".home__welcome");
+    expect(welcome?.textContent).toContain("Nothing here yet");
+    expect(welcome?.querySelector("a")).toBeNull();
   });
 });

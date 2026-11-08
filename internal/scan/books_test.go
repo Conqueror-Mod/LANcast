@@ -190,3 +190,78 @@ func TestBookPassReadsNarrators(t *testing.T) {
 		t.Fatalf("a credits lock was overwritten: %q", got)
 	}
 }
+
+// A book whose files sit in `Audio` inside the book's folder is named by the
+// book's folder. A library scanned before that rule existed has books titled
+// "Audio"; its next scan re-titles them in place, on the same row, though
+// nothing on disk moved, and leaves a title somebody locked as they left it.
+func TestRescanRetitlesBookInAudioFolder(t *testing.T) {
+	sc, st := newScanner(t)
+	sc.SetTagReader(&bookTags{byName: map[string]probe.Tags{}})
+	ctx := context.Background()
+	root := t.TempDir()
+	lib, err := st.CreateLibrary(ctx, "Books", "audiobooks", root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir := filepath.Join(root, "Read-Along Adventures", "01 - Star Trek the Motion Picture (Read-Along)", "Audio")
+	writeFile(t, dir, "01.mp3", 10)
+	writeFile(t, dir, "02.mp3", 10)
+	writeFile(t, filepath.Dir(dir), "Star_Trek_The_Motion_Picture.swf", 10)
+
+	book := func() store.Item {
+		t.Helper()
+		top, _, err := st.ListItems(ctx, store.ItemFilter{LibraryID: lib.ID, TopLevel: true})
+		if err != nil || len(top) != 1 {
+			t.Fatalf("books = %+v, err %v", top, err)
+		}
+		return top[0]
+	}
+	// Read back before each rescan, as the server does: a library that has
+	// never been scanned is always read in full, so the skip this test is
+	// about only arises with ScannedAt set.
+	rescan := func() Progress {
+		t.Helper()
+		l, err := st.GetLibrary(ctx, lib.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return scanAndWait(t, sc, *l)
+	}
+	const want = "Star Trek the Motion Picture (Read-Along)"
+	scanAndWait(t, sc, *lib)
+	first := book()
+	if first.Title != want || deref(first.Series) != "Read-Along Adventures" || deref2(first.Episode) != 1 {
+		t.Fatalf("book = %q, series %q, number %d", first.Title, deref(first.Series), deref2(first.Episode))
+	}
+
+	// As the live library has it: titled by the inner folder, read by the
+	// pass before this rule.
+	if err := st.SetBookDetails(ctx, first.ID, store.BookDetails{Title: "Audio", SortTitle: "audio"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.SetBookTagsRev(ctx, lib.ID, 1); err != nil {
+		t.Fatal(err)
+	}
+	if p := rescan(); p.ItemsChanged != 0 {
+		t.Fatalf("rescan changed %d files", p.ItemsChanged)
+	}
+	if got := book(); got.ID != first.ID || got.Title != want {
+		t.Fatalf("after rescan: id %d title %q, want id %d title %q", got.ID, got.Title, first.ID, want)
+	}
+
+	// A locked title stays, whatever the folders say.
+	if err := st.SetBookDetails(ctx, first.ID, store.BookDetails{Title: "My Name For It", SortTitle: "my name for it"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.LockField(ctx, first.ID, "title"); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.SetBookTagsRev(ctx, lib.ID, 1); err != nil {
+		t.Fatal(err)
+	}
+	rescan()
+	if got := book(); got.Title != "My Name For It" {
+		t.Fatalf("a locked title was overwritten: %q", got.Title)
+	}
+}

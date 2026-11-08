@@ -201,3 +201,82 @@ func keys(m map[string]Book) []string {
 	}
 	return out
 }
+
+// The Read-Along books keep their sound in `Audio`, beside `Pages` and a
+// viewer, and were all titled "Audio" on the live library (2026-11-08). The
+// book is named by the folder above, and is still keyed by the folder its
+// files are in, so the row it already has is the row it keeps.
+func TestBookInAudioFolderIsNamedByTheFolderAbove(t *testing.T) {
+	root := filepath.FromSlash("/lib/Audiobooks")
+	dir := filepath.Join(root, "Read-Along Adventures", "01 - Star Trek the Motion Picture (Read-Along)", "Audio")
+	books := GroupBooks(root, []BookFile{
+		{Path: filepath.Join(dir, "02.mp3")},
+		{Path: filepath.Join(dir, "01.mp3")},
+	})
+	if len(books) != 1 {
+		t.Fatalf("%d books, want 1: %+v", len(books), books)
+	}
+	b := books[0]
+	if b.Title != "Star Trek the Motion Picture (Read-Along)" {
+		t.Errorf("title = %q, want the book folder's name", b.Title)
+	}
+	if b.Number != 1 || b.Series != "Read-Along Adventures" {
+		t.Errorf("number/series = %d/%q, want 1/Read-Along Adventures", b.Number, b.Series)
+	}
+	if b.Key != dir || b.Dir != dir {
+		t.Errorf("key/dir = %q/%q, want the Audio folder itself", b.Key, b.Dir)
+	}
+	if len(b.Parts) != 2 || filepath.Base(b.Parts[0].Path) != "01.mp3" {
+		t.Errorf("parts = %+v", b.Parts)
+	}
+}
+
+// Generic folders nested in each other are all passed over.
+func TestBookInNestedGenericFoldersIsNamedByTheFirstRealOne(t *testing.T) {
+	root := filepath.FromSlash("/lib/Audiobooks")
+	dir := filepath.Join(root, "Gateways", "Gateways - What Lay Beyond - Abridged", "Audio", "MP3")
+	b := GroupBooks(root, []BookFile{{Path: filepath.Join(dir, "1.mp3")}})[0]
+	if b.Title != "What Lay Beyond" || b.Series != "Gateways" || b.Edition != "Abridged" {
+		t.Errorf("title/series/edition = %q/%q/%q", b.Title, b.Series, b.Edition)
+	}
+}
+
+// A generic folder straight under the library location keeps its own name:
+// the location names no book, and "Audio" beats the name of a drive.
+func TestGenericFolderAtTheRootKeepsItsName(t *testing.T) {
+	root := filepath.FromSlash("/lib/Audiobooks")
+	b := GroupBooks(root, []BookFile{{Path: filepath.Join(root, "Audio", "1.mp3")}})[0]
+	if b.Title != "Audio" || b.Series != "" {
+		t.Errorf("title/series = %q/%q, want Audio and no series", b.Title, b.Series)
+	}
+}
+
+// Which folder names say how a book is stored, one case each.
+func TestGenericBookFolderAudio(t *testing.T)      { assertGenericFolder(t, "Audio", true) }
+func TestGenericBookFolderAudioFiles(t *testing.T) { assertGenericFolder(t, "Audio Files", true) }
+func TestGenericBookFolderMP3(t *testing.T)        { assertGenericFolder(t, "MP3", true) }
+func TestGenericBookFolderLowerMp3s(t *testing.T)  { assertGenericFolder(t, "mp3s", true) }
+func TestGenericBookFolderM4B(t *testing.T)        { assertGenericFolder(t, "m4b", true) }
+func TestGenericBookFolderCD1(t *testing.T)        { assertGenericFolder(t, "CD1", true) }
+func TestGenericBookFolderDisc2(t *testing.T)      { assertGenericFolder(t, "Disc 2", true) }
+func TestGenericBookFolderDisk03(t *testing.T)     { assertGenericFolder(t, "disk_03", true) }
+
+// A volume or a part can be a book in its series, so it names itself.
+func TestGenericBookFolderNotVolume(t *testing.T) { assertGenericFolder(t, "Volume 2", false) }
+func TestGenericBookFolderNotPart(t *testing.T)   { assertGenericFolder(t, "Part 1", false) }
+func TestGenericBookFolderNotAvenger(t *testing.T) {
+	assertGenericFolder(t, "03 - Avenger - Abridged", false)
+}
+func TestGenericBookFolderNotAudioInATitle(t *testing.T) {
+	assertGenericFolder(t, "Audio Adrenaline", false)
+}
+
+func assertGenericFolder(t *testing.T, name string, generic bool) {
+	t.Helper()
+	root := filepath.FromSlash("/lib/Audiobooks")
+	dir := filepath.Join(root, "Series", "The Book", name)
+	got := namedBookFolder(root, dir) != dir
+	if got != generic {
+		t.Errorf("%q generic = %v, want %v", name, got, generic)
+	}
+}

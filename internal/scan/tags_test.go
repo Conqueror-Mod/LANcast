@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 
 	"lancast/internal/probe"
@@ -13,14 +14,21 @@ import (
 
 // fakeTags answers from a table keyed by filename, so these tests need no
 // ffmpeg and no real media.
+// The scanner reads tags with several workers at once, so the count is taken
+// under a lock. Without it two reads landing together lost an increment, and
+// TestSecondScanReadsNoTagsWhenNothingChanged failed on CI with "read 1 files,
+// want 2".
 type fakeTags struct {
 	byName map[string]probe.Tags
 	err    error
+	mu     sync.Mutex
 	calls  int
 }
 
 func (f *fakeTags) ReadTags(_ context.Context, path string) (probe.Tags, error) {
+	f.mu.Lock()
 	f.calls++
+	f.mu.Unlock()
 	if f.err != nil {
 		return probe.Tags{}, f.err
 	}

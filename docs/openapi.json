@@ -2468,6 +2468,56 @@
         }
       }
     },
+      "/resume": {
+        "get": {
+          "operationId": "getResume",
+          "tags": [
+            "items"
+          ],
+          "summary": "The home page's resume console: everything in progress, across kinds",
+          "description": "One card per thing you would resume — the album, not its tracks; the book, not its parts; the show, not its episodes; the game, not its saves — newest first across kinds (ADR 0118).\n\n**At most two cards of a kind** unless `all=true`, so one kind cannot fill the console; `more` says whether anything was left out, which is when a client offers See all. Each kind is asked for on its own and merged, so a run of half-played songs cannot push the films off.\n\nThe Continue window (`continue_weeks`) and the account's limits apply exactly as on `GET /continue`. Video and show cards are the rows `GET /continue?shelf=watching` returns, so a show card's `next_episode` is for drawing, not deciding: ask `GET /items/{id}/continue` on the press.",
+          "parameters": [
+            {
+              "name": "limit",
+              "in": "query",
+              "required": false,
+              "description": "How many cards. Defaults to 5, or 100 with `all=true`; maximum 100.",
+              "schema": {
+                "type": "integer",
+                "default": 5,
+                "maximum": 100
+              }
+            },
+            {
+              "name": "all",
+              "in": "query",
+              "required": false,
+              "description": "`true` lifts the two-per-kind cap: the See all page.",
+              "schema": {
+                "type": "string",
+                "enum": [
+                  "true"
+                ]
+              }
+            }
+          ],
+          "responses": {
+            "200": {
+              "description": "The console, possibly empty.",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/ResumeConsole"
+                  }
+                }
+              }
+            },
+            "401": {
+              "$ref": "#/components/responses/Unauthorized"
+            }
+          }
+        }
+      },
     "/items/{id}/playback": {
       "parameters": [
         {
@@ -9809,6 +9859,50 @@
         }
       }
     },
+      "/artwork/{hash}/tone": {
+        "parameters": [
+          {
+            "name": "hash",
+            "in": "path",
+            "required": true,
+            "description": "The content-addressed hash from an item's `artwork` block.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "get": {
+          "operationId": "getArtworkTone",
+          "tags": [
+            "items"
+          ],
+          "summary": "Which of the field's wisps a picture leans toward",
+          "description": "For the home spotlight (ADR 0118 §5): the hero raises the wisps a picture leans toward and lowers the others, so no colour enters the page that the field did not already have.\n\nWorked out from the cached thumbnail on request, not stored. The bytes behind a hash never change, so neither does the answer, and it is served as immutably as the picture.",
+          "responses": {
+            "200": {
+              "description": "The tone.",
+              "headers": {
+                "Cache-Control": {
+                  "description": "`public, max-age=31536000, immutable`.",
+                  "schema": {
+                    "type": "string"
+                  }
+                }
+              },
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/ArtworkTone"
+                  }
+                }
+              }
+            },
+            "404": {
+              "$ref": "#/components/responses/NotFound"
+            }
+          }
+        }
+      },
     "/coverart": {
       "get": {
         "operationId": "getCoverArtProgress",
@@ -20057,6 +20151,112 @@
           }
         }
       },
+        "ResumeConsole": {
+          "type": "object",
+          "required": [
+            "cards",
+            "more"
+          ],
+          "properties": {
+            "cards": {
+              "type": "array",
+              "items": {
+                "$ref": "#/components/schemas/ResumeCard"
+              }
+            },
+            "more": {
+              "type": "boolean",
+              "description": "Something in progress was left out by the limit or the per-kind cap."
+            }
+          }
+        },
+        "ResumeCard": {
+          "type": "object",
+          "required": [
+            "kind",
+            "touched_at",
+            "item"
+          ],
+          "properties": {
+            "kind": {
+              "type": "string",
+              "enum": [
+                "video",
+                "show",
+                "music",
+                "book",
+                "comic",
+                "game"
+              ],
+              "description": "`video` is a film or a collection's next film; `game` is a retro game with a save on the server."
+            },
+            "touched_at": {
+              "type": "integer",
+              "format": "int64",
+              "description": "When this account last played, read or saved it."
+            },
+            "item": {
+              "$ref": "#/components/schemas/Item",
+              "description": "What the card pictures and opens: the film, the show (with `next_episode`), the album, the book, the comic or the game."
+            },
+            "track": {
+              "$ref": "#/components/schemas/ResumeTrack"
+            },
+            "page": {
+              "$ref": "#/components/schemas/ComicPlace"
+            }
+          }
+        },
+        "ResumeTrack": {
+          "type": "object",
+          "required": [
+            "item"
+          ],
+          "description": "On a music card: the track to resume, and where it sits on the album.",
+          "properties": {
+            "item": {
+              "$ref": "#/components/schemas/Item"
+            },
+            "number": {
+              "type": "integer",
+              "description": "Its track number, when known."
+            },
+            "of": {
+              "type": "integer",
+              "description": "How many tracks the album holds, when the card is an album."
+            }
+          }
+        },
+        "ArtworkTone": {
+          "type": "object",
+          "required": [
+            "violet",
+            "blue",
+            "teal",
+            "ember",
+            "light"
+          ],
+          "description": "The four weights share 1 between them, or are all 0 for a picture with no colour to speak of.",
+          "properties": {
+            "violet": {
+              "type": "number"
+            },
+            "blue": {
+              "type": "number"
+            },
+            "teal": {
+              "type": "number"
+            },
+            "ember": {
+              "type": "number",
+              "description": "Reds, oranges and yellows: the field's warm wisp."
+            },
+            "light": {
+              "type": "number",
+              "description": "Mean luminance, 0 to 1."
+            }
+          }
+        },
       "ComicPlace": {
         "type": "object",
         "required": [

@@ -21,14 +21,41 @@ import "./HomeMasthead.css";
  *
  *   - Greets by name and by hour, which is the one line on the page that says
  *     the server knows who is asking.
- *   - Puts the libraries in reach as *destinations* with their counts, so the
- *     first screenful answers "what is in here" without scrolling. On a fresh
- *     install where every shelf is empty, this is the only thing on the page —
- *     and that is the state the home page previously had nothing to say in.
+ *   - Says how much is here, which is a true boast: it is the whole point of
+ *     running your own server.
+ *
+ * The library buttons it used to carry moved to the resume console's empty
+ * state (ADR 0118 §3, LibraryLinks below): with something to resume, the
+ * first screen has a better answer than a list of destinations.
  *
  * It compresses when there is a hero below it, because two full-height
  * statements stacked is one too many and the hero is the better of the two.
  */
+/*
+ * The libraries as destinations, with their counts.
+ *
+ * This used to sit in the masthead on every visit. Since ADR 0118 the
+ * libraries live in the navigation, and here only when there is nothing in
+ * progress: a first screen with nothing to resume should answer "what is in
+ * here", and one with something to resume already has.
+ */
+export function LibraryLinks({ libraries }: { libraries: Library[] }) {
+  if (libraries.length === 0) return null;
+  return (
+    <nav className="masthead__libs" aria-label="Libraries">
+      {libraries.map((lib) => (
+        <Link key={lib.id} className="masthead__lib" to={`/library/${lib.id}`}>
+          <span className="masthead__libicon" aria-hidden="true">
+            <LibraryIcon kind={lib.kind} />
+          </span>
+          <span className="masthead__libname">{lib.name}</span>
+          <span className="masthead__libcount">{navCount(lib).toLocaleString()}</span>
+        </Link>
+      ))}
+    </nav>
+  );
+}
+
 export function HomeMasthead({
   libraries,
   hasHero,
@@ -57,21 +84,6 @@ export function HomeMasthead({
         )}
       </div>
 
-      {libs.length > 0 && (
-        <nav className="masthead__libs" aria-label="Libraries">
-          {libs.map((lib) => (
-            <Link key={lib.id} className="masthead__lib" to={`/library/${lib.id}`}>
-              <span className="masthead__libicon" aria-hidden="true">
-                <LibraryIcon kind={lib.kind} />
-              </span>
-              <span className="masthead__libname">{lib.name}</span>
-              <span className="masthead__libcount">
-                {navCount(lib).toLocaleString()}
-              </span>
-            </Link>
-          ))}
-        </nav>
-      )}
     </header>
   );
 }

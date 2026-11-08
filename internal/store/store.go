@@ -3191,6 +3191,26 @@ func (c ContinueShelf) Valid() bool {
  * Recently Added met the same fault and was fixed the same way.
  */
 func (s *Store) ContinueOn(ctx context.Context, userID string, shelf ContinueShelf, limit int, sinceUnix int64) ([]Item, error) {
+	timed, err := s.continueOnTimed(ctx, userID, shelf, limit, sinceUnix)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]Item, len(timed))
+	for i, t := range timed {
+		out[i] = t.Item
+	}
+	return out, nil
+}
+
+// TimedItem is an item and when this account last touched it.
+type TimedItem struct {
+	Item    Item
+	Touched int64
+}
+
+// continueOnTimed is ContinueOn keeping each row's time, which the resume
+// console needs to order different kinds against each other (ADR 0118).
+func (s *Store) continueOnTimed(ctx context.Context, userID string, shelf ContinueShelf, limit int, sinceUnix int64) ([]TimedItem, error) {
 	if limit <= 0 || limit > 100 {
 		limit = 20
 	}
@@ -3325,7 +3345,7 @@ func (s *Store) ContinueOn(ctx context.Context, userID string, shelf ContinueShe
 	}
 	rows.Close()
 
-	out := []Item{}
+	out := []TimedItem{}
 	// A film can be reached twice — on its own and as a collection's next, or
 	// as the next of two collections — and a shelf lists it once.
 	listed := map[int64]bool{}
@@ -3340,7 +3360,7 @@ func (s *Store) ContinueOn(ctx context.Context, userID string, shelf ContinueShe
 			}
 			if ok && !listed[next.ID] {
 				listed[next.ID] = true
-				out = append(out, *next)
+				out = append(out, TimedItem{*next, r.updated})
 			}
 			continue
 		}
@@ -3354,7 +3374,7 @@ func (s *Store) ContinueOn(ctx context.Context, userID string, shelf ContinueShe
 		if r.kind == rowItem {
 			if !listed[it.ID] {
 				listed[it.ID] = true
-				out = append(out, *it)
+				out = append(out, TimedItem{*it, r.updated})
 			}
 			continue
 		}
@@ -3370,7 +3390,7 @@ func (s *Store) ContinueOn(ctx context.Context, userID string, shelf ContinueShe
 			continue
 		}
 		it.NextEpisode = next.Item
-		out = append(out, *it)
+		out = append(out, TimedItem{*it, r.updated})
 	}
 	return out, nil
 }

@@ -395,8 +395,8 @@ function detailActions(o: {
   // arrives there unasked, and its page has to be able to say no.
   if (o.onShelf) {
     out.push({
-      label:
-        o.isMusic || isBook(item) ? "Remove from Continue Listening" : "Remove from Continue Watching",
+      // One list since ADR 0118, so one name for every kind.
+      label: "Remove from Continue",
       onSelect: o.forget,
     });
   }
