@@ -1,0 +1,137 @@
+/*
+ * The Bridge (ADR 0118 §1, §5): the first screen of Home.
+ *
+ * The spotlight keeps its full-bleed backdrop, tuned over several releases
+ * (HomeHero.css), and the panels stand over its right edge on a wide screen
+ * rather than squeezing it into a column. Narrower, they drop beneath it in a
+ * row; on a phone the resume console leads, because a phone is mostly where
+ * you pick something back up.
+ *
+ * The D-pad needs nothing from this file. Focus moves by geometry (ADR 0004),
+ * so the order is the layout: the spotlight's buttons, then right into the
+ * console, then down. A hand-written order would be the defect ADR 0004
+ * names.
+ */
+
+.bridge {
+  /* One width for the panel column, in vw so the hero's text can leave the
+     same room for it from inside a box of a different width. */
+  --bridge-panels: clamp(340px, 28vw, 460px);
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 16px;
+  margin-bottom: 8px;
+}
+
+.bridge > .hero {
+  grid-column: 1 / -1;
+  grid-row: 1;
+}
+
+.bridge__panels {
+  display: flex;
+  gap: 16px;
+  min-width: 0;
+}
+
+/* Each panel takes an equal share of the row; the console a larger one. */
+.bridge__panels > .panel {
+  flex: 1 1 0;
+  min-width: 0;
+}
+.bridge__panels > .panel--resume {
+  flex-grow: 1.4;
+}
+
+/*
+ * A panel is a window cut into the field, not a box laid on it: darker than
+ * what is behind it, with the resting gold hairline design.md allows. When
+ * focus is inside, the panel lifts one step. It never takes the gold ring --
+ * that belongs to the card you are on, and two golds in one scope would leave
+ * nothing meaning "here".
+ */
+.panel {
+  padding: 14px 14px 12px;
+  border: 1px solid var(--gold-dormant);
+  border-radius: var(--radius-panel);
+  background: rgba(5, 7, 15, 0.66);
+  box-shadow: var(--elev-1);
+  transition:
+    box-shadow var(--dur-base) ease,
+    background-color var(--dur-base) ease,
+    transform var(--dur-base) ease;
+}
+
+.panel:focus-within {
+  background: rgba(10, 15, 34, 0.78);
+  box-shadow: var(--elev-2);
+  transform: translateY(-2px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .panel:focus-within {
+    transform: none;
+  }
+}
+
+/*
+ * Wide: the panels over the spotlight's right edge.
+ *
+ * Both sit in row 1, so the row is as tall as the taller of the two -- a long
+ * console makes the backdrop taller rather than spilling out of it. The
+ * spotlight's own text keeps to the left of the column.
+ */
+@media (min-width: 1200px) {
+  .bridge--hero {
+    grid-template-columns: minmax(0, 1fr) var(--bridge-panels);
+  }
+  .bridge--hero > .bridge__panels {
+    grid-column: 2;
+    grid-row: 1;
+    align-self: end;
+    flex-direction: column;
+    position: relative;
+    z-index: 2;
+    /* The spotlight's bottom margin and its body's bottom padding, so the
+       panels' foot lines up with the Play button's. */
+    margin-bottom: 46px;
+  }
+  .bridge--hero .hero__body {
+    padding-right: calc(var(--bridge-panels) + var(--main-pad) + 32px);
+  }
+  .bridge--hero .hero__text {
+    max-width: min(72ch, 100%);
+  }
+}
+
+/*
+ * Phone: the console first, then the spotlight, then the other panels.
+ *
+ * `display: contents` lets the panels take places either side of the
+ * spotlight without a second copy of them in the markup. The spotlight stops
+ * rising behind the masthead here, because the console is between the two.
+ */
+@media (max-width: 767px) {
+  .bridge__panels {
+    display: contents;
+  }
+  .bridge > .hero {
+    grid-row: auto;
+  }
+  .bridge__panels > .panel {
+    order: 1;
+  }
+  /* After the rule above, which it overrides at the same specificity. */
+  .bridge__panels > .panel--resume {
+    order: -1;
+  }
+  .masthead + .bridge--hero > .hero {
+    margin-top: 0;
+    padding-top: 0;
+  }
+  .masthead + .bridge--hero > .hero .hero__backdrop {
+    -webkit-mask-image: none;
+    mask-image: none;
+  }
+}

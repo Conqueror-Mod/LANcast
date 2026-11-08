@@ -118,7 +118,7 @@ export function ResumeConsole({ cards, more, actions, open }: ConsoleProps) {
    */
   const seeAll = more || cards.length > 3;
   return (
-    <section className="resume" aria-labelledby="resume-title">
+    <section className="resume panel panel--resume" aria-labelledby="resume-title">
       <header className="resume__head">
         <h2 id="resume-title" className="resume__title">
           Continue

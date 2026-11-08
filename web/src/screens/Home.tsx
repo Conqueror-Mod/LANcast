@@ -26,6 +26,7 @@ import type { Item, Library } from "@/api/types";
 import { useContinueMenu } from "@/lib/useContinueMenu";
 import { useHeroSpotlight } from "@/lib/useHero";
 import "./Home.css";
+import "./Bridge.css";
 
 /*
  * Films you have not started, shuffled — and shows you have not started.
@@ -191,6 +192,14 @@ export function Home() {
         nobody designs for.
       */}
       <HomeMasthead libraries={libraries} hasHero={!!hero} />
+      {/*
+        The Bridge (ADR 0118 §1): the spotlight and the panels share the first
+        screen. On a wide screen the panels stand over the right of the
+        spotlight's backdrop, which stays full-bleed; narrower, they drop into
+        a row beneath it; on a phone the console leads. Which goes where is
+        CSS (Bridge.css); the order here is the reading order.
+      */}
+      <div className={"bridge" + (hero ? " bridge--hero" : "")}>
       {hero && (
         <HomeHero
           item={hero.item}
@@ -210,12 +219,15 @@ export function Home() {
           )}
         />
       )}
-      <ResumeConsole
-        cards={resumeCards}
-        more={resume?.more ?? false}
-        actions={resumeActions}
-        open={resumeOpen}
-      />
+        <div className="bridge__panels">
+          <ResumeConsole
+            cards={resumeCards}
+            more={resume?.more ?? false}
+            actions={resumeActions}
+            open={resumeOpen}
+          />
+        </div>
+      </div>
       <div className="home__shelves">
         {/* What you meant to watch, after what you are in the middle of
             (ADR 0085). Newest first, and empty means no shelf. */}

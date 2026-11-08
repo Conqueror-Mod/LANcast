@@ -101,17 +101,20 @@
  * its minimum, the body grows downward from under the buttons instead of
  * climbing into them.
  */
-.masthead + .hero {
+.masthead + .hero,
+.masthead + .bridge > .hero {
   margin-top: -56px;
   padding-top: 76px;
 }
 
-.masthead + .hero .hero__backdrop {
+.masthead + .hero .hero__backdrop,
+.masthead + .bridge > .hero .hero__backdrop {
   -webkit-mask-image: linear-gradient(to bottom, transparent, #000 170px);
   mask-image: linear-gradient(to bottom, transparent, #000 170px);
 }
 
-.masthead + .hero .hero__scrim--top {
+.masthead + .hero .hero__scrim--top,
+.masthead + .bridge > .hero .hero__scrim--top {
   display: none;
 }
 
