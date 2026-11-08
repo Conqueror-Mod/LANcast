@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { apiGet, apiPost, apiSend } from "@/api/client";
 import type { TogetherAskAnswer, TogetherSession } from "@/api/types";
 import { peerAskURL, peerRequestURL, peerRoomURL } from "@/playback/peerSource";
+import { useFocusable } from "@/focus/FocusController";
 import "./AskToJoin.css";
 
 /*
@@ -126,6 +127,11 @@ export function AskToJoin({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [phase, request, fingerprint]);
 
+  // Registered with the focus controller, so a remote can reach them: Ask to
+  // join sits on the home page's friends panel, which a TV is driven through.
+  const askFocus = useFocusable(() => void ask());
+  const cancelFocus = useFocusable(() => void cancel());
+
   switch (phase) {
     case "asking":
       return (
@@ -139,7 +145,12 @@ export function AskToJoin({
           <span className="ask-join__state" role="status">
             Asking {name}…
           </span>
-          <button type="button" className="ask-join ask-join--cancel" onClick={() => void cancel()}>
+          <button
+            type="button"
+            {...cancelFocus}
+            className="ask-join ask-join--cancel"
+            onClick={() => void cancel()}
+          >
             Cancel
           </button>
         </span>
@@ -164,7 +175,7 @@ export function AskToJoin({
       );
     default:
       return (
-        <button type="button" className="ask-join" onClick={() => void ask()}>
+        <button type="button" {...askFocus} className="ask-join" onClick={() => void ask()}>
           Ask to join
         </button>
       );

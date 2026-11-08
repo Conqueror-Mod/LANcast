@@ -1,10 +1,13 @@
 /*
- * Home asks /api/continue once per shelf.
+ * Home draws what is in progress from /api/resume (ADR 0118), and never from
+ * one mixed /api/continue list.
  *
  * One mixed list of 20 let half-played songs fill every slot: on the owner's
  * library 16 of the newest 20 rows were tracks, and Continue Watching showed
- * three films of the forty it could have. Here the music shelf answers 25
- * songs, and both films must still be on Continue Watching.
+ * three films of the forty it could have. The server now merges a list per
+ * kind and caps each kind (store.ResumeCandidates, api.resume, both tested in
+ * Go). What is left for the client is not to undo that: ask the console, keep
+ * every card it is given, and never fall back to an unscoped ask.
  */
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { act } from "react";
@@ -82,6 +85,21 @@ function mount(libs: unknown[]) {
       if (url.includes("/api/continue?shelf=music")) {
         return json({ items: Array.from({ length: 25 }, (_, i) => track(100 + i)) });
       }
+      if (url.includes("/api/resume")) {
+        return json({
+          more: true,
+          cards: [
+            { kind: "video", touched_at: 3, item: film(10, "Paused Film", 5000) },
+            { kind: "video", touched_at: 2, item: film(11, "Other Film", 9000) },
+            {
+              kind: "music",
+              touched_at: 1,
+              item: { id: 90, title: "An Album", kind: "album", library_id: 2, artwork: {} },
+              track: { item: track(100), number: 1, of: 12 },
+            },
+          ],
+        });
+      }
       // An unscoped ask is what let the songs evict the films.
       if (url.includes("/api/continue")) {
         return json({ items: Array.from({ length: 20 }, (_, i) => track(100 + i)) });
@@ -131,25 +149,23 @@ async function render() {
   }
 }
 
-const shelf = (title: string) =>
-  [...host.querySelectorAll("section")].find((s) =>
-    s.querySelector(".section-label")?.textContent?.startsWith(title),
-  );
-
-describe("home continue shelves", () => {
-  it("asks per shelf, so songs cannot push the films off", async () => {
+describe("home resume console", () => {
+  it("draws every card the server merged, and never asks one mixed list", async () => {
     mount([library(1, "Movies", "movie"), library(2, "Music", "music")]);
     await render();
+    expect(gets.some((u) => u.includes("/api/resume"))).toBe(true);
     const asks = gets.filter((u) => u.includes("/api/continue"));
-    expect(asks.some((u) => u.includes("shelf=watching"))).toBe(true);
-    expect(asks.some((u) => u.includes("shelf=music"))).toBe(true);
     expect(asks.filter((u) => !u.includes("shelf="))).toEqual([]);
+    // The console replaced Continue Listening; nothing asks for it any more.
+    expect(asks.some((u) => u.includes("shelf=music"))).toBe(false);
 
-    const watching = shelf("Continue Watching");
-    expect(watching, "no Continue Watching shelf").toBeTruthy();
-    expect(watching!.textContent).toContain("Paused Film");
-    expect(watching!.textContent).toContain("Other Film");
-    expect(watching!.textContent).not.toContain("Song");
-    expect(shelf("Continue Listening")?.textContent).toContain("Song 100");
+    const panel = host.querySelector("section.resume");
+    expect(panel, "no resume console").toBeTruthy();
+    expect(panel!.textContent).toContain("Paused Film");
+    expect(panel!.textContent).toContain("Other Film");
+    expect(panel!.textContent).toContain("An Album");
+    expect(panel!.textContent).toContain("Track 1 of 12");
+    // The server held something back, so the console offers the rest.
+    expect(panel!.querySelector('a[href="/continue"]')?.textContent).toBe("See all");
   });
 });

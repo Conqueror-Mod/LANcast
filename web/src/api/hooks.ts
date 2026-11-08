@@ -31,6 +31,8 @@ import type {
   NearCopies,
   PhotoPlaces,
   RetroDatabase,
+  ResumeConsole,
+  ArtworkTone,
   WebCores,
 } from "./types";
 import { isContainer } from "@/lib/kind";
@@ -1100,6 +1102,8 @@ export function useSetComicPlace(id: number) {
     mutationFn: (page: number) => apiSend(`/api/items/${id}/place`, "PUT", { page }).then(() => page),
     onSuccess: (page) => {
       qc.invalidateQueries({ queryKey: ["comic-pages", id], refetchType: "none" });
+      // Where you are in it is what the resume console shows.
+      qc.invalidateQueries({ queryKey: ["continue", "resume"] });
       const pages = qc.getQueryData<ComicPages>(["comic-pages", id])?.pages;
       if (pages !== undefined && page === pages - 1) invalidateWatchState(qc);
     },
@@ -1442,6 +1446,43 @@ export function useContinueWatching(shelf: ContinueShelf, limit = 20) {
   });
 }
 
+/*
+ * Which wisps of the field a picture leans toward (ADR 0118 §5).
+ *
+ * staleTime Infinity: the answer is a function of the bytes behind the hash,
+ * which never change, and the server says so with an immutable cache header.
+ */
+export function useArtworkTone(hash: string | undefined) {
+  return useQuery({
+    queryKey: ["artwork-tone", hash],
+    queryFn: ({ signal }) => apiGet<ArtworkTone>(`/api/artwork/${hash}/tone`, signal),
+    enabled: !!hash,
+    staleTime: Infinity,
+    retry: false,
+  });
+}
+
+/*
+ * The resume console: everything in progress, across kinds (ADR 0118).
+ *
+ * Keyed under ["continue"] so every write that already refreshes the Continue
+ * shelves -- progress, mark watched, a scan, the event stream -- refreshes
+ * this too. A sibling key such as ["resume"] would be reached by none of them,
+ * and the console would keep showing a film somebody had just finished.
+ */
+export function useResume(all = false) {
+  return useQuery({
+    queryKey: ["continue", "resume", all],
+    queryFn: ({ signal }) =>
+      apiGet<Partial<ResumeConsole>>(all ? "/api/resume?all=true" : "/api/resume", signal).then(
+        // An answer of any other shape is an empty console, never a home page
+        // that fails to draw.
+        (r): ResumeConsole => ({ cards: r.cards ?? [], more: r.more ?? false }),
+      ),
+    staleTime: 10_000,
+  });
+}
+
 // Recently added, across every library. Its own hook rather than useItems so a
 // home shelf is not entangled with the Browse grid's library scoping.
 // The newest photographs, rather than the galleries holding them.
@@ -1514,10 +1555,12 @@ export function useRecentPhotos(limit = 20) {
  * be caught by it.
  */
 
-// Music and pictures have shelves of their own, so the video window excludes
-// them rather than filtering them out after the fact — filtering after the
-// fact is what made the window the wrong size in the first place.
-const NOT_VIDEO = "artist,album,track,gallery,photo";
+// Music, pictures, books, comics and games have windows of their own, so the
+// video window excludes them rather than filtering them out after the fact —
+// filtering after the fact is what made the window the wrong size in the first
+// place. Books, comics and games joined the list when a test library of each
+// filled all forty places and pushed out films added the same day.
+const NOT_VIDEO = "artist,album,track,gallery,photo,book,comic,rom";
 
 export function useRecentlyAddedVideo(limit = 20) {
   return useQuery({
@@ -1527,6 +1570,22 @@ export function useRecentlyAddedVideo(limit = 20) {
         `/api/items?sort=added&limit=${limit}&exclude_kind=${NOT_VIDEO}`,
         signal,
       ).then((r) => r.items),
+    staleTime: 30_000,
+  });
+}
+
+/*
+ * The newest of one kind — `book`, `comic` or `rom` — in a window of its own,
+ * for the reason above: a row asks for its own kind, so nothing another row
+ * does can empty it.
+ */
+export function useRecentlyAddedKind(kind: "book" | "comic" | "rom", limit = 20) {
+  return useQuery({
+    queryKey: ["recently-added", kind, limit],
+    queryFn: ({ signal }) =>
+      apiGet<ItemsPage>(`/api/items?kind=${kind}&sort=added&limit=${limit}`, signal).then(
+        (r) => r.items,
+      ),
     staleTime: 30_000,
   });
 }

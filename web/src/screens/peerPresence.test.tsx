@@ -18,6 +18,7 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter } from "react-router-dom";
+import { FocusProvider } from "@/focus/FocusController";
 import { People } from "./People";
 
 declare global {
@@ -69,9 +70,11 @@ async function render(until?: () => boolean) {
   await act(async () => {
     root.render(
       <QueryClientProvider client={qc}>
-        <MemoryRouter>
-          <People />
-        </MemoryRouter>
+        <FocusProvider>
+          <MemoryRouter>
+            <People />
+          </MemoryRouter>
+        </FocusProvider>
       </QueryClientProvider>,
     );
   });

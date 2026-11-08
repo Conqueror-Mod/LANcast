@@ -993,6 +993,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/resume": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The home page's resume console: everything in progress, across kinds
+         * @description One card per thing you would resume — the album, not its tracks; the book, not its parts; the show, not its episodes; the game, not its saves — newest first across kinds (ADR 0118).
+         *
+         *     **At most two cards of a kind** unless `all=true`, so one kind cannot fill the console; `more` says whether anything was left out, which is when a client offers See all. Each kind is asked for on its own and merged, so a run of half-played songs cannot push the films off.
+         *
+         *     The Continue window (`continue_weeks`) and the account's limits apply exactly as on `GET /continue`. Video and show cards are the rows `GET /continue?shelf=watching` returns, so a show card's `next_episode` is for drawing, not deciding: ask `GET /items/{id}/continue` on the press.
+         */
+        get: operations["getResume"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/items/{id}/playback": {
         parameters: {
             query?: never;
@@ -4288,6 +4312,31 @@ export interface paths {
          *     That is also why a covered thumbnail is obscured by a client not requesting it rather than by the server varying it: artwork is shared, so a per-viewer response would poison the cache for everyone.
          */
         get: operations["getArtwork"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/artwork/{hash}/tone": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The content-addressed hash from an item's `artwork` block. */
+                hash: string;
+            };
+            cookie?: never;
+        };
+        /**
+         * Which of the field's wisps a picture leans toward
+         * @description For the home spotlight (ADR 0118 §5): the hero raises the wisps a picture leans toward and lowers the others, so no colour enters the page that the field did not already have.
+         *
+         *     Worked out from the cached thumbnail on request, not stored. The bytes behind a hash never change, so neither does the answer, and it is served as immutably as the picture.
+         */
+        get: operations["getArtworkTone"];
         put?: never;
         post?: never;
         delete?: never;
@@ -8561,6 +8610,45 @@ export interface components {
             pages: number;
             place: components["schemas"]["ComicPlace"] | null;
         };
+        ResumeConsole: {
+            cards: components["schemas"]["ResumeCard"][];
+            /** @description Something in progress was left out by the limit or the per-kind cap. */
+            more: boolean;
+        };
+        ResumeCard: {
+            /**
+             * @description `video` is a film or a collection's next film; `game` is a retro game with a save on the server.
+             * @enum {string}
+             */
+            kind: "video" | "show" | "music" | "book" | "comic" | "game";
+            /**
+             * Format: int64
+             * @description When this account last played, read or saved it.
+             */
+            touched_at: number;
+            /** @description What the card pictures and opens: the film, the show (with `next_episode`), the album, the book, the comic or the game. */
+            item: components["schemas"]["Item"];
+            track?: components["schemas"]["ResumeTrack"];
+            page?: components["schemas"]["ComicPlace"];
+        };
+        /** @description On a music card: the track to resume, and where it sits on the album. */
+        ResumeTrack: {
+            item: components["schemas"]["Item"];
+            /** @description Its track number, when known. */
+            number?: number;
+            /** @description How many tracks the album holds, when the card is an album. */
+            of?: number;
+        };
+        /** @description The four weights share 1 between them, or are all 0 for a picture with no colour to speak of. */
+        ArtworkTone: {
+            violet: number;
+            blue: number;
+            teal: number;
+            /** @description Reds, oranges and yellows: the field's warm wisp. */
+            ember: number;
+            /** @description Mean luminance, 0 to 1. */
+            light: number;
+        };
         ComicPlace: {
             /** @description From 0. Never past the last page, even if the archive has since lost some. */
             page: number;
@@ -12021,6 +12109,32 @@ export interface operations {
                 };
             };
             400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+        };
+    };
+    getResume: {
+        parameters: {
+            query?: {
+                /** @description How many cards. Defaults to 5, or 100 with `all=true`; maximum 100. */
+                limit?: number;
+                /** @description `true` lifts the two-per-kind cap: the See all page. */
+                all?: "true";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The console, possibly empty. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResumeConsole"];
+                };
+            };
             401: components["responses"]["Unauthorized"];
         };
     };
@@ -17637,6 +17751,32 @@ export interface operations {
                 content?: never;
             };
             401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    getArtworkTone: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The content-addressed hash from an item's `artwork` block. */
+                hash: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The tone. */
+            200: {
+                headers: {
+                    /** @description `public, max-age=31536000, immutable`. */
+                    "Cache-Control"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ArtworkTone"];
+                };
+            };
             404: components["responses"]["NotFound"];
         };
     };

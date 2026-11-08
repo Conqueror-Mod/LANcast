@@ -1,0 +1,107 @@
+/* The Bridge's friends and On this day panels (ADR 0118 §4). Panel frame and
+   heading come from Bridge.css and ResumeConsole.css. */
+
+.panel--friends,
+.panel--memory {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+}
+
+.friends__idle {
+  margin: 0;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.friends__go {
+  align-self: flex-start;
+  font-size: 13px;
+  color: var(--text-secondary);
+  text-decoration: none;
+  padding: 7px 12px;
+  border: 1px solid var(--gold-dormant);
+  border-radius: var(--radius-tile);
+}
+.friends__go:hover,
+.friends__go:focus-visible {
+  outline: none;
+  color: var(--text-primary);
+  border-color: var(--gold);
+  box-shadow: 0 0 0 4px var(--gold-ring);
+}
+
+.friends__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.friends__row {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-width: 0;
+}
+
+.friends__who {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.friends__name {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+/* Wraps to a second line rather than cutting off: "What they watch can't be
+   seen from here" is the one explanation the row gives, and in a panel a
+   third of the screen wide it lost its ending on the live library. */
+.friends__status {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
+}
+
+.friends__name {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.friends__status {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+/* Quiet, as People draws an offline server: styling it as an error trains
+   people to ignore the row. */
+.friends__row--down .friends__name {
+  color: var(--text-secondary);
+}
+
+.memory__ago {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.memory__grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+/* A photograph's tile carries no caption, so the grid is all picture. */
+.memory__grid .poster-tile {
+  width: 100%;
+}

@@ -273,7 +273,7 @@ describe("removing a title from Continue Watching on its page", () => {
     // Under More Options, with the page's other actions.
     await act(async () => button("More Options")!.click());
     const remove = [...document.querySelectorAll("[role=menuitem]")].find(
-      (b) => b.textContent === "Remove from Continue Watching",
+      (b) => b.textContent === "Remove from Continue",
     ) as HTMLButtonElement | undefined;
     expect(remove, "no way to take it off the shelf").toBeDefined();
     await act(async () => remove!.click());
@@ -290,7 +290,7 @@ describe("removing a title from Continue Watching on its page", () => {
     await act(async () => button("More Options")!.click());
     expect(
       [...document.querySelectorAll("[role=menuitem]")].some(
-        (b) => b.textContent === "Remove from Continue Watching",
+        (b) => b.textContent === "Remove from Continue",
       ),
     ).toBe(false);
   });
