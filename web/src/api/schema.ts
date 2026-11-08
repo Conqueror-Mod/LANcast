@@ -4460,7 +4460,7 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Photographs taken on today's date in an earlier year
+         * Photographs taken, and things you finished, on today's date in an earlier year
          * @description Not admin-gated: photographs a viewer may already browse, on a shelf they already see.
          */
         get: operations["getMemories"];
@@ -9193,6 +9193,17 @@ export interface components {
              *     **Returned rather than assumed**, so a client left open overnight can notice it has crossed midnight and the shelf it is drawing is yesterday's. It is also the reason this is a route rather than a `taken_on` filter on `/api/items`: a parameter would put a calendar date in the client's hands, and a client computing one resolves to tomorrow through a US evening, because `toISOString()` is UTC. The day comes from the same clock the photographs were filed under.
              */
             on: string;
+            /** @description What you finished on today's date in an earlier year, from your own watch history (ADR 0119): films, episodes, audiobooks and comics. Most recent first, one entry per item at its latest such finish. Only rows with a real date count, so the history backfilled when the log began never appears. The ceiling and hidden libraries apply. Empty on most days, and on every day until a year of history exists. */
+            watched: components["schemas"]["FinishedMemory"][];
+        };
+        /** @description One item from your history for On this day. */
+        FinishedMemory: {
+            item: components["schemas"]["Item"];
+            /**
+             * Format: int64
+             * @description When you finished it, unix seconds.
+             */
+            finished_at: number;
         };
         /**
          * @description Whether this server can answer a typed query, and why not when it cannot (ADR 0060).

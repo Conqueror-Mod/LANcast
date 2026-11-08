@@ -2,7 +2,7 @@ import { Link } from "react-router-dom";
 import { AskToJoin } from "./AskToJoin";
 import { PosterTile } from "./PosterTile";
 import { friendRows } from "@/lib/presence";
-import type { Item, PeerPresence } from "@/api/types";
+import type { FinishedMemory, Item, PeerPresence } from "@/api/types";
 import "./BridgePanels.css";
 
 /*
@@ -95,15 +95,51 @@ export function yearsAgo(takenAt: number, now = new Date()): number {
   return now.getFullYear() - new Date(takenAt * 1000).getFullYear();
 }
 
-/** How many photographs the panel shows before pointing at the rest. */
+/** How many tiles the panel shows, photographs and history together. */
 const MEMORIES_SHOWN = 4;
 
-export function MemoryPanel({ items }: { items: Item[] }) {
-  if (items.length === 0) return null;
-  const shown = items.slice(0, MEMORIES_SHOWN);
-  // Said only when every photograph shown is from the same year: "3 years
-  // ago" over pictures from three different years would be true of one.
-  const years = new Set(shown.map((it) => (it.taken_at ? yearsAgo(it.taken_at) : 0)));
+/** At most this many from your history while there are photographs too. */
+const WATCHED_BESIDE_PHOTOS = 2;
+
+/** The word under a tile from your history, in that kind's own terms. */
+export function finishedVerb(kind: string): string {
+  if (kind === "book") return "Listened";
+  if (kind === "comic") return "Read";
+  return "Watched";
+}
+
+/*
+ * What the panel shows (ADR 0119 §3a): what you finished on this date first,
+ * because it is yours and rarer, then photographs. Two from history at most
+ * while there are photographs to fill the rest, so neither source crowds out
+ * the other.
+ */
+export function memoryTiles(
+  photos: Item[],
+  watched: FinishedMemory[],
+): { item: Item; at: number; note?: string }[] {
+  const fromHistory = watched
+    .slice(0, photos.length > 0 ? WATCHED_BESIDE_PHOTOS : MEMORIES_SHOWN)
+    .map((m) => ({ item: m.item, at: m.finished_at, note: finishedVerb(m.item.kind) }));
+  const fromPhotos = photos
+    .slice(0, MEMORIES_SHOWN - fromHistory.length)
+    .map((it) => ({ item: it, at: it.taken_at ?? 0 }));
+  return [...fromHistory, ...fromPhotos];
+}
+
+export function MemoryPanel({
+  items,
+  watched = [],
+}: {
+  items: Item[];
+  /** What you finished on this date in an earlier year. */
+  watched?: FinishedMemory[];
+}) {
+  const shown = memoryTiles(items, watched);
+  if (shown.length === 0) return null;
+  // Said only when every tile shown is from the same year: "3 years ago" over
+  // things from three different years would be true of one.
+  const years = new Set(shown.map((t) => (t.at ? yearsAgo(t.at) : 0)));
   const ago = years.size === 1 ? [...years][0] : 0;
   return (
     <section className="panel panel--memory" aria-labelledby="memory-title">
@@ -120,8 +156,11 @@ export function MemoryPanel({ items }: { items: Item[] }) {
       {/* Poster tiles, so a marked photograph is covered here as on every
           other Home surface (ADR 0051), and the D-pad reaches each one. */}
       <div className="memory__grid">
-        {shown.map((it) => (
-          <PosterTile key={it.id} item={it} />
+        {shown.map((t) => (
+          <div className="memory__cell" key={t.item.id}>
+            <PosterTile item={t.item} />
+            {t.note && <span className="memory__note">{t.note}</span>}
+          </div>
         ))}
       </div>
     </section>

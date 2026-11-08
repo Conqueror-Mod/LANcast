@@ -179,6 +179,8 @@ export function Home() {
    * second opinion here would be a rule in two places that can disagree.
    */
   const onThisDay = memories?.items ?? [];
+  // What you finished on this date in an earlier year (ADR 0119 §3a).
+  const watchedThisDay = memories?.watched ?? [];
   // Friends on paired servers (ADR 0118 §4). Shown with an empty roster only
   // to an administrator, who can pair.
   const { data: peerPresence } = usePeerPresence();
@@ -241,10 +243,10 @@ export function Home() {
           />
           {/* Side by side beneath the console; absent when neither has
               anything to say, so the column never ends in an empty frame. */}
-          {(friendsShown || onThisDay.length > 0) && (
+          {(friendsShown || onThisDay.length > 0 || watchedThisDay.length > 0) && (
             <div className="bridge__pair">
               {friendsShown && <FriendsPanel peers={peerPresence?.peers ?? []} />}
-              <MemoryPanel items={onThisDay} />
+              <MemoryPanel items={onThisDay} watched={watchedThisDay} />
             </div>
           )}
         </div>

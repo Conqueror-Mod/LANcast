@@ -3,7 +3,7 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { MemoryRouter } from "react-router-dom";
 import { FocusProvider } from "@/focus/FocusController";
-import { FriendsPanel, MemoryPanel, showFriends, yearsAgo } from "./BridgePanels";
+import { FriendsPanel, MemoryPanel, finishedVerb, memoryTiles, showFriends, yearsAgo } from "./BridgePanels";
 import { friendRows } from "@/lib/presence";
 import type { Item, PeerPresence } from "@/api/types";
 
@@ -112,5 +112,30 @@ describe("On this day", () => {
   it("draws nothing on a day with no photographs", () => {
     draw(<MemoryPanel items={[]} />);
     expect(host.querySelector(".panel")).toBeNull();
+  });
+
+  const film = (id: number, kind: string, year: number) => ({
+    finished_at: new Date(year, 10, 8, 20).getTime() / 1000,
+    item: { id, kind, title: `${kind} ${id}`, artwork: {} } as unknown as Item,
+  });
+
+  it("shows what you finished, with the right word, when there are no photographs", () => {
+    const now = new Date().getFullYear();
+    draw(<MemoryPanel items={[]} watched={[film(7, "movie", now - 1), film(8, "comic", now - 1)]} />);
+    expect(host.querySelector(".panel")).not.toBeNull();
+    expect([...host.querySelectorAll(".memory__note")].map((n) => n.textContent)).toEqual(["Watched", "Read"]);
+    expect(host.textContent).toContain("A year ago");
+    expect(finishedVerb("book")).toBe("Listened");
+  });
+
+  it("puts history first and keeps room for photographs", () => {
+    const now = new Date().getFullYear();
+    const watched = [1, 2, 3].map((id) => film(id, "movie", now - 1));
+    const photos = [10, 11, 12, 13].map((id) => photo(id, now - 2));
+    expect(memoryTiles(photos, watched).map((t) => t.item.id)).toEqual([1, 2, 10, 11]);
+    // With no photographs, history may fill the panel.
+    expect(memoryTiles([], [...watched, film(4, "movie", now - 1), film(5, "movie", now - 1)]).length).toBe(4);
+    // With one photograph, it still gets its place.
+    expect(memoryTiles([photo(10, now - 2)], watched).map((t) => t.item.id)).toEqual([1, 2, 10]);
   });
 });

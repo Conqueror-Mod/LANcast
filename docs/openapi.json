@@ -10148,7 +10148,7 @@
         "tags": [
           "items"
         ],
-        "summary": "Photographs taken on today's date in an earlier year",
+        "summary": "Photographs taken, and things you finished, on today's date in an earlier year",
         "description": "Not admin-gated: photographs a viewer may already browse, on a shelf they already see.",
         "parameters": [
           {
@@ -21702,7 +21702,8 @@
         "description": "Photographs taken on **today's date in an earlier year** — the home page's \"On this day\" shelf.\n\n**Three exclusions, and one is stricter than the timeline's.** Marked folders never appear (ADR 0051): the timeline is somewhere you navigated to, where a memory is unsolicited and lands on the home page in front of whoever is in the room. The current year is excluded, because a photograph from this morning is not a memory and a card imported today would otherwise be the whole shelf. Missing files are excluded, because a shelf is for looking at.\n\nAn empty list is the ordinary answer on most days, and a client shows nothing rather than an empty shelf — a heading over no tiles is the shape of something broken.",
         "required": [
           "items",
-          "on"
+          "on",
+          "watched"
         ],
         "properties": {
           "items": {
@@ -21715,6 +21716,31 @@
           "on": {
             "type": "string",
             "description": "The date the server resolved as today, `MM-DD`.\n\n**Returned rather than assumed**, so a client left open overnight can notice it has crossed midnight and the shelf it is drawing is yesterday's. It is also the reason this is a route rather than a `taken_on` filter on `/api/items`: a parameter would put a calendar date in the client's hands, and a client computing one resolves to tomorrow through a US evening, because `toISOString()` is UTC. The day comes from the same clock the photographs were filed under."
+          },
+          "watched": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/FinishedMemory"
+            },
+            "description": "What you finished on today's date in an earlier year, from your own watch history (ADR 0119): films, episodes, audiobooks and comics. Most recent first, one entry per item at its latest such finish. Only rows with a real date count, so the history backfilled when the log began never appears. The ceiling and hidden libraries apply. Empty on most days, and on every day until a year of history exists."
+          }
+        }
+      },
+      "FinishedMemory": {
+        "type": "object",
+        "description": "One item from your history for On this day.",
+        "required": [
+          "item",
+          "finished_at"
+        ],
+        "properties": {
+          "item": {
+            "$ref": "#/components/schemas/Item"
+          },
+          "finished_at": {
+            "type": "integer",
+            "format": "int64",
+            "description": "When you finished it, unix seconds."
           }
         }
       },
