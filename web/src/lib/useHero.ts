@@ -1,4 +1,11 @@
-import { useItem, useItems, useContinueWatching, HOME_WATCHING_LIMIT } from "@/api/hooks";
+import { useState } from "react";
+import {
+  useItem,
+  useItems,
+  useContinueWatching,
+  useHomeSuggestion,
+  HOME_WATCHING_LIMIT,
+} from "@/api/hooks";
 import type { Item } from "@/api/types";
 import { isBook, isMusic, isPicture } from "./kind";
 import {
@@ -78,6 +85,20 @@ export function useHeroSpotlight(recent: Item[] | undefined): HeroPick | null {
   const { data: pinned } = useItem(mode === "pinned" ? pinnedID : 0);
 
   /*
+   * Nothing in progress to seed from: what you finished instead (ADR 0119).
+   *
+   * Before this, Suggested with an empty Continue shelf fell straight through
+   * to "Just added", and a household that finishes what it starts never saw a
+   * suggestion at all. Asked only in that case, so the mode costs nothing more
+   * when it has a seed. The shuffle is fixed for the visit, like Unwatched.
+   */
+  const [visit] = useState(() => Math.floor(Math.random() * 2 ** 31));
+  // Only once the shelf has arrived: while it loads it is undefined, which
+  // reads as "nothing in progress" and would ask for every visit.
+  const fromHistory = wanted && continueWatching !== undefined && !watchable;
+  const { data: suggestion } = useHomeSuggestion(visit, fromHistory);
+
+  /*
    * Neither the seed nor anything already on the Continue shelf may be
    * suggested. A part-watched film is unwatched as far as the filter is
    * concerned, so without this the recommendation is liable to be the very
@@ -108,6 +129,16 @@ export function useHeroSpotlight(recent: Item[] | undefined): HeroPick | null {
       recent,
       recommended: [franchise],
       seed: { ...franchise, id: from.after_id, title: from.after_title, continues_from: undefined },
+      pinned,
+    });
+  }
+
+  if (fromHistory && suggestion?.taste) {
+    return pickHero(mode, {
+      resumable: continueWatching,
+      recent,
+      recommended: suggestion.items.filter((i) => !onTheShelf.has(i.id)),
+      taste: suggestion.taste,
       pinned,
     });
   }

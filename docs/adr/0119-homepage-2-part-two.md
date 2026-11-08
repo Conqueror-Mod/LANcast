@@ -212,6 +212,25 @@ observes. Trakt export filters to films and episodes, as it does now.
 - **3b:** finished books and comics are recorded in `viewing`. Music and games
   are not. The Trakt export stays films and episodes only.
 
+## As built
+
+### Step 2: Suggested falls back to finished history (2026-11-08)
+
+`GET /api/home/suggestion` (`internal/api/suggestion.go`) over
+`store.RecentTaste` (`internal/store/taste.go`). The client asks only in
+Suggested mode, only once the Continue shelf has loaded, and only when it
+holds nothing to seed from. While it loads, the empty shelf would otherwise
+ask on every visit; a test caught that.
+
+The sentence is "Because you've finished 3 Comedy titles lately", not
+"6 thrillers". Genre names do not take plurals reliably ("Science Fiction",
+"Animation"), and a wrong plural on the biggest line of the page is worse than
+a plain one.
+
+The query is keyed under `["continue", "suggestion", …]`, so every write that
+already refreshes Continue, marking something watched included, refreshes the
+suggestion too.
+
 ## Not proposed
 
 - **A recommender.** Nothing here learns a model, ranks by similarity across

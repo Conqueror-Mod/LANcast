@@ -6,7 +6,7 @@ import { artworkURL } from "@/api/client";
 import { useFocusable } from "@/focus/FocusController";
 import { isMusic, isSquareArt } from "@/lib/kind";
 import { rating, runtime } from "@/lib/format";
-import type { Item } from "@/api/types";
+import type { Item, Taste } from "@/api/types";
 import type { HeroReason } from "@/lib/heroMode";
 import { useArtworkTone } from "@/api/hooks";
 import { useObscured } from "@/lib/sensitiveAck";
@@ -109,7 +109,12 @@ function progressPct(item: Item): number {
  * a suggestion that cannot say where it came from is the kind of thing this
  * project has no interest in growing.
  */
-function eyebrow(reason: HeroReason, item: Item, seed: Item | undefined): string {
+function eyebrow(
+  reason: HeroReason,
+  item: Item,
+  seed: Item | undefined,
+  taste: Taste | undefined,
+): string {
   switch (reason) {
     case "resuming":
       // An album part way through is being listened to, not watched.
@@ -119,6 +124,9 @@ function eyebrow(reason: HeroReason, item: Item, seed: Item | undefined): string
     case "pinned":
       return "Pinned to your homepage";
     case "recommended":
+      // From what you finished (ADR 0119): the count is the one the server
+      // used, so the sentence is true of this account.
+      if (!seed && taste) return `Because you've finished ${taste.titles} ${taste.genre} titles lately`;
       if (!seed) return "Suggested";
       return isMusic(seed)
         ? `Because you listened to ${seed.title}`
@@ -130,12 +138,15 @@ export function HomeHero({
   item,
   reason,
   seed,
+  taste,
   actions,
 }: {
   item: Item;
   reason: HeroReason;
   /** For "recommended": the item the suggestion was drawn from. */
   seed?: Item;
+  /** For "recommended" from history: the genre recent finishes share. */
+  taste?: Taste;
   /**
    * The same menu the item's Continue Watching tile carries, when it is on
    * that shelf. Reported after 0.9.80: a collection's next film sat in the
@@ -145,7 +156,7 @@ export function HomeHero({
    */
   actions?: MenuAction[];
 }) {
-  const label = eyebrow(reason, item, seed);
+  const label = eyebrow(reason, item, seed, taste);
   const navigate = useNavigate();
   const [menuAt, setMenuAt] = useState<MenuPoint | null>(null);
   const [byKey, setByKey] = useState(false);

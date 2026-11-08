@@ -1,5 +1,5 @@
 import { useDevice } from "./device";
-import type { Item } from "@/api/types";
+import type { Item, Taste } from "@/api/types";
 import { isBook, isMusic, isPicture } from "./kind";
 
 /*
@@ -74,6 +74,13 @@ export interface HeroPick {
    * does not want to grow.
    */
   seed?: Item;
+  /**
+   * For "recommended" with nothing in progress to seed from (ADR 0119): the
+   * genre recent finishes share, and how many titles. The hero says "Because
+   * you've finished 6 Thriller titles lately", which is attributable in the
+   * same way a seed is.
+   */
+  taste?: Taste;
 }
 
 export interface HeroSources {
@@ -82,6 +89,8 @@ export interface HeroSources {
   /** Unwatched candidates sharing a genre with `seed`. */
   recommended?: Item[];
   seed?: Item;
+  /** What recent finishes share, when the candidates came from history. */
+  taste?: Taste;
   pinned?: Item;
 }
 
@@ -109,11 +118,13 @@ export function pickHero(mode: HeroMode, sources: HeroSources): HeroPick | null 
 
   const fromRecommendation = (): HeroPick | null => {
     const found = firstEligible(sources.recommended);
-    // Without a seed there is no sentence to write, so it is not a
+    // Without a seed or a taste there is no sentence to write, so it is not a
     // recommendation — it is an unwatched item, which the next mode along
     // already covers honestly.
-    if (!found || !sources.seed) return null;
-    return { item: found, reason: "recommended", seed: sources.seed };
+    if (!found) return null;
+    if (sources.seed) return { item: found, reason: "recommended", seed: sources.seed };
+    if (sources.taste) return { item: found, reason: "recommended", taste: sources.taste };
+    return null;
   };
 
   const order: Array<() => HeroPick | null> = [];

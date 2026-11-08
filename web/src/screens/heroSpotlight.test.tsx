@@ -59,7 +59,7 @@ const track = {
   missing: false, artwork: {},
 };
 
-function stub() {
+function stub(continuing: unknown[] = [track, film]) {
   asked = [];
   vi.stubGlobal(
     "fetch",
@@ -67,7 +67,9 @@ function stub() {
       const u = String(url);
       asked.push(u);
       let body: unknown = {};
-      if (u.includes("/api/continue")) body = { items: [track, film] };
+      if (u.includes("/api/continue")) body = { items: continuing };
+      else if (u.startsWith("/api/home/suggestion"))
+        body = { taste: { genre: "Thriller", titles: 6 }, items: [suggestion] };
       else if (u.startsWith("/api/items?")) body = { items: [suggestion], total: 1 };
       else if (u.startsWith("/api/items/")) {
         /*
@@ -94,6 +96,7 @@ function Probe() {
     <span>
       {pick.reason}:{pick.item.title}
       {pick.seed ? ` from ${pick.seed.title}` : ""}
+      {pick.taste ? ` from ${pick.taste.titles} ${pick.taste.genre}` : ""}
     </span>
   );
 }
@@ -248,5 +251,29 @@ describe("what the suggestion is seeded from", () => {
     expect(query, "no candidate search was made").toBeTruthy();
     expect(query).toContain("genre=Horror");
     expect(query).toContain("library_id=3");
+  });
+});
+
+describe("suggesting from what was finished (ADR 0119)", () => {
+  it("is not asked while there is something in progress to seed from", async () => {
+    stub();
+    writeDevice(HERO_MODE_KEY, "recommended");
+    await render(<Probe />);
+    expect(asked.some((u) => u.startsWith("/api/home/suggestion"))).toBe(false);
+  });
+
+  it("is asked with nothing in progress, and says what it came from", async () => {
+    // A household that finishes what it starts used to get "Just added" here.
+    stub([]);
+    writeDevice(HERO_MODE_KEY, "recommended");
+    await render(<Probe />);
+    expect(asked.some((u) => u.startsWith("/api/home/suggestion?seed="))).toBe(true);
+    expect(text()).toContain("recommended:Never watched from 6 Thriller");
+  });
+
+  it("costs nothing in any other mode", async () => {
+    stub([]);
+    await render(<Probe />);
+    expect(asked.some((u) => u.startsWith("/api/home/suggestion"))).toBe(false);
   });
 });

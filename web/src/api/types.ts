@@ -61,6 +61,8 @@ export type Item = components["schemas"]["Item"];
 // The home page's resume console (ADR 0118).
 export type ResumeCard = components["schemas"]["ResumeCard"];
 export type ResumeConsole = components["schemas"]["ResumeConsole"];
+export type HomeSuggestion = components["schemas"]["HomeSuggestion"];
+export type Taste = NonNullable<HomeSuggestion["taste"]>;
 export type ArtworkTone = components["schemas"]["ArtworkTone"];
 
 /** Exact duplicate photos (ADR 0075). */

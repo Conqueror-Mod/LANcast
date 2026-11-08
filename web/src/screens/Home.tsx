@@ -215,6 +215,7 @@ export function Home() {
           item={hero.item}
           reason={hero.reason}
           seed={hero.seed}
+          taste={hero.taste}
           // The shelf's menu, when the spotlight is showing something from
           // the shelf: the one place a collection's next film or a resumed
           // title can be taken off without opening it.
