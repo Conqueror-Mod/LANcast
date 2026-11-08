@@ -27,6 +27,7 @@ class FakeAudio extends EventTarget {
   currentTime = 0;
   paused = true;
   playbackRate = 1;
+  volume = 1;
   preload = "";
   play() {
     this.paused = false;
@@ -192,5 +193,96 @@ describe("playing a book", () => {
     expect(audio.src).toBe("/api/stream/11");
     act(() => audio.ready());
     expect(audio.currentTime).toBe(10 * 60 - 10);
+  });
+});
+
+/*
+ * The sleep timer (ADR 0116 step 3): minutes that count only while the book
+ * plays, the end of a chapter as a place on the book's clock, and a fade that
+ * leaves the listener's own volume as it found it.
+ */
+describe("the sleep timer", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  async function playFrom(ms: number) {
+    await act(async () => {
+      await player!.play(BOOK, ms);
+    });
+    act(() => audio.ready());
+  }
+
+  it("fades over its last seconds, pauses, and puts the volume back", async () => {
+    vi.useFakeTimers({ toFake: ["setInterval", "clearInterval", "performance"] });
+    await playFrom(0);
+    audio.volume = 0.8;
+    act(() => player!.setSleep(15));
+    expect(player!.sleep).toBe(15);
+
+    act(() => vi.advanceTimersByTime(15 * MIN - 5_000));
+    expect(audio.paused).toBe(false);
+    // Five seconds of a ten-second fade left: half the listener's volume.
+    expect(audio.volume).toBeCloseTo(0.4, 1);
+
+    act(() => vi.advanceTimersByTime(6_000));
+    expect(audio.paused).toBe(true);
+    expect(audio.volume).toBe(0.8);
+    expect(player!.sleep).toBeNull();
+    expect(player!.sleepLeftMs).toBeNull();
+  });
+
+  it("counts minutes only while the book plays", async () => {
+    vi.useFakeTimers({ toFake: ["setInterval", "clearInterval", "performance"] });
+    await playFrom(0);
+    act(() => player!.setSleep(15));
+    act(() => vi.advanceTimersByTime(10 * MIN));
+    act(() => audio.pause());
+    // An hour paused costs the timer nothing.
+    act(() => vi.advanceTimersByTime(60 * MIN));
+    act(() => player!.toggle());
+    act(() => vi.advanceTimersByTime(4 * MIN));
+    expect(audio.paused).toBe(false);
+    expect(player!.sleep).toBe(15);
+    act(() => vi.advanceTimersByTime(MIN + 1_000));
+    expect(audio.paused).toBe(true);
+  });
+
+  it("stops at the end of the chapter it was set in", async () => {
+    await playFrom(5 * MIN);
+    act(() => player!.setSleep("chapter"));
+    act(() => audio.at(9 * 60 + 59));
+    expect(audio.paused).toBe(false);
+    act(() => audio.at(10 * 60));
+    expect(audio.paused).toBe(true);
+    expect(player!.sleep).toBeNull();
+    // The pause wrote the place, as any pause does.
+    expect(writes.filter((w) => w.url.endsWith("/progress")).at(-1)!.body).toEqual({
+      position_ms: 10 * MIN,
+      watched: false,
+    });
+  });
+
+  it("follows a skip into another chapter to that chapter's end", async () => {
+    await playFrom(5 * MIN);
+    act(() => player!.setSleep("chapter"));
+    act(() => player!.seekTo(12 * MIN));
+    expect(audio.src).toBe("/api/stream/12");
+    act(() => audio.ready());
+    // Past the first chapter's end, inside the second: still playing.
+    act(() => audio.at(5 * 60));
+    expect(audio.paused).toBe(false);
+    expect(player!.sleepLeftMs).toBe(18 * MIN);
+  });
+
+  it("is cleared by closing the book, and by choosing Off", async () => {
+    await playFrom(0);
+    act(() => player!.setSleep(30));
+    act(() => player!.setSleep(null));
+    expect(player!.sleep).toBeNull();
+    act(() => player!.setSleep(45));
+    act(() => player!.stop());
+    expect(player!.sleep).toBeNull();
+    expect(audio.volume).toBe(1);
   });
 });

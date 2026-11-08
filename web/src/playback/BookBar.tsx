@@ -9,6 +9,7 @@ import { Link } from "react-router-dom";
 import { artworkURL } from "@/api/client";
 import { useBookPlayer } from "./BookPlayer";
 import { BOOK_SPEEDS, clock } from "./bookTimeline";
+import { SLEEP_MINUTES, sleepClock, type SleepChoice } from "./sleepTimer";
 import "./BookBar.css";
 
 function speedLabel(r: number): string {
@@ -106,6 +107,34 @@ export function BookBar() {
             </option>
           ))}
         </select>
+      </label>
+
+      {/* The sleep timer (ADR 0116, answer 8). "Sleep" is the off position, so
+          the menu names itself when nothing is set; while one runs, the time
+          left sits beside it. */}
+      <label className={`book-bar__speed book-bar__sleep${b.sleep !== null ? " book-bar__sleep--on" : ""}`}>
+        <span className="visually-hidden">Sleep timer</span>
+        <select
+          value={b.sleep === null ? "off" : String(b.sleep)}
+          onChange={(e) => {
+            const v = e.target.value;
+            b.setSleep(v === "off" ? null : v === "chapter" ? "chapter" : (Number(v) as SleepChoice));
+          }}
+          aria-label="Sleep timer"
+        >
+          <option value="off">{b.sleep === null ? "Sleep" : "Off"}</option>
+          {SLEEP_MINUTES.map((m) => (
+            <option key={m} value={String(m)}>
+              {m} min
+            </option>
+          ))}
+          <option value="chapter">End of chapter</option>
+        </select>
+        {b.sleepLeftMs !== null && (
+          <span className="book-bar__sleep-left" aria-live="off">
+            {sleepClock(b.sleepLeftMs)}
+          </span>
+        )}
       </label>
 
       <button type="button" className="book-bar__btn book-bar__close" onClick={b.stop} aria-label="Close the book">

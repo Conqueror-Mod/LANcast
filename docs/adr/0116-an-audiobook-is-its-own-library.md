@@ -222,7 +222,13 @@ counts once when it finishes, not once per part.
 2. Playing a book: resume by default, chapters list and chapter skip, 15/30
    skips, speed per book. **Built**; see "Step 2, as built" below.
 3. The sleep timer, the narrator read from tags, and the author, narrator and
-   series filters.
+   series filters. **The sleep timer is built** (2026-11-08), in the client
+   alone: a menu beside the speed. Minutes count only while the book plays, so
+   a pause does not spend them. "End of chapter" is a place on the book's
+   clock, checked on every time update, and a skip into another chapter moves
+   it to that chapter's end. The last ten seconds fade, then the book pauses,
+   which writes the place, and the listener's volume is put back. The narrator
+   and the filters are still to come.
 
 Before step 1: `devseed` creates `TEST AUDIOBOOK LIBRARY` like the other
 test libraries, and the 115 books' tags are read and reported. Whether they
