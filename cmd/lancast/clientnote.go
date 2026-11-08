@@ -42,6 +42,7 @@ var noteAreas = map[string]bool{
 	"together":     true, // Watch Together seen from this window
 	"error":        true, // uncaught errors and rejected promises
 	"visualizer":   true, // how evenly a visualizer draws (web/src/playback/frameRecord.ts)
+	"remote":       true, // commands from another of your devices (ADR 0117)
 }
 
 const (

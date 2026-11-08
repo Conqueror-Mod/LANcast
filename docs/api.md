@@ -719,6 +719,8 @@ data but never wrong data.
 | `libraries` | a library was added, removed, renamed or rescanned |
 | `items` | what a library holds changed |
 | `backups` | the backup schedule took a backup or deleted old scheduled ones (`GET /api/backups`, admin only) |
+| `players` | one of **this** person's windows offered itself as a player, went away, or changed what it plays or whether it is paused (`GET /api/remote/players`). Sent only to that person's streams |
+| `remote` | a command is waiting for one of **this** person's players (`GET /api/remote/players/{id}/commands`). Sent only to that person's streams |
 
 - Topics published within about 250 ms of each other arrive as one event, so a
   scan touching thousands of files is one `items`, not thousands.
@@ -4726,6 +4728,103 @@ the host answering their request to join (federation Phase 5). `peer` is that
 server's fingerprint and `server` its name, frozen when they joined. Their
 `user_id` is `peer:<fingerprint>/<person>` and never collides with an account
 here.
+
+### Play on another device
+
+Send something to another of **your own** signed-in windows and control it like
+a remote ([ADR 0117](adr/0117-play-on-another-device.md)). A *player* is a
+window that has offered itself; any signed-in account may use these routes, and
+only ever for its own players.
+
+**Your players only.** Every route is scoped to the caller's account. Another
+account's player is never listed, and a command to it is `404 not_found`, the
+same answer as a player that does not exist. There is no admin view. The
+commanded window plays through its own session, so library access and the
+rating ceiling apply exactly as if it had been pressed there; the server does
+not judge the item.
+
+**Live state, no schema**, like Watch Together: a player that has not reported
+for 20 s is gone.
+
+A player id is chosen by the window: 8 to 64 of `A–Z a–z 0–9 - _`, kept so the
+same device keeps the same id. Anything else is `400 bad_request`.
+
+#### `GET /api/remote/players`
+
+The caller's live players, by name.
+
+```json
+{ "players": [ { "id": "k3f9q2xw7m4p", "name": "Living room", "kind": "desktop",
+  "item_id": 87, "position_ms": 1284000, "duration_ms": 7200000,
+  "paused": false, "volume": 0.8, "age_ms": 1400, "pending": 0 } ] }
+```
+
+`kind` is `desktop`, `browser` or `phone`, a hint for an icon. `item_id` is `0`
+when nothing is playing. **Extrapolate a playing position with `age_ms`**, as
+for a Watch Together room: it is how long ago the player reported, measured by
+the server, so no two clocks are compared. `pending` is how many commands are
+waiting for it.
+
+#### `PUT` / `DELETE /api/remote/players/{id}`
+
+`PUT` is a window offering itself, or reporting again. Send it every 5 s and
+whenever the item or play state changes:
+
+```json
+{ "name": "Living room", "kind": "desktop", "item_id": 87,
+  "position_ms": 1284000, "duration_ms": 7200000, "paused": false, "volume": 0.8 }
+```
+
+Answers the player as listed. **When `pending` is above zero, collect the
+commands**, whether or not the `remote` event arrived: a missed event then costs
+one report, never a command. The name is trimmed to 60 characters, control
+characters removed. A new player, or a new name, item or play state, publishes
+`players`; a position alone does not.
+
+`DELETE` takes the player away at once, for a window that stops offering
+itself. `204` whether or not it existed.
+
+#### `POST /api/remote/players/{id}/commands`
+
+Queues one command for that player and publishes `remote` to the caller's
+streams; `202`.
+
+```json
+{ "action": "play", "item_id": 87, "queue": [87, 88, 89],
+  "position_ms": 1284000, "from_start": false, "from_player": "a81kq0zz9wpd",
+  "from_name": "Phone" }
+```
+
+| `action` | needs |
+|---|---|
+| `play` | `item_id`. Optional `queue` (at most 20,000 ids, the item included), `position_ms` (absent: wherever Play would start it on that device), `from_start` |
+| `seek` | `position_ms` |
+| `volume` | `volume`, 0 to 1 |
+| `pause`, `resume`, `stop`, `next`, `previous` | nothing |
+
+`from` tells the player who sent it. It is the sending player's own name when
+`from_player` names one of the caller's live players. Otherwise it is
+`from_name`, what the sending device calls itself, cleaned as a player's name
+is. Failing both, it is the server's description of the caller's browser, as
+Authorized devices shows it. A `from` in the body is ignored. A name the
+caller supplies is shown only on its own account's windows. A command
+that does not fit its action is `400 bad_request`; a player that is not the
+caller's, or not live, is `404 not_found`.
+
+A player holds at most 16 waiting commands, dropping the oldest, and **a
+command not collected within 30 s is dropped unrun**: a film that starts a
+minute after somebody gave up on it is worse than one that never starts.
+
+#### `GET /api/remote/players/{id}/commands`
+
+Hands over every command waiting for the player, oldest first, and clears
+them. Collecting counts as reporting. `404 not_found` for a player that is not
+the caller's or not live.
+
+```json
+{ "commands": [ { "action": "play", "item_id": 87, "queue": [87, 88, 89],
+  "position_ms": 1284000, "from": "Phone", "sent_at": 1762500000000 } ] }
+```
 
 ### `GET /api/channels`
 

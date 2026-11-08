@@ -1,0 +1,245 @@
+/* Play on another device (ADR 0117). The player's popover language, as the
+   watch-together panel uses it: raised surface over the picture, gold only on
+   focus. On the Devices page the same rows sit in the page instead. */
+
+.remote {
+  position: absolute;
+  right: 12px;
+  bottom: 64px;
+  z-index: 40;
+  width: 340px;
+  max-width: calc(100vw - 24px);
+  max-height: min(70vh, 560px);
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px;
+  border-radius: var(--radius-panel);
+  border: 1px solid var(--gold-dormant);
+  background: rgba(7, 11, 24, 0.97);
+  box-shadow: var(--elev-3);
+  text-align: left;
+}
+
+.remote--page {
+  position: static;
+  z-index: auto;
+  width: auto;
+  max-width: 640px;
+  max-height: none;
+  overflow: visible;
+  padding: 0;
+  border: none;
+  background: none;
+  box-shadow: none;
+}
+
+.remote__head {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.remote__x {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.remote__lead,
+.remote__hint,
+.remote__error {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+
+.remote__hint {
+  color: var(--text-faint);
+  font-size: 11px;
+}
+
+.remote__hint a {
+  color: var(--text-secondary);
+}
+
+.remote__error {
+  color: #e8a0a0;
+}
+
+.remote__empty {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.remote__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* flex-shrink: 0, or a scrolling column squashes the rows instead of
+   scrolling them. */
+.remote__player {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: var(--radius-tile);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.remote__who {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.remote__name {
+  font-size: 14px;
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.remote__kind {
+  flex-shrink: 0;
+  font-size: 11px;
+  color: var(--text-faint);
+}
+
+.remote__now {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 12px;
+}
+
+.remote__title {
+  color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.remote__time {
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.remote__idle {
+  color: var(--text-faint);
+}
+
+.remote__send,
+.remote__btn {
+  background: none;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: var(--radius-tile);
+  color: var(--text-primary);
+  cursor: pointer;
+}
+
+.remote__send {
+  align-self: flex-start;
+  font-size: 13px;
+  padding: 7px 14px;
+}
+
+.remote__controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.remote__btn {
+  min-width: 34px;
+  height: 32px;
+  padding: 0 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.remote__btn--main {
+  min-width: 44px;
+}
+
+.remote__send:hover,
+.remote__send:focus-visible,
+.remote__btn:hover,
+.remote__btn:focus-visible {
+  outline: none;
+  border-color: var(--gold);
+}
+
+.remote__send:disabled,
+.remote__btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.remote__volume {
+  flex-basis: 100%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  color: var(--text-faint);
+}
+
+.remote__volume input {
+  flex: 1;
+  min-width: 0;
+  accent-color: var(--text-secondary);
+}
+
+/* A popover on the item page opens below its button rather than above the
+   player bar. */
+.remote-anchor {
+  position: relative;
+  display: inline-flex;
+}
+
+.remote-anchor .remote {
+  top: calc(100% + 8px);
+  bottom: auto;
+  left: 0;
+  right: auto;
+}
+
+@media (max-width: 520px) {
+  .remote-anchor .remote {
+    position: fixed;
+    top: auto;
+    left: 12px;
+    right: 12px;
+    bottom: calc(var(--tabbar-h) + 12px);
+    width: auto;
+  }
+}
+
+/* The Devices page's one line of explanation above the list. */
+.devices__note {
+  max-width: 640px;
+  margin: 0 0 16px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text-muted);
+}

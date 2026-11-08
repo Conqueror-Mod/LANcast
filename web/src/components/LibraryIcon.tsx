@@ -257,6 +257,18 @@ export function GamesIcon() {
   );
 }
 
+// Devices: your other screens, to play on and control (ADR 0117). The
+// player's cast glyph, drawn on the rail's own box.
+export function DevicesIcon() {
+  return (
+    <RailGlyph>
+      <path d="M2.8 7.6V5.4c0-.7.6-1.3 1.3-1.3h11.8c.7 0 1.3.6 1.3 1.3v9.2c0 .7-.6 1.3-1.3 1.3H10.6" />
+      <path d="M2.8 10.4a5.4 5.4 0 0 1 5.4 5.4" />
+      <path d="M2.8 13.1a2.7 2.7 0 0 1 2.7 2.7" />
+    </RailGlyph>
+  );
+}
+
 // People: two heads, the second offset behind the first. Same idea as the
 // player's watch-together glyph, drawn on the rail's own box.
 export function PeopleIcon() {

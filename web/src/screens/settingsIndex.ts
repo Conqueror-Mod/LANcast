@@ -218,6 +218,8 @@ export const SETTINGS_INDEX: SettingEntry[] = [
   { pane: "player", label: "Night mode", terms: "compressor quiet loud audio" },
   { pane: "player", label: "Play the next episode or track automatically", terms: "autoplay up next" },
   { pane: "player", label: "Skip intros automatically", terms: "skip intro" },
+  { pane: "player", label: "Let my other devices play here", terms: "cast remote play on another device phone tv" },
+  { pane: "player", label: "This device's name", terms: "cast remote play on rename" },
   { pane: "player", label: "Play the pre-roll before films", terms: "trailer pre-roll" },
   { pane: "player", label: "Equaliser", terms: "eq equalizer bass treble" },
   { pane: "player", label: "Crossfade between albums", terms: "gapless fade music" },

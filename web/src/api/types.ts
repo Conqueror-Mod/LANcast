@@ -237,6 +237,12 @@ export type TogetherSession = components["schemas"]["TogetherSession"];
 export type TogetherRequest = components["schemas"]["TogetherRequest"];
 export type TogetherAskAnswer = components["schemas"]["TogetherAskAnswer"];
 
+// GET /api/remote/players — one of your own windows that offered itself to
+// your other windows (ADR 0117), and a command sent to one.
+export type RemotePlayer = components["schemas"]["RemotePlayer"];
+export type RemoteCommand = components["schemas"]["RemoteCommand"];
+export type RemoteCommandRequest = components["schemas"]["RemoteCommandRequest"];
+
 // PATCH /api/users/{id} — an account as the manager sees it. `sessions` is live
 // sessions, not a login history: it answers "is this person here right now".
 export type ManagedUser = components["schemas"]["ManagedUser"];

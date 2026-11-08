@@ -1,0 +1,22 @@
+/* "Playing from Phone": a moment's word that a film arrived from another of
+   your devices (ADR 0117). Top centre, where the join prompt sits and for the
+   same reason: the docked picture never covers it. No gold: arriving is not
+   where you are. */
+
+.remote-notice {
+  position: fixed;
+  top: 72px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: var(--z-prompt);
+  max-width: calc(100vw - 32px);
+  padding: 10px 16px;
+  border-radius: var(--radius-panel);
+  border: 1px solid rgba(190, 208, 255, 0.14);
+  background: rgba(7, 11, 24, 0.95);
+  box-shadow: var(--elev-3);
+  color: var(--text-primary);
+  font-size: 13px;
+  line-height: 1.4;
+  pointer-events: none;
+}

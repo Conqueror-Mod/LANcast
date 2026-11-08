@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { ServerEvents, topicKeys, invalidateTopics } from "./serverEvents";
+import { ServerEvents, topicKeys, invalidateTopics, onTopic } from "./serverEvents";
 
 /*
  * The client half of ADR 0079: a topic on the stream makes the right queries
@@ -195,7 +195,30 @@ describe("the event stream", () => {
   });
 
   it("every topic the server publishes has a row", () => {
-    for (const topic of ["peers", "presence", "libraries", "items", "backups"])
+    for (const topic of ["peers", "presence", "libraries", "items", "backups", "players"])
       expect(topicKeys[topic], topic).toBeDefined();
+  });
+
+  /*
+   * ADR 0117. `players` is a list a remote shows; `remote` is a command for
+   * this window to collect, heard by a listener rather than a query.
+   */
+  it("refreshes your devices when a player changes", async () => {
+    const es = await mount();
+    es.open();
+    act(() => es.emit("changed", { topics: ["players"] }));
+    expect(invalidated()).toEqual([{ queryKey: ["remote-players"] }]);
+  });
+
+  it("tells a listener that a command is waiting, and stops when it unsubscribes", async () => {
+    const es = await mount();
+    es.open();
+    const heard = vi.fn();
+    const off = onTopic("remote", heard);
+    act(() => es.emit("changed", { topics: ["remote", "items"] }));
+    expect(heard).toHaveBeenCalledTimes(1);
+    off();
+    act(() => es.emit("changed", { topics: ["remote"] }));
+    expect(heard).toHaveBeenCalledTimes(1);
   });
 });

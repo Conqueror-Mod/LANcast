@@ -219,6 +219,19 @@ export function TogetherGlyph(p: Props) {
   );
 }
 
+// A screen with waves rising from its corner: playing on another device
+// (ADR 0117). The shape everybody already reads as "cast".
+export function CastGlyph(p: Props) {
+  return (
+    <Svg {...p}>
+      <path d="M3 9V6.5A1.5 1.5 0 0 1 4.5 5h15A1.5 1.5 0 0 1 21 6.5v11a1.5 1.5 0 0 1-1.5 1.5H13" />
+      <path d="M3 12.5a6.5 6.5 0 0 1 6.5 6.5" />
+      <path d="M3 15.8a3.2 3.2 0 0 1 3.2 3.2" />
+      <circle cx="3.4" cy="18.6" r="0.6" />
+    </Svg>
+  );
+}
+
 // A crescent: night mode, which is what the setting is called and when it is
 // for. Drawn as one arc so it reads at 20px the way the rest of the bar does.
 export function NightGlyph(p: Props) {

@@ -38,10 +38,12 @@ import {
   GamesIcon,
   LiveIcon,
   PeopleIcon,
+  DevicesIcon,
   ReportIcon,
   SignOutIcon,
 } from "./LibraryIcon";
 import { ReportIssue } from "./ReportIssue";
+import { getRemoteDevice, otherPlayers, useRemotePlayers } from "@/playback/remote";
 import "./AppShell.css";
 
 // The shell: a vertical rail of places, and a top bar of state.
@@ -186,6 +188,9 @@ export function AppShell({ children }: { children: ReactNode }) {
   const retroIDs = (libraries ?? []).filter((l) => l.kind === "retro").map((l) => l.id);
   const hub = hubOffered({ retroLibraries: retroIDs.length, desktop: gamesSupported(), admin: isAdmin });
   const inHub = hub && insideHub(location.pathname, retroIDs);
+  // Kept current by the `players` topic, not a poll.
+  const players = useRemotePlayers(true, false);
+  const otherDevices = otherPlayers(players.data, getRemoteDevice().id).length;
 
   return (
     <div className="app-shell">
@@ -353,6 +358,25 @@ export function AppShell({ children }: { children: ReactNode }) {
                 People
               </span>
             </NavLink>
+            {/* Devices (ADR 0117): only once another of yours is offering
+                itself, so a household with one screen is not shown a place
+                that can only ever be empty. The phone's More follows the same
+                rule, in the same place. */}
+            {otherDevices > 0 && (
+              <NavLink
+                to="/devices"
+                title="Devices"
+                onClick={releaseRail}
+                className={({ isActive }) =>
+                  "app-shell__lib" + (isActive ? " is-active" : "")
+                }
+              >
+                <DevicesIcon />
+                <span className="app-shell__lib-name app-shell__label">
+                  Devices
+                </span>
+              </NavLink>
+            )}
           </div>
 
           {/* The foot of the rail. `margin-top: auto` puts it against the

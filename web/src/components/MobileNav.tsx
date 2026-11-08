@@ -23,9 +23,11 @@ import {
   GamesIcon,
   LiveIcon,
   PeopleIcon,
+  DevicesIcon,
   ReportIcon,
   SignOutIcon,
 } from "./LibraryIcon";
+import { getRemoteDevice, otherPlayers, useRemotePlayers } from "@/playback/remote";
 import "./MobileNav.css";
 
 /*
@@ -62,6 +64,9 @@ export function MobileNav() {
 
   const retroIDs = (libraries ?? []).filter((l) => l.kind === "retro").map((l) => l.id);
   const hub = hubOffered({ retroLibraries: retroIDs.length, desktop: gamesSupported(), admin: isAdmin });
+  // Kept current by the `players` topic, as on the rail.
+  const players = useRemotePlayers(true, false);
+  const otherDevices = otherPlayers(players.data, getRemoteDevice().id).length;
   const inHub = hub && insideHub(location.pathname, retroIDs);
 
   // Choosing somewhere closes the sheet. Watching the location rather than
@@ -104,7 +109,7 @@ export function MobileNav() {
     location.pathname.startsWith("/peers/") ||
     location.pathname === "/live" ||
     inHub;
-  const inMore = ["/settings", "/profile", "/downloads", "/addons"].some((p) =>
+  const inMore = ["/settings", "/profile", "/downloads", "/addons", "/devices"].some((p) =>
     location.pathname.startsWith(p),
   );
 
@@ -165,6 +170,14 @@ export function MobileNav() {
                 <DownloadIcon />
                 <span>Downloads</span>
               </NavLink>
+              {/* Your other screens, as a remote (ADR 0117). The rail's rule:
+                  only once another of yours is offering itself. */}
+              {otherDevices > 0 && (
+                <NavLink to="/devices" className={({ isActive }) => row(isActive)}>
+                  <DevicesIcon />
+                  <span>Devices</span>
+                </NavLink>
+              )}
               {/* The report form, as on the rail (ADR 0109). */}
               <button type="button" className="mnav__row" onClick={() => setReporting(true)}>
                 <ReportIcon />

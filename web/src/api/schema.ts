@@ -2176,6 +2176,92 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/remote/players": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Your windows that offered themselves as players
+         * @description Live players only, by name. Extrapolate a playing position with `age_ms`, which the server measured as it answered, so no two clocks are compared.
+         *
+         *     **Your own players only** (ADR 0117). Every route is scoped to the calling account: another account's player is never listed, and a command to it is `404`, the same as a player that does not exist. There is no admin view.
+         */
+        get: operations["listRemotePlayers"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/remote/players/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The player's id, chosen by its window: 8 to 64 of `A-Z a-z 0-9 - _`. */
+                id: components["parameters"]["PlayerId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Offer this window as a player, or report again
+         * @description Send every 5 s and whenever the item or play state changes; a player silent for 20 s is gone. **When `pending` is above zero, collect the commands** whether or not the `remote` event arrived. A new player, name, item or play state publishes `players`; a position alone does not.
+         *
+         *     **Your own players only** (ADR 0117). Every route is scoped to the calling account: another account's player is never listed, and a command to it is `404`, the same as a player that does not exist. There is no admin view.
+         */
+        put: operations["reportRemotePlayer"];
+        post?: never;
+        /**
+         * Stop offering this window
+         * @description `204` whether or not it existed.
+         *
+         *     **Your own players only** (ADR 0117). Every route is scoped to the calling account: another account's player is never listed, and a command to it is `404`, the same as a player that does not exist. There is no admin view.
+         */
+        delete: operations["removeRemotePlayer"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/remote/players/{id}/commands": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The player's id, chosen by its window: 8 to 64 of `A-Z a-z 0-9 - _`. */
+                id: components["parameters"]["PlayerId"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Collect this player's waiting commands
+         * @description Oldest first, and clears them. Collecting counts as reporting.
+         *
+         *     **Your own players only** (ADR 0117). Every route is scoped to the calling account: another account's player is never listed, and a command to it is `404`, the same as a player that does not exist. There is no admin view.
+         */
+        get: operations["takeRemoteCommands"];
+        put?: never;
+        /**
+         * Queue a command for one of your players
+         * @description Publishes `remote` to the caller's streams. A player holds at most 16 waiting commands, dropping the oldest, and a command not collected within 30 s is dropped unrun.
+         *
+         *     The server does not judge the item in a `play`: the player plays it through its own session, which is the same account, so library access and the rating ceiling apply as if it had been pressed there.
+         *
+         *     **Your own players only** (ADR 0117). Every route is scoped to the calling account: another account's player is never listed, and a command to it is `404`, the same as a player that does not exist. There is no admin view.
+         */
+        post: operations["sendRemoteCommand"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/together": {
         parameters: {
             query?: never;
@@ -7766,6 +7852,105 @@ export interface components {
             /** @description That server's name, frozen when the member joined, so a member list can say where somebody is watching from without asking across the network. */
             server?: string;
         };
+        /** @description A window that offered itself to its owner's other windows (ADR 0117). */
+        RemotePlayer: {
+            id: string;
+            name: string;
+            /**
+             * @description A hint for an icon.
+             * @enum {string}
+             */
+            kind: "desktop" | "browser" | "phone";
+            /**
+             * Format: int64
+             * @description What it is playing; 0 for nothing.
+             */
+            item_id: number;
+            /** Format: int64 */
+            position_ms: number;
+            /** Format: int64 */
+            duration_ms: number;
+            paused: boolean;
+            volume: number;
+            /**
+             * Format: int64
+             * @description How long ago it reported, measured by the server as it answered.
+             */
+            age_ms: number;
+            /** @description Commands waiting for it. */
+            pending: number;
+        };
+        RemotePlayerList: {
+            players: components["schemas"]["RemotePlayer"][];
+        };
+        /** @description What a player says about itself. The name is trimmed to 60 characters; an unknown kind is `browser`. */
+        RemotePlayerReport: {
+            name?: string;
+            /** @enum {string} */
+            kind?: "desktop" | "browser" | "phone";
+            /** Format: int64 */
+            item_id?: number;
+            /** Format: int64 */
+            position_ms?: number;
+            /** Format: int64 */
+            duration_ms?: number;
+            paused?: boolean;
+            volume?: number;
+        };
+        RemoteCommandRequest: {
+            /** @enum {string} */
+            action: "play" | "pause" | "resume" | "seek" | "stop" | "next" | "previous" | "volume";
+            /**
+             * Format: int64
+             * @description What to play. `play` only, and required there.
+             */
+            item_id?: number;
+            /** @description What plays after it, the item included. `play` only. */
+            queue?: number[];
+            /**
+             * Format: int64
+             * @description Where to start (`play`; absent means wherever Play would start it on that device) or where to go (`seek`, required).
+             */
+            position_ms?: number;
+            /** @description Ignore any resume point. `play` only. */
+            from_start?: boolean;
+            /** @description `volume` only, and required there. */
+            volume?: number;
+            /** @description The sending window's own player id, if it is one. The player is told that player's name as `from`. */
+            from_player?: string;
+            /** @description What the sending device calls itself. Used for `from` when `from_player` is not one of the caller's live players; failing both, the server describes the caller's browser. */
+            from_name?: string;
+        };
+        RemoteCommand: {
+            /** @enum {string} */
+            action: "play" | "pause" | "resume" | "seek" | "stop" | "next" | "previous" | "volume";
+            /**
+             * Format: int64
+             * @description What to play. `play` only, and required there.
+             */
+            item_id?: number;
+            /** @description What plays after it, the item included. `play` only. */
+            queue?: number[];
+            /**
+             * Format: int64
+             * @description Where to start (`play`; absent means wherever Play would start it on that device) or where to go (`seek`, required).
+             */
+            position_ms?: number;
+            /** @description Ignore any resume point. `play` only. */
+            from_start?: boolean;
+            /** @description `volume` only, and required there. */
+            volume?: number;
+            /** @description The sending player's name, if it was one. */
+            from?: string;
+            /**
+             * Format: int64
+             * @description When the server queued it, Unix milliseconds.
+             */
+            sent_at: number;
+        };
+        RemoteCommandList: {
+            commands: components["schemas"]["RemoteCommand"][];
+        };
         /**
          * @description Several people playing the same thing at the same position.
          *
@@ -9976,6 +10161,8 @@ export interface components {
         };
     };
     parameters: {
+        /** @description The player's id, chosen by its window: 8 to 64 of `A-Z a-z 0-9 - _`. */
+        PlayerId: string;
         /** @description The library's id. */
         LibraryId: number;
         /** @description The root's id. */
@@ -14219,6 +14406,149 @@ export interface operations {
                 };
             };
             401: components["responses"]["Unauthorized"];
+        };
+    };
+    listRemotePlayers: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The caller's live players. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RemotePlayerList"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+        };
+    };
+    reportRemotePlayer: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The player's id, chosen by its window: 8 to 64 of `A-Z a-z 0-9 - _`. */
+                id: components["parameters"]["PlayerId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RemotePlayerReport"];
+            };
+        };
+        responses: {
+            /** @description The player as listed. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RemotePlayer"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+        };
+    };
+    removeRemotePlayer: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The player's id, chosen by its window: 8 to 64 of `A-Z a-z 0-9 - _`. */
+                id: components["parameters"]["PlayerId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Gone. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+        };
+    };
+    takeRemoteCommands: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The player's id, chosen by its window: 8 to 64 of `A-Z a-z 0-9 - _`. */
+                id: components["parameters"]["PlayerId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Every waiting command. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RemoteCommandList"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            /** @description No such player for this account, or it has gone quiet. Another account's player gets this same answer. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    sendRemoteCommand: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The player's id, chosen by its window: 8 to 64 of `A-Z a-z 0-9 - _`. */
+                id: components["parameters"]["PlayerId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RemoteCommandRequest"];
+            };
+        };
+        responses: {
+            /** @description Queued. */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            /** @description No such player for this account, or it has gone quiet. Another account's player gets this same answer. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
         };
     };
     listTogetherSessions: {

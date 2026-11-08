@@ -475,6 +475,13 @@ html.lancast-native-video:has(.playback--full) .playback__native-cues,
 html.lancast-native-video:has(.playback--full) .playback__native-cues * {
   visibility: visible;
 }
+/* "Playing from Chris's Android" (ADR 0117) arrives exactly as a native film
+   opens, and lives outside .player, so the rule above hid it: the server and
+   the window both logged the sender and nothing appeared (2026-11-07). */
+html.lancast-native-video:has(.playback--full) .remote-notice,
+html.lancast-native-video:has(.playback--full) .remote-notice * {
+  visibility: visible;
+}
 /* A friend asking to join (federation Phase 5) lives outside .player, so the
    rule above hid it over a native film: the one screen it exists for. Its
    children too, because `body *` sets hidden on each of them, not only the

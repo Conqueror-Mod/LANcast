@@ -33,6 +33,9 @@ describe("overlayKeptBy", () => {
     [{ introSkipped: true }, "intro skipped"],
     [{ stats: true }, "stats"],
     [{ stillWatching: true }, "still watching"],
+    // "Playing from Chris's Android" over a film that just arrived (ADR 0117):
+    // hidden with the overlay, it was logged and never seen.
+    [{ remoteNotice: true }, "remote notice"],
     [{ joinRequest: true }, "join request"],
   ])("%o keeps the overlay up", (change, reason) => {
     expect(overlayKeptBy({ ...idle, ...change })).toBe(reason);

@@ -44,6 +44,13 @@ const (
 	// TopicBackups: the schedule took a backup or rotated old ones out. The
 	// list itself stays admin-only; a member's window holds no such query.
 	TopicBackups = "backups"
+	// TopicPlayers: one of this person's windows offered itself as a player,
+	// went away, or changed what it is playing or whether it is paused
+	// (ADR 0117). Published only to that person's windows.
+	TopicPlayers = "players"
+	// TopicRemote: a command is waiting for one of this person's players.
+	// Published only to that person's windows; each player collects its own.
+	TopicRemote = "remote"
 )
 
 /*

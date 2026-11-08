@@ -89,6 +89,7 @@ import type { Credit } from "@/api/types";
 import { useBookPlayer } from "@/playback/BookPlayer";
 import { chapterAt, clock } from "@/playback/bookTimeline";
 import { startedFloorMs } from "@/playback/resumePoint";
+import { PlayOnButton } from "@/components/RemotePanel";
 import "./Detail.css";
 
 function PlayButton({
@@ -1286,6 +1287,8 @@ export function Detail() {
                   )}
                 </>
               )}
+              {/* Play on another of your devices (ADR 0117). */}
+              <PlayOnButton item={item} />
               {watchlistable(item) && <WatchlistButton id={item.id} />}
               {(ownTrailer || trailer) && (
                 <TrailerButton

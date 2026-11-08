@@ -48,7 +48,46 @@ export const topicKeys: Record<string, readonly (readonly string[])[]> = {
   ],
   // The schedule writes and rotates backups with nobody pressing anything.
   backups: [["backups"]],
+  // Another of this person's windows offered itself, left, or changed what
+  // it plays (ADR 0117). `remote` has no row: it is a command for one player
+  // to collect, not a list anybody shows, and onTopic below delivers it.
+  players: [["remote-players"]],
 };
+
+/*
+ * Code that has to act on a topic rather than refetch a list.
+ *
+ * The one case so far is `remote`: a command waiting for this window, which
+ * has to be collected and run once, not cached. A query that collected it
+ * would run again on every remount and refocus, and taking a command is not
+ * idempotent.
+ */
+const topicListeners = new Map<string, Set<() => void>>();
+
+/** Calls fn whenever topic arrives. Returns the unsubscribe. */
+export function onTopic(topic: string, fn: () => void): () => void {
+  let set = topicListeners.get(topic);
+  if (!set) {
+    set = new Set();
+    topicListeners.set(topic, set);
+  }
+  set.add(fn);
+  return () => {
+    set.delete(fn);
+  };
+}
+
+function notifyTopics(topics: readonly string[]) {
+  for (const topic of new Set(topics)) {
+    for (const fn of topicListeners.get(topic) ?? []) {
+      try {
+        fn();
+      } catch {
+        // One listener failing must not stop the others hearing it.
+      }
+    }
+  }
+}
 
 /** Invalidates what each named topic makes stale. Unknown topics are ignored:
  * a newer server may announce things this client does not show. */
@@ -102,10 +141,9 @@ export function useServerEvents() {
       try {
         const body = JSON.parse(e.data) as { topics?: unknown };
         if (Array.isArray(body.topics)) {
-          invalidateTopics(
-            qc,
-            body.topics.filter((t): t is string => typeof t === "string"),
-          );
+          const topics = body.topics.filter((t): t is string => typeof t === "string");
+          invalidateTopics(qc, topics);
+          notifyTopics(topics);
         }
       } catch {
         // A malformed event says nothing; the next one may.

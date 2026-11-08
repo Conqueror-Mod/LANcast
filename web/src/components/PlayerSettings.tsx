@@ -9,6 +9,7 @@ import { COLORS, SIZES } from "./PlaybackSettings";
 import { usePlaybackPrefs, useSetPlaybackPrefs } from "@/api/hooks";
 import "./PlayerSettings.css";
 import { PhotosensitivityWarning } from "./PhotosensitivityWarning";
+import { deviceKind, useRemoteDevice } from "@/playback/remote";
 
 /*
  * This device › Player: the player's own preferences, settable before
@@ -85,6 +86,8 @@ export function PlayerSettings() {
         </label>
         <SkipIntrosToggle />
       </section>
+
+      <PlayOnThisDevice />
 
       <TheaterOutput />
 
@@ -436,5 +439,53 @@ function SkipIntrosToggle() {
         turn this off to never see it. Follows your account.
       </p>
     </>
+  );
+}
+
+/*
+ * Whether your other devices can send things here (ADR 0117). Per device,
+ * like everything on this pane: it is a fact about this screen.
+ */
+function PlayOnThisDevice() {
+  const [device, setDevice] = useRemoteDevice();
+  const [name, setName] = useState(device.name);
+  useEffect(() => setName(device.name), [device.name]);
+  const commit = () => {
+    const next = name.trim();
+    if (next && next !== device.name) setDevice({ name: next.slice(0, 60) });
+    else setName(device.name);
+  };
+  const kind = deviceKind();
+  return (
+    <section className="settings__section">
+      <span className="section-label">Play on another device</span>
+      <label className="set-toggle">
+        <input
+          type="checkbox"
+          checked={device.enabled}
+          onChange={(e) => setDevice({ enabled: e.target.checked })}
+        />
+        Let my other devices play here
+      </label>
+      <p className="set-row__sub">
+        Your phone or another window signed in as you can send a film or a song here and
+        control it. Nobody else&rsquo;s account can see this device.
+        {kind !== "desktop" &&
+          " A browser will not start sound until you have tapped the page, so the first thing sent here may arrive paused."}
+      </p>
+      <label className="set-row">
+        <span>This device&rsquo;s name</span>
+        <input
+          className="set-input"
+          value={name}
+          maxLength={60}
+          onChange={(e) => setName(e.target.value)}
+          onBlur={commit}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+          }}
+        />
+      </label>
+    </section>
   );
 }

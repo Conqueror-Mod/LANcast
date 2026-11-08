@@ -217,6 +217,9 @@ is in the [Feature backlog](#feature-backlog) entry it names.*
   is built ([ADR 0108](adr/0108-music-is-levelled-by-its-own-replaygain.md));
   measuring untagged tracks is not.
 - Playback: **Chromecast and AirPlay**, and **offline downloads** (the client half).
+  **Play on another of your own devices** is built
+  ([ADR 0117](adr/0117-play-on-another-device.md), unreleased): send a film
+  from the phone to the LANcast window and drive it like a remote.
 - Social: **Last.fm and Trakt scrobbling**.
 - Operations: **bandwidth limits**, and **granular sharing** by label or
   on a friend's server (confirm somebody needs it first).
@@ -2117,6 +2120,15 @@ group is not priority.
   Chromecast itself, so LANcast contacts nothing, but a custom receiver would
   need registering with Google. AirPlay has no official server-side
   specification and is the heavier of the two. Each is its own ADR.
+- **Play on another of your own devices** — built, unreleased
+  ([ADR 0117](adr/0117-play-on-another-device.md)). The owner's "screen share
+  / casting" item, read on 2026-11-07 as Plex's "play on": one LANcast window
+  sends a film or a song to another window signed in as the same account, at
+  the moment it was at, and controls it from a remote panel. In memory, no
+  schema; commands are announced by the event stream (`remote`) and fetched,
+  never pushed as payloads. The desktop window offers itself by default and a
+  browser or phone opts in, because a browser will not start sound untapped.
+  Never across accounts and never across servers.
 - **Offline downloads** — partly built. `GET /api/items/{id}/download` already
   hands over the original file. What is missing is the client half: keeping a
   copy on a device, playing it with no server, and reporting the progress when
