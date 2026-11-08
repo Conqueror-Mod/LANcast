@@ -62,6 +62,10 @@ export function libraryItemQuery(
     series: params.getAll("series"),
     collections: nums("collection"),
     faceClusters: nums("face_cluster"),
+    // Your own tags (ADR 0062) and favourites. The bar drew their pills for
+    // a release before they were sent, and the grid did not narrow.
+    tags: nums("tag"),
+    favourite: params.get("favourite") === "1",
     minRating: Number(params.get("min_rating") ?? 0),
     status: params.get("status") ?? "",
     /*

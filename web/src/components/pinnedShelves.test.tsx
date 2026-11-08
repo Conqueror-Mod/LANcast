@@ -143,6 +143,15 @@ describe("a pinned shelf on Home", () => {
     );
   });
 
+  it("narrows by your tags and favourites, the way the grid does", async () => {
+    stub([shelf({ query: "tag=4&tag=11&favourite=1" })], [{ id: 11, title: "Die Hard" }]);
+    await draw(<PinnedShelves libraries={[films]} />);
+    const items = calls.find((c) => c.url.startsWith("/api/items"));
+    const q = new URLSearchParams(items!.url.split("?")[1]);
+    expect(q.getAll("tag")).toEqual(["4", "11"]);
+    expect(q.get("favourite")).toBe("1");
+  });
+
   it("is left out when its library is not one you can see", async () => {
     stub([shelf({ library_id: 99 })], [{ id: 11, title: "Die Hard" }]);
     await draw(<PinnedShelves libraries={[films]} />);

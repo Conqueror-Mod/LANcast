@@ -116,6 +116,10 @@ export function LibraryView({
    * person.
    */
   const faceClusters = params.getAll("face_cluster");
+  // Your own tags (ADR 0062) and favourites. The bar has drawn their pills
+  // since it learned them; they were never sent, so the grid did not narrow.
+  const tags = params.getAll("tag");
+  const favourite = params.get("favourite") === "1";
   const minRating = Number(params.get("min_rating") ?? 0);
   const status = params.get("status") ?? "";
   const unwatched = params.get("watched") === "false";
@@ -186,6 +190,8 @@ export function LibraryView({
         series: seriesNames,
         collections: collections.map(Number),
         faceClusters: faceClusters.map(Number),
+        tags: tags.map(Number),
+        favourite,
         minRating,
         status,
       });
@@ -398,6 +404,8 @@ export function LibraryView({
     seriesNames.length > 0 ||
     collections.length > 0 ||
     faceClusters.length > 0 ||
+    tags.length > 0 ||
+    favourite ||
     minRating > 0 ||
     !!status ||
     unwatched;
