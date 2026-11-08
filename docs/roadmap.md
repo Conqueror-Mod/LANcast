@@ -1,6 +1,6 @@
 # Roadmap
 
-Last updated: 2026-11-07 · **v0.10.6 released, nothing unreleased on main · M0–M4 built.** The React client executes the design
+Last updated: 2026-11-07 · **v0.10.6 released, one fix on main · M0–M4 built.** The React client executes the design
 system and the client-UX backlog is closed. Observability (match, review, scan
 diagnostics), an audit log and CI are in place. Transport security (TLS) and
 multi-user accounts (admin/member roles) are built, and branding & splash shipped.
@@ -20,7 +20,8 @@ listed work that had shipped as open. The release-by-release record is the
 [Releases](#releases) table, and what remains is [What is left](#what-is-left).
 Refreshed again 2026-11-07, after v0.10.6: the file had stopped at v0.10.3.*
 
-**On main, unreleased:** nothing. Main is v0.10.6.
+**On main, unreleased:** Continue Watching gets a list of its own (#1025), so
+half-played songs no longer push films off it. No schema change.
 
 v0.10.6 is the latest release. Since v0.9.78:
 - **v0.10.6:** play on another of your own devices
@@ -195,14 +196,14 @@ breadth, and it is listed in the [Feature backlog](#feature-backlog).
 is in the [Feature backlog](#feature-backlog) entry it names.*
 
 **Open faults from use.** Reported by the owner 2026-11-03 and 2026-11-06,
-diagnosed as far as the evidence went. Each lost its server log to Debug
-rotation; since v0.10.5 the log holds about a day, so the next step for each
-is to reproduce it and copy the log at once.
-- **Continue Watching emptied itself.** No data was lost (the pre-update
-  backup and the live database agree, 224 rows in progress), so it is a query
-  or a stale list. Unknown: whether it happened before or after the update to
-  v0.10.4, which changed `/api/continue` to leave books out, and on which
-  device.
+diagnosed as far as the evidence went. The three still open each lost its
+server log to Debug rotation; since v0.10.5 the log holds about a day, so the
+next step for each is to reproduce it and copy the log at once.
+- ~~**Continue Watching emptied itself.**~~ **Fixed on main (#1025),
+  unreleased.** Home read one mixed list of 20 and split it afterwards, so
+  half-played songs took the films' places: 16 of the newest 20 rows were
+  tracks on the owner's library. `/api/continue?shelf=` now gives each shelf
+  a limit of its own. Passed as the installed service on 2026-11-07.
 - **Music stalled loading on a phone.** No evidence survived. Reproduce, then
   read the `/api/stream` request times and the "music on deck/element" lines.
 - **The encoder stays held after a guest stops a film.** No player ends its
