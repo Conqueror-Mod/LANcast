@@ -1,6 +1,6 @@
 # Roadmap
 
-Last updated: 2026-11-07 · **v0.10.6 released, one fix on main · M0–M4 built.** The React client executes the design
+Last updated: 2026-11-08 · **v0.10.6 released, two changes on main · M0–M4 built.** The React client executes the design
 system and the client-UX backlog is closed. Observability (match, review, scan
 diagnostics), an audit log and CI are in place. Transport security (TLS) and
 multi-user accounts (admin/member roles) are built, and branding & splash shipped.
@@ -21,7 +21,10 @@ listed work that had shipped as open. The release-by-release record is the
 Refreshed again 2026-11-07, after v0.10.6: the file had stopped at v0.10.3.*
 
 **On main, unreleased:** Continue Watching gets a list of its own (#1025), so
-half-played songs no longer push films off it. No schema change.
+half-played songs no longer push films off it, and audiobooks step 3 (ADR
+0116): a sleep timer, narrators, and filters by author, narrator and series.
+No schema change; audiobooks libraries are read once more for narrators at
+their next scan.
 
 v0.10.6 is the latest release. Since v0.9.78:
 - **v0.10.6:** play on another of your own devices
@@ -217,9 +220,11 @@ next step for each is to reproduce it and copy the log at once.
   code fault was found. Next time, grep `login refused` with `method=passkey`.
 
 **Next, once decided.**
-- **Audiobooks step 3** — the sleep timer, narrators, and filters by author,
-  narrator and series ([ADR 0116](adr/0116-an-audiobook-is-its-own-library.md)).
-  The only accepted plan with steps still unbuilt.
+- ~~**Audiobooks step 3**~~ — **built, unreleased**
+  ([ADR 0116](adr/0116-an-audiobook-is-its-own-library.md)): a sleep timer
+  (15 to 60 minutes or end of chapter, fading out), narrators read from the
+  composer or narrator tag, and filters by author, narrator and series. No
+  schema change. Never heard with sound or run as the service.
 - **In-play RetroAchievements** — unlocks while you play (rcheevos). **Shipped
   in v0.10.2** ([ADR 0112](adr/0112-achievements-are-earned-through-the-server.md)):
   casual (softcore), in the desktop player, through the server, which holds the token
@@ -1153,7 +1158,7 @@ group is not priority.
   (ADR 0051, amended). Face grouping, the large piece when this was written,
   has since been built (ADR 0052).
 - **Audiobooks** — steps 1 and 2 shipped in v0.10.4 (books from folders, a grid, and playing);
-  step 3 (sleep timer, narrators, filters) is open; **accepted** as
+  step 3 (sleep timer, narrators, filters) built, unreleased; **accepted** as
   [ADR 0116](adr/0116-an-audiobook-is-its-own-library.md) (2026-11-03), its own
   library kind, with the owner's nine answers recorded in it. The test library
   is 12 Star Trek books, read before step 1 was built. Checking

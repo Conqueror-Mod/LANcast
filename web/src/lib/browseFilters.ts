@@ -53,6 +53,15 @@ export const FILTER_CATEGORIES: FilterCategory[] = [
    */
   { key: "actor", label: "Actor", mode: "search", role: "actor" },
   { key: "director", label: "Director", mode: "search", role: "director" },
+  /*
+   * Books (ADR 0116 step 3). Author and Series are names the facets already
+   * hold, searched here the way Year is; Narrator is a credit, searched on the
+   * server the way Actor is, because the readers of a large library are too
+   * many to list.
+   */
+  { key: "author", label: "Author", mode: "search" },
+  { key: "narrator", label: "Narrator", mode: "search", role: "narrator" },
+  { key: "series", label: "Series", mode: "search" },
   { key: "collection", label: "Collection", mode: "search" },
   // "Content rating" and "Rating" in full, because one is an age certificate
   // and the other is a score, and a bar with two buttons both reading "Rating"
@@ -171,13 +180,16 @@ export function activePills(
    * role is on the pill because Ada acting and Ada directing are two different
    * filters that would otherwise be one indistinguishable word twice over.
    */
-  for (const key of ["person", "actor", "director"]) {
+  for (const key of ["person", "actor", "director", "narrator"]) {
     for (const id of params.getAll(key)) {
       const name = ctx.castNames?.get(id);
       if (!name) continue;
-      push(key, id, key === "director" ? `${name} (director)` : name);
+      push(key, id, key === "actor" || key === "person" ? name : `${name} (${key})`);
     }
   }
+  // An author and a series are their own names, so their pills need no wait.
+  for (const a of params.getAll("author")) push("author", a, a);
+  for (const v of params.getAll("series")) push("series", v, v);
 
   /*
    * The face pill, which is the only way back out of a person filter.
@@ -259,6 +271,17 @@ export function activeCount(params: URLSearchParams, key: string): number {
  * would be slower than the typing. Cast cannot do this, which is the honest
  * difference between the two search panels.
  */
+/*
+ * Names from the facets — authors, series — narrowed by what has been typed.
+ * Any part of the name, ignoring case: "trek" should find "Star Trek", where
+ * a year's digits only make sense from the front.
+ */
+export function matchNames(names: string[], query: string): string[] {
+  const q = query.trim().toLowerCase();
+  if (!q) return names;
+  return names.filter((n) => n.toLowerCase().includes(q));
+}
+
 export function matchYears(years: number[], query: string): number[] {
   const q = query.trim();
   if (!q) return years;

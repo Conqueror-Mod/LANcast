@@ -36,6 +36,10 @@ type BookTags struct {
 	AlbumArtist string
 	Track       int
 	Year        int
+	// Composer is where rippers put the narrator; Narrator is a tag of that
+	// name, which wins where present (ADR 0116 step 3).
+	Composer string
+	Narrator string
 }
 
 // BookFile is one audio file in an audiobooks library.
@@ -58,7 +62,9 @@ type Book struct {
 	Number  int
 	Edition string
 	Year    int
-	Parts   []BookPart
+	// Narrators in billing order: everyone a full-cast drama credits.
+	Narrators []string
+	Parts     []BookPart
 }
 
 // BookPart is one file of a book, in the order it plays.
@@ -174,6 +180,7 @@ func folderBook(root, dir string, files []BookFile) Book {
 		b.Title = tidy(filepath.Base(dir))
 	}
 	b.Author = bookAuthor(files, folderAuthor)
+	b.Narrators = bookNarrators(files)
 	b.Year = bookYear(files)
 	b.Parts = partList(parts, b.Title)
 	return b
@@ -197,6 +204,7 @@ func looseBook(root string, f BookFile) Book {
 		b.Title = tidy(stem(f.Path))
 	}
 	b.Author = bookAuthor([]BookFile{f}, "")
+	b.Narrators = bookNarrators([]BookFile{f})
 	b.Year = f.Tags.Year
 	b.Parts = []BookPart{{Path: f.Path, Number: 1, Title: b.Title}}
 	return b
@@ -270,6 +278,97 @@ func bookAuthor(files []BookFile, folderAuthor string) string {
 		return personName(a)
 	}
 	return folderAuthor
+}
+
+/*
+ * bookNarrators is everyone the parts name as reading the book (ADR 0116
+ * step 3).
+ *
+ * A `narrator` tag wins over the composer tag wherever any part carries one:
+ * a tagger who wrote the field meant it, and the composer may then hold
+ * something else. Without one, the composer tag is where rippers and Audible
+ * exports put the narrator.
+ *
+ * Every name is kept, because a full-cast drama is read by its whole cast and
+ * the narrator filter should find it under each of them (answer 6). Ordered by
+ * how many parts name somebody, then by who was named first, so a book whose
+ * last part adds a guest still leads with its reader.
+ */
+func bookNarrators(files []BookFile) []string {
+	field := func(t BookTags) string { return t.Composer }
+	for _, f := range files {
+		if strings.TrimSpace(f.Tags.Narrator) != "" {
+			field = func(t BookTags) string { return t.Narrator }
+			break
+		}
+	}
+	count := map[string]int{}
+	var order []string
+	for _, f := range files {
+		seen := map[string]bool{}
+		for _, n := range splitPeople(field(f.Tags)) {
+			key := strings.ToLower(n)
+			if seen[key] {
+				continue
+			}
+			seen[key] = true
+			if count[key] == 0 {
+				order = append(order, n)
+			}
+			count[key]++
+		}
+	}
+	sort.SliceStable(order, func(i, j int) bool {
+		return count[strings.ToLower(order[i])] > count[strings.ToLower(order[j])]
+	})
+	return order
+}
+
+var (
+	// "Read by", "Narrated by", "Performed by" in front of the names.
+	reReadBy = regexp.MustCompile(`(?i)^\s*(?:read|narrated|performed)\s+by\s+`)
+	// The separators a list of people uses: ";" and "/" always, and "&" or
+	// "and" between words.
+	rePeopleSep = regexp.MustCompile(`\s*[;/]\s*|\s+(?:&|and)\s+`)
+)
+
+/*
+ * splitPeople turns one tag into the people it names.
+ *
+ * A comma is the hard case, because it means two things: "Nimoy, Leonard" is
+ * one man written surname first, and "Leonard Nimoy, John de Lancie" is two.
+ * One comma between two single words is the first; between two names of
+ * several words, or with more than one comma, it separates people. personName
+ * then turns a surname-first name round.
+ */
+func splitPeople(s string) []string {
+	s = reReadBy.ReplaceAllString(strings.TrimSpace(s), "")
+	if s == "" {
+		return nil
+	}
+	var out []string
+	for _, piece := range rePeopleSep.Split(s, -1) {
+		piece = strings.TrimSpace(piece)
+		if piece == "" {
+			continue
+		}
+		names := []string{piece}
+		if c := strings.Count(piece, ","); c > 1 {
+			names = strings.Split(piece, ",")
+		} else if c == 1 {
+			i := strings.Index(piece, ",")
+			left, right := strings.TrimSpace(piece[:i]), strings.TrimSpace(piece[i+1:])
+			if strings.Contains(left, " ") && strings.Contains(right, " ") {
+				names = []string{left, right}
+			}
+		}
+		for _, n := range names {
+			if n = personName(strings.TrimSpace(n)); n != "" {
+				out = append(out, n)
+			}
+		}
+	}
+	return out
 }
 
 func mostCommon(files []BookFile, field func(BookTags) string) string {

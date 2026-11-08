@@ -1067,6 +1067,15 @@ type ItemFilter struct {
 	PersonIDs   []int64
 	ActorIDs    []int64
 	DirectorIDs []int64
+	// NarratorIDs finds books read by these people, each of a full cast
+	// included (ADR 0116 step 3).
+	NarratorIDs []int64
+
+	// Authors and Series narrow an audiobooks library (ADR 0116 step 3). By
+	// name, because each is a column on the book rather than a person: the
+	// author is `artist`, the series `series`. Exact and OR within each.
+	Authors []string
+	Series  []string
 
 	/*
 	 * FaceClusterIDs restricts to photographs a face group appears in (ADR 0052).
@@ -1312,6 +1321,18 @@ func (s *Store) ListItems(ctx context.Context, f ItemFilter) ([]Item, int, error
 		where += ` AND platform IN (` + placeholders(len(f.Platforms)) + `)`
 		for _, p := range f.Platforms {
 			args = append(args, p)
+		}
+	}
+	if len(f.Authors) > 0 {
+		where += ` AND artist IN (` + placeholders(len(f.Authors)) + `)`
+		for _, a := range f.Authors {
+			args = append(args, a)
+		}
+	}
+	if len(f.Series) > 0 {
+		where += ` AND series IN (` + placeholders(len(f.Series)) + `)`
+		for _, v := range f.Series {
+			args = append(args, v)
 		}
 	}
 	// Which walk this listing is, for choosing how it is read; see `from`.
@@ -1600,6 +1621,7 @@ func (s *Store) ListItems(ctx context.Context, f ItemFilter) ([]Item, int, error
 	credited(f.PersonIDs, "")
 	credited(f.ActorIDs, "actor")
 	credited(f.DirectorIDs, "director")
+	credited(f.NarratorIDs, RoleNarrator)
 	if len(f.FaceClusterIDs) > 0 {
 		// EXISTS for exactly the reason `credited` gives above, and here it
 		// carries a second case: one photograph can hold the same person's face
@@ -1963,6 +1985,13 @@ type Facets struct {
 	// filter only exists where it can narrow something.
 	Platforms []string `json:"platforms"`
 
+	// Authors and Series present among an audiobooks library's books (ADR
+	// 0116 step 3), alphabetical. Empty everywhere else: no other kind of
+	// item has an author, and a series elsewhere is a show's, which the show
+	// itself already is.
+	Authors []string `json:"authors"`
+	Series  []string `json:"series"`
+
 	// Collections in this library, most-populated first — the same ordering
 	// principle as the cast list, and for the same reason: the franchises
 	// somebody actually has are more useful at the top than the alphabet is.
@@ -2046,7 +2075,36 @@ func (s *Store) LibraryFacetsAt(ctx context.Context, libraryID int64, userID, ki
 		Genres: []string{}, Decades: []int{}, ContentRatings: []string{},
 		Initials: []string{}, Years: []int{}, Resolutions: []ResolutionBucket{},
 		Collections: []CollectionFacet{}, Tags: []Tag{}, Platforms: []string{},
-		ReleaseTypes: []string{},
+		ReleaseTypes: []string{}, Authors: []string{}, Series: []string{},
+	}
+
+	if kind == "" {
+		for _, c := range []struct {
+			col string
+			out *[]string
+		}{{"artist", &f.Authors}, {"series", &f.Series}} {
+			// The column is one of two fixed names, never the caller's.
+			brows, err := s.db.QueryContext(ctx, `
+				SELECT DISTINCT `+c.col+` FROM media_item
+				WHERE library_id = ? AND kind = 'book' AND missing = 0
+				  AND `+c.col+` IS NOT NULL AND `+c.col+` != ''
+				ORDER BY `+c.col+` COLLATE NOCASE`, libraryID)
+			if err != nil {
+				return f, fmt.Errorf("library facets (books): %w", err)
+			}
+			for brows.Next() {
+				var v string
+				if err := brows.Scan(&v); err != nil {
+					brows.Close()
+					return f, fmt.Errorf("library facets (books): %w", err)
+				}
+				*c.out = append(*c.out, v)
+			}
+			brows.Close()
+			if err := brows.Err(); err != nil {
+				return f, err
+			}
+		}
 	}
 
 	if kind == "album" {

@@ -10,6 +10,15 @@ import (
 	"lancast/internal/store"
 )
 
+/*
+ * bookTagsRev is the revision of what the book pass reads from tags. Raise it
+ * when the pass starts reading something new, and every audiobooks library is
+ * read once more at its next scan, changed or not.
+ *
+ *   1: the narrator, from the composer or narrator tag (ADR 0116 step 3).
+ */
+const bookTagsRev = 1
+
 // reconcileBooks makes books out of an audiobooks library's files (ADR 0116).
 //
 // Which files are one book, and what it is called, is internal/media's
@@ -22,7 +31,13 @@ import (
 // pass follows and for the same reason: tags live inside the files, and the
 // walk has just shown none of them changed.
 func (s *Scanner) reconcileBooks(ctx context.Context, lib store.Library, p *Progress) error {
-	if lib.ScannedAt != nil && p != nil && p.ItemsChanged == 0 && p.ItemsMissing == 0 {
+	rev, err := s.st.BookTagsRev(ctx, lib.ID)
+	if err != nil {
+		return err
+	}
+	// Unchanged files are skipped, unless the pass now reads something it did
+	// not when they were last read: then every book is read once more.
+	if rev >= bookTagsRev && lib.ScannedAt != nil && p != nil && p.ItemsChanged == 0 && p.ItemsMissing == 0 {
 		s.log.Debug("skipping book pass; nothing changed since the last scan", "library", lib.ID)
 		return nil
 	}
@@ -63,6 +78,7 @@ func (s *Scanner) reconcileBooks(ctx context.Context, lib store.Library, p *Prog
 					files[i].Tags = media.BookTags{
 						Title: t.Title, Artist: t.Artist, Album: t.Album,
 						AlbumArtist: t.AlbumArtist, Track: t.Track, Year: t.Year,
+						Composer: t.Composer, Narrator: t.Narrator,
 					}
 				}
 			}()
@@ -112,6 +128,13 @@ func (s *Scanner) reconcileBooks(ctx context.Context, lib store.Library, p *Prog
 			}); err != nil {
 				return err
 			}
+			// Only when tags were read: without a reader every book would
+			// lose its narrators for want of a look.
+			if reader != nil {
+				if err := s.st.SetBookNarrators(ctx, id, b.Narrators); err != nil {
+					return err
+				}
+			}
 			for _, part := range b.Parts {
 				pid, ok := ids[part.Path]
 				if !ok {
@@ -123,6 +146,11 @@ func (s *Scanner) reconcileBooks(ctx context.Context, lib store.Library, p *Prog
 				}
 			}
 			books++
+		}
+	}
+	if reader != nil {
+		if err := s.st.SetBookTagsRev(ctx, lib.ID, bookTagsRev); err != nil {
+			return err
 		}
 	}
 	s.log.Info("book pass", "library", lib.ID, "parts", len(parts), "books", books,

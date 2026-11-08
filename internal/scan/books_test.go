@@ -115,3 +115,78 @@ func TestMusicLibrarySkipsM4B(t *testing.T) {
 		t.Fatalf("FilesSeen = %d, want 0", p.FilesSeen)
 	}
 }
+
+// Narrators come from the composer tag, every one of them, and a library read
+// before the pass knew about them is read once more even when nothing on disk
+// moved (ADR 0116 step 3). A credits lock keeps them as they are.
+func TestBookPassReadsNarrators(t *testing.T) {
+	sc, st := newScanner(t)
+	tags := &bookTags{byName: map[string]probe.Tags{
+		"Q-Squared 1.mp3": {Title: "Q-Squared 1", Composer: "John de Lancie; Leonard Nimoy", Track: 1},
+		"Q-Squared 2.mp3": {Title: "Q-Squared 2", Composer: "John de Lancie", Track: 2},
+	}}
+	sc.SetTagReader(tags)
+	ctx := context.Background()
+	root := t.TempDir()
+	lib, err := st.CreateLibrary(ctx, "Books", "audiobooks", root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir := filepath.Join(root, "The Next Generation", "Q-Squared")
+	writeFile(t, dir, "Q-Squared 1.mp3", 10)
+	writeFile(t, dir, "Q-Squared 2.mp3", 10)
+	scanAndWait(t, sc, *lib)
+
+	top, _, err := st.ListItems(ctx, store.ItemFilter{LibraryID: lib.ID, TopLevel: true})
+	if err != nil || len(top) != 1 {
+		t.Fatalf("books = %+v, err %v", top, err)
+	}
+	book := top[0].ID
+	narrators := func() []string {
+		t.Helper()
+		credits, err := st.Credits(ctx, book)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var out []string
+		for _, c := range credits {
+			if c.Role == store.RoleNarrator {
+				out = append(out, c.Name)
+			}
+		}
+		return out
+	}
+	if got := narrators(); len(got) != 2 || got[0] != "John de Lancie" || got[1] != "Leonard Nimoy" {
+		t.Fatalf("narrators = %q, want John de Lancie then Leonard Nimoy", got)
+	}
+
+	// A library read before narrators existed: no credits, an older marker.
+	if err := st.SetBookNarrators(ctx, book, nil); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.SetBookTagsRev(ctx, lib.ID, 0); err != nil {
+		t.Fatal(err)
+	}
+	if p := scanAndWait(t, sc, *lib); p.ItemsChanged != 0 {
+		t.Fatalf("rescan changed %d files", p.ItemsChanged)
+	}
+	if got := narrators(); len(got) != 2 {
+		t.Fatalf("an unchanged library was not read for narrators: %q", got)
+	}
+
+	// Locked, the credits stay as they are whatever the tags say next.
+	if err := st.LockField(ctx, book, "credits"); err != nil {
+		t.Fatal(err)
+	}
+	tags.mu.Lock()
+	tags.byName["Q-Squared 1.mp3"] = probe.Tags{Title: "Q-Squared 1", Composer: "Somebody Else", Track: 1}
+	tags.byName["Q-Squared 2.mp3"] = probe.Tags{Title: "Q-Squared 2", Composer: "Somebody Else", Track: 2}
+	tags.mu.Unlock()
+	if err := st.SetBookTagsRev(ctx, lib.ID, 0); err != nil {
+		t.Fatal(err)
+	}
+	scanAndWait(t, sc, *lib)
+	if got := narrators(); len(got) != 2 || got[0] != "John de Lancie" {
+		t.Fatalf("a credits lock was overwritten: %q", got)
+	}
+}

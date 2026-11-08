@@ -1938,6 +1938,42 @@
             }
           },
           {
+            "name": "narrator",
+            "in": "query",
+            "required": false,
+            "description": "Books read by these people (ADR 0116 step 3): the person filter scoped to narrating credits, which come from a book's composer or narrator tag. Every voice of a full-cast recording is credited, so each finds the book. **Repeatable**, OR within the facet.",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "integer"
+              }
+            }
+          },
+          {
+            "name": "author",
+            "in": "query",
+            "required": false,
+            "description": "Books by these authors, by name, exactly as `authors` in the facets lists them (ADR 0116 step 3). **Repeatable**, OR within the facet. An unknown name matches nothing.",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          {
+            "name": "series",
+            "in": "query",
+            "required": false,
+            "description": "Books in these series, by name, exactly as `series` in the facets lists them (ADR 0116 step 3). **Repeatable**, OR within the facet. An unknown name matches nothing.",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          {
             "name": "face_cluster",
             "in": "query",
             "required": false,
@@ -4943,7 +4979,7 @@
             "name": "role",
             "in": "query",
             "required": false,
-            "description": "Scopes the search to one side of the camera (`actor`, `director`). **Unvalidated on purpose**: an unknown role matches nobody and returns an empty list, which is the truthful answer — rejecting it would turn a filter nobody can satisfy into an error page.",
+            "description": "Scopes the search to one credit role: `actor` or `director`, or `narrator` in an audiobooks library. **Unvalidated on purpose**: an unknown role matches nobody and returns an empty list, which is the truthful answer — rejecting it would turn a filter nobody can satisfy into an error page.",
             "schema": {
               "type": "string"
             }
@@ -17616,6 +17652,8 @@
           "years",
           "resolutions",
           "platforms",
+          "authors",
+          "series",
           "collections",
           "max_rating",
           "has_in_progress",
@@ -17667,6 +17705,20 @@
               "type": "string"
             },
             "description": "Consoles present in a retro library (ADR 0073), alphabetical; a client orders them for display. Empty in every other library, so a Console filter exists only where it can narrow something."
+          },
+          "authors": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Authors among an audiobooks library's books (ADR 0116 step 3), alphabetical. Empty in every other library and at the album and track levels."
+          },
+          "series": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Series among an audiobooks library's books (ADR 0116 step 3), alphabetical. Empty in every other library and at the album and track levels."
           },
           "release_types": {
             "type": "array",

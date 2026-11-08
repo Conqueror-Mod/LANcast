@@ -137,6 +137,8 @@ describe("a retro game's detail page", () => {
 const facetsWith = (platforms: string[]): Facets => ({
   initials: [],
   platforms,
+  authors: [],
+  series: [],
   genres: [],
   decades: [],
   content_ratings: [],

@@ -43,6 +43,14 @@ import {
   type BookChapter,
   type BookInfo,
 } from "./bookTimeline";
+import {
+  chapterEndAt,
+  fadeGain,
+  sleepLeftMs,
+  startSleep,
+  type SleepChoice,
+  type SleepTimer,
+} from "./sleepTimer";
 
 export interface BookPlayerState {
   /** The book loaded, or 0. */
@@ -67,7 +75,16 @@ export interface BookPlayerState {
   prevChapter: () => void;
   setSpeed: (rate: number) => void;
   stop: () => void;
+  /** The sleep timer's choice, or null when none is set. */
+  sleep: SleepChoice | null;
+  /** Real time until the sleep timer stops the book, or null. */
+  sleepLeftMs: number | null;
+  /** Set the sleep timer, or clear it with null. */
+  setSleep: (choice: SleepChoice | null) => void;
 }
+
+/** How often the sleep timer counts down and steps its fade. */
+const SLEEP_TICK_MS = 250;
 
 const Ctx = createContext<BookPlayerState | null>(null);
 
@@ -114,6 +131,32 @@ export function BookProvider({ children }: { children: ReactNode }) {
   // True while a new part's source is being swapped in: the element reports
   // the old one stopping, which is not the listener pausing.
   const swapping = useRef(false);
+
+  // The sleep timer. The ref is what the element's listeners and the tick
+  // read; the state is what the bar shows.
+  const [sleep, setSleepChoice] = useState<SleepChoice | null>(null);
+  const [sleepLeft, setSleepLeft] = useState<number | null>(null);
+  const sleepRef = useRef<SleepTimer | null>(null);
+  // The listener's volume before a fade began, put back after it.
+  const sleepVolume = useRef(1);
+
+  /** Clear the timer and put the volume back, whether it fired or not. */
+  const endSleep = useCallback(() => {
+    if (sleepRef.current) bookAudio().volume = sleepVolume.current;
+    sleepRef.current = null;
+    setSleepChoice(null);
+    setSleepLeft(null);
+  }, []);
+
+  /** The timer has run out: pause, which saves the place, then tidy up. */
+  const fireSleep = useCallback(() => {
+    const a = bookAudio();
+    if (!a.paused) a.pause();
+    endSleep();
+  }, [endSleep]);
+  // For the element's listeners, which are attached once.
+  const fireSleepRef = useRef(fireSleep);
+  fireSleepRef.current = fireSleep;
 
   const save = useCallback(
     (opts: { finished?: boolean; settle?: boolean } = {}) => {
@@ -179,6 +222,11 @@ export function BookProvider({ children }: { children: ReactNode }) {
       if (!i || partRef.current < 0) return;
       timeRef.current = bookTime(i.parts, partRef.current, a.currentTime * 1000);
       setTimeMs(timeRef.current);
+      // The end of the chapter is a place, so it is checked against every
+      // step of the clock rather than the coarser tick, which at 2x could
+      // carry the book a second into the next chapter.
+      const t = sleepRef.current;
+      if (t?.kind === "chapter" && timeRef.current >= t.endMs) fireSleepRef.current();
     };
     const onPlay = () => setPlaying(true);
     const onPause = () => {
@@ -199,6 +247,8 @@ export function BookProvider({ children }: { children: ReactNode }) {
       timeRef.current = i.duration_ms;
       setTimeMs(i.duration_ms);
       save({ finished: true });
+      // The book ended before the timer did; nothing is left for it to stop.
+      if (sleepRef.current) fireSleepRef.current();
     };
     a.addEventListener("timeupdate", onTime);
     a.addEventListener("play", onPlay);
@@ -218,6 +268,37 @@ export function BookProvider({ children }: { children: ReactNode }) {
     const t = window.setInterval(() => save(), SAVE_EVERY_MS);
     return () => window.clearInterval(t);
   }, [playing, save]);
+
+  /*
+   * The sleep timer's countdown and fade, while the book plays.
+   *
+   * Paused, nothing counts down: the effect ends and the next one starts its
+   * clock afresh. The countdown on screen moves in whole seconds, so the bar
+   * redraws once a second rather than four times.
+   */
+  const sleepOn = sleep !== null;
+  useEffect(() => {
+    if (!sleepOn || !playing) return;
+    let last = performance.now();
+    const tick = () => {
+      const t = sleepRef.current;
+      if (!t) return;
+      const now = performance.now();
+      if (t.kind === "minutes") t.leftMs -= now - last;
+      last = now;
+      const left = sleepLeftMs(t, timeRef.current, speedRef.current);
+      if (left <= 0) {
+        fireSleep();
+        return;
+      }
+      bookAudio().volume = sleepVolume.current * fadeGain(left);
+      setSleepLeft((prev) =>
+        prev !== null && Math.ceil(prev / 1000) === Math.ceil(left / 1000) ? prev : left,
+      );
+    };
+    const id = window.setInterval(tick, SLEEP_TICK_MS);
+    return () => window.clearInterval(id);
+  }, [sleepOn, playing, fireSleep]);
 
   // And once more if the page goes away mid-sentence.
   useEffect(() => {
@@ -258,6 +339,8 @@ export function BookProvider({ children }: { children: ReactNode }) {
       }
       // Leaving one book for another keeps the first one's place.
       if (bookRef.current && bookRef.current !== id) save({ settle: true });
+      // A timer belongs to the book it was set on.
+      if (bookRef.current !== id) endSleep();
       if (main?.itemID) main.stop();
       infoRef.current = i;
       bookRef.current = id;
@@ -270,7 +353,7 @@ export function BookProvider({ children }: { children: ReactNode }) {
       setBookID(id);
       loadAt(fromMs ?? resumeFrom(i), true);
     },
-    [loadAt, main, save],
+    [loadAt, main, save, endSleep],
   );
 
   const toggle = useCallback(() => {
@@ -287,8 +370,33 @@ export function BookProvider({ children }: { children: ReactNode }) {
       const i = infoRef.current;
       if (!i) return;
       loadAt(Math.min(Math.max(0, ms), i.duration_ms), !bookAudio().paused);
+      // "End of chapter" means the chapter you are in, so a skip into another
+      // one moves the stop to that chapter's end.
+      const t = sleepRef.current;
+      if (t?.kind === "chapter") {
+        t.endMs = chapterEndAt(i.chapters, timeRef.current, i.duration_ms);
+        setSleepLeft(sleepLeftMs(t, timeRef.current, speedRef.current));
+      }
     },
     [loadAt],
+  );
+
+  const setSleep = useCallback(
+    (choice: SleepChoice | null) => {
+      const i = infoRef.current;
+      if (choice === null || !i) {
+        endSleep();
+        return;
+      }
+      // A second choice replaces the first, from the volume the listener set.
+      if (!sleepRef.current) sleepVolume.current = bookAudio().volume;
+      else bookAudio().volume = sleepVolume.current;
+      const t = startSleep(choice, i.chapters, timeRef.current, i.duration_ms);
+      sleepRef.current = t;
+      setSleepChoice(choice);
+      setSleepLeft(sleepLeftMs(t, timeRef.current, speedRef.current));
+    },
+    [endSleep],
   );
   const skip = useCallback((d: number) => seekTo(timeRef.current + d), [seekTo]);
   const skipBack = useCallback(() => skip(-SKIP_BACK_MS), [skip]);
@@ -321,6 +429,7 @@ export function BookProvider({ children }: { children: ReactNode }) {
     // Saved before the refs are cleared: the pause event below arrives after
     // them and would find no book to save.
     save({ settle: true });
+    endSleep();
     if (!a.paused) a.pause();
     a.removeAttribute("src");
     a.load();
@@ -331,7 +440,7 @@ export function BookProvider({ children }: { children: ReactNode }) {
     setInfo(null);
     setPlaying(false);
     setNote("");
-  }, [save]);
+  }, [save, endSleep]);
 
   const chapterIndex = info ? chapterAt(info.chapters, timeMs) : -1;
   const chapter = info && chapterIndex >= 0 ? info.chapters[chapterIndex] : null;
@@ -356,9 +465,12 @@ export function BookProvider({ children }: { children: ReactNode }) {
       prevChapter,
       setSpeed,
       stop,
+      sleep,
+      sleepLeftMs: sleepLeft,
+      setSleep,
     }),
     [bookID, book, info, playing, timeMs, speed, chapter, note, play, toggle, seekTo, skip,
-      skipBack, skipForward, nextChapter, prevChapter, setSpeed, stop],
+      skipBack, skipForward, nextChapter, prevChapter, setSpeed, stop, sleep, sleepLeft, setSleep],
   );
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

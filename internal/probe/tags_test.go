@@ -150,3 +150,23 @@ func TestParseTagsIgnoresBulkFields(t *testing.T) {
 		t.Errorf("bulk tags leaked into %+v", got)
 	}
 }
+
+// Audiobook narrators (ADR 0116 step 3): the composer tag, where rippers put
+// them, and a narrator tag, which an MP3's TXXX frame and an M4B's freeform
+// atom both surface under that description.
+func TestParseTagsReadsComposerAndNarrator(t *testing.T) {
+	got := parseTags(map[string]string{
+		"composer": "Leonard Nimoy",
+		"NARRATOR": "John de Lancie",
+		"title":    "Chapter 1",
+	})
+	if got.Composer != "Leonard Nimoy" || got.Narrator != "John de Lancie" {
+		t.Fatalf("composer %q narrator %q", got.Composer, got.Narrator)
+	}
+	if got := parseTags(map[string]string{"Narrated By": "Kate Mulgrew"}); got.Narrator != "Kate Mulgrew" {
+		t.Errorf("Narrated By read as %q", got.Narrator)
+	}
+	if !parseTags(map[string]string{"composer": "Somebody"}).Empty() {
+		t.Error("a composer alone counted as a tagged track")
+	}
+}

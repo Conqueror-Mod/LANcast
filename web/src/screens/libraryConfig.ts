@@ -37,6 +37,9 @@ export interface LibraryKindConfig {
    * defaulted on, so a new kind has to decide.
    */
   cast?: boolean;
+  /** Whether items here have narrators: books (ADR 0116 step 3), whose
+   *  readers are credits the Narrator filter searches. */
+  narrators?: boolean;
   /**
    * Other levels the library can be shown at, besides its top level.
    *
@@ -213,11 +216,11 @@ const COMICS: LibraryKindConfig = {
   ],
 };
 
-// An audiobooks library's top level is books (ADR 0116). The author, narrator
-// and series filters are step 3; sorting by title and by when a book arrived
-// is what the files support today.
+// An audiobooks library's top level is books (ADR 0116). Filtered by author,
+// narrator and series (step 3); no actors or directors, so no cast.
 const AUDIOBOOKS: LibraryKindConfig = {
   searchPlaceholder: "Search books",
+  narrators: true,
   sorts: [
     { value: "title", label: "Title" },
     { value: "added", label: "Recently added" },

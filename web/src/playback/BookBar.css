@@ -166,6 +166,24 @@
   box-shadow: 0 0 0 2px var(--gold);
 }
 
+/* The sleep timer shares the speed menu's look. While one runs its border
+   brightens and the time left sits beside it; gold stays for focus alone. */
+.book-bar__sleep {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+.book-bar__sleep--on select {
+  border-color: rgba(190, 208, 255, 0.4);
+}
+.book-bar__sleep-left {
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+  min-width: 3.2em;
+}
+
 .book-bar .visually-hidden {
   position: absolute;
   width: 1px;
@@ -184,8 +202,14 @@
     gap: 6px 10px;
     padding: 8px 12px;
   }
+  /* Room for the title before anything squeezes it: past that, the sleep
+     menu and the close button wrap to a row of their own instead. */
   .book-bar__book {
     flex: 1 1 0;
+    min-width: 150px;
+  }
+  .book-bar__close {
+    margin-left: auto;
   }
   .book-bar__scrub {
     order: 3;

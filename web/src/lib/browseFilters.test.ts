@@ -25,7 +25,7 @@ const facets: Facets = {
   // present and empty rather than absent — which is why this fixture carries
   // `initials` even though nothing here reads it.
   initials: [],
-  platforms: [],
+  platforms: [], authors: [], series: [],
   genres: ["Drama"],
   decades: [1990],
   content_ratings: ["R"],
@@ -263,5 +263,26 @@ describe("the face pill", () => {
 describe("clearing filters", () => {
   it("includes face_cluster", () => {
     expect(FILTER_PARAM_KEYS).toContain("face_cluster");
+  });
+});
+
+describe("book filter pills (ADR 0116 step 3)", () => {
+  it("name a narrator with the role, and an author and a series by name", async () => {
+    const { activePills } = await import("./browseFilters");
+    const pills = activePills(
+      new URLSearchParams("narrator=12&author=Peter+David&series=Deep+Space+Nine"),
+      { castNames: new Map([["12", "Armin Shimerman"]]) },
+    );
+    expect(pills.map((p) => p.label)).toEqual([
+      "Armin Shimerman (narrator)",
+      "Peter David",
+      "Deep Space Nine",
+    ]);
+  });
+
+  it("match names by any part, ignoring case", async () => {
+    const { matchNames } = await import("./browseFilters");
+    expect(matchNames(["Star Trek", "Discworld"], "TREK")).toEqual(["Star Trek"]);
+    expect(matchNames(["Star Trek"], "  ")).toEqual(["Star Trek"]);
   });
 });

@@ -463,6 +463,19 @@ function watchedAction(
   };
 }
 
+/*
+ * "Read by Leonard Nimoy and John de Lancie": a book's narrators (ADR 0116
+ * step 3), from its credits. A full cast past three names says how many more
+ * rather than running the line off the page.
+ */
+export function readBy(credits: Credit[] | undefined): string {
+  const names = (credits ?? []).filter((c) => c.role === "narrator").map((c) => c.name);
+  if (names.length === 0) return "";
+  if (names.length > 3) return `Read by ${names.slice(0, 3).join(", ")} and ${names.length - 3} more`;
+  if (names.length === 1) return `Read by ${names[0]}`;
+  return `Read by ${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`;
+}
+
 function castOf(credits: Credit[] | undefined) {
   return (credits ?? []).filter((c) => c.role === "actor").slice(0, 12);
 }
@@ -865,6 +878,7 @@ export function Detail() {
     // A book: its author, its place in its series, and whether it is
     // abridged — "John Peel · Deep Space Nine #7 · Abridged" (ADR 0116).
     isBookItem ? (item.artist ?? "") : "",
+    isBookItem ? readBy(item.credits) : "",
     isBookItem && item.series ? item.series + (item.episode ? ` #${item.episode}` : "") : "",
     isBookItem ? (item.edition ?? "") : "",
     item.year ? String(item.year) : "",
