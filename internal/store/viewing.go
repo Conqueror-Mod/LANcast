@@ -11,8 +11,8 @@ import (
  *
  * playback_state answers "where was I" and keeps one row per item, so it can
  * only ever say when something was *last* played. This log is the other half:
- * every time a film or an episode is finished, a row, kept until the account
- * clears it.
+ * every time a film, an episode, an audiobook or a comic is finished, a row,
+ * kept until the account clears it.
  *
  * Private to one account like everything keyed by user (ADR 0006). Nothing in
  * here takes an account from anywhere but its caller's session, one layer up.
@@ -58,8 +58,15 @@ func scanViewing(sc interface{ Scan(...any) error }) (Viewing, error) {
  *
  * Called from SaveProgress on the same edge that moves watch_count, inside its
  * transaction, so the tally and the log can never disagree about what counted
- * as a viewing. Films and episodes only: the INSERT selects nothing for any
- * other kind, so music and photographs are skipped without a branch here.
+ * as a viewing. Films, episodes, audiobooks and comics: the INSERT selects
+ * nothing for any other kind, so music, games and photographs are skipped
+ * without a branch here.
+ *
+ * Books and comics joined in ADR 0119. Both have a clear finish -- a book
+ * within its last minute, a comic at its last page or Mark as read -- and a
+ * dated record of it is what On this day needs a year later. Music does not:
+ * an album played through is a weak signal. Games do not: LANcast never sees
+ * one completed. The Trakt export still takes films and episodes only.
  */
 func logViewing(ctx context.Context, tx *sql.Tx, userID string, itemID, at int64) error {
 	_, err := tx.ExecContext(ctx, `
@@ -69,7 +76,7 @@ func logViewing(ctx context.Context, tx *sql.Tx, userID string, itemID, at int64
 		       mi.series, mi.season, mi.episode, mi.imdb_id, sh.year, sh.imdb_id
 		FROM media_item mi
 		LEFT JOIN media_item sh ON sh.id = (`+showOf+`)
-		WHERE mi.id = ? AND mi.kind IN ('movie', 'episode')`,
+		WHERE mi.id = ? AND mi.kind IN ('movie', 'episode', 'book', 'comic')`,
 		userID, at, itemID)
 	if err != nil {
 		return fmt.Errorf("log viewing: %w", err)

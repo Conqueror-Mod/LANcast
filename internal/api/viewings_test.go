@@ -94,3 +94,20 @@ func TestTheTraktShapeGroupsEpisodesUnderTheirShow(t *testing.T) {
 		t.Errorf("movies = %+v", got.Movies)
 	}
 }
+
+// Books and comics are in the history from ADR 0119, and Trakt has no place
+// for either: they are left out of its file, not counted as skipped episodes,
+// and kept in the CSV.
+func TestTheTraktShapeLeavesOutBooksAndComics(t *testing.T) {
+	got := traktHistory([]store.Viewing{
+		{Kind: "book", Title: "Dune", FinishedAt: 1},
+		{Kind: "comic", Title: "Saga 01", FinishedAt: 2},
+		{Kind: "movie", Title: "Heat", FinishedAt: 3},
+	})
+	if len(got.Movies) != 1 || got.Movies[0].Title != "Heat" || len(got.Shows) != 0 {
+		t.Errorf("trakt = %+v, want only the film", got)
+	}
+	if got.Skipped != 0 {
+		t.Errorf("skipped = %d; a book is not an episode Trakt could not place", got.Skipped)
+	}
+}

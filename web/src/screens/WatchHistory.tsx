@@ -106,12 +106,16 @@ function byMonth(vs: Viewing[]): [string, Viewing[]][] {
 
 function ViewingRow({ viewing: v }: { viewing: Viewing }) {
   const code = episodeCode(v);
+  /*
+   * A book or a comic says what it is (ADR 0119). Without it a finished
+   * audiobook reads as a film of the same name, which is the one thing a
+   * history of mostly films should not let it look like.
+   */
+  const kindWord = v.kind === "book" ? "Audiobook" : v.kind === "comic" ? "Comic" : "";
   const detail =
     v.kind === "episode"
       ? [v.series, code].filter(Boolean).join(" · ")
-      : v.year
-        ? String(v.year)
-        : "";
+      : [kindWord, v.year ? String(v.year) : ""].filter(Boolean).join(" · ");
   const when = new Date(v.finished_at * 1000).toLocaleDateString();
   const body = (
     <>

@@ -1,7 +1,9 @@
 # ADR 0074 — A viewing is a row
 
 Date: 2026-09-30 · Status: **accepted** 2026-09-30, and built with schema
-revision 53.
+revision 53. Amended by [ADR 0119](0119-homepage-2-part-two.md) §3b: finished
+audiobooks and comics are logged too, and the Trakt export still leaves them
+out.
 
 Answers the roadmap's open question *"a real history, Trakt- or
 Sonarr-shaped"*. Leaves [ADR 0006](0006-playback-state-keyed-by-user.md)

@@ -1345,8 +1345,9 @@ your browser never contacts RetroAchievements itself. `{dir}` is `UserPic`,
 
 ### `GET /api/profile/viewings`
 
-Your watch history: one row per **finished** viewing of a film or an episode,
-newest first ([ADR 0074](adr/0074-a-viewing-is-a-row.md)). `?limit=` defaults
+Your watch history: one row per **finished** viewing of a film, an episode, an
+audiobook or a comic, newest first ([ADR 0074](adr/0074-a-viewing-is-a-row.md),
+[ADR 0119](adr/0119-homepage-2-part-two.md)). `?limit=` defaults
 to 100 (max 500), `?offset=` pages.
 
 ```json
@@ -1362,9 +1363,12 @@ This is not `GET /api/profile`'s `history`, which reads the state table and so
 has one row per item, dated from its *last* play. Here a film watched three
 times is three rows.
 
-- **Only finished viewings, only video.** A row is written on the same edge
-  that moves `watch_count`: the moment something becomes finished. Abandoned
-  sittings and music are not logged; both are decisions recorded in the ADR.
+- **Only finished viewings.** A row is written on the same edge that moves
+  `watch_count`: the moment something becomes finished. A book is finished
+  within its last minute, a comic at its last page or by Mark as read.
+  Abandoned sittings, music and games are not logged. `kind` is `movie`,
+  `episode`, `book` or `comic`; books and comics have been logged since
+  v0.10.10, so they have no `estimated` rows.
 - **What was watched is copied onto the row.** `item_id` becomes `null` if the
   item is deleted, and the row still says what it was.
 - **`estimated`** marks a row seeded when the log began (schema revision 53):
@@ -1386,6 +1390,8 @@ The whole history as a file to save. `?format=csv` (the default) or
   `series`, `season`, `episode`, `imdb_id`, `show_imdb_id`, `estimated`.
 - **Trakt**: JSON shaped like the body of Trakt's history sync — `movies` by
   title, year and imdb id, and `shows` with their episodes grouped under seasons.
+  Books and comics are left out, since Trakt has no place for them; the CSV
+  keeps them.
   An episode without a season or episode number cannot be placed under a show,
   so it is left out and counted in `skipped`; the CSV keeps it.
 
