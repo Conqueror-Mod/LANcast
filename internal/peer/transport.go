@@ -336,10 +336,28 @@ func StreamClient(ident identity.Identity, fingerprint string) (*http.Client, er
 				KeepAlive: 30 * time.Second,
 			}).DialContext,
 			TLSHandshakeTimeout: 5 * time.Second,
-			// The far server has to start ffmpeg before it can answer, which
-			// is why this is not five seconds. It bounds the wait for the
-			// *header* only; the bytes after it are unbounded.
-			ResponseHeaderTimeout: 30 * time.Second,
+			// It bounds the wait for the *header* only; the bytes after it
+			// are unbounded. See StreamHeaderWait for why it is minutes.
+			ResponseHeaderTimeout: StreamHeaderWait,
 		},
 	}, nil
 }
+
+/*
+ * StreamHeaderWait is how long a friend's server may take to start answering
+ * a stream request.
+ *
+ * It was thirty seconds, which was enough to start ffmpeg and not enough for
+ * the far server's HLS playlist. A film whose picture is copied and whose
+ * sound is converted (H.264 + AC3, say) is held by that server until the
+ * conversion finishes, so the playlist can be served complete: up to five
+ * minutes for a long film (`remuxCapCeiling` in internal/api). Every request
+ * was cut off at thirty seconds, and the player asked again from where the
+ * room had moved to, which threw that work away and began it again. Watching
+ * a two-hour film together took eight minutes to start, on 2026-11-07.
+ *
+ * A peer that is switched off is still found out in seconds: the connect and
+ * the handshake keep their own short bounds. This only waits longer on a
+ * server that has accepted the request and is working on it.
+ */
+const StreamHeaderWait = 6 * time.Minute

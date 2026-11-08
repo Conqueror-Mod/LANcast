@@ -1,3 +1,4 @@
+import { withCapabilities } from "./capabilities";
 import type { FilePath } from "./fileTransport";
 
 /*
@@ -71,9 +72,13 @@ export function peerSourceURL(
        * rewrites the segment URLs in the playlist that comes back so they
        * point here rather than at a federation route this client cannot use.
        */
-      return t === "" ? `${b}/hls/${item}/index.m3u8` : `${b}/hls/${item}/index.m3u8?${t}`;
+      return withCapabilities(
+        t === "" ? `${b}/hls/${item}/index.m3u8` : `${b}/hls/${item}/index.m3u8?${t}`,
+      );
     default:
-      return `${b}/transcode?item=${item}` + (t === "" ? "" : `&${t}`);
+      return withCapabilities(
+        `${b}/transcode?item=${item}` + (t === "" ? "" : `&${t}`),
+      );
   }
 }
 
@@ -97,9 +102,16 @@ export function peerSubtitleURL(
  * Their answer, not ours. This household holds neither the file nor the probe,
  * so there is nothing here to decide with — and a guess made locally would be
  * a guess about somebody else's disk.
+ *
+ * What it *does* hold is this player, so it says what this player can decode,
+ * exactly as the local player does (`withCapabilities`). Without it the far
+ * server assumed the plainest browser and converted AC3 sound and HEVC
+ * pictures for a friend whose app plays both. The HLS and transcode URLs in
+ * peerSourceURL carry it too, because the far server decides again on each of
+ * them, and a decision made with different claims picks a different stream.
  */
 export function peerPlaybackURL(fingerprint: string, item: number): string {
-  return `${base(fingerprint)}/playback?item=${item}`;
+  return withCapabilities(`${base(fingerprint)}/playback?item=${item}`);
 }
 
 /*
