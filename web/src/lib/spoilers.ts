@@ -1,4 +1,4 @@
-import { useDevice } from "./device";
+import { LEGACY_SPOILERS_KEY, useAccountPref } from "./homePrefs";
 
 /*
  * Spoilers on a season page.
@@ -12,14 +12,12 @@ import { useDevice } from "./device";
  * Doing nothing here is itself a choice, and the wrong one to make by accident
  * (season-page-plan.md §5).
  *
- * Per device rather than per account, following bigscreen: there is no per-user
- * preference store on the server, and inventing one for this would be a schema
- * decision made by a checkbox. The cost is honest and small — somebody who
- * watches on two machines sets it twice — and if per-user preferences ever
- * arrive, this is one of the settings that should move.
+ * Per account. It was per device while the server had no per-user store, with
+ * the note that it should move if one arrived; settings-3-plan step 3 is that
+ * arrival (ADR 0120), and homePrefs.ts carries a device's older choice over.
  */
 
-export const SPOILERS_KEY = "lancast:spoilers";
+export const SPOILERS_KEY = LEGACY_SPOILERS_KEY;
 
 /**
  * How much to hide on an episode nobody has started.
@@ -37,7 +35,7 @@ export type SpoilerMode = "show" | "synopsis" | "all";
 export const SPOILER_DEFAULT: SpoilerMode = "synopsis";
 
 export function useSpoilerMode(): [SpoilerMode, (m: SpoilerMode) => void] {
-  return useDevice<SpoilerMode>(SPOILERS_KEY, SPOILER_DEFAULT);
+  return useAccountPref<SpoilerMode>("spoilers", SPOILERS_KEY, SPOILER_DEFAULT);
 }
 
 /**

@@ -6,7 +6,7 @@ import (
 )
 
 // CurrentSchemaVersion is the revision this build expects.
-const CurrentSchemaVersion = 91
+const CurrentSchemaVersion = 92
 
 // migration is one forward step. There are deliberately no down migrations:
 // rolling a media library's schema backwards loses data that a rescan cannot
@@ -205,6 +205,15 @@ var migrations = []migration{
 	// about the book. NULL is "never chosen", which plays at 1×.
 	{version: 90, columns: []column{{"playback_state", "speed", "REAL"}}},
 	{version: 91, sql: schemaRevision91},
+	// Home follows the account (ADR 0120, settings-3-plan step 3): the
+	// spotlight's mode and the title pinned to it, and how much a season page
+	// hides. Null is "never chosen", which takes the default and lets a
+	// device's older choice be carried over once.
+	{version: 92, columns: []column{
+		{"user", "home_spotlight", "TEXT"},
+		{"user", "home_spotlight_item", "INTEGER"},
+		{"user", "spoilers", "TEXT"},
+	}},
 }
 
 // migrate brings the database up to CurrentSchemaVersion.

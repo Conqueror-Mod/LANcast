@@ -662,6 +662,9 @@ func (s *Server) Handler() http.Handler {
 	// Whether an intro skips itself, per account (ADR 0083).
 	mux.HandleFunc("GET /api/profile/playback", s.playbackPreferences)
 	mux.HandleFunc("PUT /api/profile/playback", s.setPlaybackPreferences)
+	// Home follows the account (ADR 0120).
+	mux.HandleFunc("GET /api/profile/home", s.homePreferences)
+	mux.HandleFunc("PUT /api/profile/home", s.setHomePreferences)
 	mux.HandleFunc("GET /api/profile/ratings", s.listMyRatings)
 	// RetroAchievements (ADR 0090): the caller's own, and nobody else's.
 	mux.HandleFunc("GET /api/profile/retroachievements", s.getRetroAchievements)

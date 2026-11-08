@@ -11515,6 +11515,64 @@
         }
       }
     },
+    "/profile/home": {
+      "get": {
+        "operationId": "getHomePreferences",
+        "summary": "The caller's Home preferences",
+        "description": "What the caller has chosen about their Home page (ADR 0120): the spotlight, spoilers on a season page, and built-in shelves turned off. A null field has never been chosen; the client shows its default, and a device holding an older choice of its own carries it over once. On a server with no accounts, `account` is false and every field is null.",
+        "tags": [
+          "Profile"
+        ],
+        "responses": {
+          "200": {
+            "description": "The caller's Home preferences.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HomePreferences"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "operationId": "setHomePreferences",
+        "summary": "Set the caller's Home preferences",
+        "description": "Each field is optional and a field left out is left alone; at least one is required. `hidden_shelves`, when sent, replaces the whole list. Acts on the session only. Not audited.",
+        "tags": [
+          "Profile"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HomePreferencesUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Saved; the preferences as stored.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HomePreferences"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "No field sent, or a value Home cannot use: `bad_spotlight`, `bad_spotlight_item`, `bad_spoilers`, `bad_hidden_shelves` (including an Unwatched key naming no library)."
+          },
+          "409": {
+            "description": "This server has no accounts yet (`no_account`)."
+          }
+        }
+      }
+    },
     "/profile/sessions": {
       "get": {
         "operationId": "listMySessions",
@@ -23965,6 +24023,91 @@
           "current": {
             "type": "boolean",
             "description": "This is the device asking."
+          }
+        }
+      },
+      "HomePreferences": {
+        "type": "object",
+        "required": [
+          "account",
+          "spotlight",
+          "spotlight_item",
+          "spoilers",
+          "hidden_shelves"
+        ],
+        "properties": {
+          "account": {
+            "type": "boolean",
+            "description": "False on a server with no accounts yet, where the client keeps these choices on the device."
+          },
+          "spotlight": {
+            "type": "string",
+            "nullable": true,
+            "enum": [
+              "continue",
+              "recent",
+              "recommended",
+              "pinned"
+            ],
+            "description": "What the homepage spotlight shows. Null: never chosen, which shows `continue`."
+          },
+          "spotlight_item": {
+            "type": "integer",
+            "format": "int64",
+            "nullable": true,
+            "description": "The title pinned to the spotlight for `pinned`; 0 is none. Null: never chosen."
+          },
+          "spoilers": {
+            "type": "string",
+            "nullable": true,
+            "enum": [
+              "show",
+              "synopsis",
+              "all"
+            ],
+            "description": "How much a season page hides on an episode nobody has started. Null: never chosen, which hides the synopsis."
+          },
+          "hidden_shelves": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Built-in Home shelves turned off: `new`, `rate`, `watchlist`, or `unwatched:<library id>`. Pinned shelves are separate (`/home/shelves`)."
+          }
+        }
+      },
+      "HomePreferencesUpdate": {
+        "type": "object",
+        "description": "A change to the caller's Home preferences. Every field is optional; at least one is required.",
+        "properties": {
+          "spotlight": {
+            "type": "string",
+            "enum": [
+              "continue",
+              "recent",
+              "recommended",
+              "pinned"
+            ]
+          },
+          "spotlight_item": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "spoilers": {
+            "type": "string",
+            "enum": [
+              "show",
+              "synopsis",
+              "all"
+            ]
+          },
+          "hidden_shelves": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Replaces the whole list."
           }
         }
       },

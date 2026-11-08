@@ -2241,6 +2241,47 @@ alone, not read as `false`, because a client that sent nothing about it has not
 chosen anything. A body with neither is `400`. Acts on the session only; no route sets another account's. Not
 audited. `409` on a server with no accounts.
 
+### `GET /api/profile/home` and `PUT /api/profile/home`
+
+What the caller has chosen about their Home page (ADR 0120). These follow the
+person to every device:
+
+```json
+{
+  "account": true,
+  "spotlight": "pinned",
+  "spotlight_item": 1234,
+  "spoilers": "synopsis",
+  "hidden_shelves": ["rate", "unwatched:3"]
+}
+```
+
+- `spotlight`: what the homepage spotlight shows. One of `continue`,
+  `recent`, `recommended` or `pinned`.
+- `spotlight_item`: the title pinned to it, for `pinned`. `0` is none.
+- `spoilers`: how much a season page hides on an episode nobody has started.
+  One of `show`, `synopsis` or `all`.
+- `hidden_shelves`: built-in Home shelves the caller has turned off. Each is
+  `new` (New this week), `rate` (Rate what you've watched), `watchlist`, or
+  `unwatched:<library id>`. A hidden Unwatched shelf goes with its library.
+  Pinned shelves are separate, under `/api/home/shelves`.
+
+**`null` means never chosen.** The client then shows its default:
+`continue`, no pinned title, and `synopsis`. Before this route, a device kept
+these choices for itself, so the first device to find `null` carries its own
+older choice over once. `hidden_shelves` is always a list.
+
+`account` is `false` on a server with no accounts yet. There, every field reads
+`null` and the client keeps these choices on the device as it used to.
+
+`PUT` takes the same fields, **each optional**: a field left out is left
+alone. `hidden_shelves`, when sent, replaces the whole list. The answer is the
+new state, as `GET` returns it. A body with none of the fields is `400`; so
+are an unknown value and an Unwatched key naming no library (`bad_spotlight`,
+`bad_spotlight_item`, `bad_spoilers`, `bad_hidden_shelves`). It acts on the
+session only, and it is not audited. `409 no_account` on a server with no
+accounts.
+
 ### `GET /api/profile/subtitle-style` and `PUT /api/profile/subtitle-style`
 
 How subtitles look for the calling account. It follows the person to every

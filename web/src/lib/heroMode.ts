@@ -1,4 +1,4 @@
-import { useDevice } from "./device";
+import { LEGACY_PINNED_KEY, LEGACY_SPOTLIGHT_KEY, useAccountPref } from "./homePrefs";
 import type { Item, Taste } from "@/api/types";
 import { isBook, isMusic, isPicture } from "./kind";
 
@@ -12,21 +12,22 @@ import { isBook, isMusic, isPicture } from "./kind";
  * watched. A film abandoned in March is still the first thing the house sees in
  * September.
  *
- * Per device, beside `bigscreen`, `tileSize` and `spoilers`, and for the same
- * reason: the hero is what one person sees on one screen, there is no per-user
- * preference store on the server, and inventing one for a spotlight would be a
- * schema decision made by a radio button.
+ * Per account since settings-3-plan step 3 (ADR 0120): what the spotlight
+ * shows is what a person wants to see, not a fact about the screen. It was per
+ * device while there was no per-user store to put it in; homePrefs.ts carries a
+ * device's older choice over once.
  */
 
-export const HERO_MODE_KEY = "lancast:hero-mode";
-export const HERO_PINNED_KEY = "lancast:hero-pinned";
+// Where a device kept these before they followed the account.
+export const HERO_MODE_KEY = LEGACY_SPOTLIGHT_KEY;
+export const HERO_PINNED_KEY = LEGACY_PINNED_KEY;
 
 export type HeroMode = "continue" | "recent" | "recommended" | "pinned";
 
 export const HERO_MODE_DEFAULT: HeroMode = "continue";
 
 export function useHeroMode(): [HeroMode, (m: HeroMode) => void] {
-  return useDevice<HeroMode>(HERO_MODE_KEY, HERO_MODE_DEFAULT);
+  return useAccountPref<HeroMode>("spotlight", HERO_MODE_KEY, HERO_MODE_DEFAULT);
 }
 
 /**
@@ -37,7 +38,7 @@ export function useHeroMode(): [HeroMode, (m: HeroMode) => void] {
  * the pinned item has since been removed from the library.
  */
 export function usePinnedHero(): [number, (id: number) => void] {
-  return useDevice<number>(HERO_PINNED_KEY, 0);
+  return useAccountPref<number>("spotlight_item", HERO_PINNED_KEY, 0);
 }
 
 /*

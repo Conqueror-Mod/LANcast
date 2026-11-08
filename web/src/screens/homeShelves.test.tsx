@@ -55,6 +55,8 @@ let toRate: unknown[] = [];
 let watchlist: unknown[] = [];
 /** What the comics window of New this week answers with. */
 let newComics: unknown[] = [];
+/** The built-in shelves the account turned off (/api/profile/home). */
+let hiddenShelves: string[] = [];
 
 let host: HTMLDivElement;
 let root: Root;
@@ -82,6 +84,12 @@ function mount(libs: unknown[]) {
       if (url.includes("/api/libraries") && !url.includes("/trending")) return json(libs);
       if (url.includes("/api/resume")) return json({ cards: resumeCards, more: false });
       if (url.includes("/api/continue")) return json({ items: continuing });
+      if (url.includes("/api/profile/home")) {
+        return json({
+          account: true, spotlight: null, spotlight_item: null, spoilers: null,
+          hidden_shelves: hiddenShelves,
+        });
+      }
       if (url.includes("/api/profile/ratings/pending")) return json({ items: toRate });
       if (url.includes("/api/watchlist")) return json({ items: watchlist, total: watchlist.length });
       if (url.includes("kind=comic")) return json({ items: newComics, total: newComics.length });
@@ -103,6 +111,7 @@ beforeEach(() => {
   toRate = [];
   watchlist = [];
   newComics = [];
+  hiddenShelves = [];
   host = document.createElement("div");
   document.body.append(host);
   root = createRoot(host);
@@ -351,5 +360,37 @@ describe("the first shelf under the spotlight", () => {
     mount([library(1, "Movies", "movie")]);
     await render();
     expect(headings()).toEqual(["Rate what you've watched", "Watchlist", "Unwatched"]);
+  });
+});
+
+/*
+ * Shelves turned off in Your account › Home (settings-3-plan step 3). A hidden
+ * shelf is not drawn and, where it has a list of its own, not asked for.
+ */
+describe("shelves the account turned off", () => {
+  beforeEach(() => {
+    toRate = [film(20, "Finished Lately")];
+    watchlist = [film(30, "Meant To Watch")];
+  });
+
+  const shelfLabels = () =>
+    [...host.querySelectorAll(".home__shelves .section-label")].map((e) => e.textContent ?? "");
+
+  it("draws only the ones left on, and asks nothing for the rest", async () => {
+    hiddenShelves = ["watchlist", "unwatched:2"];
+    mount([library(1, "Movies", "movie"), library(2, "TV Shows", "show")]);
+    await render();
+    const shown = shelfLabels();
+    expect(shown).toContain("Rate what you've watched");
+    expect(shown).not.toContain("Watchlist");
+    expect(shown.some((l) => /Unwatched in Movies/.test(l))).toBe(true);
+    expect(shown.some((l) => /Unwatched in TV Shows/.test(l))).toBe(false);
+    expect(gets.some((u) => u.includes("/api/watchlist"))).toBe(false);
+  });
+
+  it("draws everything when nothing is turned off", async () => {
+    mount([library(1, "Movies", "movie")]);
+    await render();
+    expect(shelfLabels()).toEqual(expect.arrayContaining(["Rate what you've watched", "Watchlist"]));
   });
 });

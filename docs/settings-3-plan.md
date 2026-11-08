@@ -267,3 +267,25 @@ native player. This session could not drive that window.
 
 **Suggested order:** 1 and 2 before step 3. Both are about reaching settings
 at all, which matters more than where any one of them lives. Each is one PR.
+
+## 9. Step 3 as built
+
+- **Server.** Revision 92 adds three nullable columns to `user`
+  (`home_spotlight`, `home_spotlight_item`, `spoilers`); a null has never been
+  chosen. A hidden built-in shelf is a `home_shelf` row with `builtin` set to
+  its key (`new`, `rate`, `watchlist`, `unwatched:<library id>`), as ADR 0119
+  planned; an Unwatched row names its library, so it goes when the library
+  does. Pinned-shelf reads already skip `builtin` rows, so a hidden shelf
+  never counts against the twelve. `GET`/`PUT /api/profile/home`.
+- **Client.** `lib/homePrefs.ts` holds the query and the save. The spotlight
+  and spoiler hooks keep their names and read the account, with the device's
+  old value standing in until the account answers. `HomePrefsCarryOver`, in
+  the signed-in shell, sends a device value only for a field the account has
+  never set and then forgets the device copy; a failed save keeps it to try
+  again.
+- **Settings.** *Your account › Home* holds the spotlight, spoilers, a switch
+  per built-in shelf and the pinned shelves (up, down, unpin). *This device ›
+  Display & home* is *Display* again.
+- **Home.** A shelf turned off is not drawn, and Watchlist and Rate what
+  you've watched are not fetched. Unwatched shelves keep their library names
+  while two exist, shown or not.
