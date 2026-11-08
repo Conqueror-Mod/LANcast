@@ -132,18 +132,22 @@ describe("the settings shell", () => {
 });
 
 /*
- * This device › Player (settings plan, step 2): the player's preferences,
+ * This device › Video, Music, Theater output, Remote play (settings plan, step 2; split in Settings 3.0 step 2): the player's preferences,
  * settable before anything plays, writing the same store the player's panel
  * reads.
  */
-describe("the Player pane", () => {
-  it("is listed under This device and changes the player's quality", () => {
+describe("the player's panes", () => {
+  /*
+   * Settings 3.0 step 2 split Player into four. The old link must still land
+   * somewhere sensible: Video, where its first and most-used row went.
+   */
+  it("sends an old Player link to Video, which changes the player's quality", () => {
     render("/settings?pane=player");
-    expect(activeItem()).toBe("Player");
+    expect(activeItem()).toBe("Video");
     const quality = [...host.querySelectorAll<HTMLLabelElement>("label.set-row")]
       .find((l) => l.textContent?.includes("Quality on this device"))
       ?.querySelector("select");
-    expect(quality, "no quality control on the Player pane").toBeTruthy();
+    expect(quality, "no quality control on the Video pane").toBeTruthy();
     const set = Object.getOwnPropertyDescriptor(window.HTMLSelectElement.prototype, "value")!.set!;
     act(() => {
       set.call(quality, "720p4");
@@ -151,6 +155,29 @@ describe("the Player pane", () => {
     });
     expect(getPrefs().quality).toBe("720p4");
     act(() => resetPrefs());
+  });
+
+  it("lists Video, Music and Remote play in a browser, and no Player", () => {
+    render("/settings?pane=video");
+    const labels = navItems().map((b) => b.textContent);
+    expect(labels).toEqual(expect.arrayContaining(["Video", "Music & Now Playing", "Remote play"]));
+    expect(labels).not.toContain("Player");
+  });
+
+  it("keeps music and remote play on their own panes", () => {
+    render("/settings?pane=music");
+    expect(host.textContent).toContain("Crossfade between albums");
+    expect(host.textContent).not.toContain("Quality on this device");
+    click("Remote play");
+    expect(host.textContent).toContain("Let my other devices play here");
+    expect(host.textContent).not.toContain("Crossfade between albums");
+  });
+
+  // A browser has no player that can drive the display (DESKTOP_ONLY).
+  it("does not offer Theater output in a browser", () => {
+    render("/settings?pane=theater");
+    expect(navItems().map((b) => b.textContent)).not.toContain("Theater output");
+    expect(activeItem()).not.toBe("Theater output");
   });
 
   it("puts subtitle style under Languages & subtitles, with a preview", () => {
@@ -466,7 +493,7 @@ describe("searching settings", () => {
     act(() => {
       box.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
     });
-    expect(activeItem()).toBe("Player");
+    expect(activeItem()).toBe("Video");
     const marked = host.querySelector(".is-found");
     expect(marked?.textContent).toContain("Dialogue boost");
     expect(box.value).toBe("");

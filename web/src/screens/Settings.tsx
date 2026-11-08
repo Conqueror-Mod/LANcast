@@ -54,11 +54,13 @@ const MOVED: Record<string, string> = {
   updates: "general",
   playback: "transcoding",
   account: "profile",
+  // Settings 3.0 step 2: Player became four panes; films lead.
+  player: "video",
 };
 
 // Panes that only mean anything inside the desktop window. Offering either in a
 // browser tab would give a heading that leads to an empty column.
-const DESKTOP_ONLY = new Set(["app", "games"]);
+const DESKTOP_ONLY = new Set(["app", "games", "theater"]);
 
 // DesktopSettings renders nothing in a browser tab — there is no tray to reduce
 // to and no close button LANcast owns. Offering the category anyway would give a

@@ -1,5 +1,5 @@
 /*
- * This device › Player › Theater output (docs/theater-output-plan.md). Shown
+ * This device › Theater output (docs/theater-output-plan.md). Shown
  * only where the window's own player says it can match the display: a browser
  * has no such player, and an older client would refuse the setting.
  */
@@ -7,7 +7,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { PlayerSettings } from "./PlayerSettings";
+import { TheaterOutput } from "./PlayerSettings";
 import { resetNativePlaybackAvailability } from "@/playback/mpvBackend";
 import { getPrefs, resetPrefs } from "@/playback/prefs";
 
@@ -40,12 +40,12 @@ afterEach(() => {
   resetPrefs();
 });
 
-async function render() {
+async function render(explain = false) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   await act(async () => {
     root.render(
       <QueryClientProvider client={qc}>
-        <PlayerSettings />
+        <TheaterOutput explain={explain} />
       </QueryClientProvider>,
     );
   });
@@ -140,5 +140,25 @@ describe("Theater output › HDR", () => {
     expect(host.textContent).toContain("Use HDR");
     await act(async () => hdrBox()!.click());
     expect(getPrefs().hdrOut).toBe(true);
+  });
+});
+
+/*
+ * As its own pane (Settings 3.0 step 2) it explains an empty column rather than
+ * opening on nothing, and only once the player has answered.
+ */
+describe("Theater output as a pane", () => {
+  it("says why there is nothing to set on a player that can do neither", async () => {
+    window.lancastMpvFeatures = vi.fn(async () => ["audiofx"]);
+    await render(true);
+    expect(host.textContent).toContain("cannot change the display");
+    expect(matchBox()).toBeUndefined();
+  });
+
+  it("says nothing of the kind on a player that can", async () => {
+    window.lancastMpvFeatures = vi.fn(async () => ["refresh"]);
+    await render(true);
+    expect(host.textContent).not.toContain("cannot change the display");
+    expect(matchBox()).toBeDefined();
   });
 });

@@ -1,6 +1,6 @@
 import type { ComponentType } from "react";
 import { ScheduledTasks } from "@/components/ScheduledTasks";
-import { PlayerSettings } from "@/components/PlayerSettings";
+import { MusicSettings, RemotePlaySettings, TheaterOutput, VideoSettings } from "@/components/PlayerSettings";
 import { AboutSettings } from "@/components/AboutSettings";
 import { KeyBindings } from "@/components/KeyBindings";
 import { PeerSettings } from "@/components/PeerSettings";
@@ -68,10 +68,19 @@ export const PANE_VIEWS: Record<string, ComponentType> = {
   security: SecuritySection,
   languages: LanguagesPane,
   privacy: PrivacySection,
-  player: PlayerSettings,
+  video: VideoSettings,
+  music: MusicSettings,
+  theater: TheaterPane,
+  remoteplay: RemotePlaySettings,
   display: DisplayPane,
   keyboard: KeyBindings,
   app: AppPane,
   games: GamesSettings,
   about: AboutSettings,
 };
+
+// The pane says why it is empty on a desktop player that cannot change the
+// display; as a section anywhere else it would just not be drawn.
+function TheaterPane() {
+  return <TheaterOutput explain />;
+}

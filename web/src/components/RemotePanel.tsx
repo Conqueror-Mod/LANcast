@@ -81,8 +81,8 @@ export function RemotePanel({
           <p className="remote__hint">
             The LANcast app on a PC offers itself while it is open. On a phone or in a browser,
             turn on <em>Let my other devices play here</em> in{" "}
-            <Link to="/settings?pane=player" onClick={onClose}>
-              Settings › Player
+            <Link to="/settings?pane=remoteplay" onClick={onClose}>
+              Settings › Remote play
             </Link>
             .
           </p>

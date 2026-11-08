@@ -95,7 +95,16 @@ export const ACCOUNT_PANES: Pane[] = [
 ];
 
 export const DEVICE_PANES: Pane[] = [
-  { id: "player", label: "Player" },
+  /*
+   * The player's preferences, split by subject in Settings 3.0 step 2: they
+   * were one pane holding video, music, the theater display and remote play.
+   */
+  { id: "video", label: "Video" },
+  { id: "music", label: "Music & Now Playing" },
+  // Desktop only (DESKTOP_ONLY): a browser has no player that can drive the display.
+  { id: "theater", label: "Theater output" },
+  // Not "remote", which is Remote access: this is your devices playing here.
+  { id: "remoteplay", label: "Remote play" },
   { id: "display", label: "Display & home" },
   { id: "keyboard", label: "Keyboard" },
   { id: "app", label: "This app" },
@@ -213,26 +222,27 @@ export const SETTINGS_INDEX: SettingEntry[] = [
   { pane: "privacy", label: "Let this server's webhooks report what I watch", terms: "webhook consent" },
 
   // This device
-  { pane: "player", label: "Quality on this device", terms: "bitrate resolution" },
-  { pane: "player", label: "Dialogue boost", terms: "speech voice audio" },
-  { pane: "player", label: "Night mode", terms: "compressor quiet loud audio" },
-  { pane: "player", label: "Play the next episode or track automatically", terms: "autoplay up next" },
-  { pane: "player", label: "Skip intros automatically", terms: "skip intro" },
-  { pane: "player", label: "Let my other devices play here", terms: "cast remote play on another device phone tv" },
-  { pane: "player", label: "This device's name", terms: "cast remote play on rename" },
-  { pane: "player", label: "Play the pre-roll before films", terms: "trailer pre-roll" },
-  { pane: "player", label: "Equaliser", terms: "eq equalizer bass treble" },
-  { pane: "player", label: "Crossfade between albums", terms: "gapless fade music" },
-  { pane: "player", label: "Even out loudness", terms: "replaygain volume normalise normalize" },
-  { pane: "player", label: "Now Playing shows", terms: "visualizer cover art music" },
-  { pane: "player", label: "Calm visualizers: half the motion", terms: "reduce motion milkdrop" },
+  { pane: "video", label: "Quality on this device", terms: "bitrate resolution" },
+  { pane: "video", label: "Dialogue boost", terms: "speech voice audio" },
+  { pane: "video", label: "Night mode", terms: "compressor quiet loud audio" },
+  { pane: "video", label: "Play the next episode or track automatically", terms: "autoplay up next" },
+  { pane: "video", label: "Skip intros automatically", terms: "skip intro" },
+  { pane: "remoteplay", label: "Let my other devices play here", terms: "cast remote play on another device phone tv" },
+  { pane: "remoteplay", label: "This device's name", terms: "cast remote play on rename" },
+  { pane: "video", label: "Play the pre-roll before films", terms: "trailer pre-roll" },
+  { pane: "music", label: "Night mode", terms: "compressor quiet loud music" },
+  { pane: "music", label: "Equaliser", terms: "eq equalizer bass treble" },
+  { pane: "music", label: "Crossfade between albums", terms: "gapless fade music" },
+  { pane: "music", label: "Even out loudness", terms: "replaygain volume normalise normalize" },
+  { pane: "music", label: "Now Playing shows", terms: "visualizer cover art music" },
+  { pane: "music", label: "Calm visualizers: half the motion", terms: "reduce motion milkdrop" },
   {
-    pane: "player",
+    pane: "music",
     label: "Photosensitivity warning",
     terms: "seizure epilepsy epileptic photosensitive flashing strobe visualizer",
   },
-  { pane: "player", label: "Theater output", terms: "tv display hdr monitor" },
-  { pane: "player", label: "Match the display to the film's frame rate", terms: "refresh rate 23.976 hz judder" },
+  { pane: "theater", label: "Theater output", terms: "tv display hdr monitor" },
+  { pane: "theater", label: "Match the display to the film's frame rate", terms: "refresh rate 23.976 hz judder" },
   { pane: "display", label: "Bigscreen mode", terms: "tv ten foot scale" },
   { pane: "display", label: "Improved live TV playback", terms: "hls segmented" },
   { pane: "display", label: "Spoilers on a season page", terms: "hide synopsis still" },

@@ -1,12 +1,12 @@
 /*
- * The Skip intros switch in This device › Player (ADR 0083). It is per
+ * The Skip intros switch in This device › Video (ADR 0083). It is per
  * account, so it reads and writes the server rather than this device's prefs.
  */
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { PlayerSettings } from "./PlayerSettings";
+import { VideoSettings } from "./PlayerSettings";
 
 declare global {
   // eslint-disable-next-line no-var
@@ -53,7 +53,7 @@ async function render() {
   await act(async () => {
     root.render(
       <QueryClientProvider client={qc}>
-        <PlayerSettings />
+        <VideoSettings />
       </QueryClientProvider>,
     );
   });
