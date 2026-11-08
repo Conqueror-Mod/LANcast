@@ -49,6 +49,12 @@ let continuing: unknown[] = [];
 let resumeCards: unknown[] = [];
 /** The signed-in account's role. */
 let role = "admin";
+/** What /api/profile/ratings/pending answers with. */
+let toRate: unknown[] = [];
+/** What /api/watchlist answers with. */
+let watchlist: unknown[] = [];
+/** What the comics window of New this week answers with. */
+let newComics: unknown[] = [];
 
 let host: HTMLDivElement;
 let root: Root;
@@ -76,6 +82,9 @@ function mount(libs: unknown[]) {
       if (url.includes("/api/libraries") && !url.includes("/trending")) return json(libs);
       if (url.includes("/api/resume")) return json({ cards: resumeCards, more: false });
       if (url.includes("/api/continue")) return json({ items: continuing });
+      if (url.includes("/api/profile/ratings/pending")) return json({ items: toRate });
+      if (url.includes("/api/watchlist")) return json({ items: watchlist, total: watchlist.length });
+      if (url.includes("kind=comic")) return json({ items: newComics, total: newComics.length });
       if (url.includes("/api/items") && url.includes("sort=random")) {
         return json({
           items: [film(1, "Never Seen")],
@@ -91,6 +100,9 @@ beforeEach(() => {
   continuing = [];
   resumeCards = [];
   role = "admin";
+  toRate = [];
+  watchlist = [];
+  newComics = [];
   host = document.createElement("div");
   document.body.append(host);
   root = createRoot(host);
@@ -292,5 +304,52 @@ describe("the first screen with nothing to resume", () => {
     const welcome = host.querySelector(".home__welcome");
     expect(welcome?.textContent).toContain("Nothing here yet");
     expect(welcome?.querySelector("a")).toBeNull();
+  });
+});
+
+/*
+ * The order beneath the spotlight. New this week leads when the week brought
+ * anything; a quiet week draws no section, so Rate what you've watched leads
+ * instead. Nothing else changes place.
+ */
+describe("the first shelf under the spotlight", () => {
+  const comic = (id: number, title: string, addedAt: number) => ({
+    id,
+    title,
+    kind: "comic",
+    library_id: 2,
+    artwork: {},
+    added_at: addedAt,
+  });
+
+  /** Shelf headings in page order, New this week's section heading included. */
+  const headings = () =>
+    [...host.querySelectorAll(".home__shelves .new-week__title, .home__shelves .section-label")]
+      .filter((e) => !e.closest(".new-week") || e.classList.contains("new-week__title"))
+      .map((e) => e.textContent ?? "");
+
+  beforeEach(() => {
+    toRate = [film(20, "Finished Lately")];
+    watchlist = [film(30, "Meant To Watch")];
+  });
+
+  it("is New this week when the week brought something", async () => {
+    newComics = [comic(40, "Fresh Issue", Math.floor(Date.now() / 1000) - 3600)];
+    mount([library(1, "Movies", "movie")]);
+    await render();
+    expect(headings()).toEqual([
+      "New this week",
+      "Rate what you've watched",
+      "Watchlist",
+      "Unwatched",
+    ]);
+  });
+
+  it("is Rate what you've watched when the week was quiet", async () => {
+    // Added a month ago: inside the comics window, outside the week.
+    newComics = [comic(40, "Old Issue", Math.floor(Date.now() / 1000) - 30 * 86400)];
+    mount([library(1, "Movies", "movie")]);
+    await render();
+    expect(headings()).toEqual(["Rate what you've watched", "Watchlist", "Unwatched"]);
   });
 });
