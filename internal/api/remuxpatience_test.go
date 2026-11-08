@@ -4,6 +4,7 @@ import (
 	"testing"
 	"time"
 
+	"lancast/internal/peer"
 	"lancast/internal/probe"
 )
 
@@ -79,5 +80,25 @@ func TestTheFilmThatFrozeWouldNowBeWaitedFor(t *testing.T) {
 	p := remuxPatienceFor(probe.Decision{VideoAction: "copy", AudioAction: "encode"}, 6300)
 	if p.Cap <= 60*time.Second {
 		t.Fatalf("cap = %v; sixty seconds is what served it growing", p.Cap)
+	}
+}
+
+/*
+ * A friend's server waits for a playlist at least as long as this one holds it.
+ *
+ * The two limits live in different packages and nothing else ties them. When
+ * the peer client gave up at thirty seconds and this side held a playlist for
+ * up to five minutes, every request from a friend was cut off and begun again,
+ * and a film watched together took eight minutes to start (2026-11-07).
+ */
+func TestAFriendsServerOutwaitsThePlaylist(t *testing.T) {
+	if peer.StreamHeaderWait <= remuxCapCeiling {
+		t.Fatalf("peer.StreamHeaderWait = %v, but a playlist can be held for %v; a friend's request would be cut off",
+			peer.StreamHeaderWait, remuxCapCeiling)
+	}
+	// The longest film this side will wait for, so the bound is about real
+	// work and not only the constant.
+	if p := remuxPatienceFor(probe.Decision{AudioAction: "encode"}, 4*3600); p.Cap >= peer.StreamHeaderWait {
+		t.Fatalf("a four-hour film is waited for %v, at or past the friend's %v", p.Cap, peer.StreamHeaderWait)
 	}
 }
