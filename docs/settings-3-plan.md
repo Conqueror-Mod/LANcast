@@ -226,3 +226,44 @@ the natural next release, because it finishes what Homepage 2.0 started.
    needs its own ADR saying why the metadata language may now differ from
    the interface's.
 6. **Chris's list:** nothing for now. It can be added to this section later.
+
+## 8. Step 0: what Settings looks like on screen (2026-11-08)
+
+Walked against the live server, with this plan's step 2 build (#1045) served
+by the dev client, signed in as an administrator. All 32 panes were opened at
+each size; one page script measured them, and screenshots covered the panes
+step 2 created. Read-only: nothing on the server was changed.
+
+**What is fine at all three sizes:**
+- Every pane draws.
+- Nothing spills sideways at 1440, 375 or 1920 wide.
+- No row collapses to zero height.
+- Theater output is absent in a browser, as designed.
+- In Bigscreen, the bottom of the nav can still be reached by scrolling.
+
+**Found:**
+
+1. **On a phone, the nav buries the pane.** At 375 × 812, the nav wraps into a
+   block of 32 links, 467 px tall. The pane starts 624 px down, and the bottom
+   tab bar covers part of what is left. Tapping a pane does not scroll to it,
+   so a person sees about a row and a half of what they chose. This predates
+   Settings 3.0; step 2 adds three links to the block.
+   *Proposed fix:* below the phone breakpoint, show the list first and the
+   pane second, with Back, as phone settings apps do. Client only.
+2. **On a TV, a remote cannot move through Settings.** Neither the nav nor any
+   pane control registers with the focus controller (ADR 0004); 24 other
+   components do. Arrow keys therefore do nothing in Settings, with real key
+   presses or synthetic ones. Only Tab moves focus, and a remote has no Tab.
+   This predates Settings 3.0.
+   *Proposed fix:* register the nav items and the pane's controls as
+   focusables, scoped to the nav and the pane, so left and right move
+   between the two. Client only.
+3. **Two pane headings do not match their nav names.** *Music & Now Playing*
+   opens on a section called "Music", and *Remote play* on "Play on another
+   device". Small; fold into whichever PR next touches those panes.
+
+**Not seen:** Theater output inside the desktop window, which needs the
+native player. This session could not drive that window.
+
+**Suggested order:** 1 and 2 before step 3. Both are about reaching settings
+at all, which matters more than where any one of them lives. Each is one PR.
