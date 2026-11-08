@@ -1,6 +1,6 @@
 # ADR 0027 — Depth in the canonical look
 
-**Status:** accepted
+**Status:** accepted · rule 3 amended by [ADR 0118](0118-the-home-page-is-a-bridge.md)
 **Date:** 2026-08-09
 
 ## Context

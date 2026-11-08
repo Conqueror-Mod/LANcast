@@ -1,6 +1,6 @@
 # ADR 0118 — The home page is a bridge
 
-Date: 2026-11-08 · Status: **proposed** — the decisions below were approved by the owner in conversation on 2026-11-08; this text awaits their review · Related: [ADR 0027](0027-depth-in-the-canonical-look.md) (amends rule 3), [ADR 0003](0003-one-canonical-theme.md), [ADR 0045](0045-live-presence-between-paired-servers.md), [ADR 0051](0051-sensitive-content-is-obscured-until-asked-for.md), [ADR 0057](0057-what-a-forty-thousand-item-library-may-cost.md), [ADR 0071](0071-a-shared-library-is-a-standing-grant.md), [ADR 0116](0116-an-audiobook-is-its-own-library.md)
+Date: 2026-11-08 · Status: **accepted** 2026-11-08 · Related: [ADR 0027](0027-depth-in-the-canonical-look.md) (amends rule 3), [ADR 0003](0003-one-canonical-theme.md), [ADR 0045](0045-live-presence-between-paired-servers.md), [ADR 0051](0051-sensitive-content-is-obscured-until-asked-for.md), [ADR 0057](0057-what-a-forty-thousand-item-library-may-cost.md), [ADR 0071](0071-a-shared-library-is-a-standing-grant.md), [ADR 0116](0116-an-audiobook-is-its-own-library.md)
 
 ## Context
 
