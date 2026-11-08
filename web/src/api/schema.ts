@@ -4320,6 +4320,31 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/artwork/{hash}/tone": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The content-addressed hash from an item's `artwork` block. */
+                hash: string;
+            };
+            cookie?: never;
+        };
+        /**
+         * Which of the field's wisps a picture leans toward
+         * @description For the home spotlight (ADR 0118 §5): the hero raises the wisps a picture leans toward and lowers the others, so no colour enters the page that the field did not already have.
+         *
+         *     Worked out from the cached thumbnail on request, not stored. The bytes behind a hash never change, so neither does the answer, and it is served as immutably as the picture.
+         */
+        get: operations["getArtworkTone"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/coverart": {
         parameters: {
             query?: never;
@@ -8613,6 +8638,16 @@ export interface components {
             number?: number;
             /** @description How many tracks the album holds, when the card is an album. */
             of?: number;
+        };
+        /** @description The four weights share 1 between them, or are all 0 for a picture with no colour to speak of. */
+        ArtworkTone: {
+            violet: number;
+            blue: number;
+            teal: number;
+            /** @description Reds, oranges and yellows: the field's warm wisp. */
+            ember: number;
+            /** @description Mean luminance, 0 to 1. */
+            light: number;
         };
         ComicPlace: {
             /** @description From 0. Never past the last page, even if the archive has since lost some. */
@@ -17716,6 +17751,32 @@ export interface operations {
                 content?: never;
             };
             401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    getArtworkTone: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The content-addressed hash from an item's `artwork` block. */
+                hash: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The tone. */
+            200: {
+                headers: {
+                    /** @description `public, max-age=31536000, immutable`. */
+                    "Cache-Control"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ArtworkTone"];
+                };
+            };
             404: components["responses"]["NotFound"];
         };
     };

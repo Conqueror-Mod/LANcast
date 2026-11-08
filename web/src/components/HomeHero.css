@@ -60,9 +60,40 @@
 .hero__tint {
   position: absolute;
   inset: 0;
+  /*
+   * Four wisps, each as strong as the picture leans toward it (ADR 0118 §5;
+   * lib/heroTone.ts sets the --tone-* weights). Violet and blue keep a floor
+   * so the base stays deep-space; teal and the ember start at nothing and are
+   * only lit by a picture that carries them. Every bound is fixed here.
+   *
+   * Teal and the ember sit in the upper middle, where the art shows. The field
+   * keeps its ember low, but low on the spotlight is under the scrims, and a
+   * wisp placed there measured as no visible change at all.
+   *
+   * The defaults (0.55 violet, 0.45 blue, nothing else) reproduce the tint as
+   * it was before any picture had a say: 0.30 violet and 0.26 blue.
+   */
   background:
-    radial-gradient(ellipse 80% 70% at 12% 8%, rgba(126, 108, 200, 0.3), transparent 62%),
-    radial-gradient(ellipse 70% 60% at 88% 92%, rgba(60, 118, 208, 0.26), transparent 60%);
+    radial-gradient(
+      ellipse 80% 70% at 12% 8%,
+      rgb(126 108 200 / calc(0.1 + var(--tone-violet, 0.55) * 0.36)),
+      transparent 62%
+    ),
+    radial-gradient(
+      ellipse 70% 60% at 88% 92%,
+      rgb(60 118 208 / calc(0.1 + var(--tone-blue, 0.45) * 0.36)),
+      transparent 60%
+    ),
+    radial-gradient(
+      ellipse 60% 55% at 72% 22%,
+      rgb(31 111 128 / calc(var(--tone-teal, 0) * 0.4)),
+      transparent 64%
+    ),
+    radial-gradient(
+      ellipse 70% 65% at 42% 38%,
+      rgb(126 51 70 / calc(var(--tone-ember, 0) * 0.5)),
+      transparent 66%
+    );
 }
 
 /*

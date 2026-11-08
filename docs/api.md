@@ -5516,6 +5516,22 @@ Served with `ETag: "{hash}"` and `Cache-Control: public, max-age=31536000,
 immutable`. Content addressing makes indefinite caching safe — the bytes behind
 a hash cannot change.
 
+### `GET /api/artwork/{hash}/tone`
+
+Which of the field's wisps a picture leans toward, for the home spotlight
+(ADR 0118 §5). The four weights share 1 between them; all four are `0` for a
+picture with no colour to speak of, which means "leave the field as it is".
+`light` is the picture's mean luminance, 0 to 1.
+
+```json
+{ "violet": 0.08, "blue": 0.12, "teal": 0.05, "ember": 0.75, "light": 0.41 }
+```
+
+Worked out from the cached thumbnail on request, not stored. The bytes behind a
+hash never change, so neither does the answer: it is served with
+`Cache-Control: public, max-age=31536000, immutable` like the picture itself.
+`404` for a hash the cache does not hold.
+
 ### `GET` / `PUT /api/settings`
 
 TMDB key, OpenSubtitles key, OMDb key (external ratings, [ADR 0019](adr/0019-external-ratings.md)),

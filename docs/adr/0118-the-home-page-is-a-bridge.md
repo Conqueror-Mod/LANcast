@@ -210,6 +210,46 @@ This settles three of the questions listed below, and changes one decision:
 - **Retro saves carry no screenshot** (`rom_save` holds bytes and hashes), so a
   game card uses the game's box art.
 
+### The Bridge and its panels (2026-11-08)
+
+- **The spotlight keeps its full-bleed backdrop.** On a wide screen the panel
+  column stands over the right edge of the backdrop instead of squeezing the
+  spotlight into a 2fr column. The backdrop, parallax and masthead overlap
+  were each tuned against a bug report, and a column would have broken all
+  three. The spotlight's text leaves the column room (`screens/Bridge.css`).
+- **The TV focus order is geometry, not a declared order.** ADR 0004 moves
+  focus by position and calls a component with its own arrow keys a defect,
+  so the order described in §1 comes from where the panels are. From the
+  spotlight's buttons, Right enters the console at the card level with them.
+- **The menu's Remove entry is "Remove from Continue" for every kind**, on the
+  console and on a title's page, because the shelves it used to name are gone.
+  A comic offers Mark as read and a game only its page: a Remove would report
+  success and leave either card in place.
+- **Ask to join now registers with the focus controller**, so a remote can
+  reach it on the friends panel and on People.
+
+### The spotlight's tone (2026-11-08)
+
+`GET /api/artwork/{hash}/tone` computes the summary from the cached thumbnail
+on request, and nothing stores it. The bytes behind a hash never change, so
+the answer is served as immutably as the picture. That needs no column, no
+backfill, and no work when artwork is replaced. The four wisps are violet,
+blue, teal and ember, weighted by colourfulness so grey pixels count for
+little. Violet and blue keep a floor; teal and ember only appear when a
+picture carries them.
+
+Teal and ember sit in the upper middle of the spotlight, not low as they do
+in the field. The scrims darken the lower part for legibility, and a wisp
+placed there made no visible change. The effect is subtle by design. Its
+strength is a few multipliers in `HomeHero.css`.
+
+### Not built in v0.10.9
+
+- **"New this week"** in place of the three Recently Added shelves. A strict
+  seven-day window empties that space in any quiet week, and calling older
+  items "new this week" would be untrue. The shelves stay as they are until
+  that is decided.
+
 ## Not decided here
 
 - **Launcher games on the console.** That would need the desktop app to report

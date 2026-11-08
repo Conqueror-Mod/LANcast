@@ -1001,6 +1001,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/coverart", s.coverArtStatus)
 	mux.HandleFunc("POST /api/coverart/refresh", s.adminOnly(s.recoverArt))
 	mux.HandleFunc("GET /api/artwork/{hash}", s.serveArtwork)
+	// Which wisps of the field a picture leans toward (ADR 0118 §5).
+	mux.HandleFunc("GET /api/artwork/{hash}/tone", s.artworkTone)
 
 	mux.HandleFunc("GET /api/settings", s.adminOnly(s.getSettings))
 	mux.HandleFunc("GET /api/settings/public-certificate", s.adminOnly(s.getPublicCert))

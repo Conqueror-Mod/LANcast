@@ -8,6 +8,9 @@ import { isMusic, isSquareArt } from "@/lib/kind";
 import { rating, runtime } from "@/lib/format";
 import type { Item } from "@/api/types";
 import type { HeroReason } from "@/lib/heroMode";
+import { useArtworkTone } from "@/api/hooks";
+import { useObscured } from "@/lib/sensitiveAck";
+import { toneStyle } from "@/lib/heroTone";
 import { PointMenu, type MenuAction, type MenuPoint } from "./Menu";
 import "./HomeHero.css";
 
@@ -218,6 +221,11 @@ export function HomeHero({
   const parallaxRef = useParallax(!reduced);
 
   const fanart = artworkURL(item.artwork?.fanart, "fanart");
+  // A covered title does not steer the field (ADR 0118 §5): asking for its
+  // tone would let its picture show through as a colour.
+  const obscured = useObscured(item);
+  const { data: tone } = useArtworkTone(obscured ? undefined : item.artwork?.fanart);
+  const tint = toneStyle(tone);
   const poster = artworkURL(item.artwork?.poster, "poster");
   const pct = progressPct(item);
   const score = rating(item.rating);
@@ -256,7 +264,7 @@ export function HomeHero({
         {/* Tint and vignette belong to the art — they sit above it and below
             the scrims, so the backdrop is part of the field before anything
             starts darkening it for legibility. */}
-        <div className="hero__tint" />
+        <div className="hero__tint" style={tint} />
         <div className="hero__vignette" />
         {/* Three scrims, not one. Upward carries the legibility requirement;
             leftward keeps the type column dark under a bright image; downward

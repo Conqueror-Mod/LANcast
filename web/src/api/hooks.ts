@@ -32,6 +32,7 @@ import type {
   PhotoPlaces,
   RetroDatabase,
   ResumeConsole,
+  ArtworkTone,
   WebCores,
 } from "./types";
 import { isContainer } from "@/lib/kind";
@@ -1442,6 +1443,22 @@ export function useContinueWatching(shelf: ContinueShelf, limit = 20) {
         (r) => r.items,
       ),
     staleTime: 10_000,
+  });
+}
+
+/*
+ * Which wisps of the field a picture leans toward (ADR 0118 §5).
+ *
+ * staleTime Infinity: the answer is a function of the bytes behind the hash,
+ * which never change, and the server says so with an immutable cache header.
+ */
+export function useArtworkTone(hash: string | undefined) {
+  return useQuery({
+    queryKey: ["artwork-tone", hash],
+    queryFn: ({ signal }) => apiGet<ArtworkTone>(`/api/artwork/${hash}/tone`, signal),
+    enabled: !!hash,
+    staleTime: Infinity,
+    retry: false,
   });
 }
 
