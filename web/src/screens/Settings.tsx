@@ -61,6 +61,9 @@ const MOVED: Record<string, string> = {
 
 // Panes that only mean anything inside the desktop window. Offering either in a
 // browser tab would give a heading that leads to an empty column.
+// Where the list and the pane stop sitting side by side. Matches Settings.css.
+const NARROW = "(max-width: 860px)";
+
 const DESKTOP_ONLY = new Set(["app", "games", "theater"]);
 
 // DesktopSettings renders nothing in a browser tab — there is no tray to reduce
@@ -167,14 +170,42 @@ export function Settings() {
   const adminOnly = [...STATUS_PANES, ...SERVER_PANES].some((x) => x.id === pane);
   const View = !adminOnly || isAdmin ? PANE_VIEWS[pane] : undefined;
 
+  /*
+   * On a phone, Settings is a list first and a pane second (settings-3-plan
+   * §8): with every category above the pane, the nav filled most of the screen
+   * and a chosen pane showed about a row and a half. `listing` is true when no
+   * pane is named in the URL. Only the narrow layout acts on it (Settings.css);
+   * a wide screen still opens the first pane, as it always has.
+   *
+   * Going from the list into a pane adds a history entry, so a phone's own back
+   * gesture returns to the list. Moving between panes replaces it, as before.
+   */
+  const listing = !params.get("pane");
   const go = (id: string) =>
     setParams(
       (prev) => {
         prev.set("pane", id);
         return prev;
       },
+      { replace: !listing },
+    );
+  const backToList = () =>
+    setParams(
+      (prev) => {
+        prev.delete("pane");
+        return prev;
+      },
       { replace: true },
     );
+  const paneLabel = all.find((x) => x.id === pane)?.label ?? "";
+
+  // A pane chosen on a phone starts at its top, not wherever the list was.
+  useEffect(() => {
+    if (listing) return;
+    if (typeof window.matchMedia === "function" && window.matchMedia(NARROW).matches) {
+      window.scrollTo(0, 0);
+    }
+  }, [pane, listing]);
 
   const [query, setQuery] = useState("");
   const [found, setFound] = useState<{ label: string; at: number } | null>(null);
@@ -218,7 +249,7 @@ export function Settings() {
      * every pane's controls (ADR 0004). None of them registered before, and
      * on a TV Settings could not be moved through at all (settings-3-plan §8).
      */
-    <div className="settings" ref={zone}>
+    <div className="settings" ref={zone} data-showing={listing ? "list" : "pane"}>
       <h1 className="settings__title">Settings</h1>
 
       <div className="settings__layout">
@@ -299,6 +330,13 @@ export function Settings() {
         </nav>
 
         <div className="settings__pane" ref={paneRef} data-focus-column>
+          {/* Drawn only in the narrow layout, where the list is not beside the pane. */}
+          <div className="settings__panehead">
+            <button type="button" className="settings__back" onClick={backToList}>
+              &lsaquo; Settings
+            </button>
+            <h2 className="settings__panetitle">{paneLabel}</h2>
+          </div>
           {View && <View />}
         </div>
       </div>

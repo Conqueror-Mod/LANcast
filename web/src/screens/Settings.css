@@ -618,8 +618,22 @@
   margin-top: 0;
 }
 
-/* Narrow: the categories lie down above the pane rather than squeezing it into
-   a column too thin for a library row. */
+/* The pane's own heading and its way back to the list: only the narrow layout,
+   where the list is not beside the pane, draws them. */
+.settings__panehead {
+  display: none;
+}
+
+/*
+ * Narrow: a list first, then a pane (settings-3-plan §8).
+ *
+ * The categories used to lie down above the pane, wrapped into a block of
+ * thirty-odd links that took most of a phone's screen, so a chosen pane began
+ * near the bottom and showed about a row and a half. Now the page shows one
+ * or the other, as phone settings apps do: data-showing says which (no pane in
+ * the URL is the list). The list is a column of full-width rows a thumb can
+ * hit, and a pane carries its own name and a way back.
+ */
 @media (max-width: 860px) {
   .settings__layout {
     flex-direction: column;
@@ -628,31 +642,69 @@
   .settings__nav {
     position: static;
     width: 100%;
-    flex-direction: row;
-    flex-wrap: wrap;
-    gap: 14px;
-  }
-  .settings__navgroup {
-    flex-direction: row;
-    flex-wrap: wrap;
-    align-items: center;
   }
   .settings__navitem {
-    border-left: none;
-    border-bottom: 2px solid transparent;
+    font-size: 15px;
+    min-height: 44px;
+    padding: 10px 12px;
+    flex-shrink: 0;
   }
-  .settings__navitem.is-active {
-    border-left-color: transparent;
-    border-bottom-color: var(--gold);
+  .settings__navitem::after {
+    content: "›";
+    float: right;
+    color: var(--text-faint);
   }
-  /* Results stay a column: a wrapped row of long setting names is unreadable. */
-  .settings__results {
-    flex-direction: column;
-    align-items: stretch;
-    width: 100%;
+  .settings__result::after {
+    content: none;
   }
   .settings__result {
-    border-bottom: none;
+    border-left: none;
+  }
+
+  .settings[data-showing="list"] .settings__pane {
+    display: none;
+  }
+  /* The list is a place to choose, with nothing open yet: no row is "where you
+     are", so none wears the gold edge (docs/design.md). */
+  .settings[data-showing="list"] .settings__navitem.is-active {
+    color: var(--text-secondary);
+    border-left-color: transparent;
+    background: none;
+  }
+  .settings[data-showing="pane"] .settings__nav {
+    display: none;
+  }
+  /* In a pane, its own name heads the page; "Settings" moves into the back button. */
+  .settings[data-showing="pane"] .settings__title {
+    display: none;
+  }
+  .settings__panehead {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 6px;
+    margin-bottom: 18px;
+  }
+  .settings__back {
+    font: inherit;
+    font-size: 14px;
+    color: var(--text-secondary);
+    background: none;
+    border: none;
+    min-height: 44px;
+    padding: 0 4px 0 0;
+    cursor: pointer;
+  }
+  .settings__back:focus-visible {
+    outline: none;
+    color: var(--text-primary);
+    box-shadow: 0 0 0 3px var(--gold-ring);
+    border-radius: 6px;
+  }
+  .settings__panetitle {
+    font-size: 24px;
+    font-weight: 600;
+    margin: 0;
   }
 }
 

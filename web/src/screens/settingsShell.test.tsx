@@ -505,3 +505,38 @@ describe("searching settings", () => {
     expect(results()).toEqual([]);
   });
 });
+
+/*
+ * On a phone, a list first and a pane second (settings-3-plan §8). jsdom draws
+ * no layout, so what is tested is the state the narrow CSS acts on and the way
+ * back; that the list really hides the pane on a 375px screen was looked at in
+ * the browser.
+ */
+describe("the list and the pane, for a phone", () => {
+  const showing = () => host.querySelector<HTMLElement>(".settings")?.dataset.showing;
+
+  it("is the list when no pane is named, and a pane once one is chosen", () => {
+    render("/settings");
+    expect(showing()).toBe("list");
+    click("Video");
+    expect(showing()).toBe("pane");
+    expect(host.querySelector(".settings__panetitle")?.textContent).toBe("Video");
+  });
+
+  it("goes back to the list from a pane's own back link", () => {
+    render("/settings?pane=music");
+    expect(showing()).toBe("pane");
+    const back = [...host.querySelectorAll<HTMLButtonElement>(".settings__back")][0];
+    expect(back?.textContent).toContain("Settings");
+    act(() => {
+      back.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    expect(showing()).toBe("list");
+  });
+
+  it("still opens a pane straight from a link", () => {
+    render("/settings?pane=remoteplay");
+    expect(showing()).toBe("pane");
+    expect(host.textContent).toContain("Let my other devices play here");
+  });
+});
