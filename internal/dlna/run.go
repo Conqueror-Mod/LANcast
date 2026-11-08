@@ -66,6 +66,7 @@ func Announce(ctx context.Context, d Device, port int, preferredIP func() string
 	defer tick.Stop()
 
 	buf := make([]byte, 4096)
+	quiet := newSeenOnce(256)
 	for {
 		select {
 		case <-ctx.Done():
@@ -90,15 +91,31 @@ func Announce(ctx context.Context, d Device, port int, preferredIP func() string
 		if !ok {
 			continue
 		}
-		// At debug, so "is the TV's search reaching us at all" is answered by
-		// the log rather than by guessing at the firewall.
-		log.Debug("dlna: search", "from", from.String(), "target", s.Target)
 		host := localIPFor(from)
+		var answers []string
+		var dd Device
+		if host != "" {
+			dd = at(host)
+			answers = dd.Answers(s)
+		}
+		/*
+		 * At debug, so "is the TV's search reaching us at all" is answered by
+		 * the log rather than by guessing at the firewall.
+		 *
+		 * A search we answer is always logged. One we do not is logged the
+		 * first time each sender asks for each target, and then left out:
+		 * on Aither (2026-11-08) a router asking every second for an internet
+		 * gateway, which LANcast is not, was a quarter of lancastd.log, and
+		 * pushed the evidence for two open reports out of it.
+		 */
+		if len(answers) > 0 || quiet.first(from.IP.String()+" "+s.Target) {
+			log.Debug("dlna: search", "from", from.String(), "target", s.Target,
+				"answered", len(answers) > 0)
+		}
 		if host == "" {
 			continue
 		}
-		dd := at(host)
-		for _, target := range dd.Answers(s) {
+		for _, target := range answers {
 			if _, err := send.WriteToUDP(dd.SearchResponse(target), from); err != nil {
 				log.Debug("dlna: reply", "to", from, "error", err)
 			}
@@ -119,4 +136,32 @@ func localIPFor(remote *net.UDPAddr) string {
 		return a.IP.String()
 	}
 	return ""
+}
+
+/*
+ * seenOnce remembers which unanswered searches have been logged, so each is
+ * logged once rather than every second. Bounded: past its size it forgets
+ * everything and starts again, which logs a repeat now and then rather than
+ * growing without end on a busy network.
+ */
+type seenOnce struct {
+	max  int
+	seen map[string]bool
+}
+
+func newSeenOnce(max int) *seenOnce {
+	return &seenOnce{max: max, seen: map[string]bool{}}
+}
+
+// first reports whether key has not been seen since the last reset, and
+// marks it seen.
+func (q *seenOnce) first(key string) bool {
+	if q.seen[key] {
+		return false
+	}
+	if len(q.seen) >= q.max {
+		q.seen = map[string]bool{}
+	}
+	q.seen[key] = true
+	return true
 }
