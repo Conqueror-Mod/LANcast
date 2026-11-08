@@ -51,8 +51,8 @@ const RATABLE_LIBRARIES = new Set(["movie", "show", "retro"]);
 /*
  * Continue Listening for one audiobooks library (ADR 0116, answer 7): the
  * library's own shelf, so a half-heard book neither pushes songs off music's
- * shelf nor sits among films. The same /api/continue every shelf reads,
- * narrowed to this library's books.
+ * shelf nor sits among films. /api/continue's books shelf, narrowed to this
+ * library's books.
  */
 function BookShelf({
   libraryID,
@@ -61,7 +61,8 @@ function BookShelf({
   libraryID: number;
   actions: (item: Item) => MenuAction[];
 }) {
-  const { data } = useContinueWatching(50);
+  // Books only, so songs and films cannot fill the list ahead of them.
+  const { data } = useContinueWatching("books", 50);
   const books = (data ?? []).filter((i) => i.kind === "book" && i.library_id === libraryID);
   return <Shelf title="Continue Listening" items={books} itemActions={actions} />;
 }

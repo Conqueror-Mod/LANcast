@@ -2,6 +2,7 @@ import { QuickRate } from "@/components/QuickRate";
 import {
   useLibraries,
   useContinueWatching,
+  HOME_WATCHING_LIMIT,
   useMemories,
   useRecentlyAddedVideo,
   useRecentlyAddedMusic,
@@ -90,7 +91,14 @@ function UnwatchedShelf({
 // grid — the hubs are a convenience, never a gate.
 export function Home() {
   const { data: libraries } = useLibraries();
-  const { data: continueWatching } = useContinueWatching();
+  /*
+   * A list per shelf, for the reason Recently Added has two below: one mixed
+   * list let half-played songs take the films' places. Watching feeds both
+   * Continue Watching and Next up, hence the deeper limit; the spotlight asks
+   * for the same key, so it is one request.
+   */
+  const { data: continueWatching } = useContinueWatching("watching", HOME_WATCHING_LIMIT);
+  const { data: continueListening } = useContinueWatching("music");
   // Deeper than the row can show, because the one list is split into two. On a
   // library where a scan just added 200 tracks, the top 20 by date are all
   // music and "Recently Added" would be empty while New Music overflowed.
@@ -262,7 +270,7 @@ export function Home() {
     (i) => !isMusic(i) && i.kind !== "show" && i.kind !== "book",
   );
   const nextUp = resumable.filter((i) => i.kind === "show" && i.next_episode);
-  const continueAudio = resumable.filter(isMusic);
+  const continueAudio = (continueListening ?? []).filter(isMusic);
 
   // Already the right kinds, so only the hero has to be taken out of the video
   // row; the music row cannot contain it.
@@ -327,6 +335,7 @@ export function Home() {
 
   const hasAnything =
     (continueWatching?.length ?? 0) > 0 ||
+    (continueListening?.length ?? 0) > 0 ||
     (recentlyAddedVideo?.length ?? 0) > 0 ||
     (recentlyAddedMusic?.length ?? 0) > 0 ||
     (libraries?.length ?? 0) > 0;

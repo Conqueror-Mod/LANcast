@@ -1744,6 +1744,13 @@ are films.
 The user's in-progress items, most recently played first — the home screen's
 first shelf. `limit` defaults to 20 (max 100).
 
+`shelf` asks for one shelf's own list, with the limit applied to that shelf
+alone: `watching` (films, shows, and collections' next films), `music`
+(artists, albums and tracks) or `books` (audiobooks). Anything else is a 400.
+Omitted, every kind comes back in one list. **Ask per shelf.** In one mixed
+list, a run of half-played songs fills the limit and leaves the films off.
+On a real library, 16 of the newest 20 rows were tracks.
+
 ```json
 { "items": [
   { "id": 87, "title": "Arrival", "kind": "movie", ...,

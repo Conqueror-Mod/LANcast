@@ -11992,6 +11992,8 @@ export interface operations {
             query?: {
                 /** @description Defaults to 20, maximum 100. */
                 limit?: number;
+                /** @description One shelf's own list, with the limit applied to that shelf alone. `watching` is films, shows and collections' next films; `music` is artists, albums and tracks; `books` is audiobooks. Omitted, every kind comes back in one list. Ask per shelf: in one mixed list a run of half-played songs fills the limit and leaves the films off. */
+                shelf?: "watching" | "music" | "books";
             };
             header?: never;
             path?: never;
@@ -12008,6 +12010,7 @@ export interface operations {
                     "application/json": components["schemas"]["ItemList"];
                 };
             };
+            400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
         };
     };

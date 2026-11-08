@@ -22,6 +22,8 @@ import {
   useShowStanding,
   useSetWatchedByID,
   useContinueWatching,
+  HOME_WATCHING_LIMIT,
+  type ContinueShelf,
 } from "@/api/hooks";
 import { resumeSeconds } from "@/playback/resumePoint";
 import { offersShuffle, playAllLabel } from "@/lib/playAll";
@@ -598,7 +600,21 @@ export function Detail() {
   const forgetPlace = useSetWatchedByID();
   const [, recordDownload] = useDownloads();
   const { markAll, marking } = useMarkAll();
-  const { data: onTheShelf } = useContinueWatching();
+  /*
+   * The shelf this item would sit on, at the depth that shelf's own screen asks
+   * for, so the answer is that screen's query rather than a mixed list in which
+   * a film past twenty songs was never "on the shelf" and lost its Remove.
+   */
+  const shelfOf: ContinueShelf =
+    item?.kind === "book"
+      ? "books"
+      : item?.kind === "artist" || item?.kind === "album" || item?.kind === "track"
+        ? "music"
+        : "watching";
+  const { data: onTheShelf } = useContinueWatching(
+    shelfOf,
+    shelfOf === "watching" ? HOME_WATCHING_LIMIT : shelfOf === "books" ? 50 : 20,
+  );
   const { data: standing } = useShowStanding(
     itemID,
     item?.kind === "show" || item?.kind === "season" || item?.kind === "collection",

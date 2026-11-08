@@ -1412,11 +1412,30 @@ export function useReview(libraryID?: number) {
   });
 }
 
-export function useContinueWatching(limit = 20) {
+/*
+ * One shelf's in-progress list, each with a limit of its own.
+ *
+ * Every caller names its shelf. Reading one mixed list and splitting it here
+ * let a run of half-played songs fill the limit: on a real library 16 of the
+ * newest 20 rows were tracks, and Continue Watching showed three films of the
+ * forty it could have. Recently Added met the same fault and was split the same
+ * way. Still keyed under ["continue"], so every write that invalidates that
+ * prefix reaches all three.
+ */
+export type ContinueShelf = "watching" | "music" | "books";
+
+/*
+ * Home's watching list feeds two shelves (Continue Watching and Next up) and the
+ * spotlight, so it is deeper than one row. Home and the spotlight share this
+ * number so they share one query.
+ */
+export const HOME_WATCHING_LIMIT = 40;
+
+export function useContinueWatching(shelf: ContinueShelf, limit = 20) {
   return useQuery({
-    queryKey: ["continue", limit],
+    queryKey: ["continue", shelf, limit],
     queryFn: ({ signal }) =>
-      apiGet<{ items: Item[] }>(`/api/continue?limit=${limit}`, signal).then(
+      apiGet<{ items: Item[] }>(`/api/continue?shelf=${shelf}&limit=${limit}`, signal).then(
         (r) => r.items,
       ),
     staleTime: 10_000,
