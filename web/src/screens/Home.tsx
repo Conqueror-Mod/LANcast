@@ -91,8 +91,9 @@ function UnwatchedShelf({
   );
 }
 
-// Home is the hub: the Bridge (spotlight and panels), then what you meant to
-// watch → what is new this week → something unwatched. Library names in the nav still jump straight to the full
+// Home is the hub: the Bridge (spotlight and panels), then what is new this
+// week → what to rate → what you meant to watch → your pinned views → something
+// unwatched (ADR 0119 §2a). Library names in the nav still jump straight to the full
 // grid — the hubs are a convenience, never a gate.
 export function Home() {
   const { data: libraries } = useLibraries();
@@ -252,19 +253,9 @@ export function Home() {
         </div>
       </div>
       <div className="home__shelves">
-        {/* What you meant to watch, after what you are in the middle of
-            (ADR 0085). Newest first, and empty means no shelf. */}
-        <Shelf title="Watchlist" items={watchlistItems(watchlist)} />
-        {/* What you finished lately and have not rated. Rating one takes it
-            off; an empty list is no shelf. */}
-        <Shelf
-          title="Rate what you've watched"
-          items={toRate?.items ?? []}
-          itemFooter={(item) => <QuickRate item={item} />}
-        />
-        {/* The views you pinned from a library grid, in your order (ADR 0119 §2). */}
-        <PinnedShelves libraries={libraries} />
-        {/* What arrived in the last seven days, and nothing older (ADR 0118). */}
+        {/* What arrived in the last seven days, and nothing older (ADR 0118):
+            first under the spotlight. A quiet week draws nothing here, which
+            is what lets Rate what you've watched lead instead. */}
         <NewThisWeek
           rows={{
             video: recentVideo,
@@ -275,6 +266,18 @@ export function Home() {
             photos: recentPictures,
           }}
         />
+        {/* What you finished lately and have not rated. Rating one takes it
+            off; an empty list is no shelf. */}
+        <Shelf
+          title="Rate what you've watched"
+          items={toRate?.items ?? []}
+          itemFooter={(item) => <QuickRate item={item} />}
+        />
+        {/* What you meant to watch (ADR 0085). Newest first, and empty means
+            no shelf. */}
+        <Shelf title="Watchlist" items={watchlistItems(watchlist)} />
+        {/* The views you pinned from a library grid, in your order (ADR 0119 §2). */}
+        <PinnedShelves libraries={libraries} />
         {unwatchedLibraries.map((lib) => (
           <UnwatchedShelf
             key={lib.id}

@@ -204,8 +204,9 @@ observes. Trakt export filters to films and episodes, as it does now.
 - **1a:** history is a fallback inside `recommended`, not a fifth mode. This
   amends ADR 0118's "offered beside the existing modes".
 - **1b:** no time-of-day picking until there is a year of history.
-- **2a, 2b, 2c:** pinned shelves sit below Rate and above New this week, at
-  most 12 per account. Hiding built-in shelves comes later, in the same table,
+- **2a, 2b, 2c:** pinned shelves sit below Rate, at most 12 per account.
+  (Amended for v0.10.11: New this week moved from beneath them to the first
+  shelf under the spotlight; see *Shelf order* below.) Hiding built-in shelves comes later, in the same table,
   which the first migration prepares for.
 - **3a:** On this day from history is built now and turns itself on as dated
   history accumulates.
@@ -248,7 +249,7 @@ The grid's own query moved into `libraryItemQuery`, so the grid and a pinned
 shelf build the same request from the same parameters rather than two that
 agree today. "Pin to Home" appears beside Clear once a view is filtered or
 re-sorted; the title starts as the filter pills joined. On Home the pinned
-shelves sit below Rate and above New this week, each with a ⋯ menu at the end
+shelves sit below Rate and Watchlist, each with a ⋯ menu at the end
 of its heading: Rename, Move up, Move down, Unpin. A shelf with nothing in it
 today keeps its heading and menu, because a shelf that vanished would take the
 only way to unpin it with it.
@@ -273,6 +274,18 @@ four without, each captioned in its kind's own word: Watched, Listened, Read.
 "A year ago" is still said only when every tile shares the year. No schema
 change. It answers `[]` until 2027-09-30, the first anniversary of real
 history.
+
+### Shelf order (v0.10.11)
+
+Beneath the Bridge the shelves run: **New this week**, **Rate what you've
+watched**, **Watchlist**, the pinned shelves, then Unwatched per film and
+show library. New this week had been under the pinned shelves, partway down,
+where the one section that changes every visit read as an afterthought; it now
+leads. A quiet week draws no section (ADR 0118), so Rate what you've watched
+is first then, with no rule of its own: the order is fixed and an empty shelf
+takes no place in it. Rate stands above Watchlist in both cases, so a week's
+arrivals coming or going never swaps the two beneath it. Client only; no API
+or schema change.
 
 ## Not proposed
 
