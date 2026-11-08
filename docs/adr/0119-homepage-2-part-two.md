@@ -1,6 +1,6 @@
 # ADR 0119 — Homepage 2.0, part two: a spotlight from your history, shelves you pin, and On this day beyond photographs
 
-Date: 2026-11-08 · Status: **proposed** · Related: [ADR 0118](0118-the-home-page-is-a-bridge.md) (its v0.10.10 list), [ADR 0074](0074-a-viewing-is-a-row.md), [ADR 0051](0051-sensitive-content-is-obscured-until-asked-for.md), [ADR 0057](0057-what-a-forty-thousand-item-library-may-cost.md)
+Date: 2026-11-08 · Status: **accepted** 2026-11-08 · Amends: [ADR 0118](0118-the-home-page-is-a-bridge.md) (the history mode is not a fifth mode) · Related: [ADR 0118](0118-the-home-page-is-a-bridge.md) (its v0.10.10 list), [ADR 0074](0074-a-viewing-is-a-row.md), [ADR 0051](0051-sensitive-content-is-obscured-until-asked-for.md), [ADR 0057](0057-what-a-forty-thousand-item-library-may-cost.md)
 
 ## Context
 
@@ -16,9 +16,9 @@ given one line:
 
 One line each was enough to reserve the version and not enough to build from.
 This ADR is the design for each, written overnight from what the code and the
-database already hold. Every point marked **Decide** needs an answer before
-that piece is built. Each one gives a recommendation; none of them is decided
-here.
+database already hold. Every point marked **Decide** was answered on
+2026-11-08, and each answer is the recommendation written beside it. The
+answers are listed together under *Decisions* below.
 
 Three facts about the existing data shape all three designs:
 
@@ -198,6 +198,19 @@ and feeds the Trakt export. Recommendation: **yes, for books and comics**,
 which have a clear "finished" moment. **Not music**, where a finished album is
 a weak signal, or **games**, where completion is not something LANcast
 observes. Trakt export filters to films and episodes, as it does now.
+
+## Decisions (2026-11-08)
+
+- **1a:** history is a fallback inside `recommended`, not a fifth mode. This
+  amends ADR 0118's "offered beside the existing modes".
+- **1b:** no time-of-day picking until there is a year of history.
+- **2a, 2b, 2c:** pinned shelves sit below Rate and above New this week, at
+  most 12 per account. Hiding built-in shelves comes later, in the same table,
+  which the first migration prepares for.
+- **3a:** On this day from history is built now and turns itself on as dated
+  history accumulates.
+- **3b:** finished books and comics are recorded in `viewing`. Music and games
+  are not. The Trakt export stays films and episodes only.
 
 ## Not proposed
 
