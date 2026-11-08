@@ -1797,6 +1797,10 @@ export interface ItemQuery {
    * about the rest.
    */
   faceClusters?: number[];
+  /** Your own tag ids (ADR 0062); an item matches if it carries any of them. */
+  tags?: number[];
+  /** Only items the caller has marked a favourite. */
+  favourite?: boolean;
   /** Rated at least this highly, out of ten. Unrated items are excluded. */
   minRating?: number;
   /** in_progress | unmatched. Single-valued; the two cannot be combined. */
@@ -1833,6 +1837,8 @@ function itemsParams({
   series = [],
   collections = [],
   faceClusters = [],
+  tags = [],
+  favourite = false,
   minRating = 0,
   status,
   excludeKind,
@@ -1867,9 +1873,11 @@ function itemsParams({
   for (const s of series) params.append("series", s);
   for (const c of collections) params.append("collection", String(c));
   for (const c of faceClusters) params.append("face_cluster", String(c));
+  for (const t of tags) params.append("tag", String(t));
   if (minRating > 0) params.set("min_rating", String(minRating));
   if (status) params.set("status", status);
   if (unwatched) params.set("watched", "false");
+  if (favourite) params.set("favourite", "1");
   return params;
 }
 
