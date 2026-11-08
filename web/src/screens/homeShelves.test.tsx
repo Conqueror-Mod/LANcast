@@ -47,6 +47,8 @@ const film = (id: number, title: string, progress?: number) => ({
 let continuing: unknown[] = [];
 /** What /api/resume answers with. */
 let resumeCards: unknown[] = [];
+/** The signed-in account's role. */
+let role = "admin";
 
 let host: HTMLDivElement;
 let root: Root;
@@ -68,7 +70,7 @@ function mount(libs: unknown[]) {
         return json({
           authenticated: true,
           configured: true,
-          user: { id: "u1", name: "dana", role: "admin" },
+          user: { id: "u1", name: "dana", role },
         });
       }
       if (url.includes("/api/libraries") && !url.includes("/trending")) return json(libs);
@@ -88,6 +90,7 @@ function mount(libs: unknown[]) {
 beforeEach(() => {
   continuing = [];
   resumeCards = [];
+  role = "admin";
   host = document.createElement("div");
   document.body.append(host);
   root = createRoot(host);
@@ -255,5 +258,39 @@ describe("a show in the resume console", () => {
     mount([]);
     await render();
     expect(host.querySelector("section.resume")).toBeNull();
+  });
+});
+
+/*
+ * No state of the first screen is an empty frame (ADR 0118 §3).
+ */
+describe("the first screen with nothing to resume", () => {
+  it("lists the libraries in the console, as places to start", async () => {
+    mount([library(1, "Movies", "movie"), library(2, "Music", "music")]);
+    await render();
+    const panel = host.querySelector("section.resume");
+    expect(panel?.textContent).toContain("Your libraries");
+    const links = [...(panel?.querySelectorAll("a") ?? [])].map((a) => a.getAttribute("href"));
+    expect(links).toEqual(["/library/1", "/library/2"]);
+    // And only there: the masthead no longer carries them.
+    expect(host.querySelector(".masthead .masthead__libs")).toBeNull();
+  });
+
+  it("welcomes a new install with the one thing to do", async () => {
+    mount([]);
+    await render();
+    const welcome = host.querySelector(".home__welcome");
+    expect(welcome?.textContent).toContain("Add your first library");
+    expect(welcome?.querySelector("a")?.getAttribute("href")).toBe("/settings?pane=libraries");
+    expect(host.querySelector("section.resume")).toBeNull();
+  });
+
+  it("offers somebody who cannot add a library no button that would fail", async () => {
+    role = "member";
+    mount([]);
+    await render();
+    const welcome = host.querySelector(".home__welcome");
+    expect(welcome?.textContent).toContain("Nothing here yet");
+    expect(welcome?.querySelector("a")).toBeNull();
   });
 });

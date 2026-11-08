@@ -10,12 +10,13 @@ import {
   useItems,
   useWatchlist,
   useResume,
+  useIsAdmin,
   useToRate,
   useItemCollections,
   watchlistItems,
 } from "@/api/hooks";
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { Shelf } from "@/components/Shelf";
 import type { MenuAction } from "@/components/Menu";
 import { HomeHero } from "@/components/HomeHero";
@@ -126,6 +127,7 @@ export function Home() {
   );
 
   const navigate = useNavigate();
+  const admin = useIsAdmin();
   const { continueActions, resumeActions, resumeOpen } = useContinueMenu();
 
   /*
@@ -225,6 +227,7 @@ export function Home() {
             more={resume?.more ?? false}
             actions={resumeActions}
             open={resumeOpen}
+            libraries={libraries}
           />
         </div>
       </div>
@@ -256,8 +259,28 @@ export function Home() {
           />
         ))}
       </div>
-      {!hasAnything && (
-        <p className="home__empty">No libraries yet. Add one from Settings.</p>
+      {/*
+        A new install (ADR 0118 §3): one welcome panel, and no empty frames
+        around it. Adding a library is an administrator's to do, so anybody
+        else is told what they are waiting for rather than shown a button that
+        would fail.
+      */}
+      {!hasAnything && (libraries?.length ?? 0) === 0 && libraries !== undefined && (
+        <section className="panel home__welcome" aria-labelledby="welcome-title">
+          <h2 id="welcome-title" className="home__welcome-title">
+            {admin ? "Add your first library" : "Nothing here yet"}
+          </h2>
+          <p className="home__welcome-body">
+            {admin
+              ? "Point LANcast at a folder of films, shows, music, books, comics, games or photographs. It scans the folder and everything here fills in from it."
+              : "Libraries appear here once the server's administrator adds one."}
+          </p>
+          {admin && (
+            <Link className="hero__btn hero__btn--primary home__welcome-go" to="/settings?pane=libraries">
+              Add a library
+            </Link>
+          )}
+        </section>
       )}
     </div>
   );

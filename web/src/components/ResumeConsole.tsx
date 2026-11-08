@@ -4,7 +4,8 @@ import { PointMenu, type MenuAction, type MenuPoint } from "./Menu";
 import { useFocusable } from "@/focus/FocusController";
 import { acknowledge, useCanReveal, useObscured } from "@/lib/sensitiveAck";
 import { resumeArt, resumeDetail, resumeFraction, resumeHref } from "@/lib/resume";
-import type { ResumeCard } from "@/api/types";
+import type { Library, ResumeCard } from "@/api/types";
+import { LibraryLinks } from "./HomeMasthead";
 import "./ResumeConsole.css";
 
 /*
@@ -106,10 +107,30 @@ type ConsoleProps = {
   more: boolean;
   actions?: (card: ResumeCard) => MenuAction[];
   open?: (card: ResumeCard) => (() => void) | undefined;
+  /** Listed in place of the cards when nothing is in progress. */
+  libraries?: Library[];
 };
 
-export function ResumeConsole({ cards, more, actions, open }: ConsoleProps) {
-  if (cards.length === 0) return null;
+export function ResumeConsole({ cards, more, actions, open, libraries }: ConsoleProps) {
+  /*
+   * Nothing in progress (ADR 0118 §3): the panel says what is here instead,
+   * so the first screen is never an empty frame. With no libraries at all
+   * there is nothing to list, and the page's welcome stands in for this.
+   */
+  if (cards.length === 0) {
+    if (!libraries || libraries.length === 0) return null;
+    return (
+      <section className="resume panel panel--resume" aria-labelledby="resume-title">
+        <header className="resume__head">
+          <h2 id="resume-title" className="resume__title">
+            Your libraries
+          </h2>
+        </header>
+        <p className="resume__idle">Nothing in progress. Pick somewhere to start.</p>
+        <LibraryLinks libraries={libraries} />
+      </section>
+    );
+  }
   /*
    * See all when the server held something back, and also when there are more
    * cards than a phone shows: a narrow screen hides the fourth and fifth with

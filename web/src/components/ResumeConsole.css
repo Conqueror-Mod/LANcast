@@ -179,3 +179,13 @@
 .resume__list--all .resume__item {
   display: block;
 }
+
+/* Nothing in progress: a line, then the libraries as places to start. */
+.resume__idle {
+  margin: 0 0 4px;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+.resume .masthead__libs {
+  margin: 0;
+}
