@@ -35,6 +35,7 @@ import type {
   HomeSuggestion,
   HomeShelf,
   HomeShelves,
+  FinishedMemory,
   ArtworkTone,
   WebCores,
 } from "./types";
@@ -1588,10 +1589,10 @@ export function useMemories(limit = 40) {
   return useQuery({
     queryKey: ["memories", limit],
     queryFn: ({ signal }) =>
-      apiGet<{ items: Item[]; on: string }>(
+      apiGet<{ items: Item[]; on: string; watched?: FinishedMemory[] }>(
         `/api/memories?limit=${limit}`,
         signal,
-      ),
+      ).then((r) => ({ ...r, watched: r.watched ?? [] })),
     // Long, because the answer changes once a day. Short enough that a machine
     // left running crosses midnight within an hour of it mattering.
     staleTime: 15 * 60_000,

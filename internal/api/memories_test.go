@@ -2,9 +2,12 @@ package api
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"testing"
 	"time"
+
+	"lancast/internal/store"
 )
 
 /*
@@ -40,5 +43,22 @@ func TestMemoriesCarryTheirThumbnails(t *testing.T) {
 	}
 	if body.Items[0].Artwork["poster"] == "" {
 		t.Error("the photograph came back with no thumbnail; its tile would draw only the filename")
+	}
+}
+
+// The history half (ADR 0119 §3a) is always a list, and something finished
+// today is not yet a memory. The dated cases are the store's tests: this
+// package cannot write a viewing on any day but today.
+func TestWatchedOnThisDayLeavesOutToday(t *testing.T) {
+	h := newHarness(t)
+	film := h.addFile(t, "today.mkv", []byte("x"))
+	if err := h.st.SaveProgress(context.Background(), film, store.LocalUserID, 0, true); err != nil {
+		t.Fatal(err)
+	}
+	resp := h.do(t, http.MethodGet, "/api/memories", nil)
+	var body map[string]json.RawMessage
+	decode(t, resp, &body)
+	if string(body["watched"]) != "[]" {
+		t.Errorf("watched = %s, want []", body["watched"])
 	}
 }
