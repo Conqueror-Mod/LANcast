@@ -243,12 +243,27 @@ in the field. The scrims darken the lower part for legibility, and a wisp
 placed there made no visible change. The effect is subtle by design. Its
 strength is a few multipliers in `HomeHero.css`.
 
-### Not built in v0.10.9
+### New this week (2026-11-08)
 
-- **"New this week"** in place of the three Recently Added shelves. A strict
-  seven-day window empties that space in any quiet week, and calling older
-  items "new this week" would be untrue. The shelves stay as they are until
-  that is decided.
+Decided: a strict seven days. Anything older is not called new, and a quiet
+week has no section at all, because Home draws no empty frames. The library
+pages still sort by date added for anybody who wants the rest. Seven days is a
+span of seconds, not a set of calendar dates, so no date is ever worked out on
+the client. `added_at` is when the scan first saw the file.
+
+It is one heading, "New this week", with a row for each kind that has
+something from the window: films and shows, music, audiobooks, comics, games
+and photographs. Each row still has its own query. Looking at it on the test
+server found the reason: the old video window took every kind except music
+and pictures, so a comics library and a games library arriving on the same
+day filled all forty places, and films added that day did not appear. Books,
+comics and games are now left out of that window and asked for one kind each
+(`useRecentlyAddedKind`). That needs no API change, because `kind` already
+filters a listing. The video row is named for what is in it ("Films ·
+Shows"), since a given week may bring only one of the two.
+
+A side effect is that the spotlight's "Recently added" mode draws from the
+video window, so it no longer chooses a comic or a game.
 
 ## Not decided here
 

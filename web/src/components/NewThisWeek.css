@@ -1,0 +1,16 @@
+/*
+ * New this week: one heading over its rows, in the console's voice so the two
+ * read as parts of the same page. The rows keep the shelf's own quieter label.
+ */
+.new-week {
+  margin-bottom: 8px;
+}
+
+.new-week__title {
+  margin: 4px 0 12px;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}

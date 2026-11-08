@@ -1555,10 +1555,12 @@ export function useRecentPhotos(limit = 20) {
  * be caught by it.
  */
 
-// Music and pictures have shelves of their own, so the video window excludes
-// them rather than filtering them out after the fact — filtering after the
-// fact is what made the window the wrong size in the first place.
-const NOT_VIDEO = "artist,album,track,gallery,photo";
+// Music, pictures, books, comics and games have windows of their own, so the
+// video window excludes them rather than filtering them out after the fact —
+// filtering after the fact is what made the window the wrong size in the first
+// place. Books, comics and games joined the list when a test library of each
+// filled all forty places and pushed out films added the same day.
+const NOT_VIDEO = "artist,album,track,gallery,photo,book,comic,rom";
 
 export function useRecentlyAddedVideo(limit = 20) {
   return useQuery({
@@ -1568,6 +1570,22 @@ export function useRecentlyAddedVideo(limit = 20) {
         `/api/items?sort=added&limit=${limit}&exclude_kind=${NOT_VIDEO}`,
         signal,
       ).then((r) => r.items),
+    staleTime: 30_000,
+  });
+}
+
+/*
+ * The newest of one kind — `book`, `comic` or `rom` — in a window of its own,
+ * for the reason above: a row asks for its own kind, so nothing another row
+ * does can empty it.
+ */
+export function useRecentlyAddedKind(kind: "book" | "comic" | "rom", limit = 20) {
+  return useQuery({
+    queryKey: ["recently-added", kind, limit],
+    queryFn: ({ signal }) =>
+      apiGet<ItemsPage>(`/api/items?kind=${kind}&sort=added&limit=${limit}`, signal).then(
+        (r) => r.items,
+      ),
     staleTime: 30_000,
   });
 }

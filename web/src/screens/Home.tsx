@@ -6,6 +6,7 @@ import {
   useMemories,
   useRecentlyAddedVideo,
   useRecentlyAddedMusic,
+  useRecentlyAddedKind,
   useRecentPhotos,
   useItems,
   useWatchlist,
@@ -22,6 +23,7 @@ import { Shelf } from "@/components/Shelf";
 import type { MenuAction } from "@/components/Menu";
 import { HomeHero } from "@/components/HomeHero";
 import { ResumeConsole } from "@/components/ResumeConsole";
+import { NewThisWeek } from "@/components/NewThisWeek";
 import { FriendsPanel, MemoryPanel, showFriends } from "@/components/BridgePanels";
 import { collectionsMenu } from "@/lib/collectionsMenu";
 import { HomeMasthead } from "@/components/HomeMasthead";
@@ -88,8 +90,8 @@ function UnwatchedShelf({
   );
 }
 
-// Home is the hub: a spotlight, then continue watching → recently added →
-// something unwatched. Library names in the nav still jump straight to the full
+// Home is the hub: the Bridge (spotlight and panels), then what you meant to
+// watch → what is new this week → something unwatched. Library names in the nav still jump straight to the full
 // grid — the hubs are a convenience, never a gate.
 export function Home() {
   const { data: libraries } = useLibraries();
@@ -101,9 +103,6 @@ export function Home() {
    */
   const { data: continueWatching } = useContinueWatching("watching", HOME_WATCHING_LIMIT);
   const { data: resume } = useResume();
-  // Deeper than the row can show, because the one list is split into two. On a
-  // library where a scan just added 200 tracks, the top 20 by date are all
-  // music and "Recently Added" would be empty while New Music overflowed.
   /*
    * A window each, rather than one window split afterwards.
    *
@@ -114,6 +113,9 @@ export function Home() {
    */
   const { data: recentlyAddedVideo } = useRecentlyAddedVideo(40);
   const { data: recentlyAddedMusic } = useRecentlyAddedMusic(20);
+  const { data: recentBooks } = useRecentlyAddedKind("book");
+  const { data: recentComics } = useRecentlyAddedKind("comic");
+  const { data: recentGames } = useRecentlyAddedKind("rom");
   // Photos come from their own query rather than out of recentlyAdded: that one
   // is top-level, so on a picture library it answers with galleries — the same
   // 25 folders every time, which is not what "recently added" means when you
@@ -256,9 +258,17 @@ export function Home() {
           items={toRate?.items ?? []}
           itemFooter={(item) => <QuickRate item={item} />}
         />
-        <Shelf title="Recently Added" items={recentVideo} />
-        <Shelf title="New Music" items={recentAudio} />
-        <Shelf title="Recently Added Photos" items={recentPictures} />
+        {/* What arrived in the last seven days, and nothing older (ADR 0118). */}
+        <NewThisWeek
+          rows={{
+            video: recentVideo,
+            music: recentAudio,
+            books: withoutHero(recentBooks),
+            comics: recentComics,
+            games: recentGames,
+            photos: recentPictures,
+          }}
+        />
         {unwatchedLibraries.map((lib) => (
           <UnwatchedShelf
             key={lib.id}

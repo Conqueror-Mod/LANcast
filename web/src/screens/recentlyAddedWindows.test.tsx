@@ -39,6 +39,8 @@ const film = {
   kind: "movie",
   library_id: 1,
   artwork: {},
+  // Added today: Home shows only the last seven days (ADR 0118).
+  added_at: Math.floor(Date.now() / 1000) - 3600,
 };
 
 /** What a bulk music import leaves at the top of `added_at`. */
@@ -48,6 +50,7 @@ const artists = Array.from({ length: 40 }, (_, i) => ({
   kind: "artist",
   library_id: 2,
   artwork: {},
+  added_at: Math.floor(Date.now() / 1000) - 60,
 }));
 
 let host: HTMLDivElement;
@@ -152,7 +155,7 @@ describe("Recently Added after a bulk import", () => {
     await render();
     const video = gets.find((u) => u.includes("exclude_kind="));
     expect(video, "no request excluded the music and picture kinds").toBeTruthy();
-    for (const kind of ["artist", "album", "track", "gallery", "photo"]) {
+    for (const kind of ["artist", "album", "track", "gallery", "photo", "book", "comic", "rom"]) {
       expect(video).toContain(kind);
     }
   });
