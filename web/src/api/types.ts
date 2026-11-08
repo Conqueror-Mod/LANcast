@@ -65,6 +65,7 @@ export type HomeSuggestion = components["schemas"]["HomeSuggestion"];
 export type Taste = NonNullable<HomeSuggestion["taste"]>;
 export type HomeShelf = components["schemas"]["HomeShelf"];
 export type HomeShelves = components["schemas"]["HomeShelves"];
+export type FinishedMemory = components["schemas"]["FinishedMemory"];
 export type ArtworkTone = components["schemas"]["ArtworkTone"];
 
 /** Exact duplicate photos (ADR 0075). */

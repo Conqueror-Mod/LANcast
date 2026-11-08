@@ -105,3 +105,18 @@
 .memory__grid .poster-tile {
   width: 100%;
 }
+
+.memory__cell {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+/* "Watched", "Read": quiet, under a tile from your history. */
+.memory__note {
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}

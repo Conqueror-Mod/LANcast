@@ -256,6 +256,24 @@ only way to unpin it with it.
 The title dialog is portalled to the body. Drawn in place it was clipped to
 the grid's toolbar, which is a containing block for fixed elements.
 
+### Step 4: On this day from history (2026-11-08)
+
+`GET /api/memories` gains `watched`: what the caller finished on today's date
+in an earlier year, `{item, finished_at}`, most recent first and one entry per
+item at its latest such finish. The day is SQLite's `'now', 'localtime'`, as
+for the photographs. Only rows with `estimated = 0` count; a deleted item or a
+missing file is left out; the ceiling and hidden libraries apply.
+
+It takes books and comics as well as films and episodes, which §3a did not
+say. §3b put them in `viewing` with real dates first, so leaving them out here
+would have been the only place their history did not reach.
+
+The panel puts history first, at most two tiles beside photographs and up to
+four without, each captioned in its kind's own word: Watched, Listened, Read.
+"A year ago" is still said only when every tile shares the year. No schema
+change. It answers `[]` until 2027-09-30, the first anniversary of real
+history.
+
 ## Not proposed
 
 - **A recommender.** Nothing here learns a model, ranks by similarity across

@@ -1945,7 +1945,8 @@ you to every screen ([ADR 0119](adr/0119-homepage-2-part-two.md) §2).
 ### `GET /api/memories`
 
 Photographs taken on **today's date in an earlier year**, newest first — the
-home page's "On this day" shelf. `?limit=` defaults to 40 and is capped at 200.
+home page's "On this day" panel — and, under `watched`, what you finished on
+that date. `?limit=` defaults to 40 and is capped at 200.
 
 ```json
 { "on": "09-04",
@@ -1975,6 +1976,24 @@ because a shelf is for looking at.
 An empty list is the ordinary answer on most days. A client shows nothing at
 all rather than an empty shelf: a heading over no tiles is the shape of
 something broken.
+
+**`watched` is the other half** ([ADR 0119](adr/0119-homepage-2-part-two.md)):
+films, episodes, audiobooks and comics *you* finished on today's date in an
+earlier year, from your own watch history.
+
+```json
+"watched": [ { "finished_at": 1759262400,
+               "item": { "id": 812, "kind": "movie", "title": "Heat", "…": "…" } } ]
+```
+
+Most recent first, one entry per item at its latest such finish, so a film
+watched every Christmas Eve is one memory. Only viewings with a real date
+count: the rows backfilled when the history began
+(`estimated: true` in `GET /api/profile/viewings`) carry the day a flag was written,
+not the day of the viewing, and would put a June film under "a year ago today"
+in October. The ceiling and hidden libraries apply, as on every listing. A
+deleted item or a missing file is left out. It is `[]` until a year of real
+history exists, and is never absent.
 
 ### `GET /api/profile`
 
