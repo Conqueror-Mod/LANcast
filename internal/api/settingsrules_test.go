@@ -283,3 +283,35 @@ func TestALargeArtworkLimitIsAllowed(t *testing.T) {
 		t.Errorf("artwork_cache_mb = %#v", got)
 	}
 }
+
+// GET /api/continue?shelf= answers for that shelf alone, and refuses a shelf
+// it does not know rather than quietly returning every kind.
+func TestContinueShelfParameter(t *testing.T) {
+	h := newHarness(t)
+	film := h.addFile(t, "film.mkv", []byte("f"))
+	resp := h.do(t, "PUT", "/api/items/"+itoa(film)+"/progress",
+		map[string]any{"position_ms": 1000, "watched": false})
+	resp.Body.Close()
+
+	count := func(path string) int {
+		t.Helper()
+		var body struct {
+			Items []struct{} `json:"items"`
+		}
+		decode(t, h.do(t, "GET", path, nil), &body)
+		return len(body.Items)
+	}
+	if n := count("/api/continue?shelf=watching"); n != 1 {
+		t.Errorf("watching shelf = %d items, want the film", n)
+	}
+	if n := count("/api/continue?shelf=music"); n != 0 {
+		t.Errorf("music shelf = %d items, want none", n)
+	}
+	if n := count("/api/continue?shelf=books"); n != 0 {
+		t.Errorf("books shelf = %d items, want none", n)
+	}
+	if n := count("/api/continue"); n != 1 {
+		t.Errorf("no shelf = %d items, want every kind (the film)", n)
+	}
+	wantError(t, h.do(t, "GET", "/api/continue?shelf=films", nil), 400, "bad_request")
+}

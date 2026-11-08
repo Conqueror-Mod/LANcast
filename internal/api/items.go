@@ -786,7 +786,15 @@ func (s *Server) continueWatching(w http.ResponseWriter, r *http.Request) {
 	if limit <= 0 || limit > cur.ContinueLimit {
 		limit = cur.ContinueLimit
 	}
-	items, err := s.st.ContinueWatching(r.Context(), s.userID(r), limit,
+	// One shelf's own list, so songs cannot push films off it; no shelf is
+	// every kind in one list, as before.
+	shelf := store.ContinueShelf(r.URL.Query().Get("shelf"))
+	if !shelf.Valid() {
+		writeError(w, http.StatusBadRequest, "bad_request",
+			"shelf must be watching, music or books")
+		return
+	}
+	items, err := s.st.ContinueOn(r.Context(), s.userID(r), shelf, limit,
 		cur.ContinueCutoff(time.Now()))
 	if err != nil {
 		s.writeInternal(w, err, "continue watching")

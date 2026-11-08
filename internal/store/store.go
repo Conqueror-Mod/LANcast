@@ -3095,8 +3095,49 @@ func (s *Store) CollectionsShownFor(ctx context.Context, itemID int64) ([]Item, 
 // shelf of 40 that is 39 abandoned documentaries and one real row is the bug
 // this window exists to prevent, and trimming afterwards reproduces it exactly.
 func (s *Store) ContinueWatching(ctx context.Context, userID string, limit int, sinceUnix int64) ([]Item, error) {
+	return s.ContinueOn(ctx, userID, ShelfAll, limit, sinceUnix)
+}
+
+// ContinueShelf names one of the shelves the in-progress list feeds.
+type ContinueShelf string
+
+const (
+	// ShelfAll is every kind in one list, newest first.
+	ShelfAll ContinueShelf = ""
+	// ShelfWatching is films, shows and collections: everything that is not
+	// music or a book.
+	ShelfWatching ContinueShelf = "watching"
+	// ShelfMusic is artists, albums and tracks.
+	ShelfMusic ContinueShelf = "music"
+	// ShelfBooks is audiobooks (ADR 0116).
+	ShelfBooks ContinueShelf = "books"
+)
+
+// Valid reports whether the shelf is one ContinueOn knows.
+func (c ContinueShelf) Valid() bool {
+	switch c {
+	case ShelfAll, ShelfWatching, ShelfMusic, ShelfBooks:
+		return true
+	}
+	return false
+}
+
+/*
+ * ContinueOn is ContinueWatching for one shelf.
+ *
+ * A shelf gets a limit of its own, rather than a share of one mixed list split
+ * afterwards. Sharing the limit meant a run of half-played songs evicted the
+ * films: on the owner's real library (2026-11-03) 16 of the newest 20 rows were
+ * tracks, so Continue Watching showed three films out of forty it could have
+ * offered, and a longer evening of shuffled music would have shown none. Home's
+ * Recently Added met the same fault and was fixed the same way.
+ */
+func (s *Store) ContinueOn(ctx context.Context, userID string, shelf ContinueShelf, limit int, sinceUnix int64) ([]Item, error) {
 	if limit <= 0 || limit > 100 {
 		limit = 20
+	}
+	if !shelf.Valid() {
+		return nil, fmt.Errorf("continue watching: unknown shelf %q", shelf)
 	}
 
 	/*
@@ -3119,14 +3160,36 @@ func (s *Store) ContinueWatching(ctx context.Context, userID string, limit int, 
 	 * Movies, tracks and anything else keep the old rule — they have no next,
 	 * so a finished one is finished.
 	 */
-	const q = `
+	/*
+	 * Which arms each shelf needs. The kinds are the client's isMusic and
+	 * isBook, so a row lands on exactly one shelf: shows and collections
+	 * are only ever watched, and an item of its own is watched unless it is
+	 * music or a book.
+	 */
+	itemKinds := ""
+	shows, collections := true, true
+	switch shelf {
+	case ShelfWatching:
+		itemKinds = ` AND mi.kind NOT IN ('artist', 'album', 'track', 'book')`
+	case ShelfMusic:
+		itemKinds = ` AND mi.kind IN ('artist', 'album', 'track')`
+		shows, collections = false, false
+	case ShelfBooks:
+		itemKinds = ` AND mi.kind = 'book'`
+		shows, collections = false, false
+	}
+
+	q := `
 		SELECT id, updated_at, is_show FROM (
 			SELECT mi.id AS id, ps.updated_at AS updated_at, 0 AS is_show
 			FROM media_item mi
 			JOIN playback_state ps ON ps.item_id = mi.id AND ps.user_id = ?
 			WHERE ps.position_ms > 0 AND ps.watched = 0 AND mi.missing = 0
-			  AND mi.kind != 'episode'
-			  AND (? = 0 OR ps.updated_at >= ?)
+			  AND mi.kind != 'episode'` + itemKinds + `
+			  AND (? = 0 OR ps.updated_at >= ?)`
+	args := []any{userID, sinceUnix, sinceUnix}
+	if shows {
+		q += `
 
 			UNION ALL
 
@@ -3139,7 +3202,11 @@ func (s *Store) ContinueWatching(ctx context.Context, userID string, limit int, 
 			  AND sh.kind = 'show'
 			  AND (ps.position_ms > 0 OR ps.watched = 1)
 			  AND (? = 0 OR ps.updated_at >= ?)
-			GROUP BY sh.id
+			GROUP BY sh.id`
+		args = append(args, userID, sinceUnix, sinceUnix)
+	}
+	if collections {
+		q += `
 
 			UNION ALL
 
@@ -3150,7 +3217,10 @@ func (s *Store) ContinueWatching(ctx context.Context, userID string, limit int, 
 			JOIN playback_state ps ON ps.item_id = f.id AND ps.user_id = ?
 			WHERE ps.watched = 1
 			  AND (? = 0 OR ps.updated_at >= ?)
-			GROUP BY ic.collection_id
+			GROUP BY ic.collection_id`
+		args = append(args, userID, sinceUnix, sinceUnix)
+	}
+	q += `
 		)
 		ORDER BY updated_at DESC
 		LIMIT ?`
@@ -3166,11 +3236,7 @@ func (s *Store) ContinueWatching(ctx context.Context, userID string, limit int, 
 		fetch = 200
 	}
 
-	rows, err := s.db.QueryContext(ctx, q,
-		userID, sinceUnix, sinceUnix,
-		userID, sinceUnix, sinceUnix,
-		userID, sinceUnix, sinceUnix,
-		fetch)
+	rows, err := s.db.QueryContext(ctx, q, append(args, fetch)...)
 	if err != nil {
 		return nil, fmt.Errorf("continue watching: %w", err)
 	}

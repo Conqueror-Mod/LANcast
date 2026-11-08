@@ -1,4 +1,4 @@
-import { useItem, useItems, useContinueWatching } from "@/api/hooks";
+import { useItem, useItems, useContinueWatching, HOME_WATCHING_LIMIT } from "@/api/hooks";
 import type { Item } from "@/api/types";
 import { isBook, isMusic, isPicture } from "./kind";
 import {
@@ -28,7 +28,9 @@ import {
 export function useHeroSpotlight(recent: Item[] | undefined): HeroPick | null {
   const [mode] = useHeroMode();
   const [pinnedID] = usePinnedHero();
-  const { data: continueWatching } = useContinueWatching();
+  // The watching list alone (no songs or books to skip past), and Home's own
+  // query: same shelf, same limit, same key.
+  const { data: continueWatching } = useContinueWatching("watching", HOME_WATCHING_LIMIT);
 
   /*
    * The seed is what you are part-way through — the one thing on this page that
