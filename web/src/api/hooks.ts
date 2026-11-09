@@ -76,6 +76,7 @@ import type {
   Plugin,
   PluginCaps,
   Profile,
+  ProfileKinds,
   RatedItem,
   Rating,
   Viewing,
@@ -3937,12 +3938,35 @@ export function useRemovePlaylistEntry(id: number) {
  * an infinite query for a list nobody scrolls to the end of buys nothing but a
  * cache that never shrinks. `has_more` from the server drives the button.
  */
-export function useProfile(limit = 50, offset = 0) {
+export function useProfile(limit = 50, offset = 0, kind: HistoryKind = "") {
   return useQuery({
-    queryKey: ["profile", limit, offset],
+    queryKey: ["profile", limit, offset, kind],
     queryFn: ({ signal }) =>
-      apiGet<Profile>(`/api/profile?limit=${limit}&offset=${offset}`, signal),
+      apiGet<Profile>(
+        `/api/profile?limit=${limit}&offset=${offset}${kind ? `&kind=${kind}` : ""}`,
+        signal,
+      ),
     placeholderData: keepPreviousData,
+    staleTime: 10_000,
+  });
+}
+
+/*
+ * A filter on either history (profile-2-plan §4e). The server owns which media
+ * kinds each one means, so both lists agree; "" is everything.
+ */
+export type HistoryKind = "" | "video" | "music" | "books" | "comics";
+
+/*
+ * The Overview's books, comics and games (profile-2-plan §4d).
+ *
+ * Under ["profile"], so a history reset, which invalidates the profile,
+ * empties these too without a second key to remember.
+ */
+export function useProfileKinds() {
+  return useQuery({
+    queryKey: ["profile", "kinds"],
+    queryFn: ({ signal }) => apiGet<ProfileKinds>("/api/profile/kinds", signal),
     staleTime: 10_000,
   });
 }
@@ -4577,13 +4601,13 @@ export function useHistoryCount(scope: HistoryScope, enabled = true) {
  * Under ["profile"], which a history reset invalidates, so clearing finished
  * history empties this list without a second key to remember.
  */
-export function useViewings(pageSize = 100) {
+export function useViewings(pageSize = 100, kind: HistoryKind = "") {
   return useInfiniteQuery({
-    queryKey: ["profile", "viewings", pageSize],
+    queryKey: ["profile", "viewings", pageSize, kind],
     initialPageParam: 0,
     queryFn: ({ pageParam, signal }) =>
       apiGet<{ viewings: Viewing[]; total: number }>(
-        `/api/profile/viewings?limit=${pageSize}&offset=${pageParam as number}`,
+        `/api/profile/viewings?limit=${pageSize}&offset=${pageParam as number}${kind ? `&kind=${kind}` : ""}`,
         signal,
       ),
     getNextPageParam: (last, pages) => {

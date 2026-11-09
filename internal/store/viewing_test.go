@@ -39,7 +39,7 @@ func viewingFixture(t *testing.T) (*Store, string, int64) {
 
 func viewingTitles(t *testing.T, st *Store, user string) []string {
 	t.Helper()
-	vs, _, err := st.Viewings(context.Background(), user, 100, 0)
+	vs, _, err := st.Viewings(context.Background(), user, GroupAll, 100, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -75,7 +75,7 @@ func TestFinishingAFilmLogsOneViewingAndARewatchLogsAnother(t *testing.T) {
 	if err := st.SaveProgress(ctx, film, me, 7_000_000, true); err != nil {
 		t.Fatal(err)
 	}
-	vs, total, err := st.Viewings(ctx, me, 100, 0)
+	vs, total, err := st.Viewings(ctx, me, GroupAll, 100, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -137,7 +137,7 @@ func TestAnEpisodeIsLoggedWithItsShowAndATrackIsNot(t *testing.T) {
 	if err := st.SaveProgress(ctx, track, me, 0, true); err != nil {
 		t.Fatal(err)
 	}
-	vs, _, err := st.Viewings(ctx, me, 100, 0)
+	vs, _, err := st.Viewings(ctx, me, GroupAll, 100, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -165,7 +165,7 @@ func TestAViewingOutlivesItsItem(t *testing.T) {
 	if err := st.DeleteItems(ctx, []int64{film}); err != nil {
 		t.Fatal(err)
 	}
-	vs, _, err := st.Viewings(ctx, me, 100, 0)
+	vs, _, err := st.Viewings(ctx, me, GroupAll, 100, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -241,7 +241,7 @@ func TestRevision53SeedsOneEstimatedRowPerFinishedVideo(t *testing.T) {
 	if err := migrate(st.db); err != nil {
 		t.Fatalf("migrate: %v", err)
 	}
-	vs, _, err := st.Viewings(ctx, me, 100, 0)
+	vs, _, err := st.Viewings(ctx, me, GroupAll, 100, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -281,7 +281,7 @@ func TestAFinishedBookAndComicAreLogged(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	vs, _, err := st.Viewings(ctx, me, 100, 0)
+	vs, _, err := st.Viewings(ctx, me, GroupAll, 100, 0)
 	if err != nil {
 		t.Fatal(err)
 	}

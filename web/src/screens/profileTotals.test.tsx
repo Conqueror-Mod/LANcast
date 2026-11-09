@@ -30,10 +30,14 @@ const item = (id: number, title: string, kind = "movie", extra: object = {}) => 
 });
 
 let profile: Record<string, unknown>;
+let kinds: Record<string, unknown> | null;
+let urls: string[];
 let host: HTMLDivElement;
 let root: Root;
 
 beforeEach(() => {
+  kinds = null;
+  urls = [];
   host = document.createElement("div");
   document.body.append(host);
   root = createRoot(host);
@@ -41,6 +45,7 @@ beforeEach(() => {
     "fetch",
     vi.fn(async (input: string) => {
       const url = String(input);
+      urls.push(url);
       const json = (v: unknown) =>
         new Response(JSON.stringify(v), {
           status: 200,
@@ -49,6 +54,9 @@ beforeEach(() => {
       if (url.includes("/api/auth/status"))
         return json({ authenticated: true, configured: true, user: { id: "u1", name: "dana", role: "admin" } });
       if (url.includes("/api/profile/year")) return json({});
+      if (url.includes("/api/profile/kinds"))
+        return kinds ? json(kinds) : new Response("", { status: 404 });
+      if (url.includes("/api/profile/viewings")) return json({ viewings: [], total: 0 });
       if (url.startsWith("/api/profile?") || url === "/api/profile") return json(profile);
       return json({});
     }),
@@ -61,14 +69,14 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-async function render() {
+async function render(path = "/profile") {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   await act(async () => {
     root.render(
       <QueryClientProvider client={client}>
         <FocusProvider>
           <PlaybackProvider>
-            <MemoryRouter initialEntries={["/profile"]}>
+            <MemoryRouter initialEntries={[path]}>
               <Routes>
                 <Route path="/profile" element={<Profile />} />
               </Routes>
@@ -140,5 +148,74 @@ describe("profile totals by kind", () => {
     expect(rows.map((r) => r.getAttribute("href"))).toEqual(["/item/1", "/item/2"]);
     expect(rows[1].textContent).toContain("9 plays");
     expect(rows[1].textContent).toContain("Ten");
+  });
+});
+
+const click = async (label: string) => {
+  const b = [...host.querySelectorAll<HTMLButtonElement>(".chip")].find((c) => c.textContent === label)!;
+  await act(async () => {
+    b.click();
+    await new Promise((r) => setTimeout(r, 10));
+  });
+};
+
+describe("one History (profile-2-plan §4e)", () => {
+  beforeEach(() => {
+    profile = {
+      ...base,
+      stats: { started: 0, finished: 0, viewings: 0, watched_ms: 0, first_at: null, by_kind: [] },
+      most_played: [],
+    };
+  });
+
+  it("asks for one kind when a filter is pressed", async () => {
+    await render("/profile?tab=history");
+    await click("Video");
+    expect(urls.some((u) => u.startsWith("/api/profile?") && u.includes("kind=video"))).toBe(true);
+    const on = [...host.querySelectorAll(".chip.is-on")].map((c) => c.textContent);
+    expect(on).toEqual(["Video", "Each title once"]);
+  });
+
+  it("switches to the log, keeping the filter", async () => {
+    await render("/profile?tab=history&kind=books");
+    await click("Every time");
+    expect(urls.some((u) => u.includes("/api/profile/viewings") && u.includes("kind=books"))).toBe(true);
+    expect(host.textContent).toContain("each time you finished it");
+  });
+});
+
+describe("books, comics and games on Overview (profile-2-plan §4d)", () => {
+  beforeEach(() => {
+    profile = {
+      ...base,
+      stats: { started: 0, finished: 0, viewings: 0, watched_ms: 0, first_at: null, by_kind: [] },
+      most_played: [],
+    };
+  });
+
+  it("shows only the kinds that have something, with where you are", async () => {
+    kinds = {
+      books: { in_progress: [], finished: [] },
+      comics: {
+        in_progress: [
+          { item: item(7, "Saga 01", "comic"), touched_at: 1, page: { page: 3, pages: 20, updated_at: 1 } },
+        ],
+        finished: [{ item: item(8, "Saga 02", "comic"), touched_at: 1 }],
+      },
+      games: [{ item: item(9, "Tetris", "rom"), saved_at: 1_700_000_000 }],
+    };
+    await render();
+    const labels = [...host.querySelectorAll(".profile__kind .section-label")].map((e) => e.textContent);
+    expect(labels).toEqual(["Comics", "Games"]);
+    const rows = [...host.querySelectorAll(".profile__kind .profile__row")].map((r) => r.textContent ?? "");
+    expect(rows[0]).toContain("Page 4 of 20");
+    expect(rows[1]).toContain("Read");
+    expect(rows[2]).toContain("Saved");
+  });
+
+  it("shows nothing on a server without the route", async () => {
+    kinds = null;
+    await render();
+    expect(host.querySelector(".profile__kind")).toBeNull();
   });
 });

@@ -230,10 +230,11 @@ describe("the profile's tabs", () => {
     expect(selected()).toBe("Overview");
   });
 
-  it("keeps Recently played on History", async () => {
+  it("keeps the history on History, each title once by default", async () => {
     await render("/profile?tab=history");
     expect(selected()).toBe("History");
-    expect(host.textContent).toContain("Recently played");
+    const on = [...host.querySelectorAll(".chip.is-on")].map((c) => c.textContent);
+    expect(on).toEqual(["All", "Each title once"]);
     expect(section("Favourites")).toBeUndefined();
   });
 });

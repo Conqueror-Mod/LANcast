@@ -3769,6 +3769,21 @@
               "type": "integer",
               "default": 0
             }
+          },
+          {
+            "name": "kind",
+            "in": "query",
+            "required": false,
+            "description": "Narrows the list to one kind of thing: `video` (films, episodes and home videos), `music` (songs), `books` (audiobooks and their parts) or `comics`. Absent for everything. Anything else is `400`. Retro games are not a kind here: they leave no play record, only saves (`GET /profile/kinds`).",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "video",
+                "music",
+                "books",
+                "comics"
+              ]
+            }
           }
         ],
         "responses": {
@@ -3833,6 +3848,31 @@
                 }
               }
             }
+          }
+        }
+      }
+    },
+    "/profile/kinds": {
+      "get": {
+        "operationId": "getProfileKinds",
+        "tags": [
+          "profile"
+        ],
+        "summary": "Your books, comics and games, for the profile's Overview",
+        "description": "Up to six of each, newest first (profile-2-plan §4d). `in_progress` is the resume console's answer (`GET /resume`) without its Continue window; `finished` is what you finished. A game has no play record, so `games` lists each one you have a save of, by its newest save. The account's limits apply (ADR 0084), and items carry `artwork`. Every list is present, empty when there is nothing.",
+        "responses": {
+          "200": {
+            "description": "The caller's books, comics and games.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProfileKinds"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
           }
         }
       }
@@ -11498,7 +11538,7 @@
           "Profile"
         ],
         "summary": "Your watch history: every finished viewing",
-        "description": "One row per finished viewing of a film or an episode, newest first (ADR 0074). Not `GET /profile`'s `history`, which has one row per item dated from its last play: here a film watched three times is three rows.\n\nOnly finished viewings and only video are logged. Rows seeded when the log began carry `estimated`. `DELETE /profile/history` with scope `all` or `finished` clears these rows too. Private to the caller.",
+        "description": "One row per finished viewing of a film or an episode, newest first (ADR 0074). Not `GET /profile`'s `history`, which has one row per item dated from its last play: here a film watched three times is three rows.\n\nOnly finished viewings are logged: films, episodes, audiobooks and comics (ADR 0119), never songs, so `kind=music` is always empty. Rows seeded when the log began carry `estimated`. `DELETE /profile/history` with scope `all` or `finished` clears these rows too. Private to the caller.",
         "parameters": [
           {
             "name": "limit",
@@ -11519,6 +11559,21 @@
               "type": "integer",
               "minimum": 0,
               "default": 0
+            }
+          },
+          {
+            "name": "kind",
+            "in": "query",
+            "required": false,
+            "description": "Narrows the list to one kind of thing: `video` (films, episodes and home videos), `music` (songs), `books` (audiobooks and their parts) or `comics`. Absent for everything. Anything else is `400`. Retro games are not a kind here: they leave no play record, only saves (`GET /profile/kinds`).",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "video",
+                "music",
+                "books",
+                "comics"
+              ]
             }
           }
         ],
@@ -17516,6 +17571,87 @@
           "plays": {
             "type": "integer",
             "description": "Times finished, at least 2."
+          }
+        }
+      },
+      "KindEntry": {
+        "type": "object",
+        "required": [
+          "item",
+          "touched_at"
+        ],
+        "properties": {
+          "item": {
+            "$ref": "#/components/schemas/Item"
+          },
+          "touched_at": {
+            "type": "integer",
+            "format": "int64",
+            "description": "When you last played or read it, Unix seconds."
+          },
+          "page": {
+            "$ref": "#/components/schemas/ComicPlace",
+            "description": "A comic in progress: the page it is on. Absent otherwise."
+          }
+        }
+      },
+      "KindShelf": {
+        "type": "object",
+        "required": [
+          "in_progress",
+          "finished"
+        ],
+        "properties": {
+          "in_progress": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/KindEntry"
+            }
+          },
+          "finished": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/KindEntry"
+            }
+          }
+        }
+      },
+      "SavedGame": {
+        "type": "object",
+        "required": [
+          "item",
+          "saved_at"
+        ],
+        "properties": {
+          "item": {
+            "$ref": "#/components/schemas/Item"
+          },
+          "saved_at": {
+            "type": "integer",
+            "format": "int64",
+            "description": "The newest save of it on the server, Unix seconds. There is no play time to report."
+          }
+        }
+      },
+      "ProfileKinds": {
+        "type": "object",
+        "required": [
+          "books",
+          "comics",
+          "games"
+        ],
+        "properties": {
+          "books": {
+            "$ref": "#/components/schemas/KindShelf"
+          },
+          "comics": {
+            "$ref": "#/components/schemas/KindShelf"
+          },
+          "games": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SavedGame"
+            }
           }
         }
       },

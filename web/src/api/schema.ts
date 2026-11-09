@@ -1510,6 +1510,26 @@ export interface paths {
         patch: operations["renameProfile"];
         trace?: never;
     };
+    "/profile/kinds": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Your books, comics and games, for the profile's Overview
+         * @description Up to six of each, newest first (profile-2-plan §4d). `in_progress` is the resume console's answer (`GET /resume`) without its Continue window; `finished` is what you finished. A game has no play record, so `games` lists each one you have a save of, by its newest save. The account's limits apply (ADR 0084), and items carry `artwork`. Every list is present, empty when there is nothing.
+         */
+        get: operations["getProfileKinds"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/profile/history": {
         parameters: {
             query?: never;
@@ -5046,7 +5066,7 @@ export interface paths {
          * Your watch history: every finished viewing
          * @description One row per finished viewing of a film or an episode, newest first (ADR 0074). Not `GET /profile`'s `history`, which has one row per item dated from its last play: here a film watched three times is three rows.
          *
-         *     Only finished viewings and only video are logged. Rows seeded when the log began carry `estimated`. `DELETE /profile/history` with scope `all` or `finished` clears these rows too. Private to the caller.
+         *     Only finished viewings are logged: films, episodes, audiobooks and comics (ADR 0119), never songs, so `kind=music` is always empty. Rows seeded when the log began carry `estimated`. `DELETE /profile/history` with scope `all` or `finished` clears these rows too. Private to the caller.
          */
         get: operations["listViewings"];
         put?: never;
@@ -7556,6 +7576,33 @@ export interface components {
             item: components["schemas"]["Item"];
             /** @description Times finished, at least 2. */
             plays: number;
+        };
+        KindEntry: {
+            item: components["schemas"]["Item"];
+            /**
+             * Format: int64
+             * @description When you last played or read it, Unix seconds.
+             */
+            touched_at: number;
+            /** @description A comic in progress: the page it is on. Absent otherwise. */
+            page?: components["schemas"]["ComicPlace"];
+        };
+        KindShelf: {
+            in_progress: components["schemas"]["KindEntry"][];
+            finished: components["schemas"]["KindEntry"][];
+        };
+        SavedGame: {
+            item: components["schemas"]["Item"];
+            /**
+             * Format: int64
+             * @description The newest save of it on the server, Unix seconds. There is no play time to report.
+             */
+            saved_at: number;
+        };
+        ProfileKinds: {
+            books: components["schemas"]["KindShelf"];
+            comics: components["schemas"]["KindShelf"];
+            games: components["schemas"]["SavedGame"][];
         };
         /** @description Identity, statistics and history in one request, because a page needing all three should not discover that from three round trips and three loading states. */
         Profile: {
@@ -13679,6 +13726,8 @@ export interface operations {
                 limit?: number;
                 /** @description History page offset. */
                 offset?: number;
+                /** @description Narrows the list to one kind of thing: `video` (films, episodes and home videos), `music` (songs), `books` (audiobooks and their parts) or `comics`. Absent for everything. Anything else is `400`. Retro games are not a kind here: they leave no play record, only saves (`GET /profile/kinds`). */
+                kind?: "video" | "music" | "books" | "comics";
             };
             header?: never;
             path?: never;
@@ -13732,6 +13781,27 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorEnvelope"];
                 };
             };
+        };
+    };
+    getProfileKinds: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The caller's books, comics and games. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProfileKinds"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
         };
     };
     countHistoryReset: {
@@ -19432,6 +19502,8 @@ export interface operations {
             query?: {
                 limit?: number;
                 offset?: number;
+                /** @description Narrows the list to one kind of thing: `video` (films, episodes and home videos), `music` (songs), `books` (audiobooks and their parts) or `comics`. Absent for everything. Anything else is `400`. Retro games are not a kind here: they leave no play record, only saves (`GET /profile/kinds`). */
+                kind?: "video" | "music" | "books" | "comics";
             };
             header?: never;
             path?: never;

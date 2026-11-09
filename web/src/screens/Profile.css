@@ -471,3 +471,24 @@ a.profile__page {
 .profile__mostplayed .profile__history {
   padding-bottom: 8px;
 }
+
+/* History's filter and switch (profile-2-plan §4e): two rows of pills that
+   wrap on a phone rather than scrolling sideways. */
+.profile__historybar {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 10px 18px;
+  padding: 4px 0 16px;
+}
+
+.profile__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+/* Books, comics and games on Overview (§4d). */
+.profile__kind .profile__history {
+  padding-bottom: 12px;
+}
