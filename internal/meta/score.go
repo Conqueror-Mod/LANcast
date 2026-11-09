@@ -196,11 +196,69 @@ func albumText(s string) string {
 			}
 		}
 	}
-	return strings.TrimSpace(b.String())
+	return unstylize(strings.TrimSpace(b.String()))
+}
+
+/*
+ * stylized maps the Cyrillic letters a Latin name borrows for their look to
+ * the letters they stand in for: "KoЯn" is Korn, credited as "Korn".
+ *
+ * Only inside a word that also holds Latin letters. A word wholly in Cyrillic
+ * is Cyrillic ("Тату" is not "Tatu" here; the credit's own names cover that),
+ * and a mixed word is a stylization, since no language spells that way.
+ * Measured on a real library: Korn's "Untouchables" was the fourth result,
+ * exact in title and year, and scored as another artist's record.
+ */
+var stylized = map[rune]rune{
+	'я': 'r', 'и': 'n', 'а': 'a', 'е': 'e', 'о': 'o', 'р': 'p',
+	'с': 'c', 'у': 'y', 'х': 'x', 'к': 'k', 'м': 'm', 'т': 't',
+	'в': 'b', 'з': '3', 'ё': 'e',
+}
+
+func unstylize(s string) string {
+	words := strings.Fields(s)
+	changed := false
+	for i, w := range words {
+		latin, cyrillic := false, false
+		for _, r := range w {
+			latin = latin || unicode.Is(unicode.Latin, r)
+			cyrillic = cyrillic || unicode.Is(unicode.Cyrillic, r)
+		}
+		if !latin || !cyrillic {
+			continue
+		}
+		words[i] = strings.Map(func(r rune) rune {
+			if l, ok := stylized[r]; ok {
+				return l
+			}
+			return r
+		}, w)
+		changed = true
+	}
+	if !changed {
+		return s
+	}
+	return strings.Join(words, " ")
+}
+
+/*
+ * symbolTitle is a title with no letters or digits at all, compared as
+ * written: Justice's "✝" and Caravan Palace's "<|°_°|>" are real albums,
+ * and albumText reduces both to nothing, which scored an exact match zero
+ * (measured). Only whitespace and case are set aside.
+ */
+func symbolTitle(s string) string {
+	return strings.ToLower(strings.Join(strings.Fields(s), ""))
 }
 
 func albumTitleScore(a, b string) float64 {
 	na, nb := albumText(a), albumText(b)
+	if na == "" && nb == "" {
+		if sa := symbolTitle(a); sa != "" && sa == symbolTitle(b) {
+			return 1
+		}
+		return 0
+	}
 	if na == "" || nb == "" {
 		return 0
 	}
@@ -241,6 +299,12 @@ func artistAgreement(a, b string) float64 {
 	}
 	if na == nb {
 		return 1
+	}
+	// The same letters spaced differently are the same name: punctuation is
+	// dropped, so "Go_A" reads "goa" and "Go A" reads "go a", and "Mr.A"
+	// against "Mr. A" likewise. Not 1, since the spelling did differ.
+	if strings.ReplaceAll(na, " ", "") == strings.ReplaceAll(nb, " ", "") {
+		return 0.95
 	}
 	wa, wb := strings.Fields(na), strings.Fields(nb)
 	inB := map[string]bool{}
