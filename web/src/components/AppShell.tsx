@@ -15,6 +15,7 @@ import {
   useUpdateStatus,
   useHealth,
   useActivity,
+  useLiveTVOn,
 } from "@/api/hooks";
 import { useEffect, useState, type ReactNode } from "react";
 import type { Library } from "@/api/types";
@@ -108,6 +109,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   const logout = useLogout();
   const location = useLocation();
   const isAdmin = useIsAdmin();
+  const liveTV = useLiveTVOn();
   const { data: health } = useHealth();
   const [reporting, setReporting] = useState(false);
 
@@ -275,25 +277,30 @@ export function AppShell({ children }: { children: ReactNode }) {
             Reported as exactly that. The first group is what you watch or
             play; the second is what you manage, and who is here.
           */}
-          <div className="app-shell__group">
-            {/* Live TV is a place with contents, like a library — and unlike a
-                library it is the same list for everybody, so it sits below them
-                rather than among them. Shown to everyone: adding a channel
-                source is an admin act, watching is not. */}
-            <NavLink
-              to="/live"
-              title="Live TV"
-              onClick={releaseRail}
-              className={({ isActive }) =>
-                "app-shell__lib" + (isActive ? " is-active" : "")
-              }
-            >
-              <LiveIcon />
-              <span className="app-shell__lib-name app-shell__label">
-                Live TV
-              </span>
-            </NavLink>
-          </div>
+          {/* Only while the server has live TV on (useLiveTVOn), and the
+              group with it: it holds nothing else, and an empty group would
+              still draw its break. */}
+          {liveTV === true && (
+            <div className="app-shell__group">
+              {/* Live TV is a place with contents, like a library — and unlike a
+                  library it is the same list for everybody, so it sits below them
+                  rather than among them. Shown to everyone: adding a channel
+                  source is an admin act, watching is not. */}
+              <NavLink
+                to="/live"
+                title="Live TV"
+                onClick={releaseRail}
+                className={({ isActive }) =>
+                  "app-shell__lib" + (isActive ? " is-active" : "")
+                }
+              >
+                <LiveIcon />
+                <span className="app-shell__lib-name app-shell__label">
+                  Live TV
+                </span>
+              </NavLink>
+            </div>
+          )}
 
           <div className="app-shell__group">
             {/* Add-ons is in the rail rather than buried three levels into
