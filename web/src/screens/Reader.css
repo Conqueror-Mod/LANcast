@@ -27,6 +27,29 @@
   display: block;
 }
 
+/* Two facing pages: each takes half the width, and they meet in the middle
+   with no gutter, as a printed spread does. */
+.reader--spread .reader__page {
+  max-width: 50%;
+}
+
+/* Fitted to the width: the page is as wide as the screen and the stage
+   scrolls down it. */
+.reader--fit-width .reader__stage {
+  align-items: flex-start;
+  overflow-y: auto;
+}
+
+.reader--fit-width .reader__page {
+  width: 100%;
+  max-height: none;
+  height: auto;
+}
+
+.reader--fit-width.reader--spread .reader__page {
+  width: 50%;
+}
+
 .reader__bar {
   flex: 0 0 auto;
   display: flex;

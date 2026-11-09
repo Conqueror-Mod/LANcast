@@ -1,4 +1,5 @@
 import { useState, type FormEvent } from "react";
+import { Link } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiGet, apiPost, apiSend } from "@/api/client";
 import type { components } from "@/api/schema";
@@ -6,12 +7,18 @@ import { errorMessage } from "@/lib/errors";
 import "./RetroAchievementsCard.css";
 
 /*
- * Your RetroAchievements, on your profile page (ADR 0090).
+ * Your RetroAchievements (ADR 0090), in two places since settings-3-plan
+ * step 4.
+ *
+ * The connection — connecting, disconnecting, earning while playing — is in
+ * Settings › Your account › Connected accounts, where somebody looking for
+ * "achievements" in Settings can find it (ADR 0112 step 6 asked for that). The
+ * points, unlocks and progress stay on your profile, which is where you look
+ * at what you have done.
  *
  * Yours alone, and opt-in: until you connect, nothing contacts
- * RetroAchievements and this section is a short form saying what connecting
- * does. Pictures are LANcast's own URLs; the server fetched them, so this page
- * never contacts RetroAchievements either.
+ * RetroAchievements. Pictures are LANcast's own URLs; the server fetched
+ * them, so neither page contacts RetroAchievements either.
  */
 
 export type RAView = components["schemas"]["RetroAchievementsView"];
@@ -26,12 +33,12 @@ export function useRetroAchievements() {
   });
 }
 
-export function RetroAchievementsCard() {
+/** Connecting, disconnecting and earning while playing: Settings › Connected accounts. */
+export function RetroAchievementsConnection() {
   const qc = useQueryClient();
-  const { data } = useRetroAchievements();
+  const { data, isPending } = useRetroAchievements();
   const [username, setUsername] = useState("");
   const [apiKey, setApiKey] = useState("");
-  const [showAll, setShowAll] = useState(false);
 
   const connect = useMutation({
     mutationFn: () =>
@@ -45,12 +52,16 @@ export function RetroAchievementsCard() {
     mutationFn: () => apiSend("/api/profile/retroachievements", "DELETE"),
     onSuccess: () => qc.invalidateQueries({ queryKey: KEY }),
   });
-  const refresh = useMutation({
-    mutationFn: () => apiGet<RAView>("/api/profile/retroachievements?refresh=1"),
-    onSuccess: (v) => qc.setQueryData(KEY, v),
-  });
 
-  if (!data || !data.available) return null;
+  if (isPending) return null;
+  if (!data || !data.available) {
+    return (
+      <section className="ra" aria-label="RetroAchievements">
+        <span className="section-label">RetroAchievements</span>
+        <p className="ra__intro">This server cannot reach RetroAchievements.</p>
+      </section>
+    );
+  }
 
   if (!data.connected) {
     const submit = (e: FormEvent) => {
@@ -61,8 +72,8 @@ export function RetroAchievementsCard() {
       <section className="ra" aria-label="RetroAchievements">
         <span className="section-label">RetroAchievements</span>
         <p className="ra__intro">
-          Connect your RetroAchievements account to see your points, recent unlocks and progress here. Only
-          you see it. Your Web API key is on your RetroAchievements settings page; LANcast keeps it encrypted and
+          Connect your RetroAchievements account to see your points, recent unlocks and progress on your
+          profile. Only you see it. Your Web API key is on your RetroAchievements settings page; LANcast keeps it encrypted and
           contacts RetroAchievements only for you.
         </p>
         <form className="ra__form" onSubmit={submit}>
@@ -92,6 +103,55 @@ export function RetroAchievementsCard() {
     );
   }
 
+  return (
+    <section className="ra" aria-label="RetroAchievements">
+      <div className="ra__head">
+        <span className="section-label">RetroAchievements</span>
+        <div className="ra__actions">
+          <button className="ra__link" disabled={disconnect.isPending} onClick={() => disconnect.mutate()}>
+            Disconnect
+          </button>
+        </div>
+      </div>
+      <Who view={data} />
+      {data.problem && (
+        <p className="ra__problem" role="status">
+          {data.problem}
+        </p>
+      )}
+      <EarnWhilePlaying view={data} />
+      <p className="ra__intro">
+        Your points, recent unlocks and progress are on <Link to="/profile">your profile</Link>.
+      </p>
+    </section>
+  );
+}
+
+/** Points, unlocks and progress: your profile. */
+export function RetroAchievementsCard() {
+  const qc = useQueryClient();
+  const { data } = useRetroAchievements();
+  const [showAll, setShowAll] = useState(false);
+  const refresh = useMutation({
+    mutationFn: () => apiGet<RAView>("/api/profile/retroachievements?refresh=1"),
+    onSuccess: (v) => qc.setQueryData(KEY, v),
+  });
+
+  if (!data || !data.available) return null;
+
+  if (!data.connected) {
+    return (
+      <section className="ra" aria-label="RetroAchievements">
+        <span className="section-label">RetroAchievements</span>
+        <p className="ra__intro">
+          Connect your RetroAchievements account in{" "}
+          <Link to="/settings?pane=accounts">Settings › Connected accounts</Link> to see your points, recent
+          unlocks and progress here.
+        </p>
+      </section>
+    );
+  }
+
   const games = Array.isArray(data.games) ? data.games : [];
   const recent = Array.isArray(data.recent) ? data.recent : [];
   const shownGames = showAll ? games : games.slice(0, 8);
@@ -104,31 +164,19 @@ export function RetroAchievementsCard() {
           <button className="ra__link" disabled={refresh.isPending} onClick={() => refresh.mutate()}>
             {refresh.isPending ? "Refreshing…" : "Refresh"}
           </button>
-          <button className="ra__link" disabled={disconnect.isPending} onClick={() => disconnect.mutate()}>
-            Disconnect
-          </button>
+          <Link className="ra__link" to="/settings?pane=accounts">
+            Manage
+          </Link>
         </div>
       </div>
 
-      <div className="ra__who">
-        {data.avatar && <img className="ra__avatar" src={data.avatar} alt="" />}
-        <div>
-          <div className="ra__name">{data.user}</div>
-          <div className="ra__points">
-            {data.points.toLocaleString()} points
-            {data.softcore_points > 0 && <> · {data.softcore_points.toLocaleString()} casual</>}
-          </div>
-          {data.rich_presence && <div className="ra__presence">{data.rich_presence}</div>}
-        </div>
-      </div>
+      <Who view={data} />
 
       {data.problem && (
         <p className="ra__problem" role="status">
           {data.problem}
         </p>
       )}
-
-      <EarnWhilePlaying view={data} />
 
       {recent.length > 0 && (
         <>
@@ -191,6 +239,23 @@ export function RetroAchievementsCard() {
         <p className="ra__intro">Nothing unlocked yet. Progress shows here as you play.</p>
       )}
     </section>
+  );
+}
+
+/** Who is connected, and their points. */
+function Who({ view }: { view: RAView }) {
+  return (
+    <div className="ra__who">
+      {view.avatar && <img className="ra__avatar" src={view.avatar} alt="" />}
+      <div>
+        <div className="ra__name">{view.user}</div>
+        <div className="ra__points">
+          {view.points.toLocaleString()} points
+          {view.softcore_points > 0 && <> · {view.softcore_points.toLocaleString()} casual</>}
+        </div>
+        {view.rich_presence && <div className="ra__presence">{view.rich_presence}</div>}
+      </div>
+    </div>
   );
 }
 

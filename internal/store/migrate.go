@@ -6,7 +6,7 @@ import (
 )
 
 // CurrentSchemaVersion is the revision this build expects.
-const CurrentSchemaVersion = 92
+const CurrentSchemaVersion = 93
 
 // migration is one forward step. There are deliberately no down migrations:
 // rolling a media library's schema backwards loses data that a rescan cannot
@@ -213,6 +213,15 @@ var migrations = []migration{
 		{"user", "home_spotlight", "TEXT"},
 		{"user", "home_spotlight_item", "INTEGER"},
 		{"user", "spoilers", "TEXT"},
+	}},
+	// Reading and listening defaults (settings-3-plan step 4): the speed a
+	// book starts at before it has one of its own, a sleep timer set when a
+	// book starts, and how comics are laid out. Null is "never chosen".
+	{version: 93, columns: []column{
+		{"user", "book_speed", "REAL"},
+		{"user", "book_sleep", "TEXT"},
+		{"user", "comic_layout", "TEXT"},
+		{"user", "comic_fit", "TEXT"},
 	}},
 }
 

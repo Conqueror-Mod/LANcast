@@ -5143,6 +5143,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/profile/reading": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The caller's reading and listening defaults
+         * @description What a book or a comic does when nothing more specific has been chosen (ADR 0120): the speed a book starts at, a sleep timer set when a book starts, and how comics are laid out. A null field has never been chosen: 1x, no timer, one page fitted to the screen. On a server with no accounts, `account` is false and every field is null.
+         */
+        get: operations["getReadingPreferences"];
+        /**
+         * Set the caller's reading and listening defaults
+         * @description Each field is optional and a field left out is left alone; at least one is required. Acts on the session only. Not audited.
+         */
+        put: operations["setReadingPreferences"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/profile/sessions": {
         parameters: {
             query?: never;
@@ -10112,6 +10136,41 @@ export interface components {
             spoilers?: "show" | "synopsis" | "all";
             /** @description Replaces the whole list. */
             hidden_shelves?: string[];
+        };
+        ReadingPreferences: {
+            /** @description False on a server with no accounts yet. */
+            account: boolean;
+            /**
+             * @description The speed a book starts at until it has a speed of its own, which then wins. Null: never chosen, which is 1x.
+             * @enum {number|null}
+             */
+            book_speed: 0.75 | 1 | 1.25 | 1.5 | 1.75 | 2 | null;
+            /**
+             * @description A sleep timer set when a book starts: minutes, the end of the chapter, or off. The book player can change or clear it. Null: never chosen, which is off.
+             * @enum {string|null}
+             */
+            book_sleep: "off" | "15" | "30" | "45" | "60" | "chapter" | null;
+            /**
+             * @description How a comic is shown: a page at a time, or two facing pages with the cover alone. Null: never chosen, which is single.
+             * @enum {string|null}
+             */
+            comic_layout: "single" | "spread" | null;
+            /**
+             * @description How a comic page is sized: the whole page on screen, or the width of the screen, scrolled down. Null: never chosen, which is page.
+             * @enum {string|null}
+             */
+            comic_fit: "page" | "width" | null;
+        };
+        /** @description A change to the caller's reading and listening defaults. Every field is optional; at least one is required. */
+        ReadingPreferencesUpdate: {
+            /** @enum {number} */
+            book_speed?: 0.75 | 1 | 1.25 | 1.5 | 1.75 | 2;
+            /** @enum {string} */
+            book_sleep?: "off" | "15" | "30" | "45" | "60" | "chapter";
+            /** @enum {string} */
+            comic_layout?: "single" | "spread";
+            /** @enum {string} */
+            comic_fit?: "page" | "width";
         };
         /** @description Answered with every field. On PUT each field is optional, and a field left out is left alone; at least one is required. */
         PlaybackPreferences: {
@@ -19163,6 +19222,64 @@ export interface operations {
                 };
             };
             /** @description No field sent, or a value Home cannot use: `bad_spotlight`, `bad_spotlight_item`, `bad_spoilers`, `bad_hidden_shelves` (including an Unwatched key naming no library). */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description This server has no accounts yet (`no_account`). */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    getReadingPreferences: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The caller's reading and listening defaults. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReadingPreferences"];
+                };
+            };
+        };
+    };
+    setReadingPreferences: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReadingPreferencesUpdate"];
+            };
+        };
+        responses: {
+            /** @description Saved; the defaults as stored. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReadingPreferences"];
+                };
+            };
+            /** @description No field sent, or a value the players cannot use: `bad_book_speed`, `bad_book_sleep`, `bad_comic_layout`, `bad_comic_fit`. */
             400: {
                 headers: {
                     [name: string]: unknown;

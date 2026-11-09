@@ -58,6 +58,10 @@ let host: HTMLDivElement;
 let root: Root;
 let player: BookPlayerState | null = null;
 let writes: { url: string; method: string; body: unknown }[] = [];
+/** The account's reading defaults (/api/profile/reading); nothing chosen unless a test says so. */
+let reading: Record<string, unknown> = {};
+/** The book's own fields over `info`, for a test that gives it a speed. */
+let bookExtra: Record<string, unknown> = {};
 
 function Probe() {
   player = useBookPlayer();
@@ -83,6 +87,8 @@ beforeEach(async () => {
   audio = new FakeAudio();
   resetBookAudioForTests(audio as unknown as HTMLAudioElement);
   writes = [];
+  reading = { account: true, book_speed: null, book_sleep: null, comic_layout: null, comic_fit: null };
+  bookExtra = {};
   vi.stubGlobal(
     "fetch",
     vi.fn(async (url: string, init?: RequestInit) => {
@@ -90,7 +96,11 @@ beforeEach(async () => {
         writes.push({ url, method: init.method, body: init.body ? JSON.parse(String(init.body)) : null });
         return new Response(null, { status: 204 });
       }
-      const body = url.endsWith(`/api/items/${BOOK}/book`) ? info : { id: BOOK, kind: "book", title: "Warped" };
+      const body = url.endsWith("/api/profile/reading")
+        ? reading
+        : url.endsWith(`/api/items/${BOOK}/book`)
+          ? { ...info, ...bookExtra }
+          : { id: BOOK, kind: "book", title: "Warped" };
       return new Response(JSON.stringify(body), { status: 200, headers: { "Content-Type": "application/json" } });
     }),
   );
@@ -284,5 +294,62 @@ describe("the sleep timer", () => {
     act(() => player!.stop());
     expect(player!.sleep).toBeNull();
     expect(audio.volume).toBe(1);
+  });
+});
+
+/*
+ * The account's defaults (Your account › Reading & listening,
+ * settings-3-plan step 4). Defaults only: a book's own speed wins, and a timer
+ * already counting is left alone.
+ */
+describe("the account's listening defaults", () => {
+  it("starts a book with no speed of its own at the default, without giving it one", async () => {
+    reading = { ...reading, book_speed: 1.5 };
+    await act(async () => {
+      await player!.play(BOOK);
+    });
+    act(() => audio.ready());
+    expect(player!.speed).toBe(1.5);
+    expect(audio.playbackRate).toBe(1.5);
+    expect(writes.some((w) => w.url.endsWith("/speed"))).toBe(false);
+  });
+
+  it("keeps a book's own speed over the default", async () => {
+    reading = { ...reading, book_speed: 1.5 };
+    bookExtra = { speed: 1.25 };
+    await act(async () => {
+      await player!.play(BOOK);
+    });
+    expect(player!.speed).toBe(1.25);
+  });
+
+  it("sets the default sleep timer when a book starts, and leaves one already counting", async () => {
+    reading = { ...reading, book_sleep: "30" };
+    await act(async () => {
+      await player!.play(BOOK);
+    });
+    expect(player!.sleep).toBe(30);
+    act(() => player!.setSleep("chapter"));
+    await act(async () => {
+      await player!.play(BOOK);
+    });
+    expect(player!.sleep).toBe("chapter");
+  });
+
+  it("sets no timer when the default is off", async () => {
+    reading = { ...reading, book_sleep: "off" };
+    await act(async () => {
+      await player!.play(BOOK);
+    });
+    expect(player!.sleep).toBeNull();
+  });
+
+  it("plays at 1x when the defaults cannot be read", async () => {
+    reading = { error: "nope" };
+    await act(async () => {
+      await player!.play(BOOK);
+    });
+    expect(player!.speed).toBe(1);
+    expect(player!.sleep).toBeNull();
   });
 });

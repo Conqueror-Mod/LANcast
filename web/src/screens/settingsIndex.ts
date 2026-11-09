@@ -93,6 +93,10 @@ export const ACCOUNT_PANES: Pane[] = [
   { id: "home", label: "Home" },
   { id: "security", label: "Security" },
   { id: "languages", label: "Languages & subtitles" },
+  // Defaults for audiobooks and comics, and services you connected
+  // (settings-3-plan step 4).
+  { id: "reading", label: "Reading & listening" },
+  { id: "accounts", label: "Connected accounts" },
   { id: "privacy", label: "Privacy" },
 ];
 
@@ -223,6 +227,11 @@ export const SETTINGS_INDEX: SettingEntry[] = [
   { pane: "languages", label: "Preferred audio", terms: "language dub" },
   { pane: "languages", label: "Subtitle language", terms: "subs captions" },
   { pane: "languages", label: "Subtitle style", terms: "font size colour color captions" },
+  { pane: "reading", label: "Speed", terms: "audiobook book playback rate default faster" },
+  { pane: "reading", label: "Sleep timer", terms: "audiobook book bed fade stop" },
+  { pane: "reading", label: "Pages", terms: "comic two page spread single manga" },
+  { pane: "reading", label: "Fit", terms: "comic width zoom page size" },
+  { pane: "accounts", label: "RetroAchievements", terms: "achievements cheevos retro points connect" },
   { pane: "privacy", label: "Let others here see what I have watched", terms: "sharing activity" },
   { pane: "privacy", label: "Let paired servers list me", terms: "presence peers federation" },
   { pane: "privacy", label: "Let this server's webhooks report what I watch", terms: "webhook consent" },

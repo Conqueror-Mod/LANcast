@@ -20,6 +20,8 @@ let host: HTMLDivElement;
 let root: Root;
 let place: { page: number; pages: number; updated_at: number } | null;
 let puts: number[];
+/** What /api/profile/reading answers: the account's comic layout and fit. */
+let reading: Record<string, unknown>;
 
 beforeEach(() => {
   host = document.createElement("div");
@@ -27,6 +29,7 @@ beforeEach(() => {
   root = createRoot(host);
   place = null;
   puts = [];
+  reading = { account: true, comic_layout: null, comic_fit: null };
   vi.stubGlobal(
     "fetch",
     vi.fn(async (url: string, init?: RequestInit) => {
@@ -36,6 +39,7 @@ beforeEach(() => {
         puts.push(JSON.parse(init.body as string).page);
         return new Response(null, { status: 204 });
       }
+      if (url.endsWith("/api/profile/reading")) return json(reading);
       if (url.endsWith("/api/items/7/pages")) return json({ pages: 5, place });
       if (url.endsWith("/api/items/8/pages")) {
         return json({ error: { code: "unavailable", message: "cannot be opened" } }, 503);
@@ -182,5 +186,58 @@ describe("the comic reader", () => {
     });
     await settle();
     expect(host.querySelector('[role="alert"]')?.textContent).toContain("cannot be opened");
+  });
+});
+
+/*
+ * Layout from Your account › Reading & listening (settings-3-plan step 4).
+ */
+describe("the comic reader's layout", () => {
+  const all = () => [...host.querySelectorAll("img.reader__page")].map((i) => i.getAttribute("src"));
+
+  it("shows two facing pages, the cover alone, and turns a spread at a time", async () => {
+    reading = { account: true, comic_layout: "spread", comic_fit: null };
+    await open();
+    expect(all()).toEqual(["/api/items/7/pages/0"]);
+    await key("ArrowRight");
+    expect(all()).toEqual(["/api/items/7/pages/1", "/api/items/7/pages/2"]);
+    expect(host.textContent).toContain("2–3 / 5");
+    await key("ArrowRight");
+    expect(all()).toEqual(["/api/items/7/pages/3", "/api/items/7/pages/4"]);
+    // The last spread: forward goes nowhere, and the button says so.
+    await key("ArrowRight");
+    expect(all()).toEqual(["/api/items/7/pages/3", "/api/items/7/pages/4"]);
+    expect(host.querySelector<HTMLButtonElement>('[aria-label="Next page"]')!.disabled).toBe(true);
+    await key("ArrowLeft");
+    expect(all()).toEqual(["/api/items/7/pages/1", "/api/items/7/pages/2"]);
+    // The place kept is the spread's first page.
+    await settle(200);
+    expect(puts.at(-1)).toBe(1);
+  });
+
+  it("shows one page on a screen taller than it is wide, whatever the layout", async () => {
+    reading = { account: true, comic_layout: "spread", comic_fit: null };
+    vi.stubGlobal("matchMedia", (q: string) => ({
+      matches: false,
+      media: q,
+      addEventListener: () => {},
+      removeEventListener: () => {},
+    }));
+    await open();
+    await key("ArrowRight");
+    expect(all()).toEqual(["/api/items/7/pages/1"]);
+  });
+
+  it("fitted to the width, leaves up and down to scroll the page", async () => {
+    reading = { account: true, comic_layout: null, comic_fit: "width" };
+    await open();
+    expect(host.querySelector(".reader--fit-width")).not.toBeNull();
+    await key("ArrowDown");
+    expect(shown()).toBe("/api/items/7/pages/0");
+    // A page that fits needs no scrolling, so Space turns it.
+    await key(" ");
+    expect(shown()).toBe("/api/items/7/pages/1");
+    await key("ArrowRight");
+    expect(shown()).toBe("/api/items/7/pages/2");
   });
 });

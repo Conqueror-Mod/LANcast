@@ -777,7 +777,7 @@ describe("achievements while playing (ADR 0112)", () => {
     emit({ kind: "menu" });
     await act(async () => button("Achievements: off…").click());
     expect(host.textContent).toContain("earning achievements is off");
-    expect(host.textContent).toContain("in your profile, under RetroAchievements");
+    expect(host.textContent).toContain("in Settings, under Connected accounts");
   });
 
   it("shows what is being counted towards, and says when an unlock is waiting to be sent", async () => {

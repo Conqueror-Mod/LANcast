@@ -68,6 +68,9 @@ export type HomeShelves = components["schemas"]["HomeShelves"];
 // Home preferences per account (ADR 0120, settings-3-plan step 3).
 export type HomePreferences = components["schemas"]["HomePreferences"];
 export type HomePreferencesUpdate = components["schemas"]["HomePreferencesUpdate"];
+// Reading and listening defaults per account (settings-3-plan step 4).
+export type ReadingPreferences = components["schemas"]["ReadingPreferences"];
+export type ReadingPreferencesUpdate = components["schemas"]["ReadingPreferencesUpdate"];
 export type FinishedMemory = components["schemas"]["FinishedMemory"];
 export type ArtworkTone = components["schemas"]["ArtworkTone"];
 

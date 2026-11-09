@@ -1274,7 +1274,8 @@ hidden libraries apply, as everywhere.
 
 ### `GET` · `PUT` · `DELETE /api/profile/retroachievements`
 
-Your RetroAchievements progress on your profile page
+Your RetroAchievements connection (Settings › Connected accounts) and your
+progress (your profile page)
 ([ADR 0090](adr/0090-retroachievements-are-yours-to-connect.md)). **Yours
 only**: every route answers for the caller, and no route reads anybody
 else's.
@@ -2279,6 +2280,45 @@ alone. `hidden_shelves`, when sent, replaces the whole list. The answer is the
 new state, as `GET` returns it. A body with none of the fields is `400`; so
 are an unknown value and an Unwatched key naming no library (`bad_spotlight`,
 `bad_spotlight_item`, `bad_spoilers`, `bad_hidden_shelves`). It acts on the
+session only, and it is not audited. `409 no_account` on a server with no
+accounts.
+
+### `GET /api/profile/reading` and `PUT /api/profile/reading`
+
+The caller's reading and listening defaults (ADR 0120). They follow the person
+to every device:
+
+```json
+{
+  "account": true,
+  "book_speed": 1.5,
+  "book_sleep": "30",
+  "comic_layout": "spread",
+  "comic_fit": "page"
+}
+```
+
+- `book_speed`: the speed a book starts at until it has one of its own
+  (`PUT /api/items/{id}/speed`), which then wins. One of `0.75`, `1`, `1.25`,
+  `1.5`, `1.75` or `2`.
+- `book_sleep`: a sleep timer set when a book starts playing. One of `off`,
+  `15`, `30`, `45`, `60` (minutes) or `chapter` (the end of the chapter). The
+  book player can still change or clear it.
+- `comic_layout`: `single` (a page at a time) or `spread` (two facing pages,
+  the cover alone).
+- `comic_fit`: `page` (the whole page on screen) or `width` (as wide as the
+  screen, scrolled down).
+
+**`null` means never chosen.** The client then plays at 1x, sets no timer,
+and shows one page fitted to the screen.
+
+`account` is `false` on a server with no accounts yet, where every field reads
+`null`.
+
+`PUT` takes the same fields, **each optional**: a field left out is left
+alone. The answer is the new state, as `GET` returns it. A body with none of
+the fields is `400`; so is an unknown value (`bad_book_speed`,
+`bad_book_sleep`, `bad_comic_layout`, `bad_comic_fit`). It acts on the
 session only, and it is not audited. `409 no_account` on a server with no
 accounts.
 
