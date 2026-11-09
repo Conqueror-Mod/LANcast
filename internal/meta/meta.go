@@ -76,10 +76,15 @@ type Candidate struct {
 	ExternalID string
 	Kind       Kind
 	Title      string
-	Year       int
-	Overview   string
-	Popularity float64
-	PosterURL  string
+	// OtherTitles are the candidate's other names: its original-language
+	// title, and its English one when it was searched in another language
+	// (ADR 0122). The scorer takes the best of Title and these, so a file
+	// named in either language matches.
+	OtherTitles []string `json:"-"`
+	Year        int
+	Overview    string
+	Popularity  float64
+	PosterURL   string
 	// Artist is an album candidate's artist credit, as one string ("Jay-Z &
 	// Linkin Park"). Absent for every other kind.
 	Artist string `json:",omitempty"`

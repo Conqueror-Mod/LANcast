@@ -113,3 +113,20 @@ func TestAMissingLibraryIsNotFound(t *testing.T) {
 	wantError(t, h.do(t, "GET", "/api/libraries/999999/refresh?scope=settled", nil), 404, "not_found")
 	wantError(t, h.do(t, "POST", "/api/libraries/999999/refresh?scope=settled", nil), 404, "not_found")
 }
+
+// The `language` scope (ADR 0122) is routed like `settled`: priced first, run
+// by id, and never through the search-and-score queue.
+func TestTheLanguageScopeIsAcceptedAndRunByID(t *testing.T) {
+	h := newHarness(t)
+	lib := makeLibrary(t, h)
+
+	var body map[string]any
+	decode(t, h.do(t, "GET", fmt.Sprintf("/api/libraries/%d/refresh?scope=language", lib), nil), &body)
+	if body["scope"] != "language" || body["count"] != float64(0) {
+		t.Errorf("preview = %#v, want scope language and a count of 0", body)
+	}
+	decode(t, h.do(t, "POST", fmt.Sprintf("/api/libraries/%d/refresh?scope=language", lib), nil), &body)
+	if body["scope"] != "language" || body["queued"] != float64(0) {
+		t.Errorf("run = %#v, want scope language and 0 queued for a library with nothing identified", body)
+	}
+}

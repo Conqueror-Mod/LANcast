@@ -5615,6 +5615,7 @@ prevent.
 | `all` | every item a provider could answer for |
 | `unmatched` | only items no provider identified |
 | `settled` | only items whose match is **locked**, re-fetched by the id they already carry |
+| `language` | every item TMDB identified, **matched or locked**, re-fetched by the id it already carries — for a new `metadata_language` (ADR 0122) |
 
 **GET prices it without performing it**, the way the history reset does. This is
 not destructive but it *is* expensive — roughly 1,480 lookups for a real film
@@ -5671,6 +5672,28 @@ nothing to say so. What came of it goes to the log: `settled refresh finished`
 with `attempted`, `updated` and `failed`. Those differing is information rather
 than a fault: a row whose provider is no longer configured, or whose id no
 longer resolves at the provider, is skipped rather than failed.
+
+#### `language` is `settled`, wider
+
+A change of `metadata_language` (ADR 0122) is news about every identified
+title's **text** and about nobody's **identity**. So this scope takes the
+`settled` door — fetch by the recorded id, write `match_state` and
+`match_score` back unchanged, honour every field lock — and widens who goes
+through it: rows whose match is `matched` as well as `locked`.
+
+It never searches. An ordinary refresh would re-score every film against
+titles in the new language, and a file named in English is exactly the case a
+translated title scores worst on.
+
+Only rows whose provider is `tmdb` and that carry an id are counted: TMDB is
+the provider whose answers depend on the language. Rows in **`review` are left
+out** — their id is a candidate's that nobody confirmed, and fetching by it
+would fill the row with a suggestion's text as though it had been chosen.
+
+Changing the language never starts this. The client offers it once the setting
+is saved, with the count from GET, because a library of 1,480 films is 1,480
+lookups. POST behaves as `settled`'s does: it reports how many it will
+attempt, runs detached, and logs `language refresh finished`.
 
 ### `POST /api/libraries/{id}/reparse`
 
@@ -5970,6 +5993,8 @@ to "have I watched this".
 | `login_picker` | `true` | boolean | Show the accounts on the sign-in page, as names to pick from, to devices on the home network only (`GET /api/auth/accounts`). Audited |
 | `member_pictures` | `true` | boolean | Members may upload a picture of themselves (`PUT /api/profile/picture`). Off refuses their uploads with `403` and leaves existing pictures; administrators may always set their own ([ADR 0121](adr/0121-a-picture-of-your-own.md)). Audited |
 | `certification_country` | `""` | one of `certification_countries` | Whose certificate to prefer on films and programmes, as an ISO 3166-1 alpha-2 code. Empty is the default order: the US certificate, falling back to the British one. A chosen country is placed **in front of** that default rather than replacing it — TMDB's coverage is uneven, and narrowing would strip the label off every title the chosen country has no entry for, which a rating ceiling then reads as unrated and **blocks**. The offered list is **served by `GET /api/settings`, not known by the client**: what may be offered is a fact about the server's rating ladder, and a country whose labels the ladder cannot place would populate `content_rating` with strings every ceiling treats as unrated. France is the worked example — `Tous publics` is a real certificate with no rung on the ladder. A code outside the list is **rejected with 400** rather than stored and ignored. Takes effect on the next metadata fetch and does **not** rewrite certificates already stored; a metadata refresh does that |
+| `metadata_language` | `"en-US"` | one of `metadata_languages` | The language titles, synopses and taglines are fetched from TMDB in (ADR 0122), as a language-region tag. Server-wide. Where TMDB has no translation the **English text fills the gap**, so a choice never blanks a synopsis English had. Matching still works on English filenames: every name a candidate has — its title in this language, its original title, its English title — is scored. A tag outside the list is **400**. `en-US` is stored as the default. Takes effect on the next fetch and does **not** rewrite what is stored; the `language` refresh scope does that, and is offered rather than started. The region of certificates is `certification_country`, not this |
+| `metadata_languages` | — | read-only | The languages `metadata_language` may be set to, each `{code, name, native}` — `name` in English, `native` in the language itself. **Served rather than known by the client**, for the reason `certification_countries` is |
 | `artwork_cache_mb` | `0` | 0 or more | A cap on the artwork cache, in megabytes. **0 is no limit**, the default. A *target* rather than a guarantee: a daily pass removes things in the order of what can be recovered — **orphans** (artwork nothing references) at any setting, then **derived sizes** oldest-first to meet the cap, and **never a live original**. An original is the only copy that cannot be rebuilt without going back to a provider, so a cap that could remove one would turn a disk-space setting into "some of your posters are gone now". A library whose live originals alone exceed the cap keeps them and says so in the log rather than meeting the number. Orphans are removed even at 0, because they are waste under every policy and removing one cannot cost a visible picture. No upper bound: a large array may reasonably hold a great deal of artwork, and an invented ceiling would be wrong with no way to say so |
 | `max_transcodes` | `3` | 1 to 64 | How many conversions may run at once. Each is a whole ffmpeg, so this is a statement about the machine rather than a preference. A **ceiling, not a queue**: past it a request is refused and the client reports a busy server, which is honest — admitting everybody and letting every stream stutter is not. **Direct play does not count**; a file sent as it is costs no session however many people are watching. Applied live, so an operator relieving a struggling server does not have to restart it and drop the sessions they are trying to help; those already running are left alone and the ceiling decides what is admitted next |
 | `scan_at_hour` | `null` | 0–23 or `null` | The hour of the **local** day a due scan may start. `null` is any time, the default. A **gate on top of `scan_interval_hours`, not a schedule replacing it**: the interval still says how often, this says when a due scan may begin — so `24`+`3` is nightly, and `1`+`3` is also nightly because the gate holds the others back. It does **not** make a scan due: `at 3` on a weekly interval is still weekly. Redefining the interval instead would mean somebody who had set "every 6 hours" and then picked an hour silently got a daily scan, with two settings on screen contradicting each other. **Local time**, because 3am means 3am where the server is; 3am UTC would wake the disk at 10pm for this household, which is the one time of day the setting exists to avoid. Send `null` to clear it; omitting the field leaves it alone |

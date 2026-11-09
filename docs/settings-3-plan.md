@@ -310,3 +310,27 @@ at all, which matters more than where any one of them lives. Each is one PR.
   moved from the profile to *Your account › Connected accounts*. The profile
   keeps the points, unlocks and progress, with a Manage link, and sends
   somebody not yet connected to Settings.
+
+## 11. Step 5 as built
+
+ADR 0122 is the decision; this is what landed.
+
+- **One server setting**, `metadata_language`, default `en-US`, chosen from a
+  list the server serves (33 language-region tags). Per library is step 6.
+  "Region" turned out to be the age-rating country, which already existed and
+  is left where it was.
+- **TMDB asks in it everywhere.** The language is part of the cache key, so
+  an answer in one language is never served for another; English keeps the
+  key it always had, so an upgrade keeps its cache. Where the chosen language
+  has no translation, the English title or synopsis fills the gap.
+- **English filenames keep matching.** A search in German returns "Der Pate"
+  for `The Godfather (1972).mkv`. Every name a result has is scored: the
+  translated title, the original-language title, and the English title from a
+  second search made only when the language is not English.
+- **Trailers** ask for the chosen language, then English, then untagged.
+- **The refresh is offered, never started.** A new scope, `language`, takes
+  the by-id path `settled` uses, widened to matched titles: nothing is
+  searched or re-scored, match states are written back unchanged, and field
+  locks hold. Titles in review are left out, since their id is a suggestion.
+  After the language is saved, *Server › Metadata* shows each film and show
+  library with its count and its own Refresh button, and a Not now.

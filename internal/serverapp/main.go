@@ -437,6 +437,8 @@ func run(ctx context.Context, addr, dataDir string, log *slog.Logger) error {
 				// effect on the next fetch. It does not rewrite what is already
 				// stored — a refresh does that, and the settings page says so.
 				tmdb.WithCertificationCountry(s.CertificationCountry),
+				// The same for the language (ADR 0122): fetches from now on.
+				tmdb.WithLanguage(s.MetadataLanguage),
 			))
 		}
 		// External ratings (ADR 0019): registered only when a key is present, so
