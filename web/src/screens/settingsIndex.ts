@@ -215,6 +215,7 @@ export const SETTINGS_INDEX: SettingEntry[] = [
   { pane: "backup", label: "Take a backup", terms: "backup database export" },
   { pane: "backup", label: "Back up automatically", terms: "backup schedule" },
   { pane: "backup", label: "Scheduled backups to keep", terms: "backup retention" },
+  { pane: "backup", label: "Storage", terms: "disk space size usage free drive previews database how much" },
   { pane: "backup", label: "Artwork cache limit", terms: "storage disk space posters" },
 
   // Your account

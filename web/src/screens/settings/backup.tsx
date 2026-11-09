@@ -1,5 +1,6 @@
 import { useSettings, useUpdateSettings } from "@/api/hooks";
 import { BackupSettings } from "@/components/BackupSettings";
+import { StorageOverview } from "@/components/StorageOverview";
 import { RuleSelect } from "./shared";
 
 export function BackupPane() {
@@ -37,6 +38,7 @@ export function BackupPane() {
           </section>
           <section className="settings__section">
             <span className="section-label">Storage</span>
+            <StorageOverview />
             <RuleSelect
               title="Artwork cache limit"
               sub="Posters and stills LANcast has downloaded. Artwork nothing uses any more is always cleared out, whatever this says. A limit additionally drops resized copies, which are rebuilt from the originals when they are next needed — the originals themselves are never deleted, so a limit below what your library actually uses simply will not be met."

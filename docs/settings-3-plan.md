@@ -358,3 +358,21 @@ ADR 0123 is the decision; schema 95.
 - **The library editor** (Settings › Libraries › Edit) gains an Options
   section with whichever applies, and changing the language offers that
   library's refresh.
+
+## 13. Step 7 as built
+
+- **`GET /api/storage`**, admin only and read-only. One walk of the data
+  folder counts every file once against its part (database, artwork,
+  previews, optimized, backups, conversion scratch, subtitles, models, game
+  saves, tools and downloads, logs, other), plus the optimized-copy folder on
+  its own when it is on another drive, plus the drive's free space.
+- **Never inside the request.** A GET answers with the last measurement and
+  starts a new one in the background when it is missing or over ten minutes
+  old; `?fresh=1` measures now. One at a time. On the machine it was built
+  for, 50,000 files and 13.2 GB took 2.3 seconds.
+- **"Other" names its five largest entries**, which is how it turned up two
+  old database copies and two pre-revision-54 folders, 157 MB together, that
+  nothing in LANcast ever removes.
+- **Settings › Backup & storage** shows each part with its size, a neutral
+  bar for its share, and whether it can be had again: artwork and previews
+  are rebuilt, game saves are not. Nothing on it deletes.

@@ -3496,6 +3496,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/storage": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * What LANcast keeps on disk, part by part
+         * @description **Administrators only**, and read-only. Measuring walks the data folder and never runs inside the request: this answers at once with the last measurement (`report` is `null` before the first) and, when there is none or it is older than ten minutes, starts one in the background. `measuring` is `true` while one runs; ask again until it is `false`. One runs at a time however many callers ask.
+         */
+        get: operations["getStorage"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/backups": {
         parameters: {
             query?: never;
@@ -9069,6 +9089,53 @@ export interface components {
             scheduled: boolean;
             /** @description Whether the server took it on its own, just before an update changed the database. Named with -schema<N>-premigrate before the extension, N being the revision it holds. The newest three are kept; older ones are deleted when the next is taken. Never counted toward backup_keep. */
             pre_migration: boolean;
+        };
+        StorageAnswer: {
+            /** @description A measurement is running now; ask again for its result. */
+            measuring: boolean;
+            /** @description The last measurement, or `null` before the first has finished. */
+            report: components["schemas"]["StorageReport"] | null;
+        };
+        StorageReport: {
+            data_dir: string;
+            /** @description Every part, in a fixed order, `other` last. A part with nothing in it is reported at zero. */
+            parts: components["schemas"]["StoragePart"][];
+            /** Format: int64 */
+            total_bytes: number;
+            /**
+             * Format: int64
+             * @description Unix seconds.
+             */
+            measured_at: number;
+            /** Format: int64 */
+            took_ms: number;
+            /**
+             * Format: int64
+             * @description Free space on the drive holding the data folder; 0 where the system would not say.
+             */
+            disk_free_bytes: number;
+            /** Format: int64 */
+            disk_total_bytes: number;
+            /** @description The walk was stopped before it finished, so the numbers are a lower bound. */
+            partial?: boolean;
+        };
+        StoragePart: {
+            /** @description **An open set.** `database`, `artwork`, `previews`, `optimized`, `backups`, `transcode`, `subtitles`, `models`, `saves`, `downloads`, `logs` and `other` today. */
+            id: string;
+            /** @description The part's folder, or the data folder for a part made of several entries. */
+            path: string;
+            /** Format: int64 */
+            bytes: number;
+            /** Format: int64 */
+            files: number;
+            /** @description The folder is not inside the data folder and may be on another drive. */
+            outside?: boolean;
+            /** @description `other` only: its five largest top-level entries, biggest first. */
+            largest?: {
+                name: string;
+                /** Format: int64 */
+                bytes: number;
+            }[];
         };
         /**
          * @description A backup is a snapshot of the database and nothing else (ADR 0058).
@@ -17027,6 +17094,31 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorEnvelope"];
                 };
             };
+        };
+    };
+    getStorage: {
+        parameters: {
+            query?: {
+                /** @description `1` measures again now, whatever the age of the last measurement. */
+                fresh?: "1";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The last measurement, and whether one is running. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StorageAnswer"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
         };
     };
     listBackups: {

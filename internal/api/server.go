@@ -172,6 +172,9 @@ type Deps struct {
 type Server struct {
 	// chapters caches each file's chapter marks (chapters.go).
 	chapters chapterCache
+	// storage is the last measurement of what LANcast keeps on disk
+	// (storage.go).
+	storage storageState
 	// reports are problem reports sent this hour (reportissue.go), and
 	// reportURL replaces the build's webhook in tests.
 	reports   reportLimiter
@@ -596,6 +599,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("PATCH /api/webhooks/{id}", s.adminOnly(s.patchWebhook))
 	mux.HandleFunc("DELETE /api/webhooks/{id}", s.adminOnly(s.deleteWebhook))
 	mux.HandleFunc("POST /api/webhooks/{id}/test", s.adminOnly(s.testWebhook))
+	mux.HandleFunc("GET /api/storage", s.adminOnly(s.storageOverview))
 	mux.HandleFunc("GET /api/backups", s.adminOnly(s.listBackups))
 	mux.HandleFunc("POST /api/backups", s.adminOnly(s.createBackup))
 	mux.HandleFunc("GET /api/backups/{name}", s.adminOnly(s.downloadBackup))

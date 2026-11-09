@@ -6601,6 +6601,60 @@ Recorded as `metrics.token`.
 
 Administrators only. Revokes it. `204`, whether or not there was one.
 
+## Storage
+
+### `GET /api/storage`
+
+What LANcast keeps on disk, part by part. **Administrators only**, and
+**read-only**: nothing here deletes, and nothing offers to.
+
+```json
+{ "measuring": false,
+  "report": {
+    "data_dir": "C:\\ProgramData\\LANcast",
+    "parts": [
+      { "id": "database", "path": "C:\\ProgramData\\LANcast", "bytes": 93613560, "files": 3 },
+      { "id": "artwork",  "path": "C:\\ProgramData\\LANcast\\artwork", "bytes": 7574702154, "files": 36289 },
+      { "id": "optimized", "path": "E:\\Optimized", "bytes": 0, "files": 0, "outside": true },
+      { "id": "other", "path": "C:\\ProgramData\\LANcast", "bytes": 157362148, "files": 13,
+        "largest": [ { "name": "lancast.db.replaced-20261026-171854", "bytes": 45346816 } ] }
+    ],
+    "total_bytes": 13244276826, "measured_at": 1794202501, "took_ms": 2346,
+    "disk_free_bytes": 459414482944, "disk_total_bytes": 999180726272 } }
+```
+
+**Measuring is a walk of the data folder and never runs inside the request.**
+The artwork cache alone is tens of thousands of files. A GET answers at once
+with the last measurement — `report` is `null` before the first — and, when
+there is none or it is older than ten minutes, starts one in the background.
+`measuring` is `true` while one runs; ask again until it is `false`.
+`?fresh=1` measures again now. One measurement runs at a time however many
+callers ask, and one that takes over five minutes is reported as far as it
+got with `partial: true`.
+
+**Every file in the data folder is counted once**, against the part its
+top-level entry belongs to:
+
+| `id` | What |
+| --- | --- |
+| `database` | `lancast.db` and its `-wal` and `-shm` |
+| `artwork` | posters, backdrops, faces and their resized copies |
+| `previews` | scrub-bar preview sheets ([ADR 0105](adr/0105-a-preview-is-a-keyframe-every-ten-seconds.md)) |
+| `optimized` | optimized copies ([ADR 0087](adr/0087-an-optimized-copy-is-converted-once.md)). May be another drive: `outside` is then `true` and it is walked on its own, never counted twice |
+| `backups` | database backups |
+| `transcode` | conversion scratch, while conversions run |
+| `subtitles` | subtitles extracted or downloaded |
+| `models` | face and picture-search models |
+| `saves` | retro game saves — **the one part that cannot be fetched again** |
+| `downloads` | media tools, browser cores, game databases, plugins, visualizer presets: fetched, and fetched again if removed |
+| `logs` | `lancastd.log` and its rotations |
+| `other` | anything else, with its five `largest` entries named |
+
+Every part is reported, at zero when there is none of it. `disk_free_bytes`
+and `disk_total_bytes` are the drive holding the data folder, `0` where the
+system would not say. A folder that cannot be read is skipped rather than
+failing the walk, and links are counted as themselves, never followed.
+
 ## Backups
 
 A backup is a snapshot of the database and nothing else
