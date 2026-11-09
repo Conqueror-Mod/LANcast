@@ -1,6 +1,6 @@
 # ADR 0067 — The desktop client plays through libmpv
 
-**Status:** Proposed
+**Status:** accepted and built — shipped in v0.9.28
 **Date:** 2026-09-16
 
 ## Context
