@@ -1,6 +1,6 @@
 # ADR 0052 — Face grouping runs in a native sidecar
 
-**Status:** proposed
+**Status:** accepted and built — face grouping shipped in v0.8.46
 **Date:** 2026-08-31
 
 Face grouping is the feature Google Photos used to justify reading every family

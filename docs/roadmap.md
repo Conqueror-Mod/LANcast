@@ -1,6 +1,6 @@
 # Roadmap
 
-Last updated: 2026-11-08 · **v0.10.8 released, nothing unreleased on main · M0–M4 built.** The React client executes the design
+Last updated: 2026-11-08 · **v0.10.10 released · Settings 3.0 steps 1–2 unreleased on main · M0–M4 built · 1.0 planned in [v1-plan.md](v1-plan.md).** The React client executes the design
 system and the client-UX backlog is closed. Observability (match, review, scan
 diagnostics), an audit log and CI are in place. Transport security (TLS) and
 multi-user accounts (admin/member roles) are built, and branding & splash shipped.
@@ -18,11 +18,24 @@ The 2026-10-26 pass found this file fifteen days and seventeen releases
 behind: the Releases table stopped at v0.9.78, and three backlog entries still
 listed work that had shipped as open. The release-by-release record is the
 [Releases](#releases) table, and what remains is [What is left](#what-is-left).
-Refreshed again 2026-11-07, after v0.10.6: the file had stopped at v0.10.3.*
+Refreshed again 2026-11-07, after v0.10.6: the file had stopped at v0.10.3.
+Refreshed 2026-11-08 for 1.0 planning, after v0.10.10: the file had stopped
+at v0.10.8, and the schema, the executables and the CI rows had drifted.*
 
-**On main, unreleased:** nothing. Main is v0.10.8.
+**On main, unreleased:** Settings 3.0 steps 1 and 2 ([plan](settings-3-plan.md),
+#1044, #1045, [ADR 0120](adr/0120-a-setting-belongs-to-what-it-describes.md)):
+one file per pane and Player split four ways, with Settings reachable by a TV
+remote (#1046) and usable on a phone (#1047); and New this week leading the
+shelves under the spotlight (#1043). Step 3, Your account › Home, is open as
+#1048 (schema 92).
 
-v0.10.8 is the latest release. Since v0.9.78:
+v0.10.10 is the latest release. Since v0.9.78:
+- **v0.10.10:** shelves you pin to Home from a filtered library, Suggested
+  falling back to what you have been finishing, and On this day from watch
+  history ([ADR 0119](adr/0119-homepage-2-part-two.md)). Schema 91, one-way.
+- **v0.10.9:** Homepage 2.0 ([ADR 0118](adr/0118-the-home-page-is-a-bridge.md)):
+  one Continue panel for every kind, Friends and On this day beside the
+  spotlight, a background tinted from the spotlight, and New this week.
 - **v0.10.8:** a Debug log that holds about 28 hours rather than 11.
 - **v0.10.7:** audiobooks step 3 (a sleep timer, narrators, and filters by
   author, narrator and series), Continue Watching with a list of its own, and
@@ -187,8 +200,9 @@ visualizers, and webhooks; and from v0.9.98 comics (CBZ and PDF), chapters and
 previews on the scrub bar, extras, pre-roll, two-factor sign-in, invite links and
 the dashboard's history; and by v0.10.6 in-play RetroAchievements, frame-rate
 matching, music browsed by album, track and genre, albums identified by
-MusicBrainz, audiobooks, and playing on another of your own devices. The schema
-is at **revision 90**.
+MusicBrainz, audiobooks, and playing on another of your own devices; and by
+v0.10.10 a home page built around what you are in the middle of, with shelves
+you pin. The schema is at **revision 91**.
 The [Areas](#areas) tables hold the status of each piece, and the
 [Releases](#releases) table records when each one landed. What is left is
 breadth, and it is listed in the [Feature backlog](#feature-backlog).
@@ -219,7 +233,14 @@ at once.
   fixed in v0.10.5; why the window's own sign-in failed is not known, and no
   code fault was found. Next time, grep `login refused` with `method=passkey`.
 
-**Next, once decided.**
+**Next: the road to 1.0** ([plan](v1-plan.md)). Finish Settings 3.0 (steps
+3–7, [plan](settings-3-plan.md); step 3 is #1048) and Profile Page 2.0, then
+freeze scope: empty or label the list below, prove the clean install, the
+update from 0.9.79 and the Linux archive on real artifacts, and rewrite the
+documents for a newcomer. The last item is an acceptance run of the
+candidate as the installed service, and the release itself.
+
+**Shipped from the previous Next list.**
 - ~~**Audiobooks step 3**~~ — **shipped in v0.10.7**
   ([ADR 0116](adr/0116-an-audiobook-is-its-own-library.md)): a sleep timer
   (15 to 60 minutes or end of chapter, fading out), narrators read from the
@@ -281,7 +302,10 @@ is watching that keeps running.
   two-factor sign-in and the comics reader (CBZ and PDF) all passed as the
   installed service on 2026-10-27.
 - Watch Together and live updates between two servers on **different
-  networks**, and the follower side of Watch Together on one server.
+  networks**, and the follower side of Watch Together on one server. Tried
+  across networks on 2026-11-07 with Georgia's server behind NAT (v0.10.6):
+  friends' posters passed, and the eight-minute start it found was fixed in
+  v0.10.7 (#1024). A retest with both servers at v0.10.7 or later is owed.
 - Retro: **Game Boy, Game Boy Color and Master System** on real dumps, a pad
   on the TV, and the touch controls on a real phone.
 - Now Playing and the visualizers **in the desktop window** and on the TV with
@@ -300,6 +324,8 @@ is watching that keeps running.
 
 | Version | Date | What shipped |
 |---|---|---|
+| **v0.10.10** | 2026-11-08 | **Shelves you pin, and a spotlight from your history.** [ADR 0119](adr/0119-homepage-2-part-two.md) steps 2–4 (#1037, #1038, #1040): **Pin to Home** on any filtered or re-sorted library grid, up to 12 per account, each with Rename, Move up, Move down and Unpin, kept in `home_shelf`; **Suggested** falls back to the genres you have been finishing when nothing is in progress; **On this day** adds films, episodes, audiobooks and comics finished on this date in an earlier year, from `viewing` rows with a real date (kept since 2026-09-30, so it first appears on 2027-09-30). Finished audiobooks and comics are logged in history (#1036). The Tag and Favourites filters reach `/api/items` at last (#1039). Schema 91, one-way |
+| **v0.10.9** | 2026-11-08 | **Homepage 2.0: the Bridge.** [ADR 0118](adr/0118-the-home-page-is-a-bridge.md) (#1032): one **Continue** panel for films, shows, albums, audiobooks, comics and retro games, holding five, four or three by width with at most two of a kind, each saying where you are in its own terms; **Friends** and **On this day** as panels over the spotlight, whose picture tints the background; **New this week** replaces three Recently Added shelves, strictly seven days; a welcome panel on an empty server. Continue Watching, Next up and Continue Listening leave Home. A book in an `Audio` or `CD1` folder takes the name of the folder above (#1034). Schema 90 unchanged |
 | **v0.10.8** | 2026-11-08 | **A log that keeps its evidence.** After v0.10.6 the Debug log held eleven hours: the play-on-another-device report (`PUT /api/remote/players/{id}`, every 5 s per window) was 28% of it and a router's SSDP searches for an internet gateway 25%. Their request lines go, with the GETs a timer sends (transcodes, dashboard history, federation presence, metrics, remote players); a DLNA search LANcast answers is still logged, one it ignores once per sender and target (#1028). Replayed, 60% fewer lines: about 28 hours. Schema 90 unchanged |
 | **v0.10.7** | 2026-11-08 | **Audiobooks finished, and a shelf of films again.** ADR 0116 step 3 (#1026): a sleep timer of 15 to 60 minutes or end of chapter, counted only while playing and fading out; narrators read from the composer or narrator tag, every voice of a full cast kept, stored as `narrator` credits; filters by author, narrator and series, and "Read by" on a book's page. Libraries are read once more for narrators at their next scan. Continue Watching asks per shelf (#1025), so half-played songs no longer push films off it. A film watched with a friend starts in seconds: the guest's server waits as long for the playlist as the host holds it, and a friend's app sends what it can decode (#1024). Schema 90 unchanged |
 | **v0.10.6** | 2026-11-07 | **Play on another device.** One of your own windows plays a film, an episode or a song sent from another signed in as the same account, at the moment it was at, with the rest of the queue and no pre-roll ([ADR 0117](adr/0117-play-on-another-device.md), #1018): **Move here** in the player, **Play on…** on an item's page, and a **Devices** remote. In memory, no schema; never across accounts or servers. The desktop window offers itself by default, a browser or phone opts in. A friend's join request now shows over a full-screen film (#1019), and friends see posters on a shared library again (#1020). Schema 90 unchanged |
@@ -614,7 +640,7 @@ Status: **planned** · **next** · *unplanned*
 |---|---|---|
 | Server core architecture | **built** | Go, SQLite, scan → browse → play |
 | UI/UX design system | **built** | Nebula field, gold rule, keyboard model — executed by the React client, not just the tokens |
-| Data model evolution and migrations | **built** | Forward-only migrations (rev 1→79); collections, hierarchy, multi-part & serial works ([ADR 0017](adr/0017-collections-and-multi-part-works.md)) |
+| Data model evolution and migrations | **built** | Forward-only migrations (rev 1→91); collections, hierarchy, multi-part & serial works ([ADR 0017](adr/0017-collections-and-multi-part-works.md)) |
 | API contract and versioning | **built** | URL-path versioning, `/api` ≡ v1, additive-safe rule ([ADR 0018](adr/0018-api-contract-and-versioning.md)); `child_count`, `collection_id`, cross-type match |
 
 ### Metadata and artwork · M2
@@ -665,7 +691,7 @@ Status: **planned** · **next** · *unplanned*
 
 | Area | Status | Note |
 |---|---|---|
-| Stage 1 — own the window | **built, default** | `LANcast-Client.exe` opens a WebView2 window instead of handing a URL to a browser ([plan](native-client-plan.md)). **Pure Go, `CGO_ENABLED=0`** — the ADR's assumed CGO cost was wrong, tested rather than argued, so the single-runner release matrix survives. The binding is a trimmed vendored copy with the embedded DLL and its from-memory loader removed ([provenance](../internal/webview2/PROVENANCE.md)); Microsoft's signed loader ships beside the executable |
+| Stage 1 — own the window | **built, default** | `LANcast-Client.exe` (since v0.9.79 `LANcast.exe`, [ADR 0080](adr/0080-one-executable-two-roles.md)) opens a WebView2 window instead of handing a URL to a browser ([plan](native-client-plan.md)). **Pure Go, `CGO_ENABLED=0`** — the ADR's assumed CGO cost was wrong, tested rather than argued, so the single-runner release matrix survives. The binding is a trimmed vendored copy with the embedded DLL and its from-memory loader removed ([provenance](../internal/webview2/PROVENANCE.md)); Microsoft's signed loader ships beside the executable |
 | Certificate trust | **built** | The point of owning the window, and worse than the ADR assumed: against a LAN-bound server the web view does not warn, it fails the handshake and retries, so the app never loads. The client pins the server's public key, read from its own `cert.pem` on local disk; every other certificate is still validated |
 | Flip `-window` to default | **built** | Done after living with it, not after arguing about it. The browser lost on three things a tab cannot fix: LANcast cannot say what its close button means, cannot pin the server's certificate, and gets a warning against a LAN-bound self-signed server that the window does not need. `-browser` is the opt-out, `-window` is kept as a no-op alias so existing shortcuts and the autostart run key keep working, a machine with no WebView2 runtime falls back on its own, and the installer's finish page offers both |
 | Installed games | **built** | Steam, Epic, Battle.net, the Xbox app, GOG and the EA app, each read from the launcher's own files in the client, with no sign-in ([ADR 0066](adr/0066-a-game-belongs-to-the-machine-it-is-installed-on.md)) |
@@ -676,16 +702,16 @@ Status: **planned** · **next** · *unplanned*
 | Area | Status | Note |
 |---|---|---|
 | Users, auth, sessions | **built** | Multi-user accounts with admin/member roles (ADR 0015); per-user watch state |
-| Remote access | documented | VPN or reverse proxy; see security.md |
+| Remote access | **built** | A VPN is still the simplest route. Beyond it: a public name with a publicly trusted certificate ([ADR 0081](adr/0081-a-public-name-can-earn-a-public-certificate.md)), passkeys ([ADR 0082](adr/0082-a-passkey-belongs-to-the-public-name.md)), trusted proxies ([ADR 0095](adr/0095-a-proxy-is-believed-by-name.md)) and invite links ([ADR 0104](adr/0104-a-friend-is-invited-by-a-link-that-works-once.md)); see security.md |
 | Security model | **built** | Auth, CSRF, throttling, loopback-until-secured |
 | Transport security (TLS) | **built** | HTTPS beyond loopback; bring-your-own or self-signed cert, http→https redirect (ADR 0014) |
 | Performance targets | **built** | Budgets for a 40k-item library, accepted and met for the filter bar, every grid page by title, year and date added, search, Continue Watching and Recently Added; guarded on the query plan, not the clock. The Unwatched shelf was quadratic and is now 57ms against 50; a rating-sorted page 39,000 deep and the two-facet page sit at their 150ms edge. All three are recorded misses ([ADR 0057](adr/0057-what-a-forty-thousand-item-library-may-cost.md), amended 2026-10-09) |
-| Packaging and distribution | **built** | Two branded executables, goreleaser matrix, in-binary service install, signed-tag releases with a Windows installer ([ADR 0016](adr/0016-packaging-and-distribution.md), [ADR 0022](adr/0022-client-and-server-executables.md)) |
+| Packaging and distribution | **built** | One executable, `LANcast.exe`, the app or the server by how it starts ([ADR 0080](adr/0080-one-executable-two-roles.md), v0.9.79; two branded executables before that), goreleaser matrix, in-binary service install, signed-tag releases with a Windows installer ([ADR 0016](adr/0016-packaging-and-distribution.md), [ADR 0022](adr/0022-client-and-server-executables.md)) |
 | Backup and restore | **built** | A backup is the database and nothing else ([ADR 0058](adr/0058-a-backup-is-the-database.md)) — `VACUUM INTO`, **441ms on a 103MB library** from a live server with no downtime, where a file copy under WAL yields a torn, *plausible*, wrong file. Taken and downloaded from Settings, restored with `lancastd restore` on the machine with the server stopped. **Restoring is deliberately not an endpoint**: a server that could restore onto itself would be replacing the file it is reading. Artwork is excluded and the cost is stated — the cache is 4.6GB against 100MB and re-fetchable. A backup carries no sessions, cleared when it is written rather than when it is restored, so a file copied to a stick cannot sign anyone in |
 | Activity view | **built** | `GET /api/activity` in one shape for every worker; a nav indicator and task popover. Indeterminate where the worker genuinely cannot know its total — a scan discovers its own size, so it shows a count rather than a lying percentage |
 | Observability | **built** | Match score breakdown, review queue, scan skip diagnostics — including `skipped_kind`, the count of media a library's own kind discards — and a single-instance guard that names what is holding it: the service, its pid and its data directory, read at a privilege an unelevated caller actually has. The gap once listed here, a show library created as a movie library scanning silently, closed in v0.6.27 ([libraryshape.go](../internal/store/libraryshape.go)) |
 | Desktop lifecycle | **built** | *Open on Windows start* and *Close to tray* ([plan](desktop-lifecycle-plan.md)), both off by default and both shown only in the LANcast window, because a tab has no tray to reduce to and no close button LANcast owns. The Settings section states which of the three meanings of "closed" you are looking at — stop the server, or leave it running because the service owns it. Autostart records the mode you chose, so picking the browser does not silently become the window at login |
-| Update checking and self-update | **built; proven as far as staging, unproven past it** | Check, download, verify, stage, and swap on the way down. **The download was broken from the day it shipped until v0.6.4**: the release lookup asked a JSON endpoint for octet-stream and GitHub answered 415, so v0.6.2 and v0.6.3 could find an update and never fetch one. Found by pressing the button, not by reading — the first release that could have been installed was the first test the code had ever had. **v0.6.5 was the first release the updater could fetch, and it got further than
+| Update checking and self-update | **built; the routine update path since v0.9.79, with no recorded run from the oldest supported version (a 1.0 check, [v1-plan.md](v1-plan.md) §3D)** | Check, download, verify, stage, and swap on the way down. **The download was broken from the day it shipped until v0.6.4**: the release lookup asked a JSON endpoint for octet-stream and GitHub answered 415, so v0.6.2 and v0.6.3 could find an update and never fetch one. Found by pressing the button, not by reading — the first release that could have been installed was the first test the code had ever had. **v0.6.5 was the first release the updater could fetch, and it got further than
 before and still not all the way**: it downloaded, verified and staged
 correctly — the swap applied, the binaries were replaced — and then stopped
 dead, because a service never shuts down on its own and the update is applied
@@ -694,7 +720,7 @@ path in one go on an installed artifact: download, stage, restart, come back on
 the new version. Two releases have now been spent finding one more link in that
 chain each time, which is what a path that only executes during a release costs. What *is* proven, on the published artifacts: the signature verifies against the key compiled into the shipping binaries, and the Windows archive's digest matches the one in the signed list — signature → checksums → bytes, all three links checked rather than assumed. Signed releases first, because auto-install is a LocalSystem process executing a downloaded binary and without authenticity that is remote code execution as SYSTEM — an Ed25519 signature over `checksums.txt`, offline verification against a key compiled into the binary, and a **separate key from the plugin project key** so one compromise is not both. Three distinct states: unsigned is installable by hand only, a wrong signature is refused outright, and a build with no key refuses everything. The swap works because a running process on Windows can rename *itself*: the binary moves aside to `.old`, the staged one takes its place, and the next start is the new version — one restart, no UAC prompt, no second process. Nothing is written into the install directory before the swap; staging lives in the data directory. The check is on by default and is not a phone-home exception — a plain GET with no install identifier, no statistics, no history, and switchable off entirely |
 | Audit log | **built** | Who changed what, and when, recorded server-side where the mutation is authorised ([ADR 0026](adr/0026-audit-log.md)) — libraries, deleted titles, overridden matches, accounts, add-on trust. An audit trail a client writes is forgeable by the client it is auditing. Readable from Settings, newest first, filterable by action. Browsing and playback are deliberately excluded: burying a handful of deliberate acts under a million routine ones is how a log becomes unreadable. Each entry freezes the actor's name and a sentence at the time it happened, so "who deleted this library" still answers after both the library and the account are gone |
-| Testing strategy | **built** | CI runs go test + client build + bundle-drift check; fixture libraries, no real media |
+| Testing strategy | **built** | CI runs go test, the client lint and build, the vitest client suite (about 2,000 tests, jsdom, so no layout) and a bundle-drift check; fixture libraries, no real media |
 | Licensing and open-sourcing | **done** | **AGPL-3.0-or-later** (`LICENSE`) with a commercial licence available (`COMMERCIAL.md`, ADR 0053) — chosen because a media server can be run for other people without ever being *distributed*, which plain GPL does not reach. Possible at all because the copyright is undivided: 1,041 commits, one contributor. Releases up to v0.8.44 were **MIT** and remain so; a relicence is forward-only. `NOTICE` carries the attribution Apache-2.0 requires, and the settings page links to the source because section 13 asks for it. **The repository is public**, which is what the update check needed: the releases API returns 404 for a private repo and cannot distinguish "no such repository" from "not yours to see", so the checker was correct and inert until the switch was flipped. Vendored code keeps its own notices and the README points at them. **The history cleanup did not happen before the repo went public and is now a judgement call rather than a scheduled one** — three `lancastd.exe~` blobs from the M3 era still sit in history (~25 MB packed, about a third of `.git`). Rewriting 352 commits and re-pointing every release tag was worth doing *once, before* the first public clone; after it, a rewrite also breaks every clone and every commit link that already exists. The honest options are to accept the weight or to pay it deliberately and announce it; `*.exe~` is gitignored, so it cannot grow either way |
 
 ## Client UX backlog
