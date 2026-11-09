@@ -36,21 +36,17 @@ and 1.0 changes neither.
 API's v1 are unrelated numbers. The release notes should say so once, because
 a third-party client author will ask.
 
-## 2. Where it stands (2026-11-08)
+## 2. Where it stands (updated 2026-11-09)
 
-- **Released:** v0.10.10, the second half of Homepage 2.0
-  ([ADR 0119](adr/0119-homepage-2-part-two.md)). Schema 91.
-- **On main, unreleased:** Settings 3.0 steps 1 and 2
-  ([ADR 0120](adr/0120-a-setting-belongs-to-what-it-describes.md)), Settings
-  reachable by a TV remote and on a phone, and New this week leading the
-  shelves.
-- **Open PRs:** Settings 3.0 step 3, Your account › Home (#1048, schema 92),
-  and the parked uncomposed-video plan document (#984).
-- **Profile Page 2.0:** planning has started. Nothing is committed yet.
+- **Released:** v0.10.11, which finished both features in flight: Settings 3.0
+  steps 3–7 and Profile Page 2.0 ([plan](profile-2-plan.md)). Schema 95.
+  Section 3A is therefore done, and the owner's last notes (§9) are all that
+  stand before the freeze.
+- **Open PRs:** the parked uncomposed-video plan document (#984).
 - **Open faults:** two, each waiting on a reproduction now that the Debug log
   holds about 28 hours: music stalling on a phone, and a sign-in refused at the
   public name.
-- 120 decision records, about 3,700 Go tests and 2,000 client tests.
+- 123 decision records, about 3,700 Go tests and 2,000 client tests.
 
 ## 3. The work between here and 1.0
 
@@ -268,3 +264,40 @@ Chris took the recommendation on all eight.
 **What these add to the work list:** the costing in 5 (section E), a preview
 label on live TV's entry points (section F), and the roadmap split, which
 moves into the last item.
+
+## 9. The owner's last notes before the freeze (2026-11-09)
+
+Given after v0.10.11, as the last work before the freeze. Each was looked at in
+the code the same day.
+
+1. **A film on a shared library has only play, the scrubber, volume and
+   fullscreen.** `PeerControls` is minimal on purpose
+   ([ADR 0071](adr/0071-a-shared-library-is-a-standing-grant.md) §5: draw only
+   what is true for a friend's film). Subtitles are already fetched across
+   servers (`/api/federation/subtitles`) and attached as tracks, but there is
+   no control to choose one. Also missing beside the household player: skip
+   back and forward, an audio-track choice, and skipping the intro and
+   credits, which would need the markers sent across servers (a federation
+   route, so the API documents change with it). Which of these are in 1.0 is
+   for the owner to say before it is built.
+2. **The desktop window should always start maximized.** Today it maximizes
+   only if it was maximized when it last closed. Reopening it from the tray
+   un-maximizes it as well, because the tray's Show calls `SW_RESTORE`.
+   `internal/clientwindow` only.
+3. **Tune the music review results.** Read the MusicBrainz match states from
+   a copy of the live database
+   ([ADR 0115](adr/0115-albums-are-identified-by-musicbrainz.md)), find out
+   why albums land in review or unmatched, and adjust the scoring. This also
+   clears ledger entry 1 (§3B).
+4. **Discuss code hardening.** Section 3E is the starting point. It is a
+   written proposal for discussion first, not a change.
+5. **The Settings nav needs its own scroll bar.** The nav is
+   `position: sticky` with about thirty-five entries and no height limit, so
+   on an ordinary screen its last entries sit below the fold until the page
+   itself scrolls. It needs a maximum height of the viewport and its own
+   scroll.
+6. **On Home, a right-click on any title opens More Options.** A tile shows
+   a menu only when its shelf passes `actions`, and New this week, Rate what
+   you've watched, Watchlist, the pinned shelves, Unwatched and On this day
+   pass none. `useItemActions` already gives the library grid and search
+   their menus, so Home reuses it.

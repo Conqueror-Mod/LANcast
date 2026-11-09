@@ -1,6 +1,6 @@
 # Roadmap
 
-Last updated: 2026-11-08 · **v0.10.10 released · Settings 3.0 steps 1–2 unreleased on main · M0–M4 built · 1.0 planned in [v1-plan.md](v1-plan.md).** The React client executes the design
+Last updated: 2026-11-09 · **v0.10.11 released · Settings 3.0 and Profile Page 2.0 complete · M0–M4 built · next is the 1.0 freeze ([v1-plan.md](v1-plan.md)).** The React client executes the design
 system and the client-UX backlog is closed. Observability (match, review, scan
 diagnostics), an audit log and CI are in place. Transport security (TLS) and
 multi-user accounts (admin/member roles) are built, and branding & splash shipped.
@@ -20,16 +20,21 @@ listed work that had shipped as open. The release-by-release record is the
 [Releases](#releases) table, and what remains is [What is left](#what-is-left).
 Refreshed again 2026-11-07, after v0.10.6: the file had stopped at v0.10.3.
 Refreshed 2026-11-08 for 1.0 planning, after v0.10.10: the file had stopped
-at v0.10.8, and the schema, the executables and the CI rows had drifted.*
+at v0.10.8, and the schema, the executables and the CI rows had drifted.
+Brought to v0.10.11 on 2026-11-09.*
 
-**On main, unreleased:** Settings 3.0 steps 1 and 2 ([plan](settings-3-plan.md),
-#1044, #1045, [ADR 0120](adr/0120-a-setting-belongs-to-what-it-describes.md)):
-one file per pane and Player split four ways, with Settings reachable by a TV
-remote (#1046) and usable on a phone (#1047); and New this week leading the
-shelves under the spotlight (#1043). Step 3, Your account › Home, is open as
-#1048 (schema 92).
+**On main, unreleased:** nothing. Main is v0.10.11.
 
-v0.10.10 is the latest release. Since v0.9.78:
+v0.10.11 is the latest release. Since v0.9.78:
+- **v0.10.11:** Settings 3.0 complete ([plan](settings-3-plan.md),
+  [ADR 0120](adr/0120-a-setting-belongs-to-what-it-describes.md)): Your account
+  › Home and › Reading & listening, metadata in 33 languages
+  ([ADR 0122](adr/0122-metadata-may-be-in-another-language.md)), options per
+  library with right-to-left comics
+  ([ADR 0123](adr/0123-a-library-carries-its-own-options.md)) and a storage
+  overview; and Profile Page 2.0 ([plan](profile-2-plan.md)): your own
+  picture ([ADR 0121](adr/0121-a-picture-of-your-own.md)), tabs, totals by
+  kind and one History. Schema 95, one-way.
 - **v0.10.10:** shelves you pin to Home from a filtered library, Suggested
   falling back to what you have been finishing, and On this day from watch
   history ([ADR 0119](adr/0119-homepage-2-part-two.md)). Schema 91, one-way.
@@ -202,7 +207,9 @@ the dashboard's history; and by v0.10.6 in-play RetroAchievements, frame-rate
 matching, music browsed by album, track and genre, albums identified by
 MusicBrainz, audiobooks, and playing on another of your own devices; and by
 v0.10.10 a home page built around what you are in the middle of, with shelves
-you pin. The schema is at **revision 91**.
+you pin; and by v0.10.11 settings sorted by what they describe, metadata in
+your language, and a profile with your own picture. The schema is at
+**revision 95**.
 The [Areas](#areas) tables hold the status of each piece, and the
 [Releases](#releases) table records when each one landed. What is left is
 breadth, and it is listed in the [Feature backlog](#feature-backlog).
@@ -233,9 +240,9 @@ at once.
   fixed in v0.10.5; why the window's own sign-in failed is not known, and no
   code fault was found. Next time, grep `login refused` with `method=passkey`.
 
-**Next: the road to 1.0** ([plan](v1-plan.md)). Finish Settings 3.0 (steps
-3–7, [plan](settings-3-plan.md); step 3 is #1048) and Profile Page 2.0, then
-freeze scope: empty or label the list below, prove the clean install, the
+**Next: the road to 1.0** ([plan](v1-plan.md)). Settings 3.0 and Profile
+Page 2.0 shipped in v0.10.11. What remains before the freeze is the owner's
+last notes (plan §9); then freeze scope at v0.11.0: empty or label the list below, prove the clean install, the
 update from 0.9.79 and the Linux archive on real artifacts, and rewrite the
 documents for a newcomer. The last item is an acceptance run of the
 candidate as the installed service, and the release itself.
@@ -324,6 +331,7 @@ is watching that keeps running.
 
 | Version | Date | What shipped |
 |---|---|---|
+| **v0.10.11** | 2026-11-09 | **Settings sorted by what each one describes, and a profile of your own.** Settings 3.0 steps 3–7 ([plan](settings-3-plan.md), #1048, #1051, #1054, #1056, #1059): Your account › Home (spotlight, spoilers, built-in shelves and pinned shelves, carried up once from each device), Reading & listening (book speed, sleep timer, comic layout), Connected accounts (RetroAchievements moved from the profile), metadata language in 33 languages with a refresh offered, never forced ([ADR 0122](adr/0122-metadata-may-be-in-another-language.md)), options per library with right-to-left comics and a per-series override ([ADR 0123](adr/0123-a-library-carries-its-own-options.md)), and a read-only storage overview. Comics gain two facing pages and fit to width. Profile Page 2.0 ([plan](profile-2-plan.md), #1050–#1060): an uploaded picture of yourself, re-encoded so no metadata survives ([ADR 0121](adr/0121-a-picture-of-your-own.md)), tabs (Overview, History, Ratings & tags, Achievements), totals by kind, Most played, one History with a filter, and the newer kinds on Overview; posters back on the profile's history and ratings (#1052). Schema 95, one-way |
 | **v0.10.10** | 2026-11-08 | **Shelves you pin, and a spotlight from your history.** [ADR 0119](adr/0119-homepage-2-part-two.md) steps 2–4 (#1037, #1038, #1040): **Pin to Home** on any filtered or re-sorted library grid, up to 12 per account, each with Rename, Move up, Move down and Unpin, kept in `home_shelf`; **Suggested** falls back to the genres you have been finishing when nothing is in progress; **On this day** adds films, episodes, audiobooks and comics finished on this date in an earlier year, from `viewing` rows with a real date (kept since 2026-09-30, so it first appears on 2027-09-30). Finished audiobooks and comics are logged in history (#1036). The Tag and Favourites filters reach `/api/items` at last (#1039). Schema 91, one-way |
 | **v0.10.9** | 2026-11-08 | **Homepage 2.0: the Bridge.** [ADR 0118](adr/0118-the-home-page-is-a-bridge.md) (#1032): one **Continue** panel for films, shows, albums, audiobooks, comics and retro games, holding five, four or three by width with at most two of a kind, each saying where you are in its own terms; **Friends** and **On this day** as panels over the spotlight, whose picture tints the background; **New this week** replaces three Recently Added shelves, strictly seven days; a welcome panel on an empty server. Continue Watching, Next up and Continue Listening leave Home. A book in an `Audio` or `CD1` folder takes the name of the folder above (#1034). Schema 90 unchanged |
 | **v0.10.8** | 2026-11-08 | **A log that keeps its evidence.** After v0.10.6 the Debug log held eleven hours: the play-on-another-device report (`PUT /api/remote/players/{id}`, every 5 s per window) was 28% of it and a router's SSDP searches for an internet gateway 25%. Their request lines go, with the GETs a timer sends (transcodes, dashboard history, federation presence, metrics, remote players); a DLNA search LANcast answers is still logged, one it ignores once per sender and target (#1028). Replayed, 60% fewer lines: about 28 hours. Schema 90 unchanged |
@@ -640,7 +648,7 @@ Status: **planned** · **next** · *unplanned*
 |---|---|---|
 | Server core architecture | **built** | Go, SQLite, scan → browse → play |
 | UI/UX design system | **built** | Nebula field, gold rule, keyboard model — executed by the React client, not just the tokens |
-| Data model evolution and migrations | **built** | Forward-only migrations (rev 1→91); collections, hierarchy, multi-part & serial works ([ADR 0017](adr/0017-collections-and-multi-part-works.md)) |
+| Data model evolution and migrations | **built** | Forward-only migrations (rev 1→95); collections, hierarchy, multi-part & serial works ([ADR 0017](adr/0017-collections-and-multi-part-works.md)) |
 | API contract and versioning | **built** | URL-path versioning, `/api` ≡ v1, additive-safe rule ([ADR 0018](adr/0018-api-contract-and-versioning.md)); `child_count`, `collection_id`, cross-type match |
 
 ### Metadata and artwork · M2
