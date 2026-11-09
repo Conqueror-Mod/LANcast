@@ -2,6 +2,7 @@ import { useState } from "react";
 import { PeerShares } from "@/components/PeerShares";
 import { AskToJoin } from "@/components/AskToJoin";
 import { OpenSessions } from "@/components/OpenSessions";
+import { PersonPicture } from "@/components/Avatar";
 import { Link } from "react-router-dom";
 import {
   useGrantPresence,
@@ -96,9 +97,13 @@ function PersonCard({ person }: { person: Person }) {
   return (
     <div className="people__card">
       <div className="people__head">
-        <span className="people__avatar" aria-hidden="true">
-          {initials(person.name)}
-        </span>
+        <PersonPicture
+          name={person.name}
+          picture={person.picture}
+          avatar={person.avatar}
+          size={38}
+          className="people__avatar"
+        />
         <div className="people__who">
           <span className="people__name">{person.name}</span>
           <span className="people__meta">
@@ -155,20 +160,6 @@ function PersonCard({ person }: { person: Person }) {
       )}
     </div>
   );
-}
-
-/*
- * Initials rather than an uploaded picture.
- *
- * An upload is a file store, a size limit, a format whitelist and a moderation
- * question, for a household of four. Initials need none of that and are legible
- * at every size the page uses.
- */
-function initials(name: string): string {
-  const parts = name.trim().split(/\s+/).filter(Boolean);
-  if (parts.length === 0) return "?";
-  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
-  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
 }
 
 /*

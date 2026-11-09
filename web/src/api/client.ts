@@ -80,9 +80,13 @@ export async function apiPost<T>(
 
 // apiUpload sends raw bytes (a plugin bundle) and returns the parsed response.
 // Distinct from apiPost, which sends JSON.
-export async function apiUpload<T>(path: string, data: ArrayBuffer): Promise<T> {
+export async function apiUpload<T>(
+  path: string,
+  data: ArrayBuffer,
+  method: "POST" | "PUT" = "POST",
+): Promise<T> {
   const res = await fetch(path, {
-    method: "POST",
+    method,
     headers: { "Content-Type": "application/octet-stream" },
     body: data,
   });
@@ -96,6 +100,13 @@ export async function apiUpload<T>(path: string, data: ArrayBuffer): Promise<T> 
     );
   }
   return parsed as T;
+}
+
+// pictureURL is an account's uploaded picture (ADR 0121). By hash, so it is
+// cached for ever; 64 for anything drawn small, 256 otherwise.
+export function pictureURL(hash: string | null | undefined, px: number): string | undefined {
+  if (!hash) return undefined;
+  return `/api/pictures/${hash}?size=${px <= 64 ? 64 : 256}`;
 }
 
 // artworkURL builds a content-addressed image URL. The bytes behind a hash

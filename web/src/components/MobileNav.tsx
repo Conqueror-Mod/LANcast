@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { NavLink, useLocation } from "react-router-dom";
 import { PeerLibraryLinks } from "@/components/PeerLibraryLinks";
-import { AvatarGlyph } from "@/components/Avatar";
+import { PersonPicture } from "@/components/Avatar";
 import {
   useLibraries,
   useCurrentUser,
@@ -191,7 +191,14 @@ export function MobileNav() {
               {user && (
                 <>
                   <NavLink to="/profile" className={({ isActive }) => row(isActive)}>
-                    <AvatarGlyph avatar={user.avatar} />
+                    <PersonPicture
+                      name={user.name}
+                      picture={user.picture}
+                      avatar={user.avatar}
+                      size={18}
+                      fallback="glyph"
+                      className="rail-icon"
+                    />
                     <span>{user.name}</span>
                   </NavLink>
                   <button

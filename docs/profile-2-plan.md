@@ -213,7 +213,7 @@ Each step is its own PR, in this order.
    `user_picture` table, §9d), decode/crop/encode with its fuzz test, the
    four routes, the setting, the guest-denial test, a backup-and-restore test that brings a picture back, `api.md`
    and `openapi.json`. Bump the ADR count in README.md and CLAUDE.md.
-2. **The picture in the client.** `<Avatar>`, the crop editor (mouse, touch,
+2. **The picture in the client.** *Built 2026-11-08. The dashboard shows no people, so it has no picture; the Users pane and Watch Together do.* `<Avatar>`, the crop editor (mouse, touch,
    remote, phone), every surface in §3g, the admin clear in Users, and the
    setting in its pane. Invalidation tests per surface.
 3. **Header and tabs.** Move the existing sections into tabs, with no new data.
