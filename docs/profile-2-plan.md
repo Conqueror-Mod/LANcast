@@ -279,16 +279,19 @@ copy of `lancast.db` with its `-wal` and `-shm`. No code was changed.
 
 ### 9a. A bug: no posters anywhere on the page
 
-`GET /api/profile`, `GET /api/profile/ratings` and `GET /api/profile/viewings`
-never call `AttachArtwork`. Every item comes back with no `artwork`, so all 60
+`GET /api/profile` and `GET /api/profile/ratings` never call `AttachArtwork`.
+Every item comes back with no `artwork`, so all 60
 rows on the page (Recently played and Your ratings) draw the first letter of the
 title instead of a poster. Measured: 60 rows, 0 with an `<img>`. Favourites is
 fine because it goes through the shelf path. It has been this way since the
 profile route was first written (7fdfb87d). Nothing failed, so nobody noticed.
 
-This is fixed on its own, ahead of step 1, and is not left for step 3. It is the
-"tiles need their posters" lesson already written in `rating.go`'s `listToRate`.
-A test asserts a poster on each of the three routes.
+This is fixed on its own, ahead of step 1, and is not left for step 3 (#1052).
+It is the "tiles need their posters" lesson already written in `rating.go`'s
+`listToRate`. A test asserts a poster on both routes. `GET
+/api/profile/viewings` is not part of it: its rows are a log that outlives
+deleted items and carry no item, so the full watch history has no posters by
+design.
 
 ### 9b. What the totals count
 
