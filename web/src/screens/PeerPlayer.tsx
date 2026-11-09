@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from "react";
 import { useParams, useSearchParams, Link } from "react-router-dom";
-import { useQuery } from "@tanstack/react-query";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { apiGet, apiSend } from "@/api/client";
-import type { SubtitleTrack } from "@/api/types";
+import type { Marker, MediaStream, SubtitleTrack } from "@/api/types";
+import { activeCues, parseVTT, type Cue } from "@/playback/nativeTracks";
 import { filePath, isUnsupportedSource } from "@/playback/fileTransport";
 import { mediaCapability, HLS_MIME } from "@/lib/liveTransport";
 import {
@@ -81,7 +82,15 @@ export function PeerPlayer() {
     enabled: fingerprint !== "" && itemID > 0,
     retry: false,
     queryFn: ({ signal }) =>
-      apiGet<{ title?: string; duration_ms?: number; position_ms?: number }>(
+      apiGet<{
+        title?: string;
+        duration_ms?: number;
+        position_ms?: number;
+        // The file's audio tracks and its intro and credits, from a server
+        // new enough to say (docs/api.md, /api/peers/{fingerprint}/item).
+        audio?: MediaStream[];
+        markers?: Marker[];
+      }>(
         asMember(peerItemURL(fingerprint, itemID), member),
         signal,
       ),
@@ -151,6 +160,23 @@ export function PeerPlayer() {
   });
   const [muted, setMuted] = useState(false);
   const [fullscreen, setFullscreen] = useState(false);
+  /*
+   * The chosen audio track, by absolute stream index, or null for the file's
+   * own default. It is part of every playback request (peerSource.ts).
+   */
+  const [audioIndex, setAudioIndex] = useState<number | null>(null);
+  /*
+   * The chosen subtitle track's key, or null for none. Undefined until the
+   * list arrives, when the file's default track (if it marks one) is chosen,
+   * as a <track default> would have been.
+   */
+  const [subKey, setSubKey] = useState<string | null | undefined>(undefined);
+  /*
+   * Where to put the film once a new source has loaded, after a change of
+   * audio track moved it to direct play: a direct source starts at zero and
+   * takes no offset in its address.
+   */
+  const pendingAt = useRef<number | null>(null);
 
   // Applied on every new source too: a converted seek swaps `src`, and the
   // element goes back to its defaults when it loads one.
@@ -235,6 +261,24 @@ export function PeerPlayer() {
     return () => document.removeEventListener("fullscreenchange", sync);
   }, []);
 
+  /*
+   * The arrow keys skip ten seconds, as in the household player. Not while a
+   * control has them (the scrubber, a select), and not in a room, where the
+   * host drives.
+   */
+  useEffect(() => {
+    if (member) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
+      const t = e.target as HTMLElement | null;
+      if (t && /^(INPUT|SELECT|TEXTAREA)$/.test(t.tagName)) return;
+      e.preventDefault();
+      seekRef.current?.(atRef.current + (e.key === "ArrowRight" ? 10 : -10));
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [member]);
+
   // Escape leaves, and leaving the screen never strands the window full.
   useEffect(() => {
     if (!fullscreen) return;
@@ -275,12 +319,15 @@ export function PeerPlayer() {
   const atRef = useRef(0);
 
   const playback = useQuery({
-    queryKey: ["peer-playback", fingerprint, itemID, member],
+    queryKey: ["peer-playback", fingerprint, itemID, member, audioIndex],
     enabled: fingerprint !== "" && itemID > 0,
     retry: false,
+    // A change of audio track asks again; the film stays on screen meanwhile
+    // rather than giving way to "Asking their server…".
+    placeholderData: keepPreviousData,
     queryFn: ({ signal }) =>
       apiGet<{ decision: { method: string; reason: string } }>(
-        asMember(peerPlaybackURL(fingerprint, itemID), member),
+        asMember(peerPlaybackURL(fingerprint, itemID, audioIndex), member),
         signal,
       ),
   });
@@ -295,6 +342,52 @@ export function PeerPlayer() {
         signal,
       ),
   });
+
+  /*
+   * Subtitles drawn by the page, at the film's own clock.
+   *
+   * A <track> runs on the element's timeline, and on a converted stream that
+   * restarts at zero at every seek, so after moving to forty minutes the cues
+   * belonged to the first minutes of the film. The household player draws them
+   * itself under native playback for a related reason (nativeTracks.ts); this
+   * reuses that parser and draws against `at`, which is right on both paths.
+   */
+  const [cues, setCues] = useState<Cue[]>([]);
+  const subOptions = (subtitles.data?.subtitles ?? []).filter((t) => t.available);
+  useEffect(() => {
+    if (subKey !== undefined || !subtitles.data) return;
+    setSubKey(subOptions.find((t) => t.default)?.key ?? null);
+  }, [subKey, subtitles.data, subOptions]);
+  useEffect(() => {
+    setCues([]);
+    if (!subKey || fingerprint === "" || itemID <= 0) return;
+    let cancelled = false;
+    fetch(asMember(peerSubtitleURL(fingerprint, itemID, subKey), member))
+      .then((r) => (r.ok ? r.text() : ""))
+      .then((text) => {
+        if (!cancelled) setCues(parseVTT(text));
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [subKey, fingerprint, itemID, member]);
+
+  // A change of audio track that lands on direct play resumes here.
+  useEffect(() => {
+    const el = video;
+    if (!el) return;
+    const apply = () => {
+      if (pendingAt.current === null) return;
+      // A converted source already starts there (its offset is in the
+      // address), and its own clock starts at zero: moving it would ask for
+      // bytes their server has not made yet.
+      if (!convertingRef.current) el.currentTime = pendingAt.current;
+      pendingAt.current = null;
+    };
+    el.addEventListener("loadedmetadata", apply);
+    return () => el.removeEventListener("loadedmetadata", apply);
+  }, [video]);
 
   /*
    * The beat that makes this visible as watching (ADR 0045 §10).
@@ -557,13 +650,13 @@ export function PeerPlayer() {
 
   const path = filePath(playback.data.decision.method, hlsUsable);
   const converting = path !== "direct";
-  const src = asMember(peerSourceURL(fingerprint, itemID, path, offset), member);
-  const tracks = (subtitles.data?.subtitles ?? []).filter((t) => t.available);
+  const src = asMember(peerSourceURL(fingerprint, itemID, path, offset, audioIndex), member);
 
   // What the film is at, and how long it is. See the offset and probed
   // comments above for why neither is simply the element's own value.
   const at = converting ? offset + elapsed : elapsed;
   const total = converting ? probed : video?.duration || probed;
+  const audioTracks = info.data?.audio ?? [];
 
   /*
    * Seeking a converted stream is not a seek.
@@ -586,10 +679,30 @@ export function PeerPlayer() {
     }
     setOffset(target);
     setElapsed(0);
-    el.src = asMember(peerSourceURL(fingerprint, itemID, path, target), member);
+    el.src = asMember(peerSourceURL(fingerprint, itemID, path, target, audioIndex), member);
     el.load();
     resume(el);
   };
+
+  /*
+   * Another audio track, from where the film is now.
+   *
+   * The track is part of the delivery decision, so this asks their server
+   * again (the playback query is keyed on it) and the source follows. A
+   * converted source starts at the offset; a direct one starts at zero and is
+   * moved once it has loaded.
+   */
+  const chooseAudio = (index: number) => {
+    const here = at;
+    const fileDefault = audioTracks.find((a) => a.default)?.index ?? audioTracks[0]?.index;
+    setAudioIndex(index === fileDefault ? null : index);
+    setOffset(here);
+    setElapsed(0);
+    pendingAt.current = here;
+  };
+
+  // The intro or the credits, if the film is inside one now.
+  const skipNow = markerSkip(info.data?.markers, at, total, seek);
 
   // Kept current for the effects above, which run before either exists.
   seekRef.current = seek;
@@ -622,28 +735,28 @@ export function PeerPlayer() {
         few seconds. That is how "it will not seek" was reported. PeerControls
         draws the film's clock: this session's offset plus the element's own.
       */}
-      <video
-        ref={setVideo}
-        className="peer-player__video"
-        src={src}
-        autoPlay
-        // Never `metadata` — a peer item has no poster to hold the frame, and
-        // preloading a film on somebody else's connection to draw one is their
-        // bandwidth spent on our decoration.
-        preload="none"
-        crossOrigin="anonymous"
-      >
-        {tracks.map((t) => (
-          <track
-            key={t.key}
-            kind="subtitles"
-            label={t.label}
-            srcLang={t.language}
-            default={t.default}
-            src={asMember(peerSubtitleURL(fingerprint, itemID, t.key), member)}
-          />
-        ))}
-      </video>
+      <div className="peer-player__stage">
+        <video
+          ref={setVideo}
+          className="peer-player__video"
+          src={src}
+          autoPlay
+          // Never `metadata` — a peer item has no poster to hold the frame, and
+          // preloading a film on somebody else's connection to draw one is their
+          // bandwidth spent on our decoration.
+          preload="none"
+          crossOrigin="anonymous"
+        />
+        {cues.length > 0 && (
+          <div className="playback__native-cues" aria-live="off">
+            {activeCues(cues, at, 0).map((c, i) => (
+              <span key={`${c.start}-${i}`} className="playback__native-cue">
+                {c.text}
+              </span>
+            ))}
+          </div>
+        )}
+      </div>
 
       <PeerControls
         paused={paused}
@@ -667,6 +780,14 @@ export function PeerPlayer() {
         onToggleMute={toggleMute}
         fullscreen={fullscreen}
         onToggleFullscreen={toggleFullscreen}
+        onSkip={member ? undefined : (by) => seek(at + by)}
+        subtitles={subOptions.map((t) => ({ key: t.key, label: t.label }))}
+        subtitle={subKey ?? null}
+        onSubtitle={setSubKey}
+        audio={audioTracks.map((a) => ({ index: a.index, label: audioLabel(a) }))}
+        audioTrack={audioIndex ?? audioTracks.find((a) => a.default)?.index ?? null}
+        onAudio={chooseAudio}
+        skip={skipNow}
       />
 
       {/*
@@ -697,6 +818,36 @@ export function PeerPlayer() {
       )}
     </div>
   );
+}
+
+/*
+ * "Skip intro" while inside the intro, "Skip credits" while inside the
+ * credits, or nothing. The intro skips to its end; the credits to their end,
+ * which for a film is its end, since credits run to the end of the file.
+ */
+export function markerSkip(
+  markers: Marker[] | undefined,
+  at: number,
+  total: number,
+  seek: (to: number) => void,
+): { label: string; onSkip: () => void } | null {
+  const ms = at * 1000;
+  for (const m of markers ?? []) {
+    const end = m.end_ms ?? (total > 0 ? total * 1000 : null);
+    if (end === null || ms < m.start_ms || ms >= end - 1000) continue;
+    if (m.kind === "intro") return { label: "Skip intro", onSkip: () => seek(end / 1000) };
+    if (m.kind === "credits") return { label: "Skip credits", onSkip: () => seek(end / 1000) };
+  }
+  return null;
+}
+
+// An audio track as a person would name it: its title, else its language and
+// channel layout.
+function audioLabel(a: MediaStream): string {
+  if (a.title) return a.title;
+  const lang = a.language && a.language !== "und" ? a.language.toUpperCase() : "Track";
+  const ch = a.channels === 6 ? " 5.1" : a.channels === 8 ? " 7.1" : a.channels === 2 ? " stereo" : "";
+  return `${lang}${ch} · ${a.codec.toUpperCase()}`;
 }
 
 function PeerPlayerNote({

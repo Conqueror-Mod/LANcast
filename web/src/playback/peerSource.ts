@@ -45,6 +45,7 @@ export function peerSourceURL(
   item: number,
   path: FilePath,
   offset = 0,
+  audio: number | null = null,
 ): string {
   const b = base(fingerprint);
   /*
@@ -60,7 +61,17 @@ export function peerSourceURL(
    * Direct play takes none of this: those are the file's own bytes over a range
    * server, and the element seeks them itself.
    */
-  const t = offset > 0 ? `t=${Math.floor(offset)}` : "";
+  /*
+   * `audio` is the chosen track's absolute stream index, and it rides on every
+   * request that takes part in the delivery decision, as it does locally
+   * (docs/api.md, `?audio=`): their server's routes are the same handlers, so
+   * a track the browser cannot decode is converted rather than ignored.
+   * Direct play serves the file's bytes and cannot select one; their server
+   * does not answer "direct" for a track that needs choosing.
+   */
+  const t = [offset > 0 ? `t=${Math.floor(offset)}` : "", audio != null ? `audio=${audio}` : ""]
+    .filter(Boolean)
+    .join("&");
   switch (path) {
     case "direct":
       return `${b}/stream?item=${item}`;
@@ -110,8 +121,13 @@ export function peerSubtitleURL(
  * peerSourceURL carry it too, because the far server decides again on each of
  * them, and a decision made with different claims picks a different stream.
  */
-export function peerPlaybackURL(fingerprint: string, item: number): string {
-  return withCapabilities(`${base(fingerprint)}/playback?item=${item}`);
+export function peerPlaybackURL(
+  fingerprint: string,
+  item: number,
+  audio: number | null = null,
+): string {
+  const a = audio != null ? `&audio=${audio}` : "";
+  return withCapabilities(`${base(fingerprint)}/playback?item=${item}${a}`);
 }
 
 /*

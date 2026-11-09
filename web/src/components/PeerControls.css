@@ -108,3 +108,57 @@
     margin-left: auto;
   }
 }
+
+/* Skipping by ten seconds: text rather than a glyph, so it says how far. */
+.peer-controls__skip {
+  width: auto;
+  padding: 0 8px;
+  font-size: 0.8rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.peer-controls__skip:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+/* Skip intro / Skip credits: a clear button, not a gold one. Gold means where
+   you are (docs/design.md), and this is an offer. */
+.peer-controls__skip-marker {
+  flex-shrink: 0;
+  padding: 6px 14px;
+  font-size: 0.85rem;
+  color: var(--text-primary);
+  background: var(--surface-3, rgba(255, 255, 255, 0.1));
+  border: 1px solid var(--border, rgba(255, 255, 255, 0.16));
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+.peer-controls__skip-marker:hover,
+.peer-controls__skip-marker:focus-visible {
+  background: var(--surface-4, rgba(255, 255, 255, 0.16));
+}
+
+.peer-controls__select {
+  flex-shrink: 1;
+  min-width: 0;
+  max-width: 11rem;
+  font-size: 0.8rem;
+  color: var(--text-primary);
+  background: var(--surface-2, rgba(255, 255, 255, 0.06));
+  border: 1px solid var(--border, rgba(255, 255, 255, 0.12));
+  border-radius: 6px;
+  padding: 4px 6px;
+}
+
+/* A narrow screen wraps the row rather than crushing the scrubber. */
+@media (max-width: 767px) {
+  .peer-controls {
+    flex-wrap: wrap;
+  }
+  .peer-controls__bar {
+    flex-basis: 100%;
+    order: -1;
+  }
+}

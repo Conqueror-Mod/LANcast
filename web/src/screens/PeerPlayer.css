@@ -39,6 +39,14 @@
   font-size: 1.6rem;
 }
 
+/* The picture and the subtitles drawn over it (PeerPlayer.tsx). */
+.peer-player__stage {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+}
+
 .peer-player__video {
   width: 100%;
   /* Capped rather than free, so a tall window does not stretch the element
@@ -73,6 +81,11 @@
 .peer-player--fullscreen .peer-player__head,
 .peer-player--fullscreen .peer-player__note {
   display: none;
+}
+
+.peer-player--fullscreen .peer-player__stage {
+  flex: 1 1 auto;
+  min-height: 0;
 }
 
 .peer-player--fullscreen .peer-player__video {
