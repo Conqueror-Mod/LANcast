@@ -1061,6 +1061,7 @@ func (s *Server) Handler() http.Handler {
 	// Comics (ADR 0101): pages out of the archive, and where you are in it.
 	mux.HandleFunc("GET /api/items/{id}/pages", s.comicPages)
 	mux.HandleFunc("GET /api/items/{id}/pages/{n}", s.comicPage)
+	mux.HandleFunc("PUT /api/items/{id}/series-direction", s.adminOnly(s.setSeriesDirection))
 	mux.HandleFunc("PUT /api/items/{id}/place", s.putComicPlace)
 	mux.HandleFunc("GET /api/stream/{id}", s.stream)
 	// A retro game's files and its player's saves (ADR 0073). A ticket minted

@@ -22,6 +22,10 @@ let place: { page: number; pages: number; updated_at: number } | null;
 let puts: number[];
 /** What /api/profile/reading answers: the account's comic layout and fit. */
 let reading: Record<string, unknown>;
+/** Which way the comic reads, as the pages answer carries it (ADR 0123). */
+let direction: Record<string, unknown>;
+let role: string;
+let directionPuts: unknown[];
 
 beforeEach(() => {
   host = document.createElement("div");
@@ -30,6 +34,9 @@ beforeEach(() => {
   place = null;
   puts = [];
   reading = { account: true, comic_layout: null, comic_fit: null };
+  direction = { direction: "ltr", direction_from: "default", series: "Saga" };
+  role = "member";
+  directionPuts = [];
   vi.stubGlobal(
     "fetch",
     vi.fn(async (url: string, init?: RequestInit) => {
@@ -40,7 +47,18 @@ beforeEach(() => {
         return new Response(null, { status: 204 });
       }
       if (url.endsWith("/api/profile/reading")) return json(reading);
-      if (url.endsWith("/api/items/7/pages")) return json({ pages: 5, place });
+      if (url.endsWith("/api/auth/status")) {
+        return json({ authenticated: true, user: { id: "u1", name: "dana", role } });
+      }
+      if (url.endsWith("/api/items/7/series-direction") && init?.method === "PUT") {
+        const body = JSON.parse(init.body as string);
+        directionPuts.push(body);
+        direction = body.direction
+          ? { direction: body.direction, direction_from: "series", series: "Saga" }
+          : { direction: "ltr", direction_from: "default", series: "Saga" };
+        return json(direction);
+      }
+      if (url.endsWith("/api/items/7/pages")) return json({ pages: 5, place, ...direction });
       if (url.endsWith("/api/items/8/pages")) {
         return json({ error: { code: "unavailable", message: "cannot be opened" } }, 503);
       }
@@ -239,5 +257,84 @@ describe("the comic reader's layout", () => {
     expect(shown()).toBe("/api/items/7/pages/1");
     await key("ArrowRight");
     expect(shown()).toBe("/api/items/7/pages/2");
+  });
+});
+
+describe("the comic reader, right to left (ADR 0123)", () => {
+  const all = () => [...host.querySelectorAll("img.reader__page")].map((i) => i.getAttribute("src"));
+
+  beforeEach(() => {
+    direction = { direction: "rtl", direction_from: "library", series: "Saga" };
+  });
+
+  it("goes forward with the left arrow and back with the right", async () => {
+    await open();
+    expect(host.querySelector(".reader--rtl")).not.toBeNull();
+    await key("ArrowLeft");
+    await key("ArrowLeft");
+    expect(shown()).toBe("/api/items/7/pages/2");
+    await key("ArrowRight");
+    expect(shown()).toBe("/api/items/7/pages/1");
+    // Space has no side: still forward.
+    await key(" ");
+    expect(shown()).toBe("/api/items/7/pages/2");
+  });
+
+  it("goes forward on a tap on the left third, and the left button is Next", async () => {
+    await open();
+    const stage = host.querySelector(".reader__stage") as HTMLElement;
+    Object.defineProperty(stage, "clientWidth", { value: 900 });
+    await act(() => {
+      stage.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true, clientX: 100, clientY: 100 }));
+      stage.dispatchEvent(new MouseEvent("pointerup", { bubbles: true, clientX: 100, clientY: 100 }));
+    });
+    expect(shown()).toBe("/api/items/7/pages/1");
+    const buttons = [...host.querySelectorAll<HTMLButtonElement>(".reader__bar .reader__btn")].slice(-2);
+    expect(buttons.map((b) => b.getAttribute("aria-label"))).toEqual(["Next page", "Previous page"]);
+    await act(() => buttons[0].click());
+    expect(shown()).toBe("/api/items/7/pages/2");
+  });
+
+  it("turns a spread with the left arrow, keeping its pages in reading order", async () => {
+    reading = { account: true, comic_layout: "spread", comic_fit: null };
+    await open();
+    await key("ArrowLeft");
+    // In reading order; the stage lays them out right to left.
+    expect(all()).toEqual(["/api/items/7/pages/1", "/api/items/7/pages/2"]);
+  });
+
+  it("offers an admin the series' direction, and a member nothing", async () => {
+    await open();
+    expect(host.querySelector('[aria-label="Reading direction for Saga"]')).toBeNull();
+
+    act(() => root.unmount());
+    root = createRoot(host);
+    role = "admin";
+    await open();
+    const select = host.querySelector<HTMLSelectElement>('[aria-label="Reading direction for Saga"]')!;
+    expect(select).not.toBeNull();
+    expect(select.value).toBe("");
+    expect(select.options[0].textContent).toBe("Library's way (right to left)");
+
+    await act(async () => {
+      select.value = "ltr";
+      select.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+    await settle(20);
+    expect(directionPuts).toEqual([{ direction: "ltr" }]);
+    // The pages answer was read again, and the reader turned round.
+    expect(host.querySelector(".reader--rtl")).toBeNull();
+    await key("ArrowRight");
+    expect(shown()).toBe("/api/items/7/pages/1");
+  });
+
+  it("leaves the arrows to the direction dropdown while it has focus", async () => {
+    role = "admin";
+    await open();
+    const select = host.querySelector<HTMLSelectElement>('[aria-label="Reading direction for Saga"]')!;
+    await act(() => {
+      select.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowLeft", bubbles: true }));
+    });
+    expect(shown()).toBe("/api/items/7/pages/0");
   });
 });

@@ -574,6 +574,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/items/{id}/series-direction": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The item's id. */
+                id: components["parameters"]["ItemId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Set which way this comic's whole series reads
+         * @description Administrators only (ADR 0123). The override belongs to the series — the comic's folder — so every issue in it, including ones added later, reads this way whatever the library does. Addressed through a comic so a client can only name a series that exists, spelled as the library spells it. Answers with this comic's direction as resolved after the change.
+         */
+        put: operations["putSeriesDirection"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/items/{id}/place": {
         parameters: {
             query?: never;
@@ -7059,6 +7082,13 @@ export interface components {
             /** @description Files in the library — songs, photos, films, episodes — as against `item_count`, which is tiles in the grid. They differ wherever a library groups its media: 1,171 artists holding tens of thousands of songs. */
             media_count: number;
             shape_warning?: components["schemas"]["ShapeWarning"];
+            /** @description The language this film or show library is fetched in (ADR 0123), a code from `metadata_languages`. `null` follows the server's `metadata_language`, so changing the server's setting moves every library nobody set. */
+            metadata_language?: string | null;
+            /**
+             * @description Which way this comics library reads (ADR 0123). `null` is left to right; `rtl` is right to left, as manga reads. A series may differ (`PUT /api/items/{id}/series-direction`).
+             * @enum {string|null}
+             */
+            reading_direction?: "rtl" | null;
         };
         LibraryList: {
             libraries: components["schemas"]["Library"][];
@@ -7080,6 +7110,13 @@ export interface components {
             name?: string;
             path?: string;
             kind?: string;
+            /** @description Film and show libraries only (ADR 0123): a code from `metadata_languages`, or empty to follow the server's language. Anything else, or any language on another kind of library, is `400` — and nothing in the request is applied. Takes effect on the next fetch; the `language` refresh scope rewrites what is stored, and is offered rather than started. */
+            metadata_language?: string;
+            /**
+             * @description Comics libraries only (ADR 0123). `ltr` and empty both mean left to right, and are stored as `null`. On another kind of library it is `400`, and nothing in the request is applied.
+             * @enum {string}
+             */
+            reading_direction?: "ltr" | "rtl" | "";
         };
         RootRequest: {
             path: string;
@@ -8829,8 +8866,35 @@ export interface components {
             /** Format: password */
             current_password: string;
         };
+        /** @description Which way a comic reads, and why (ADR 0123). Resolved by the server, so no client works out the precedence: the series' override, else the library's direction, else left to right. */
+        ReadingDirection: {
+            /** @enum {string} */
+            direction: "ltr" | "rtl";
+            /**
+             * @description Where the direction came from. `default` is left to right because nothing was set.
+             * @enum {string}
+             */
+            direction_from: "series" | "library" | "default";
+            /** @description The comic's series (its folder), or `null` for a comic at the library's root, which can only follow its library. */
+            series: string | null;
+        };
+        SeriesDirectionRequest: {
+            /**
+             * @description Empty removes the override, and the series reads its library's way again.
+             * @enum {string}
+             */
+            direction: "ltr" | "rtl" | "";
+        };
         ComicPages: {
             pages: number;
+            /**
+             * @description Which way to read it (ADR 0123), resolved as `ReadingDirection` describes.
+             * @enum {string}
+             */
+            direction: "ltr" | "rtl";
+            /** @enum {string} */
+            direction_from: "series" | "library" | "default";
+            series: string | null;
             place: components["schemas"]["ComicPlace"] | null;
         };
         ResumeConsole: {
@@ -11636,6 +11700,45 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorEnvelope"];
                 };
             };
+        };
+    };
+    putSeriesDirection: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The item's id. */
+                id: components["parameters"]["ItemId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SeriesDirectionRequest"];
+            };
+        };
+        responses: {
+            /** @description The comic's direction now. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReadingDirection"];
+                };
+            };
+            /** @description `direction` is missing or not `ltr`, `rtl` or empty, or the comic sits at the library's root and has no series — set the library's `reading_direction` instead. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
         };
     };
     putComicPlace: {

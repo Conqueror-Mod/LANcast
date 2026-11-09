@@ -244,10 +244,13 @@ func (s *Server) candidates(w http.ResponseWriter, r *http.Request) {
 	var cands []meta.Candidate
 	seen := map[string]bool{}
 	var lastErr error
+	// In the library's own language, so the titles offered are the ones
+	// applying a candidate will store (ADR 0123).
+	ctx := s.inLibraryLanguage(r.Context(), it.LibraryID)
 	for _, k := range []meta.Kind{meta.KindMovie, meta.KindShow} {
 		qk := q
 		qk.Kind = k
-		found, err := s.reg.Search(r.Context(), qk)
+		found, err := s.reg.Search(ctx, qk)
 		if err != nil {
 			lastErr = err
 			continue
@@ -379,7 +382,7 @@ func (s *Server) trailer(w http.ResponseWriter, r *http.Request) {
 	if it.Provider != nil {
 		provider = *it.Provider
 	}
-	t, err := s.reg.Trailer(r.Context(), provider, meta.Ref{
+	t, err := s.reg.Trailer(s.inLibraryLanguage(r.Context(), it.LibraryID), provider, meta.Ref{
 		Kind: meta.Kind(it.Kind), ExternalID: *it.ExternalID,
 	})
 	if err != nil {
@@ -779,4 +782,15 @@ func (s *Server) refetchByID(w http.ResponseWriter, r *http.Request, libraryID i
 	writeJSON(w, http.StatusOK, map[string]any{
 		"queued": len(items), "scope": string(scope),
 	})
+}
+
+// inLibraryLanguage is ctx carrying a library's own metadata language, when it
+// has one (ADR 0123). A failed read follows the server's language: the fetch
+// is still worth making.
+func (s *Server) inLibraryLanguage(ctx context.Context, libraryID int64) context.Context {
+	code, err := s.st.LibraryLanguage(ctx, libraryID)
+	if err != nil {
+		return ctx
+	}
+	return meta.WithLanguage(ctx, code)
 }

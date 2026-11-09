@@ -988,6 +988,15 @@ func run(ctx context.Context, addr, dataDir string, log *slog.Logger) error {
 	// open windows, so a grid fills in as it happens (ADR 0079). Set before
 	// the first enrichSoon below, so the worker goroutine sees it.
 	worker.OnProgress = func() { apiSrv.Publish(api.TopicItems) }
+	// A library fetched in a language of its own (ADR 0123). A failed read
+	// follows the server's language rather than failing the fetch.
+	worker.LibraryLanguage = func(ctx context.Context, libraryID int64) string {
+		code, err := st.LibraryLanguage(ctx, libraryID)
+		if err != nil {
+			return ""
+		}
+		return code
+	}
 
 	srv := &http.Server{
 		Addr:              listenAddr,
