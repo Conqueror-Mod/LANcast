@@ -189,3 +189,121 @@ func TestMostPlayedIsPerGroupAndNeedsTwoPlays(t *testing.T) {
 		t.Errorf("plays = %d, want 3", got[0].Plays)
 	}
 }
+
+// One group means the same kinds in both histories (profile-2-plan §4e), and
+// a whole audiobook sits with its parts.
+func TestHistoryFiltersByGroup(t *testing.T) {
+	ctx := context.Background()
+	f := newKindFixture(t)
+	film := f.play(t, "movie", 6_000_000, 1, 0)
+	ep := f.play(t, "episode", 1_800_000, 0, 60_000)
+	song := f.play(t, "track", 200_000, 1, 0)
+	book := f.play(t, "book", 3_600_000, 0, 60_000)
+	part := f.play(t, "book_part", 600_000, 1, 0)
+	comic := f.play(t, "comic", 0, 1, 0)
+
+	want := map[HistoryGroup][]int64{
+		GroupAll:    {comic, part, book, song, ep, film},
+		GroupVideo:  {ep, film},
+		GroupMusic:  {song},
+		GroupBooks:  {part, book},
+		GroupComics: {comic},
+	}
+	for g, ids := range want {
+		got, err := f.st.History(ctx, f.user, g, 50, 0)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var have []int64
+		for _, e := range got {
+			have = append(have, e.Item.ID)
+		}
+		if len(have) != len(ids) {
+			t.Errorf("%q: history = %v, want %v", g, have, ids)
+			continue
+		}
+		for i := range ids {
+			if have[i] != ids[i] {
+				t.Errorf("%q: history = %v, want %v", g, have, ids)
+				break
+			}
+		}
+	}
+	if _, err := f.st.History(ctx, f.user, "games", 50, 0); err == nil {
+		t.Error("an unknown group listed something; it should be refused")
+	}
+}
+
+// Every time: the log holds no music, so Music is empty rather than an error,
+// and a group's total counts only that group.
+func TestViewingsFilterByGroup(t *testing.T) {
+	ctx := context.Background()
+	f := newKindFixture(t)
+	for _, k := range []string{"movie", "book", "comic", "track"} {
+		id := f.play(t, k, 0, 0, 0)
+		// Finished through SaveProgress, so the log writes its row.
+		if err := f.st.SaveProgress(ctx, id, f.user, 0, true); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for g, n := range map[HistoryGroup]int{GroupAll: 3, GroupVideo: 1, GroupBooks: 1, GroupComics: 1, GroupMusic: 0} {
+		vs, total, err := f.st.Viewings(ctx, f.user, g, 100, 0)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(vs) != n || total != n {
+			t.Errorf("%q: %d rows, total %d; want %d", g, len(vs), total, n)
+		}
+	}
+}
+
+func TestProfileKindsListsBooksComicsAndGames(t *testing.T) {
+	ctx := context.Background()
+	f := newKindFixture(t)
+	reading := f.play(t, "book", 3_600_000, 0, 60_000)
+	readBook := f.play(t, "book", 3_600_000, 1, 0)
+	opened := f.play(t, "comic", 0, 0, 0)
+	if err := f.st.SetComicPlace(ctx, f.user, opened, 4, 20); err != nil {
+		t.Fatal(err)
+	}
+	readComic := f.play(t, "comic", 0, 1, 0)
+	game := f.play(t, "rom", 0, 0, 0)
+	if err := f.st.PutROMSave(ctx, f.user, game, ROMSave{Slot: "sram", SizeBytes: 1, SHA256: "x", UpdatedAt: 1_700_000_500}); err != nil {
+		t.Fatal(err)
+	}
+	f.play(t, "movie", 6_000_000, 1, 0) // not one of these kinds
+
+	k, err := f.st.ProfileKindsFor(ctx, f.user, 6)
+	if err != nil {
+		t.Fatal(err)
+	}
+	one := func(name string, l []KindEntry, id int64) {
+		t.Helper()
+		if len(l) != 1 || l[0].Item.ID != id {
+			t.Errorf("%s = %+v, want item %d alone", name, l, id)
+		}
+	}
+	one("books in progress", k.Books.InProgress, reading)
+	one("books finished", k.Books.Finished, readBook)
+	one("comics in progress", k.Comics.InProgress, opened)
+	one("comics read", k.Comics.Finished, readComic)
+	if p := k.Comics.InProgress[0].Page; p == nil || p.Page != 4 || p.Pages != 20 {
+		t.Errorf("comic page = %+v, want 4 of 20", p)
+	}
+	if len(k.Games) != 1 || k.Games[0].Item.ID != game || k.Games[0].SavedAt == 0 {
+		t.Errorf("games = %+v, want the saved game with its save time", k.Games)
+	}
+}
+
+// A whole audiobook played twice is most played, in the audiobook group.
+func TestMostPlayedCountsWholeBooks(t *testing.T) {
+	f := newKindFixture(t)
+	book := f.play(t, "book", 3_600_000, 2, 0)
+	got, err := f.st.MostPlayed(context.Background(), f.user, 5)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 1 || got[0].Item.ID != book {
+		t.Errorf("most played = %+v, want the book", got)
+	}
+}

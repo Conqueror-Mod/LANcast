@@ -142,7 +142,7 @@ export function YearInReview() {
             Worked out on this machine, from what you have played. Nothing is
             sent anywhere. A title counts in the year you <em>last</em> played
             it. Every film and episode you finished, each time, is in your{" "}
-            <Link to="/profile/viewings">watch history</Link>.
+            <Link to="/profile?tab=history&every=1">watch history</Link>.
           </p>
         </>
       )}

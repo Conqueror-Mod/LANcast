@@ -1364,7 +1364,9 @@ your browser never contacts RetroAchievements itself. `{dir}` is `UserPic`,
 Your watch history: one row per **finished** viewing of a film, an episode, an
 audiobook or a comic, newest first ([ADR 0074](adr/0074-a-viewing-is-a-row.md),
 [ADR 0119](adr/0119-homepage-2-part-two.md)). `?limit=` defaults
-to 100 (max 500), `?offset=` pages.
+to 100 (max 500), `?offset=` pages. `?kind=` narrows it, as for
+`GET /api/profile`'s history; `kind=music` is always empty, because songs are
+never logged.
 
 ```json
 { "viewings": [ { "id": 41, "finished_at": 1727700000, "estimated": false,
@@ -2053,12 +2055,46 @@ Both are absent on a server from before Profile 2.0.
 
 **`most_played`** is what was finished most often, at least twice, up to five
 in each group: films and episodes together, then songs, then audiobook
-chapters. Per group so an album on repeat cannot push every film off it. Empty
-when nothing has been finished twice. Items carry `artwork`.
+chapters (or whole audiobooks). Per group so an album on repeat cannot push
+every film off it. Empty when nothing has been finished twice. Items carry
+`artwork`.
 
 `?limit=` defaults to 50 (max 200) and `?offset=` pages. `has_more` says whether
 the history was cut short, so a client can offer the next page rather than infer
 it from a full-looking one.
+
+**`?kind=` narrows the history** to `video` (films, episodes and home videos),
+`music` (songs), `books` (audiobooks and their parts) or `comics`. It does not
+touch `stats` or `most_played`. Anything else is `400 bad_request`, so a typo
+cannot pass for an empty filter. Retro games are not a kind: they leave no play
+record, only saves, which `GET /api/profile/kinds` lists.
+
+### `GET /api/profile/kinds`
+
+The profile Overview's books, comics and games: up to six of each, newest
+first.
+
+```json
+{ "books":  { "in_progress": [ { "item": { "id": 501, "kind": "book", ... },
+                                 "touched_at": 1755200000 } ],
+              "finished":    [] },
+  "comics": { "in_progress": [ { "item": { "id": 77, "kind": "comic", ... },
+                                 "touched_at": 1755100000,
+                                 "page": { "page": 4, "pages": 20,
+                                           "updated_at": 1755100000 } } ],
+              "finished":    [] },
+  "games":  [ { "item": { "id": 900, "kind": "rom", ... },
+                "saved_at": 1755000000 } ] }
+```
+
+- **In progress** is the resume console's own answer (`GET /api/resume`), so
+  the two cannot disagree, but with no Continue window: the profile does not
+  forget a book after a month.
+- **Finished** is what you finished, newest first. Missing files are left out.
+- **Games** are every game you have a save of on the server, by its newest
+  save. LANcast records no play time, so there is none to report.
+- The account's limits apply (ADR 0084), every list is present (empty rather
+  than null), and items carry `artwork`.
 
 **History is derived from `playback_state`, not from a log of plays.** There is
 one row per item per user, so this is the *last* time each item was played and

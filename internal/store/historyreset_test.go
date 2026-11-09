@@ -146,7 +146,7 @@ func TestResetHistoryKeepsTheTotalsHonest(t *testing.T) {
 	}
 
 	// And the history list really is gone, which is the half that was asked for.
-	hist, err := st.History(ctx, "u1", 50, 0)
+	hist, err := st.History(ctx, "u1", GroupAll, 50, 0)
 	if err != nil {
 		t.Fatal(err)
 	}

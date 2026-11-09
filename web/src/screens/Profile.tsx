@@ -6,7 +6,9 @@ import {
   useMarkedItems,
   useMyRatings,
   useProfile,
+  useProfileKinds,
   useTags,
+  type HistoryKind,
 } from "@/api/hooks";
 import { Shelf } from "@/components/Shelf";
 import { PersonPicture } from "@/components/Avatar";
@@ -15,11 +17,13 @@ import { PictureEditor } from "@/components/PictureEditor";
 import { YearInReview } from "@/components/YearInReview";
 import { artworkURL } from "@/api/client";
 import { runtime, episodeCode } from "@/lib/format";
-import type { HistoryEntry, ProfileStats, RatedItem } from "@/api/types";
+import type { HistoryEntry, KindEntry, ProfileStats, RatedItem, SavedGame } from "@/api/types";
 import type { components } from "@/api/schema";
 import { kindCards } from "@/lib/profileKinds";
+import { ViewingLog } from "./WatchHistory";
 
 type PlayedItem = components["schemas"]["PlayedItem"];
+import "@/components/FilterBar.css";
 import "./Profile.css";
 
 /*
@@ -53,10 +57,26 @@ const TABS = [
 ] as const;
 type Tab = (typeof TABS)[number]["id"];
 
+// History's filter. Games are not here: a retro game leaves no play record,
+// only its saves, which the Overview shows (profile-2-plan §4d).
+const HISTORY_KINDS: { id: HistoryKind; label: string }[] = [
+  { id: "", label: "All" },
+  { id: "video", label: "Video" },
+  { id: "music", label: "Music" },
+  { id: "books", label: "Books" },
+  { id: "comics", label: "Comics" },
+];
+
 export function Profile() {
   const [offset, setOffset] = useState(0);
-  const { data, isLoading, isError } = useProfile(PAGE, offset);
   const [params, setParams] = useSearchParams();
+  // History's filter and switch, from the address (profile-2-plan §4e).
+  const askedKind = params.get("kind") ?? "";
+  const kind: HistoryKind = HISTORY_KINDS.some((k) => k.id === askedKind)
+    ? (askedKind as HistoryKind)
+    : "";
+  const every = params.get("every") === "1";
+  const { data, isLoading, isError } = useProfile(PAGE, offset, kind);
   const ra = useRetroAchievements();
   const secured = !!data?.user.secured;
   /*
@@ -75,6 +95,23 @@ export function Profile() {
   });
   const asked = params.get("tab");
   const tab: Tab = tabs.some((t) => t.id === asked) ? (asked as Tab) : "overview";
+
+  const setHistory = (change: { kind?: HistoryKind; every?: boolean }) => {
+    const next = new URLSearchParams(params);
+    if (change.kind !== undefined) {
+      if (change.kind) next.set("kind", change.kind);
+      else next.delete("kind");
+    }
+    if (change.every !== undefined) {
+      if (change.every) next.set("every", "1");
+      else next.delete("every");
+    }
+    // A different list starts at its first page.
+    setOffset(0);
+    // Replace rather than push: Back leaves the page, it does not step
+    // through every chip pressed on the way.
+    setParams(next, { replace: true });
+  };
 
   if (isError) {
     return (
@@ -167,6 +204,10 @@ export function Profile() {
             </div>
             )}
 
+            {/* What you are in the middle of comes before what you went back
+                to most: it is the part of the page you would act on. */}
+            {secured && <NewerKinds />}
+
             <MostPlayed items={data?.most_played ?? []} />
 
             {/* The same history read a different way, so it belongs with the
@@ -179,22 +220,59 @@ export function Profile() {
 
         {tab === "history" && (
           <>
-            <div className="profile__labelrow">
-              <span className="section-label profile__label">Recently played</span>
-              {/* The log beside this list: this one shows each title once, dated
-                  from its last play; the history has every time it was finished. */}
+            {/* One History (profile-2-plan §4e): a filter by kind, and a
+                switch between each title once (the state table, dated from
+                its last play) and every time (the log, one row per finish).
+                Both live in the address, so Back and a bookmark keep them. */}
+            <div className="profile__historybar">
+              <div className="profile__chips" role="group" aria-label="Show">
+                {HISTORY_KINDS.map((k) => (
+                  <button
+                    key={k.id || "all"}
+                    type="button"
+                    className={"chip" + (k.id === kind ? " is-on" : "")}
+                    aria-pressed={k.id === kind}
+                    onClick={() => setHistory({ kind: k.id })}
+                  >
+                    {k.label}
+                  </button>
+                ))}
+              </div>
               {secured && (
-                <Link className="profile__loglink" to="/profile/viewings">
-                  Full watch history →
-                </Link>
+                <div className="profile__chips" role="group" aria-label="Count">
+                  <button
+                    type="button"
+                    className={"chip" + (!every ? " is-on" : "")}
+                    aria-pressed={!every}
+                    onClick={() => setHistory({ every: false })}
+                  >
+                    Each title once
+                  </button>
+                  <button
+                    type="button"
+                    className={"chip" + (every ? " is-on" : "")}
+                    aria-pressed={every}
+                    onClick={() => setHistory({ every: true })}
+                  >
+                    Every time
+                  </button>
+                </div>
               )}
             </div>
+          </>
+        )}
 
+        {tab === "history" && every && secured && <ViewingLog kind={kind} />}
+
+        {tab === "history" && !(every && secured) && (
+          <>
             {isLoading && <p className="browse__message">Loading…</p>}
 
             {!isLoading && history.length === 0 && (
               <p className="browse__message">
-                Nothing played yet. Anything you watch or listen to shows up here.
+                {kind
+                  ? "Nothing of this kind played yet."
+                  : "Nothing played yet. Anything you watch or listen to shows up here."}
               </p>
             )}
 
@@ -318,6 +396,101 @@ function MostPlayed({ items }: { items: PlayedItem[] }) {
         );
       })}
     </section>
+  );
+}
+
+/*
+ * Books, comics and games on Overview (profile-2-plan §4d): the kinds that
+ * arrived after the page did and appeared only through Recently played. Each
+ * section is there only when it has something in it, so an account that never
+ * reads comics never sees an empty Comics heading.
+ *
+ * A game shows its last save and nothing about time: LANcast records no play
+ * time (§8), and a section that invented some would be worse than none.
+ */
+function NewerKinds() {
+  const { data } = useProfileKinds();
+  // An older server has no such route; a missing list is an empty one.
+  if (!data) return null;
+  const none = { in_progress: [], finished: [] };
+  const books = data.books ?? none;
+  const comics = data.comics ?? none;
+  const games = data.games ?? [];
+  const listened = (e: KindEntry) => {
+    const at = runtime(e.item.progress?.position_ms ?? 0);
+    return at ? `${at} in` : "In progress";
+  };
+  const reading = (e: KindEntry) =>
+    e.page ? `Page ${e.page.page + 1} of ${e.page.pages}` : "In progress";
+  const sections = [
+    {
+      label: "Audiobooks",
+      rows: [
+        ...books.in_progress.map((e) => ({ e, note: listened(e) })),
+        ...books.finished.map((e) => ({ e, note: "Finished" })),
+      ],
+    },
+    {
+      label: "Comics",
+      rows: [
+        ...comics.in_progress.map((e) => ({ e, note: reading(e) })),
+        ...comics.finished.map((e) => ({ e, note: "Read" })),
+      ],
+    },
+  ].filter((s) => s.rows.length > 0);
+  if (sections.length === 0 && games.length === 0) return null;
+  return (
+    <>
+      {sections.map((s) => (
+        <section key={s.label} className="profile__section profile__kind" aria-label={s.label}>
+          <span className="section-label profile__label">{s.label}</span>
+          <div className="profile__history">
+            {s.rows.map(({ e, note }) => (
+              <KindRow key={e.item.id} item={e.item} note={note} />
+            ))}
+          </div>
+        </section>
+      ))}
+      {games.length > 0 && (
+        <section className="profile__section profile__kind" aria-label="Games">
+          <span className="section-label profile__label">Games</span>
+          <div className="profile__history">
+            {games.map((g: SavedGame) => (
+              <KindRow
+                key={g.item.id}
+                item={g.item}
+                note={`Saved ${new Date(g.saved_at * 1000).toLocaleDateString()}`}
+              />
+            ))}
+          </div>
+        </section>
+      )}
+    </>
+  );
+}
+
+function KindRow({ item, note }: { item: KindEntry["item"]; note: string }) {
+  const poster = artworkURL(item.artwork?.poster, "thumb");
+  const detail = [item.series ?? item.artist, item.year ? String(item.year) : ""]
+    .filter(Boolean)
+    .join(" · ");
+  return (
+    <Link className="profile__row" to={`/item/${item.id}`}>
+      <div className="profile__art">
+        {poster ? (
+          <img src={poster} alt="" loading="lazy" />
+        ) : (
+          <span aria-hidden="true">{item.title.slice(0, 1).toUpperCase()}</span>
+        )}
+      </div>
+      <div className="profile__what">
+        <span className="profile__titleline">{item.title}</span>
+        {detail && <span className="profile__detail">{detail}</span>}
+      </div>
+      <div className="profile__when">
+        <span className="profile__state">{note}</span>
+      </div>
+    </Link>
   );
 }
 

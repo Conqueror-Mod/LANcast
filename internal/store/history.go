@@ -115,20 +115,28 @@ func scanItemThen(sc interface{ Scan(...any) error }, extra ...any) (*Item, erro
 // items are included: "what happened to the film I watched last week" is a
 // question about history, and a library that lost a drive should not lose its
 // answer to it.
-func (s *Store) History(ctx context.Context, userID string, limit, offset int) ([]HistoryEntry, error) {
+//
+// group narrows it to one kind of thing (profile-2-plan §4e); GroupAll is
+// everything, as before.
+func (s *Store) History(ctx context.Context, userID string, group HistoryGroup, limit, offset int) ([]HistoryEntry, error) {
+	if !group.Valid() {
+		return nil, fmt.Errorf("history: unknown group %q", group)
+	}
 	if limit <= 0 || limit > 200 {
 		limit = 50
 	}
 	if offset < 0 {
 		offset = 0
 	}
+	kinds, kargs := group.kindClause("mi.kind")
+	args := append([]any{userID}, kargs...)
 	rows, err := s.db.QueryContext(ctx, `SELECT `+itemColsMI+`,
 		    ps.position_ms, ps.watched, ps.updated_at
 		FROM media_item mi
 		JOIN playback_state ps ON ps.item_id = mi.id AND ps.user_id = ?
-		WHERE ps.position_ms > 0 OR ps.watched = 1
+		WHERE (ps.position_ms > 0 OR ps.watched = 1)`+kinds+`
 		ORDER BY ps.updated_at DESC, mi.id DESC
-		LIMIT ? OFFSET ?`, userID, limit, offset)
+		LIMIT ? OFFSET ?`, append(args, limit, offset)...)
 	if err != nil {
 		return nil, fmt.Errorf("history: %w", err)
 	}
@@ -285,7 +293,8 @@ func (s *Store) MostPlayed(ctx context.Context, userID string, per int) ([]Playe
 		FROM (
 		  SELECT ps.item_id, ps.watch_count,
 		         ROW_NUMBER() OVER (
-		           PARTITION BY CASE m.kind WHEN 'episode' THEN 'movie' ELSE m.kind END
+		           PARTITION BY CASE m.kind WHEN 'episode' THEN 'movie'
+		                                    WHEN 'book_part' THEN 'book' ELSE m.kind END
 		           ORDER BY ps.watch_count DESC, ps.updated_at DESC, ps.item_id DESC
 		         ) AS n,
 		         CASE m.kind WHEN 'movie' THEN 0 WHEN 'episode' THEN 0
@@ -294,7 +303,7 @@ func (s *Store) MostPlayed(ctx context.Context, userID string, per int) ([]Playe
 		  FROM playback_state ps
 		  JOIN media_item m ON m.id = ps.item_id
 		  WHERE ps.user_id = ? AND ps.watch_count >= 2
-		    AND m.kind IN ('movie', 'episode', 'track', 'book_part')
+		    AND m.kind IN ('movie', 'episode', 'track', 'book', 'book_part')
 		) AS ranked
 		JOIN media_item mi ON mi.id = ranked.item_id
 		WHERE ranked.n <= ?

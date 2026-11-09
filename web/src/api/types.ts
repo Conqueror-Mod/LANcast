@@ -225,6 +225,11 @@ export type HistoryEntry = components["schemas"]["HistoryEntry"];
 
 export type Profile = components["schemas"]["Profile"];
 
+// GET /api/profile/kinds — the Overview's books, comics and games.
+export type ProfileKinds = components["schemas"]["ProfileKinds"];
+export type KindEntry = components["schemas"]["KindEntry"];
+export type SavedGame = components["schemas"]["SavedGame"];
+
 // GET /api/crashes — a recovered panic. `where` is the route pattern rather
 // than the URL: the pattern is what somebody fixes.
 export type CrashReport = components["schemas"]["CrashReport"];

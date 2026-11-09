@@ -1,52 +1,60 @@
 import { useRef } from "react";
-import { Link, useNavigate } from "react-router-dom";
-import { useViewings } from "@/api/hooks";
+import { Link, Navigate } from "react-router-dom";
+import { useViewings, type HistoryKind } from "@/api/hooks";
 import { useInfiniteScroll } from "@/lib/useInfiniteScroll";
-import { useBackHandler } from "@/focus/FocusController";
 import { episodeCode } from "@/lib/format";
 import type { Viewing } from "@/api/types";
 import "./Browse.css";
 import "./Profile.css";
 
 /*
- * Every finished viewing, newest first, grouped by month (ADR 0074).
- *
- * Not the profile's Recently played, which reads the state table and so shows
- * each title once, dated from its last play. Here a film watched three times
- * is three rows — the question this page answers is "when did I watch it",
- * and only a log can say.
- *
- * The export links are plain downloads of the caller's own history. LANcast
- * sends the file nowhere; importing it into another service is the person's
- * decision, made with the file in hand.
+ * The watch history's old address. It became the Profile History tab's "Every
+ * time" (profile-2-plan §4e), and links to it (bookmarks, Year in Review in an
+ * older client) still land in the right place.
  */
 export function WatchHistory() {
-  const navigate = useNavigate();
+  return <Navigate to="/profile?tab=history&every=1" replace />;
+}
+
+/*
+ * Every finished viewing, newest first, grouped by month (ADR 0074).
+ *
+ * Not "Each title once", which reads the state table and so shows each title
+ * once, dated from its last play. Here a film watched three times is three
+ * rows: the question this answers is "when did I watch it", and only a log can
+ * say.
+ *
+ * The export links are plain downloads of the caller's own history, all of it
+ * whatever the filter. LANcast sends the file nowhere; importing it into
+ * another service is the person's decision, made with the file in hand.
+ */
+export function ViewingLog({ kind = "" }: { kind?: HistoryKind }) {
   const { data, isLoading, isError, fetchNextPage, hasNextPage, isFetchingNextPage } =
-    useViewings();
+    useViewings(100, kind);
   const viewings = (data?.pages ?? []).flatMap((p) => p.viewings);
   const total = data?.pages[0]?.total ?? 0;
 
   const sentinel = useRef<HTMLDivElement | null>(null);
   useInfiniteScroll(sentinel, { hasNextPage, isFetchingNextPage, fetchNextPage });
 
-  const back = () => navigate("/profile");
-  useBackHandler(back);
+  // Songs are never logged (ADR 0119): an album played through is a weak
+  // signal. Saying so beats an empty list that looks like a fault.
+  if (kind === "music") {
+    return (
+      <p className="browse__message">
+        Songs are not kept in the log, only the last time each was played. Switch
+        to Each title once to see them.
+      </p>
+    );
+  }
 
   return (
-    <div className="browse profile">
-      <div className="browse__head browse__head--sticky">
-        <button className="pl-back" onClick={back}>
-          ← Profile
-        </button>
-        <h1 className="browse__title">Watch history</h1>
-        <span className="browse__count">{total ? total.toLocaleString() : ""}</span>
-      </div>
-
+    <>
       <div className="profile__exports">
         <span className="profile__hint">
-          Every film and episode you finished, each time you finished it. Only
-          you can see it.
+          Every film, episode, audiobook and comic you finished, each time you
+          finished it. Only you can see it.
+          {total > 0 && ` ${total.toLocaleString()} in all.`}
         </span>
         {total > 0 && (
           <span className="profile__exportlinks">
@@ -68,8 +76,7 @@ export function WatchHistory() {
       {isError && <p className="browse__message">Your watch history could not be loaded.</p>}
       {!isLoading && !isError && viewings.length === 0 && (
         <p className="browse__message">
-          Nothing here yet. Finish a film or an episode and it is added, with the
-          date.
+          Nothing here yet. Finish something and it is added, with the date.
         </p>
       )}
 
@@ -84,7 +91,7 @@ export function WatchHistory() {
         </section>
       ))}
       <div ref={sentinel} aria-hidden="true" />
-    </div>
+    </>
   );
 }
 

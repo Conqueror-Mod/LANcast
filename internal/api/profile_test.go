@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"testing"
 
@@ -187,5 +188,52 @@ func TestProfileSplitsTotalsByKindAndListsMostPlayed(t *testing.T) {
 	}
 	if a := body.MostPlayed[0].Item.Artwork; a == nil || a.Poster != "posterhash" {
 		t.Errorf("most played artwork = %+v, want its poster", a)
+	}
+}
+
+// ?kind= narrows both histories, a kind it does not know is a 400 rather than
+// everything, and /api/profile/kinds answers with empty lists, not nulls, and
+// with its rows' posters (profile-2-plan §4d, §4e).
+func TestProfileKindFilterAndKinds(t *testing.T) {
+	h := newHarness(t)
+	ctx := context.Background()
+	id := h.addFile(t, "Film.mkv", []byte("x"))
+	if err := h.st.SaveProgress(ctx, id, "local", 0, true); err != nil {
+		t.Fatal(err)
+	}
+
+	if b := h.profile(t, "?kind=video"); len(b.History) != 1 {
+		t.Errorf("video history = %d rows, want the film", len(b.History))
+	}
+	if b := h.profile(t, "?kind=music"); len(b.History) != 0 {
+		t.Errorf("music history = %d rows, want none", len(b.History))
+	}
+	for _, path := range []string{"/api/profile?kind=games", "/api/profile/viewings?kind=film"} {
+		if resp := h.do(t, "GET", path, nil); resp.StatusCode != http.StatusBadRequest {
+			t.Errorf("%s = %d, want 400", path, resp.StatusCode)
+		}
+	}
+	resp := h.do(t, "GET", "/api/profile/viewings?kind=video", nil)
+	var log struct {
+		Total int `json:"total"`
+	}
+	decode(t, resp, &log)
+	if log.Total != 1 {
+		t.Errorf("video log total = %d, want 1", log.Total)
+	}
+
+	resp = h.do(t, "GET", "/api/profile/kinds", nil)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("kinds = %d", resp.StatusCode)
+	}
+	var k map[string]json.RawMessage
+	decode(t, resp, &k)
+	for _, want := range []string{"books", "comics", "games"} {
+		if string(k[want]) == "null" || k[want] == nil {
+			t.Errorf("%s = %s; want a value, never null", want, k[want])
+		}
+	}
+	if string(k["games"]) != "[]" {
+		t.Errorf("games = %s, want []", k["games"])
 	}
 }

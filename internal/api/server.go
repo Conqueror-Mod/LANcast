@@ -647,6 +647,8 @@ func (s *Server) Handler() http.Handler {
 	// Photographs from today's date in an earlier year (ADR 0028).
 	mux.HandleFunc("GET /api/memories", s.memories)
 	mux.HandleFunc("GET /api/profile", s.profile)
+	// The Overview's books, comics and games (profile-2-plan §4d).
+	mux.HandleFunc("GET /api/profile/kinds", s.profileKinds)
 	mux.HandleFunc("PATCH /api/profile", s.patchProfile)
 	// A taste rather than a limit, so it acts on the session and needs no role
 	// check — see internal/api/langpref.go.

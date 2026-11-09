@@ -37,6 +37,13 @@ describe("profile totals by kind", () => {
     expect(cards[1].ms).toBe(98_400_000);
   });
 
+  it("counts whole books and older chapter rows in their own words", () => {
+    const cards = kindCards([k("book", 3, 2, 9_000_000), k("book_part", 5, 4, 3_000_000)]);
+    expect(cards).toHaveLength(1);
+    expect(cards[0].ms).toBe(12_000_000);
+    expect(cards[0].note).toBe("2 books · 4 chapters finished");
+  });
+
   it("has nothing to show for nothing played", () => {
     expect(kindCards([], undefined)).toEqual([]);
   });
