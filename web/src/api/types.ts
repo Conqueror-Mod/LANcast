@@ -262,6 +262,9 @@ export type RemoteCommandRequest = components["schemas"]["RemoteCommandRequest"]
 // sessions, not a login history: it answers "is this person here right now".
 export type ManagedUser = components["schemas"]["ManagedUser"];
 export type ComicPages = components["schemas"]["ComicPages"];
+/** What LANcast keeps on disk (settings-3-plan step 7). */
+export type StorageAnswer = components["schemas"]["StorageAnswer"];
+export type StoragePart = components["schemas"]["StoragePart"];
 /** Which way a comic reads, and why (ADR 0123). */
 export type ReadingDirection = components["schemas"]["ReadingDirection"];
 export type LoginResult = components["schemas"]["LoginResponse"];

@@ -48,6 +48,7 @@ import type {
   AuthUser,
   ComicPages,
   ReadingDirection,
+  StorageAnswer,
   LoginResult,
   ManagedUser,
   RecoveryCodes,
@@ -1175,6 +1176,28 @@ export function useLibraries() {
  * the last page marks the comic read, which changes everything a watched tick
  * is drawn on.
  */
+/*
+ * What LANcast keeps on disk (settings-3-plan step 7). The server measures in
+ * the background and answers with what it last measured, so this asks again
+ * every second while `measuring` is true and not otherwise.
+ */
+export function useStorage() {
+  return useQuery({
+    queryKey: ["storage"],
+    queryFn: ({ signal }) => apiGet<StorageAnswer>("/api/storage", signal),
+    refetchInterval: (q) => (q.state.data?.measuring ? 1000 : false),
+  });
+}
+
+/** Measure again now, then follow it as useStorage does. */
+export function useMeasureStorage() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => apiGet<StorageAnswer>("/api/storage?fresh=1"),
+    onSuccess: (data) => qc.setQueryData(["storage"], data),
+  });
+}
+
 export function useComicPages(id: number) {
   return useQuery({
     queryKey: ["comic-pages", id],
