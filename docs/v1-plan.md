@@ -1,6 +1,7 @@
 # LANcast 1.0: what the number promises, and what stands between here and it
 
-Date: 2026-11-08 · Status: **proposal**, waiting on the decisions in §7 ·
+Date: 2026-11-08 · Status: **accepted** 2026-11-08, every decision in §7
+taking its recommendation (§8) ·
 Main is v0.10.10, schema 91, with Settings 3.0 steps 1–2 unreleased
 
 ## 1. What 1.0 means
@@ -237,3 +238,33 @@ already paid for three times. The acceptance run is the release.
 7. **Split the roadmap** at 1.0.
 8. **Proxies, Prometheus and Home Assistant:** labelled "checked with simulated
    clients", unless one of them already runs here.
+
+## 8. Decisions taken (2026-11-08)
+
+Chris took the recommendation on all eight.
+
+1. **1.0 is a promise, not a feature target:** the ledger, install and update,
+   and the documents, as §1 defines it.
+2. **Scope is all seven Settings 3.0 steps, then Profile Page 2.0, then the
+   freeze.** Step 7 stays in.
+3. **v0.11.0 marks the freeze.** Every v0.11.x release is a 1.0 candidate,
+   carrying fixes and ledger work only.
+4. **Linux is supported in 1.0.** The amd64 archive is run once under systemd
+   (WSL2 is enough), through a scan and a film played with ffmpeg. arm64 ships
+   labelled *built, not run*.
+5. **ffmpeg's privileges: cost it, then decide.** Find out what a restricted
+   token or a low-privilege account for the child processes costs. A few days
+   or less means it is done before 1.0. More than that means security.md says
+   so plainly for 1.0, and it is built in 1.1.
+6. **Live TV ships visible, labelled as a preview**, in the interface and in
+   the notes. The label is the only live TV work, and it does not unpark
+   anything else ([the parked scope](roadmap.md#what-is-left) stands).
+7. **The roadmap is split at 1.0**, as part of §6 step 7: `roadmap.md` keeps
+   the status, what is left, open decisions and the backlog, and the Releases
+   table and the *what the pass taught* sections move to a history file.
+8. **Proxies, Prometheus and Home Assistant are labelled** "checked with
+   simulated clients" in the docs and the notes.
+
+**What these add to the work list:** the costing in 5 (section E), a preview
+label on live TV's entry points (section F), and the roadmap split, which
+moves into the last item.
