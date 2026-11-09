@@ -683,6 +683,11 @@ func (s *Server) Handler() http.Handler {
 	// The account's own say over playback webhooks (ADR 0097). No admin route.
 	mux.HandleFunc("PUT /api/profile/webhooks", s.putPlaybackWebhooks)
 	mux.HandleFunc("PUT /api/profile/avatar", s.putAvatar)
+	// An uploaded picture (ADR 0121): the caller's own, and the two JPEGs the
+	// server drew from it, by hash, to anybody signed in here.
+	mux.HandleFunc("PUT /api/profile/picture", s.putPicture)
+	mux.HandleFunc("DELETE /api/profile/picture", s.deletePicture)
+	mux.HandleFunc("GET /api/pictures/{hash}", s.servePicture)
 	// Forgetting what you watched. GET prices it, DELETE does it.
 	/*
 	 * Your year (ADR 0035). On the profile prefix because it is a fact about
@@ -1042,6 +1047,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/users", s.adminOnly(s.listUsers))
 	mux.HandleFunc("POST /api/users", s.adminOnly(s.createUser))
 	mux.HandleFunc("DELETE /api/users/{id}", s.adminOnly(s.deleteUser))
+	mux.HandleFunc("DELETE /api/users/{id}/picture", s.adminOnly(s.clearUserPicture))
 	mux.HandleFunc("PATCH /api/users/{id}", s.adminOnly(s.patchUser))
 	mux.HandleFunc("POST /api/users/{id}/password", s.adminOnly(s.resetUserPassword))
 	mux.HandleFunc("DELETE /api/users/{id}/two-factor", s.adminOnly(s.removeUserTwoFactor))

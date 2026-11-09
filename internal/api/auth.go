@@ -529,6 +529,13 @@ func (s *Server) authStatus(w http.ResponseWriter, r *http.Request) {
 		} else {
 			u["avatar"] = avatar
 		}
+		// And the picture they uploaded (ADR 0121), which wins over the
+		// animal: its hash, or null.
+		if hash, err := s.st.PictureHash(r.Context(), sess.UserID); err != nil {
+			s.log.Error("read picture", "error", err)
+		} else {
+			u["picture"] = pictureOrNil(hash)
+		}
 		resp["user"] = u
 	}
 	writeJSON(w, http.StatusOK, resp)

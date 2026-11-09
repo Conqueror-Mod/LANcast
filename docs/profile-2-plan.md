@@ -209,7 +209,7 @@ Each step is its own PR, in this order.
 
    **Then, before step 1: posters on the profile routes** (§9a). A bug fix of
    its own, with no dependencies.
-1. **ADR 0121 and the server half of the picture.** Migration (a
+1. **ADR 0121 and the server half of the picture.** *Built 2026-11-08: `internal/picture`, schema 94, the four routes, `member_pictures`.* Migration (a
    `user_picture` table, §9d), decode/crop/encode with its fuzz test, the
    four routes, the setting, the guest-denial test, a backup-and-restore test that brings a picture back, `api.md`
    and `openapi.json`. Bump the ADR count in README.md and CLAUDE.md.

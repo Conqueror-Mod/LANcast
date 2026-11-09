@@ -105,6 +105,8 @@ func (s *Server) getSettings(w http.ResponseWriter, r *http.Request) {
 		"photo_places":   cur.PhotoPlaces,
 		"match_music":    cur.MatchMusic,
 		"login_picker":   cur.LoginPicker,
+		// Whether members may upload a picture of themselves (ADR 0121).
+		"member_pictures": cur.MemberPictures,
 
 		// The pre-roll folder (ADR 0099), "" when off.
 		"preroll_dir": cur.PrerollDir,
@@ -159,6 +161,7 @@ func (s *Server) putSettings(w http.ResponseWriter, r *http.Request) {
 		MatchMusic       *bool    `json:"match_music"`
 		PhotoPlaces      *bool    `json:"photo_places"`
 		LoginPicker      *bool    `json:"login_picker"`
+		MemberPictures   *bool    `json:"member_pictures"`
 		HardwareEncoder  *string  `json:"hardware_encoder"`
 
 		CertificationCountry *string `json:"certification_country"`
@@ -260,6 +263,9 @@ func (s *Server) putSettings(w http.ResponseWriter, r *http.Request) {
 	}
 	if req.LoginPicker != nil {
 		next.LoginPicker = *req.LoginPicker
+	}
+	if req.MemberPictures != nil {
+		next.MemberPictures = *req.MemberPictures
 	}
 	if req.PhotoPlaces != nil {
 		next.PhotoPlaces = *req.PhotoPlaces
@@ -590,6 +596,7 @@ func changedSettings(prev, next config.Settings) []string {
 	add("match_music", prev.MatchMusic != next.MatchMusic)
 	add("photo_places", prev.PhotoPlaces != next.PhotoPlaces)
 	add("login_picker", prev.LoginPicker != next.LoginPicker)
+	add("member_pictures", prev.MemberPictures != next.MemberPictures)
 	add("auto_enrich", prev.AutoEnrich != next.AutoEnrich)
 	add("update_check", prev.UpdateCheck != next.UpdateCheck)
 	add("hardware_encoder", prev.HardwareEncoder != next.HardwareEncoder)
