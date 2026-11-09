@@ -1,6 +1,6 @@
 # Profile 2.0: a picture of your own, and a page that has kept up
 
-Status: accepted, 2026-11-08. Nothing here is built. It was written while
+Status: accepted, 2026-11-08. Step 0 (the walk) is done, §9; nothing else is built. It was written while
 Settings 3.0 ([settings-3-plan.md](settings-3-plan.md)) was in its last steps,
 and it is the last of the "3.0" pieces before 1.0. Chris's decisions are in §7;
 each took the recommendation.
@@ -87,6 +87,10 @@ The editor must work three ways: mouse and touch, a TV remote (arrows move,
 `useFocusZone`), and a phone (`accept="image/*"` offers the camera as well).
 
 ### 3d. Storage
+
+> **Superseded by §9d:** backups hold only the database, so the pictures are
+> stored in it as BLOBs, not as files. The rest of this section is kept as it
+> was first written.
 
 - **Files:** content-addressed under the data dir (`pictures/<sha256>-256.jpg`,
   `-64.jpg`), hashed from the encoded output, next to the artwork cache rather
@@ -197,14 +201,17 @@ time** (today's full history). `/profile/viewings` redirects to
 
 Each step is its own PR, in this order.
 
-0. **Walk and measure, no code.** Read what `ProfileStatistics` counts per kind
+0. **Walk and measure, no code.** *Done 2026-11-08; see §9.* Read what `ProfileStatistics` counts per kind
    on the live database (copied with its -wal and -shm). Find where comic
    progress and retro play time live. Check what backup and restore include.
    Walk the current page at 375 px and with a remote. Findings go in §9 of this
    plan.
-1. **ADR 0121 and the server half of the picture.** Migration (one nullable
-   column), decode/crop/encode with its fuzz test, storage and clean-up, the
-   four routes, the setting, the guest-denial test, backup inclusion, `api.md`
+
+   **Then, before step 1: posters on the profile routes** (§9a). A bug fix of
+   its own, with no dependencies.
+1. **ADR 0121 and the server half of the picture.** Migration (a
+   `user_picture` table, §9d), decode/crop/encode with its fuzz test, the
+   four routes, the setting, the guest-denial test, a backup-and-restore test that brings a picture back, `api.md`
    and `openapi.json`. Bump the ADR count in README.md and CLAUDE.md.
 2. **The picture in the client.** `<Avatar>`, the crop editor (mouse, touch,
    remote, phone), every surface in §3g, the admin clear in Users, and the
@@ -260,8 +267,115 @@ Each took the recommendation.
   upload path could reuse that later. Phones offer JPEG when a page asks for
   `image/*` in most cases anyway.
 - **A card other people see** on People, built on the ADR 0035 opt-in.
+- **Play time for retro games.** Nothing records it today (§9c); the Retro
+  section shows the last save instead.
 - **Per-kind banking** of history resets. §4c shows the gap instead of fixing it.
 
 ## 9. Step 0 findings
 
-Not yet walked.
+Walked 2026-11-08 against the installed v0.10.10 service, through the
+`client-dev` proxy, signed in as the admin account. The database was read from a
+copy of `lancast.db` with its `-wal` and `-shm`. No code was changed.
+
+### 9a. A bug: no posters anywhere on the page
+
+`GET /api/profile` and `GET /api/profile/ratings` never call `AttachArtwork`.
+Every item comes back with no `artwork`, so all 60
+rows on the page (Recently played and Your ratings) draw the first letter of the
+title instead of a poster. Measured: 60 rows, 0 with an `<img>`. Favourites is
+fine because it goes through the shelf path. It has been this way since the
+profile route was first written (7fdfb87d). Nothing failed, so nobody noticed.
+
+This is fixed on its own, ahead of step 1, and is not left for step 3 (#1052).
+It is the "tiles need their posters" lesson already written in `rating.go`'s
+`listToRate`. A test asserts a poster on both routes. `GET
+/api/profile/viewings` is not part of it: its rows are a log that outlives
+deleted items and carry no item, so the full watch history has no posters by
+design.
+
+### 9b. What the totals count
+
+From `playback_state` joined to `media_item`, for the account with the history
+(all rows with `position_ms > 0` or `watched = 1`):
+
+| Kind | Started | Finished | Viewings | Hours |
+|---|---|---|---|---|
+| movie | 426 | 266 | 346 | 700.3 |
+| episode | 79 | 72 | 123 | 56.2 |
+| track | 208 | 126 | 161 | 13.7 |
+| comic | 1 | 1 | 1 | 0 |
+
+- **"Time watched" includes music.** About 14 of the 770 hours are songs. Small
+  here, but it would be most of the number for someone who mainly listens.
+- **"Started" counts songs.** 208 of the 714 titles "started" are tracks. Each
+  song played is one more title started.
+- **Comics are in it after all.** Reading progress lives in `comic_place` (by
+  page, ADR 0101), but marking a comic watched writes a `playback_state` row
+  with no duration. It adds one to Started and Finished and nothing to time.
+- **Audiobooks: no rows yet.** 123 books and 1,300 parts in the library, none
+  played. The split needs fixture tests for `book_part`, because the live data
+  can't show it.
+- **The split already exists.** Year in Review groups by `mi.kind`
+  (`yearKinds` in internal/store/yearreview.go) and prints
+  "426 movies · 208 tracks · 79 episodes · 1 comic". Step 4 reuses that query
+  shape for lifetime totals instead of writing a second one.
+- **Banked totals: `profile_totals` is empty on this server.** Nobody has reset
+  their history, so the "earlier, not split by kind" line (§4c) has nothing to
+  show here. It still needs a test.
+
+### 9c. Where the newer kinds keep their state
+
+- **Comics:** `comic_place (user_id, item_id, page, pages, updated_at)`, one
+  row so far. "In progress" is `page < pages`. "Read" is the `playback_state`
+  watched row described above.
+- **Retro games:** there is **no play time anywhere**. `rom_save` has
+  `updated_at` per save slot (45 rows, all `kind = 'rom'`), and that is the
+  only per-person record of playing. §4d's Retro section therefore shows "last
+  saved" and nothing about time. Recording play time is new work, parked (§8).
+- **Audiobooks:** `playback_state` on `book_part`, as above.
+
+### 9d. Backups hold the database and nothing else
+
+`internal/backup` snapshots `lancast.db` (ADR 0058). No file in the data
+directory is copied. §3d's files under `pictures/` would be **missing from
+every backup and every restore**, and a restore would point accounts at hashes
+with no file behind them.
+
+**So §3d changes: store the two JPEGs in the database.** A `user_picture
+(user_id, size, jpeg BLOB, sha256)` table instead of files. At 256 px and 64 px
+that is roughly 20–30 KB per account, which is nothing beside an 89 MB database.
+It also removes file clean-up and the question of a data-dir move. The hash
+stays, so the URL and `immutable` caching in §3e are unchanged. That makes it a
+new table rather than a nullable column, so ADR 0121 covers the schema as well.
+
+### 9e. The page as it stands
+
+Desktop (1,024 px wide):
+
+- **7,480 px tall.** Recently played starts at 3,393 px, below Favourites,
+  Ratings (10 rows), Tags and the RetroAchievements card.
+- **32 focus stops before Recently played**, out of 84 on the page. With a
+  remote, that is the case for tabs (§4b) in one number.
+- **The RetroAchievements card is the largest section** (about 900 px): a
+  status line, the earn-while-playing switch, recent unlocks and progress on 8
+  of 14 games. As the read-only Achievements tab (§6), it moves out of the way.
+- **Recently played is mostly songs.** Of the 20 most recent rows, about half
+  are tracks at "0m" or "1m". This makes the case for the kind filter (§4e):
+  songs push films off the first page.
+
+Phone (375 px):
+
+- No sideways overflow. The Favourites shelf runs past the edge, but it scrolls
+  on its own, as intended.
+- **The picture picker takes most of the first screen**: two rows of three
+  buttons and then an empty gap before the totals. The header with Edit (§4a)
+  fixes it.
+- **Recently played starts at 3,980 px**, about five screens down.
+
+### 9f. What changes in the plan
+
+1. A separate posters fix comes first (§9a).
+2. Pictures go in the database, not on disk (§9d). Step 1's migration is a new
+   table and ADR 0121 says why.
+3. The Retro section shows last saved only. Play time is added to §8.
+4. Step 4 reuses Year in Review's per-kind query.
