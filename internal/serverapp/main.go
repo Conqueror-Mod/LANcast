@@ -437,6 +437,8 @@ func run(ctx context.Context, addr, dataDir string, log *slog.Logger) error {
 				// effect on the next fetch. It does not rewrite what is already
 				// stored — a refresh does that, and the settings page says so.
 				tmdb.WithCertificationCountry(s.CertificationCountry),
+				// The same for the language (ADR 0122): fetches from now on.
+				tmdb.WithLanguage(s.MetadataLanguage),
 			))
 		}
 		// External ratings (ADR 0019): registered only when a key is present, so
@@ -986,6 +988,15 @@ func run(ctx context.Context, addr, dataDir string, log *slog.Logger) error {
 	// open windows, so a grid fills in as it happens (ADR 0079). Set before
 	// the first enrichSoon below, so the worker goroutine sees it.
 	worker.OnProgress = func() { apiSrv.Publish(api.TopicItems) }
+	// A library fetched in a language of its own (ADR 0123). A failed read
+	// follows the server's language rather than failing the fetch.
+	worker.LibraryLanguage = func(ctx context.Context, libraryID int64) string {
+		code, err := st.LibraryLanguage(ctx, libraryID)
+		if err != nil {
+			return ""
+		}
+		return code
+	}
 
 	srv := &http.Server{
 		Addr:              listenAddr,

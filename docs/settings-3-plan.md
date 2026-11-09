@@ -267,3 +267,112 @@ native player. This session could not drive that window.
 
 **Suggested order:** 1 and 2 before step 3. Both are about reaching settings
 at all, which matters more than where any one of them lives. Each is one PR.
+
+## 9. Step 3 as built
+
+- **Server.** Revision 92 adds three nullable columns to `user`
+  (`home_spotlight`, `home_spotlight_item`, `spoilers`); a null has never been
+  chosen. A hidden built-in shelf is a `home_shelf` row with `builtin` set to
+  its key (`new`, `rate`, `watchlist`, `unwatched:<library id>`), as ADR 0119
+  planned; an Unwatched row names its library, so it goes when the library
+  does. Pinned-shelf reads already skip `builtin` rows, so a hidden shelf
+  never counts against the twelve. `GET`/`PUT /api/profile/home`.
+- **Client.** `lib/homePrefs.ts` holds the query and the save. The spotlight
+  and spoiler hooks keep their names and read the account, with the device's
+  old value standing in until the account answers. `HomePrefsCarryOver`, in
+  the signed-in shell, sends a device value only for a field the account has
+  never set and then forgets the device copy; a failed save keeps it to try
+  again.
+- **Settings.** *Your account › Home* holds the spotlight, spoilers, a switch
+  per built-in shelf and the pinned shelves (up, down, unpin). *This device ›
+  Display & home* is *Display* again.
+- **Home.** A shelf turned off is not drawn, and Watchlist and Rate what
+  you've watched are not fetched. Unwatched shelves keep their library names
+  while two exist, shown or not.
+
+## 10. Step 4 as built
+
+- **Server.** Revision 93 adds four nullable columns to `user`
+  (`book_speed`, `book_sleep`, `comic_layout`, `comic_fit`); null is "never
+  chosen". `GET`/`PUT /api/profile/reading`. The values are the ones the
+  players offer and nothing else: a speed the book player's menu cannot show
+  is refused.
+- **Audiobooks.** A book with no speed of its own starts at the account's
+  default; the default is not written to the book, so changing it moves every
+  book nobody has set. The default sleep timer is set when a book starts and
+  no timer is already counting.
+- **Comics.** The reader learned two facing pages (the cover alone, then each
+  pair as printed, one page on a screen taller than it is wide) and fitting to
+  the width (up and down scroll; Space and Page Down read down the page and
+  turn at its foot). Left to right only: reading direction is step 6. There is
+  no switch inside the reader yet; the layout is chosen in Settings.
+- **Connected accounts.** Connecting, disconnecting and earning while playing
+  moved from the profile to *Your account › Connected accounts*. The profile
+  keeps the points, unlocks and progress, with a Manage link, and sends
+  somebody not yet connected to Settings.
+
+## 11. Step 5 as built
+
+ADR 0122 is the decision; this is what landed.
+
+- **One server setting**, `metadata_language`, default `en-US`, chosen from a
+  list the server serves (33 language-region tags). Per library is step 6.
+  "Region" turned out to be the age-rating country, which already existed and
+  is left where it was.
+- **TMDB asks in it everywhere.** The language is part of the cache key, so
+  an answer in one language is never served for another; English keeps the
+  key it always had, so an upgrade keeps its cache. Where the chosen language
+  has no translation, the English title or synopsis fills the gap.
+- **English filenames keep matching.** A search in German returns "Der Pate"
+  for `The Godfather (1972).mkv`. Every name a result has is scored: the
+  translated title, the original-language title, and the English title from a
+  second search made only when the language is not English.
+- **Trailers** ask for the chosen language, then English, then untagged.
+- **The refresh is offered, never started.** A new scope, `language`, takes
+  the by-id path `settled` uses, widened to matched titles: nothing is
+  searched or re-scored, match states are written back unchanged, and field
+  locks hold. Titles in review are left out, since their id is a suggestion.
+  After the language is saved, *Server › Metadata* shows each film and show
+  library with its count and its own Refresh button, and a Not now.
+
+## 12. Step 6 as built
+
+ADR 0123 is the decision; schema 95.
+
+- **Two nullable columns on `library`.** `metadata_language` (film and show
+  libraries; null follows the server's) and `reading_direction` (comics; null
+  is left to right). `PATCH /api/libraries/{id}` sets them, and an option a
+  library cannot use is a 400 that changes nothing.
+- **A series override**, `comic_series_direction`, keyed by library and
+  series name (the comic's folder). Set by an admin from the reader's bar,
+  through `PUT /api/items/{id}/series-direction`, so a client can only name
+  a series that exists.
+- **The server resolves the direction.** The pages answer carries
+  `direction` and `direction_from` (series, library, default).
+- **Right to left** turns the reader round: left arrow, left tap, swipe right
+  and the left button go forward; a spread puts its earlier page on the right;
+  the progress bar fills from the right. Space still goes forward.
+- **The library's language rides the request context** into TMDB, for
+  enrichment, Fix match, both by-id refreshes and trailers. The provider
+  interface is unchanged.
+- **The library editor** (Settings › Libraries › Edit) gains an Options
+  section with whichever applies, and changing the language offers that
+  library's refresh.
+
+## 13. Step 7 as built
+
+- **`GET /api/storage`**, admin only and read-only. One walk of the data
+  folder counts every file once against its part (database, artwork,
+  previews, optimized, backups, conversion scratch, subtitles, models, game
+  saves, tools and downloads, logs, other), plus the optimized-copy folder on
+  its own when it is on another drive, plus the drive's free space.
+- **Never inside the request.** A GET answers with the last measurement and
+  starts a new one in the background when it is missing or over ten minutes
+  old; `?fresh=1` measures now. One at a time. On the machine it was built
+  for, 50,000 files and 13.2 GB took 2.3 seconds.
+- **"Other" names its five largest entries**, which is how it turned up two
+  old database copies and two pre-revision-54 folders, 157 MB together, that
+  nothing in LANcast ever removes.
+- **Settings › Backup & storage** shows each part with its size, a neutral
+  bar for its share, and whether it can be had again: artwork and previews
+  are rebuilt, game saves are not. Nothing on it deletes.

@@ -206,64 +206,6 @@
   color: var(--text-primary);
 }
 
-/* The picture picker: six line animals on raised tiles. Gold only on the
-   chosen one and on focus, which is the same "where you are" the rail says. */
-.profile__avatars {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  margin: 4px 0 24px;
-}
-
-.profile__avatarrow {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-}
-
-.profile__avatar {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 64px;
-  height: 64px;
-  border-radius: var(--radius-panel);
-  border: 1px solid var(--gold-dormant);
-  background: var(--space-raised);
-  color: var(--text-secondary);
-  cursor: pointer;
-  transition:
-    border-color var(--dur-fast) ease,
-    color var(--dur-fast) ease,
-    transform var(--dur-fast) ease;
-}
-
-.profile__avatar:hover {
-  color: var(--text-primary);
-  transform: translateY(-1px);
-}
-
-.profile__avatar:focus-visible {
-  outline: none;
-  border-color: var(--gold);
-  box-shadow: 0 0 0 3px var(--gold-ring);
-}
-
-.profile__avatar.is-on {
-  border-color: var(--gold);
-  color: var(--text-primary);
-}
-
-.profile__avatar:disabled {
-  cursor: progress;
-}
-
-.profile__avatarerr {
-  color: var(--text-muted);
-  font-size: 13px;
-  margin: 0;
-}
-
 /* Favourites, ratings and tags: private sections that follow the totals. */
 .profile__section {
   margin-bottom: 26px;
@@ -382,4 +324,171 @@
 
 a.profile__page {
   text-decoration: none;
+}
+
+/* Who you are (profile-2-plan §4a): picture, name, since, role. */
+.profile__hero {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  margin: 8px 0 18px;
+}
+
+.profile__heropic {
+  position: relative;
+  flex: none;
+}
+
+/* Edit sits on the picture's lower edge, so it reads as belonging to it. */
+.profile__edit {
+  position: absolute;
+  left: 50%;
+  bottom: -8px;
+  transform: translateX(-50%);
+  padding: 3px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--gold-dormant);
+  background: var(--space-raised);
+  color: var(--text-secondary);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.profile__edit:hover,
+.profile__edit:focus-visible {
+  outline: none;
+  color: var(--text-primary);
+  border-color: var(--gold);
+  box-shadow: 0 0 0 3px var(--gold-ring);
+}
+
+.profile__whoami {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.profile__name {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.profile__meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.profile__meta .profile__badge {
+  margin-left: 0;
+}
+
+.profile__namelink {
+  color: var(--text-secondary);
+  text-decoration: none;
+}
+
+.profile__namelink:hover,
+.profile__namelink:focus-visible {
+  color: var(--text-primary);
+  text-decoration: underline;
+}
+
+/*
+ * The tabs (§4b). The Now Playing tabs' look: small caps, the chosen one
+ * underlined in white, gold only for focus. Sticky under the top bar, so a
+ * long History page can still change tab. On a phone they scroll sideways
+ * rather than wrap.
+ */
+.profile__tabs {
+  position: sticky;
+  top: var(--topbar-h);
+  z-index: 5;
+  display: flex;
+  gap: 22px;
+  margin: 0 calc(-1 * var(--main-pad)) 18px;
+  padding: 0 var(--main-pad);
+  overflow-x: auto;
+  scrollbar-width: none;
+  background: rgba(7, 11, 24, 0.92);
+  backdrop-filter: blur(10px);
+  border-bottom: 1px solid rgba(242, 245, 251, 0.08);
+}
+
+.profile__tab {
+  flex: none;
+  appearance: none;
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  padding: 12px 0 10px;
+  font: inherit;
+  font-size: 11px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition:
+    color var(--dur-fast) ease,
+    border-color var(--dur-fast) ease;
+}
+
+.profile__tab:hover {
+  color: var(--text-secondary);
+}
+
+.profile__tab.is-on {
+  color: var(--text-primary);
+  border-bottom-color: var(--text-secondary);
+}
+
+.profile__tab:focus-visible {
+  outline: none;
+  color: var(--text-primary);
+  box-shadow: 0 0 0 3px var(--gold-ring);
+  border-radius: 3px;
+}
+
+/* Most played (profile-2-plan §4c): one small list per group, under a quiet
+   heading, so films and songs are never ranked against each other. */
+.profile__mostplayed {
+  padding-bottom: 10px;
+}
+
+.profile__grouplabel {
+  margin: 10px 0 4px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+
+.profile__mostplayed .profile__history {
+  padding-bottom: 8px;
+}
+
+/* History's filter and switch (profile-2-plan §4e): two rows of pills that
+   wrap on a phone rather than scrolling sideways. */
+.profile__historybar {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 10px 18px;
+  padding: 4px 0 16px;
+}
+
+.profile__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+/* Books, comics and games on Overview (§4d). */
+.profile__kind .profile__history {
+  padding-bottom: 12px;
 }

@@ -1,0 +1,34 @@
+/* A person, drawn (ADR 0121). The circle is a mask, not part of the image:
+   the server stores squares. */
+.person-pic {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  overflow: hidden;
+}
+
+.person-pic--photo {
+  object-fit: cover;
+  background: var(--space-deep);
+  /* A hairline so a dark photo still reads as a circle on the dark page. */
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.12);
+}
+
+.person-pic--drawn,
+.person-pic--initials {
+  background: rgba(74, 54, 140, 0.35);
+  color: var(--text-primary);
+}
+
+.person-pic--initials {
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}
+
+/* In the rail the picture takes the icon's slot and size. */
+.rail-icon.person-pic--photo {
+  width: 18px;
+  height: 18px;
+}

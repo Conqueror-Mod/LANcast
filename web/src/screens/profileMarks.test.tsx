@@ -133,7 +133,7 @@ describe("the profile's private sections", () => {
   });
 
   it("lists your ratings with the score out of ten and the review", async () => {
-    await render("/profile");
+    await render("/profile?tab=ratings");
     const s = section("Your ratings");
     expect(s?.textContent).toContain("Alien");
     expect(s?.querySelector(".profile__score")?.getAttribute("aria-label")).toBe("9 out of 10");
@@ -146,7 +146,7 @@ describe("the profile's private sections", () => {
       item: item(100 + i, `Film ${i}`),
       rating: { item_id: 100 + i, score: 7, updated_at: 1 },
     }));
-    await render("/profile");
+    await render("/profile?tab=ratings");
     const more = [...host.querySelectorAll("button")].find((b) => b.textContent === "Show all ratings");
     expect(more).toBeTruthy();
     await act(async () => more!.click());
@@ -157,7 +157,7 @@ describe("the profile's private sections", () => {
   });
 
   it("lists your tags, each opening what carries it", async () => {
-    await render("/profile");
+    await render("/profile?tab=ratings");
     const link = section("Your tags")?.querySelector<HTMLAnchorElement>("a.profile__tag");
     expect(link?.textContent).toBe("Christmas4");
     expect(link?.getAttribute("href")).toBe("/profile/tags/7");
@@ -170,6 +170,13 @@ describe("the profile's private sections", () => {
     tags = [];
     await render("/profile");
     expect(section("Favourites")?.textContent).toContain("Nothing favourited yet");
+    const ratingsTab = [...host.querySelectorAll<HTMLButtonElement>('[role="tab"]')].find(
+      (t) => t.textContent === "Ratings & tags",
+    )!;
+    await act(async () => ratingsTab.click());
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 10));
+    });
     expect(section("Your ratings")?.textContent).toContain("Nothing rated yet");
     expect(section("Your tags")?.textContent).toContain("No tags yet");
   });
@@ -188,5 +195,46 @@ describe("the lists they open", () => {
     expect(host.textContent).toContain("Elf");
     const ask = gets.find((u) => u.includes("tag=7"))!;
     expect(ask).not.toContain("library_id");
+  });
+});
+
+/*
+ * The tabs (profile-2-plan §4b): each section is on one tab, the tab is in
+ * the address, and a tab with nothing behind it is not offered.
+ */
+describe("the profile's tabs", () => {
+  const tabs = () =>
+    [...host.querySelectorAll<HTMLButtonElement>('[role="tab"]')].map((t) => t.textContent);
+  const selected = () => host.querySelector('[role="tab"][aria-selected="true"]')?.textContent;
+
+  it("opens on Overview, with Ratings & tags a press away", async () => {
+    await render("/profile");
+    expect(selected()).toBe("Overview");
+    expect(section("Your ratings")).toBeUndefined();
+    const ratingsTab = [...host.querySelectorAll<HTMLButtonElement>('[role="tab"]')].find(
+      (t) => t.textContent === "Ratings & tags",
+    )!;
+    await act(async () => ratingsTab.click());
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 5));
+    });
+    expect(selected()).toBe("Ratings & tags");
+    expect(section("Your ratings")).toBeTruthy();
+    expect(section("Favourites")).toBeUndefined();
+  });
+
+  it("leaves out Achievements when RetroAchievements is not on this server", async () => {
+    await render("/profile?tab=achievements");
+    expect(tabs()).toEqual(["Overview", "History", "Ratings & tags"]);
+    // Asking for a tab that is not offered lands on Overview, not on nothing.
+    expect(selected()).toBe("Overview");
+  });
+
+  it("keeps the history on History, each title once by default", async () => {
+    await render("/profile?tab=history");
+    expect(selected()).toBe("History");
+    const on = [...host.querySelectorAll(".chip.is-on")].map((c) => c.textContent);
+    expect(on).toEqual(["All", "Each title once"]);
+    expect(section("Favourites")).toBeUndefined();
   });
 });

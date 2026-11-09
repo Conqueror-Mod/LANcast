@@ -95,7 +95,7 @@ func TestRenameKeepsTheIdAndTheHistory(t *testing.T) {
 		t.Errorf("name = %q, want after", got.Name)
 	}
 
-	entries, err := h.st.History(ctx, u.ID, 10, 0)
+	entries, err := h.st.History(ctx, u.ID, store.GroupAll, 10, 0)
 	if err != nil {
 		t.Fatal(err)
 	}

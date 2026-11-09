@@ -203,15 +203,15 @@ describe("panes added after the shell was built", () => {
   it("lists Display, Keyboard and Sharing's home among the categories", () => {
     render();
     const labels = navItems().map((b) => b.textContent);
-    for (const label of ["Profile", "Privacy", "Display & home", "Keyboard"]) {
+    for (const label of ["Profile", "Privacy", "Display", "Keyboard"]) {
       expect(labels).toContain(label);
     }
   });
 
   it("switches to Display and renders it", () => {
     render();
-    click("Display & home");
-    expect(activeItem()).toBe("Display & home");
+    click("Display");
+    expect(activeItem()).toBe("Display");
     // Bigscreen is the pane's only control, and it renders without a server.
     expect(host.textContent).toContain("Bigscreen");
   });

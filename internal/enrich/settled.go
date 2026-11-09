@@ -45,6 +45,7 @@ import (
 // outcome for a library enriched by a provider whose key has since been
 // removed, and a pass over hundreds of rows must not stop for it.
 func (w *Worker) RefetchSettled(ctx context.Context, item store.Item) (bool, error) {
+	ctx = w.inLanguage(ctx, item)
 	// Nullable in the schema: a row that no provider ever identified carries
 	// neither, and a locked row set by hand may carry neither either.
 	providerID, externalID := derefStr(item.Provider), derefStr(item.ExternalID)

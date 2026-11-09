@@ -87,7 +87,7 @@ you compiled yourself cannot send one; it offers to copy the report instead.
 ## RetroAchievements, for each person who connects
 
 Nothing reaches RetroAchievements until a person connects their own account
-on their profile. It's per person and off until then.
+in Settings, under Connected accounts. It's per person and off until then.
 
 - **Reading your progress:** with the Web API key you enter, the server reads
   your profile, recent unlocks and game progress from RetroAchievements.

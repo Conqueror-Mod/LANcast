@@ -195,8 +195,8 @@ export function AchievementsPage({ status, set }: { status: AchievementStatus; s
       <>
         <div className="retro-play__heading">Achievements</div>
         <p className="retro-play__hint">
-          {status.offText || "Earning achievements is off."} Earning is turned on in your profile, under
-          RetroAchievements.
+          {status.offText || "Earning achievements is off."} Earning is turned on in Settings, under
+          Connected accounts.
         </p>
       </>
     );

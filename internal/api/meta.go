@@ -244,10 +244,13 @@ func (s *Server) candidates(w http.ResponseWriter, r *http.Request) {
 	var cands []meta.Candidate
 	seen := map[string]bool{}
 	var lastErr error
+	// In the library's own language, so the titles offered are the ones
+	// applying a candidate will store (ADR 0123).
+	ctx := s.inLibraryLanguage(r.Context(), it.LibraryID)
 	for _, k := range []meta.Kind{meta.KindMovie, meta.KindShow} {
 		qk := q
 		qk.Kind = k
-		found, err := s.reg.Search(r.Context(), qk)
+		found, err := s.reg.Search(ctx, qk)
 		if err != nil {
 			lastErr = err
 			continue
@@ -379,7 +382,7 @@ func (s *Server) trailer(w http.ResponseWriter, r *http.Request) {
 	if it.Provider != nil {
 		provider = *it.Provider
 	}
-	t, err := s.reg.Trailer(r.Context(), provider, meta.Ref{
+	t, err := s.reg.Trailer(s.inLibraryLanguage(r.Context(), it.LibraryID), provider, meta.Ref{
 		Kind: meta.Kind(it.Kind), ExternalID: *it.ExternalID,
 	})
 	if err != nil {
@@ -458,9 +461,20 @@ func refreshScope(r *http.Request) (store.RefreshScope, bool) {
 		return store.RefreshUnmatched, true
 	case "settled":
 		return scopeSettled, true
+	case "language":
+		return scopeLanguage, true
 	}
 	return "", false
 }
+
+/*
+ * scopeLanguage re-asks about every TMDB-identified title, matched or locked,
+ * after the metadata language changes (ADR 0122). It goes through the same
+ * by-id door as scopeSettled — nothing searched, nothing scored, no match
+ * state moved, locked fields kept — and, like it, is not a scope refreshWhere
+ * knows, so the handlers branch on it first.
+ */
+const scopeLanguage store.RefreshScope = "language"
 
 /*
  * scopeSettled re-asks about titles whose identity is already settled.
@@ -503,9 +517,12 @@ func (s *Server) refreshPreview(w http.ResponseWriter, r *http.Request) {
 	}
 	var n int64
 	var err error
-	if scope == scopeSettled {
+	switch scope {
+	case scopeSettled:
 		n, err = s.st.SettledCount(r.Context(), id)
-	} else {
+	case scopeLanguage:
+		n, err = s.st.LanguageCount(r.Context(), id)
+	default:
 		n, err = s.st.RefreshCount(r.Context(), id, scope)
 	}
 	if err != nil {
@@ -530,8 +547,12 @@ func (s *Server) refreshLibrary(w http.ResponseWriter, r *http.Request) {
 			"that is not a scope this server knows")
 		return
 	}
-	if scope == scopeSettled {
-		s.refreshSettled(w, r, id)
+	switch scope {
+	case scopeSettled:
+		s.refetchByID(w, r, id, scopeSettled, s.st.SettledItems)
+		return
+	case scopeLanguage:
+		s.refetchByID(w, r, id, scopeLanguage, s.st.LanguageItems)
 		return
 	}
 	n, err := s.st.RefreshScoped(r.Context(), id, scope)
@@ -712,7 +733,9 @@ func itemTitle(r *http.Request, s *Server, id int64) string {
 }
 
 /*
- * refreshSettled re-asks the provider about a library's locked titles.
+ * refetchByID re-asks the provider about a library's settled titles (scope
+ * `settled`, locked rows) or every TMDB-identified one (scope `language`),
+ * each from its own recorded id.
  *
  * Its own path rather than a branch inside RefreshScoped, because it does the
  * opposite thing: the ordinary refresh clears a stamp and lets the queue search
@@ -732,17 +755,18 @@ func itemTitle(r *http.Request, s *Server, id int64) string {
  * and the rest not, and the only symptom would be a button that "sometimes
  * does not work".
  */
-func (s *Server) refreshSettled(w http.ResponseWriter, r *http.Request, libraryID int64) {
-	items, err := s.st.SettledItems(r.Context(), libraryID)
+func (s *Server) refetchByID(w http.ResponseWriter, r *http.Request, libraryID int64,
+	scope store.RefreshScope, list func(context.Context, int64) ([]store.Item, error)) {
+	items, err := list(r.Context(), libraryID)
 	if err != nil {
-		s.writeInternal(w, err, "settled refresh")
+		s.writeInternal(w, err, string(scope)+" refresh")
 		return
 	}
 	if s.worker == nil {
 		// No enrichment worker wired up — the same condition that makes every
 		// other provider action a no-op. Answering 0 is honest; pretending to
 		// have started something is not.
-		writeJSON(w, http.StatusOK, map[string]any{"queued": 0, "scope": string(scopeSettled)})
+		writeJSON(w, http.StatusOK, map[string]any{"queued": 0, "scope": string(scope)})
 		return
 	}
 
@@ -750,12 +774,23 @@ func (s *Server) refreshSettled(w http.ResponseWriter, r *http.Request, libraryI
 		ctx := context.WithoutCancel(r.Context())
 		go func() {
 			updated, failed := s.worker.RefetchSettledAll(ctx, items, s.log)
-			s.log.Info("settled refresh finished",
+			s.log.Info(string(scope)+" refresh finished",
 				"library", libraryID, "attempted", len(items),
 				"updated", updated, "failed", failed)
 		}()
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
-		"queued": len(items), "scope": string(scopeSettled),
+		"queued": len(items), "scope": string(scope),
 	})
+}
+
+// inLibraryLanguage is ctx carrying a library's own metadata language, when it
+// has one (ADR 0123). A failed read follows the server's language: the fetch
+// is still worth making.
+func (s *Server) inLibraryLanguage(ctx context.Context, libraryID int64) context.Context {
+	code, err := s.st.LibraryLanguage(ctx, libraryID)
+	if err != nil {
+		return ctx
+	}
+	return meta.WithLanguage(ctx, code)
 }

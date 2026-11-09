@@ -89,8 +89,14 @@ export const SERVER_PANES: Pane[] = [
 
 export const ACCOUNT_PANES: Pane[] = [
   { id: "profile", label: "Profile" },
+  // What you see on Home, kept on the account (settings-3-plan step 3).
+  { id: "home", label: "Home" },
   { id: "security", label: "Security" },
   { id: "languages", label: "Languages & subtitles" },
+  // Defaults for audiobooks and comics, and services you connected
+  // (settings-3-plan step 4).
+  { id: "reading", label: "Reading & listening" },
+  { id: "accounts", label: "Connected accounts" },
   { id: "privacy", label: "Privacy" },
 ];
 
@@ -105,7 +111,7 @@ export const DEVICE_PANES: Pane[] = [
   { id: "theater", label: "Theater output" },
   // Not "remote", which is Remote access: this is your devices playing here.
   { id: "remoteplay", label: "Remote play" },
-  { id: "display", label: "Display & home" },
+  { id: "display", label: "Display" },
   { id: "keyboard", label: "Keyboard" },
   { id: "app", label: "This app" },
   /*
@@ -162,6 +168,7 @@ export const SETTINGS_INDEX: SettingEntry[] = [
   { pane: "remote", label: "Public certificate", terms: "lets encrypt acme domain https outside" },
   { pane: "users", label: "Add user", terms: "account create member admin" },
   { pane: "users", label: "Show accounts on the sign-in page", terms: "login picker names" },
+  { pane: "users", label: "Members can upload a picture of themselves", terms: "profile photo avatar upload moderation" },
   { pane: "users", label: "Signed-in devices", terms: "sessions sign out revoke" },
   { pane: "users", label: "Reset password", terms: "forgot password user" },
   { pane: "users", label: "Content rating limit", terms: "parental controls kids age ceiling" },
@@ -170,9 +177,12 @@ export const SETTINGS_INDEX: SettingEntry[] = [
   { pane: "libraries", label: "Start scans at", terms: "scan hour time" },
   { pane: "libraries", label: "Allow deleting media files from disk", terms: "delete remove files" },
   { pane: "libraries", label: "Forget missing files after a scan", terms: "empty trash missing" },
+  { pane: "libraries", label: "Reading direction", terms: "manga right to left comics library edit" },
+  { pane: "libraries", label: "Library metadata language", terms: "anime japanese language translation library edit" },
   { pane: "metadata", label: "OpenSubtitles account", terms: "subtitles login provider" },
   { pane: "metadata", label: "Use LANcast's built-in keys", terms: "tmdb omdb api key provider" },
   { pane: "metadata", label: "Age rating country", terms: "certification pg-13 fsk country" },
+  { pane: "metadata", label: "Metadata language", terms: "language translation german french spanish tmdb region" },
   { pane: "metadata", label: "Automatically fetch metadata after a scan", terms: "auto enrich match" },
   { pane: "metadata", label: "Write NFO sidecar files next to media", terms: "nfo kodi sidecar" },
   { pane: "metadata", label: "Provider requests", terms: "rate limit tmdb" },
@@ -205,10 +215,15 @@ export const SETTINGS_INDEX: SettingEntry[] = [
   { pane: "backup", label: "Take a backup", terms: "backup database export" },
   { pane: "backup", label: "Back up automatically", terms: "backup schedule" },
   { pane: "backup", label: "Scheduled backups to keep", terms: "backup retention" },
+  { pane: "backup", label: "Storage", terms: "disk space size usage free drive previews database how much" },
   { pane: "backup", label: "Artwork cache limit", terms: "storage disk space posters" },
 
   // Your account
   { pane: "profile", label: "Display name", terms: "rename name" },
+  { pane: "home", label: "Spotlight", terms: "hero homepage banner pin" },
+  { pane: "home", label: "Spoilers on a season page", terms: "hide synopsis still" },
+  { pane: "home", label: "Shelves on Home", terms: "hide shelf new this week watchlist rate unwatched" },
+  { pane: "home", label: "Pinned shelves", terms: "reorder move unpin shelf" },
   { pane: "security", label: "Passkeys", terms: "webauthn fingerprint face id sign in" },
   { pane: "security", label: "Two-factor sign-in", terms: "2fa totp authenticator mfa" },
   { pane: "security", label: "API keys", terms: "token bearer script" },
@@ -217,6 +232,11 @@ export const SETTINGS_INDEX: SettingEntry[] = [
   { pane: "languages", label: "Preferred audio", terms: "language dub" },
   { pane: "languages", label: "Subtitle language", terms: "subs captions" },
   { pane: "languages", label: "Subtitle style", terms: "font size colour color captions" },
+  { pane: "reading", label: "Speed", terms: "audiobook book playback rate default faster" },
+  { pane: "reading", label: "Sleep timer", terms: "audiobook book bed fade stop" },
+  { pane: "reading", label: "Pages", terms: "comic two page spread single manga" },
+  { pane: "reading", label: "Fit", terms: "comic width zoom page size" },
+  { pane: "accounts", label: "RetroAchievements", terms: "achievements cheevos retro points connect" },
   { pane: "privacy", label: "Let others here see what I have watched", terms: "sharing activity" },
   { pane: "privacy", label: "Let paired servers list me", terms: "presence peers federation" },
   { pane: "privacy", label: "Let this server's webhooks report what I watch", terms: "webhook consent" },
@@ -245,8 +265,6 @@ export const SETTINGS_INDEX: SettingEntry[] = [
   { pane: "theater", label: "Match the display to the film's frame rate", terms: "refresh rate 23.976 hz judder" },
   { pane: "display", label: "Bigscreen mode", terms: "tv ten foot scale" },
   { pane: "display", label: "Improved live TV playback", terms: "hls segmented" },
-  { pane: "display", label: "Spoilers on a season page", terms: "hide synopsis still" },
-  { pane: "display", label: "Spotlight", terms: "hero homepage banner pin" },
   { pane: "keyboard", label: "Keyboard", terms: "shortcuts hotkeys keys bindings" },
   { pane: "app", label: "Start LANcast at login", terms: "startup boot tray" },
   { pane: "app", label: "Developer tools", terms: "devtools inspector" },

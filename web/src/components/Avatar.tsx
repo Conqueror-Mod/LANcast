@@ -1,4 +1,7 @@
+import { useState } from "react";
+import { pictureURL } from "@/api/client";
 import { AccountIcon } from "./LibraryIcon";
+import "./Avatar.css";
 
 /*
  * The pictures an account can choose for itself (PUT /api/profile/avatar).
@@ -111,5 +114,80 @@ export function AvatarGlyph({
     >
       {shape}
     </svg>
+  );
+}
+
+/*
+ * Initials, the last fallback when somebody has neither a picture nor an
+ * animal. Two letters: first and last word, or the start of a single one.
+ */
+export function initials(name: string): string {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return "?";
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+}
+
+/**
+ * A person, drawn: their uploaded picture (ADR 0121), else the animal they
+ * chose, else `fallback` — initials where people are listed, the plain person
+ * glyph in the rail, where a row of letters would read as a label.
+ *
+ * A picture that fails to load (cleared since this list was fetched) falls
+ * back the same way rather than drawing a broken image.
+ */
+export function PersonPicture({
+  name,
+  picture,
+  avatar,
+  size,
+  fallback = "initials",
+  className,
+}: {
+  name: string;
+  picture?: string | null;
+  avatar?: string | null;
+  size: number;
+  fallback?: "initials" | "glyph";
+  className?: string;
+}) {
+  const [broken, setBroken] = useState<string | null>(null);
+  const src = picture && broken !== picture ? pictureURL(picture, size) : undefined;
+  const cls = "person-pic" + (className ? " " + className : "");
+  const box = { width: size, height: size };
+
+  if (src) {
+    return (
+      <img
+        className={cls + " person-pic--photo"}
+        src={src}
+        alt=""
+        width={size}
+        height={size}
+        style={box}
+        loading="lazy"
+        decoding="async"
+        data-picture={picture ?? undefined}
+        onError={() => setBroken(picture ?? null)}
+      />
+    );
+  }
+  if (avatar || fallback === "glyph") {
+    // Inside a circle when listed with others, bare in the rail as before.
+    if (fallback === "glyph") return <AvatarGlyph avatar={avatar} size={size} />;
+    return (
+      <span className={cls + " person-pic--drawn"} style={box} aria-hidden="true">
+        <AvatarGlyph avatar={avatar} size={Math.round(size * 0.62)} />
+      </span>
+    );
+  }
+  return (
+    <span
+      className={cls + " person-pic--initials"}
+      style={{ ...box, fontSize: Math.max(10, Math.round(size * 0.36)) }}
+      aria-hidden="true"
+    >
+      {initials(name)}
+    </span>
   );
 }

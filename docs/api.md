@@ -606,7 +606,7 @@ delete, `match`, item `refresh`); `GET`/`PUT /api/settings`; and all of
 
 | Route | Purpose |
 |---|---|
-| `GET /api/users` | `{users: [{id, name, role}]}` |
+| `GET /api/users` | `{users: [{id, name, role, picture}]}`. `picture` is the hash of the account's uploaded picture, or `null` ([ADR 0121](adr/0121-a-picture-of-your-own.md)) |
 | `POST /api/users` | `{username, password, role?}` → `201 {id, name, role}`. Role defaults to `member`. `409` if the name is taken |
 | `PATCH /api/users/{id}` | `{name?, role?, max_content_rating?}` — rename an account, change its role, set the content rating it may not exceed, or any combination. At least one field is required. The account **id** is unchanged, which is what makes it a rename rather than a replacement: sessions, history, ratings and playlist membership hang off the id and follow silently. `409 last_admin` when it would demote the only administrator, refused in the store inside a transaction with the count. `max_content_rating` is a **ceiling set for the account by an administrator**, and empty clears it; `400` for a label this server cannot place on its scale, because a ceiling that means nothing would leave a household believing a limit was in force. It is deliberately the mirror image of the sharing switch, which has no administrator route at all: a switch somebody else can flip is not consent, and a limit you can lift is not a limit |
 
@@ -614,6 +614,7 @@ delete, `match`, item `refresh`); `GET`/`PUT /api/settings`; and all of
 
 **What a hidden library does** (ADR 0084). It is the same kind of limit as the ceiling and is enforced in the same places: the library leaves the account's `GET /api/libraries`, every listing, and every route that turns an id into an item or bytes, which answer `404`. Every `/api/libraries/{id}/` route answers `404` for it, exactly as for a library that does not exist. A **deny list**: an account nobody narrowed sees everything, and a library added later is visible to everyone until somebody narrows them. Administrators are never restricted. What a paired server may see is decided by its share and is unaffected.
 | `DELETE /api/users/{id}` | Removes the account, its sessions, and its watch state. `409` if it is the last admin |
+| `DELETE /api/users/{id}/picture` | Clears that account's uploaded picture → `204`, whether or not it had one. `404` for no such account. Audited as `user.picture.clear` when there was one ([ADR 0121](adr/0121-a-picture-of-your-own.md) §5) |
 | `POST /api/users/{id}/password` | `{new_password}` → resets that user's password and revokes their sessions |
 | `GET /api/users/{id}/libraries` | `{hidden: [libraryID], applies}` — which libraries this account cannot see ([ADR 0084](adr/0084-a-library-can-be-kept-from-an-account.md)). Empty is the default: every library. `applies` is `false` for an administrator, who is never restricted; the rows are kept, so a demotion puts them back |
 | `PUT /api/users/{id}/libraries` | `{hidden: [libraryID]}` → replaces the set and answers as `GET`. `hidden` is required (`400` without it, rather than lifting everything), and an id that is not a library is `400`. Audited as `user.libraries` |
@@ -931,6 +932,20 @@ whole library missing.
 
 **Changing `path` moves the library's *first* location.** With several, the
 per-location endpoints below are the precise form.
+
+**A library's own options** ([ADR 0123](adr/0123-a-library-carries-its-own-options.md)),
+both nullable on the library and both cleared by sending `""`:
+
+| Field | Libraries | Meaning |
+| --- | --- | --- |
+| `metadata_language` | film and show | The language TMDB is asked in, a code from `metadata_languages`. `null` follows the server's `metadata_language` |
+| `reading_direction` | comics | `rtl` reads right to left, as manga does. `null` (or `ltr`, which is stored as `null`) is left to right. A series may differ — `PUT /api/items/{id}/series-direction` |
+
+**An option a library cannot use is `400`**, not stored and ignored — a value
+that does nothing is one somebody sets believing it worked — and a request
+carrying one changes nothing, rename included. Changing a library's language
+rewrites nothing already stored; a client offers that library's `language`
+refresh scope instead.
 
 ---
 
@@ -1274,7 +1289,8 @@ hidden libraries apply, as everywhere.
 
 ### `GET` · `PUT` · `DELETE /api/profile/retroachievements`
 
-Your RetroAchievements progress on your profile page
+Your RetroAchievements connection (Settings › Connected accounts) and your
+progress (your profile page)
 ([ADR 0090](adr/0090-retroachievements-are-yours-to-connect.md)). **Yours
 only**: every route answers for the caller, and no route reads anybody
 else's.
@@ -1348,7 +1364,9 @@ your browser never contacts RetroAchievements itself. `{dir}` is `UserPic`,
 Your watch history: one row per **finished** viewing of a film, an episode, an
 audiobook or a comic, newest first ([ADR 0074](adr/0074-a-viewing-is-a-row.md),
 [ADR 0119](adr/0119-homepage-2-part-two.md)). `?limit=` defaults
-to 100 (max 500), `?offset=` pages.
+to 100 (max 500), `?offset=` pages. `?kind=` narrows it, as for
+`GET /api/profile`'s history; `kind=music` is always empty, because songs are
+never logged.
 
 ```json
 { "viewings": [ { "id": 41, "finished_at": 1727700000, "estimated": false,
@@ -1410,9 +1428,18 @@ is not offered over DLNA.
 
 | Route | Purpose |
 |---|---|
-| `GET /api/items/{id}/pages` | `{pages, place}`: how many, and the caller's own `{page, pages, updated_at}` or `null` |
+| `GET /api/items/{id}/pages` | `{pages, place, direction, direction_from, series}`: how many, the caller's own `{page, pages, updated_at}` or `null`, and which way it reads |
 | `GET /api/items/{id}/pages/{n}` | Page `n`, from 0, as the image it is in the archive |
 | `PUT /api/items/{id}/place` | `{page}` → `204`. Keeps the caller's place; **the last page marks it read** (`watched`) |
+| `PUT /api/items/{id}/series-direction` | `{direction}` → the comic's `{direction, direction_from, series}`. **Admin only.** The comic's whole series reads `ltr` or `rtl`; `""` removes the override |
+
+**Which way a comic reads is resolved by the server** ([ADR 0123](adr/0123-a-library-carries-its-own-options.md)):
+the series' override, else the library's `reading_direction`, else left to
+right, with `direction_from` saying which (`series`, `library`, `default`). No
+client works out the precedence for itself, so two cannot disagree about one
+book. A series is the comic's folder, so an override covers issues added
+later; a comic at the library's root has no series (`series: null`), and its
+override route is `400`.
 
 **Pages are the archive's images in natural name order** — `p2` before `p10` —
 compared folder by folder. `ComicInfo.xml`, `__MACOSX/` and hidden files are not
@@ -2004,16 +2031,70 @@ discover that from three round trips and three loading states.
 ```json
 { "user": { "id": "u_3f9", "name": "Dana", "admin": true, "secured": true },
   "stats": { "started": 214, "finished": 168, "viewings": 197,
-             "watched_ms": 913_400_000, "first_at": 1739000000 },
+             "watched_ms": 913_400_000, "first_at": 1739000000,
+             "by_kind": [ { "kind": "movie", "started": 120, "finished": 101,
+                            "viewings": 118, "watched_ms": 801_000_000 },
+                          { "kind": "track", "started": 80, "finished": 60,
+                            "viewings": 70, "watched_ms": 14_000_000 } ],
+             "earlier": { "started": 14, "finished": 7, "viewings": 9,
+                          "watched_ms": 98_400_000 } },
   "history": [ { "item": { "id": 87, "title": "Arrival", ... },
                  "position_ms": 1284000, "watched": false,
                  "played_at": 1755200000 } ],
-  "has_more": true }
+  "has_more": true,
+  "most_played": [ { "item": { "id": 12, "title": "Heat", ... }, "plays": 4 } ] }
 ```
+
+**`by_kind` splits the totals by what was played**: films, episodes, songs
+(`track`), audiobook chapters (`book_part`) and anything else marked played,
+most time first. The totals above it include music, so a client that labels
+`watched_ms` "time watched" should read the split instead. `earlier` is what a
+history reset banked, which was never split by kind; it is absent when nothing
+was banked. The `by_kind` lines plus `earlier` add up to the totals exactly.
+Both are absent on a server from before Profile 2.0.
+
+**`most_played`** is what was finished most often, at least twice, up to five
+in each group: films and episodes together, then songs, then audiobook
+chapters (or whole audiobooks). Per group so an album on repeat cannot push
+every film off it. Empty when nothing has been finished twice. Items carry
+`artwork`.
 
 `?limit=` defaults to 50 (max 200) and `?offset=` pages. `has_more` says whether
 the history was cut short, so a client can offer the next page rather than infer
 it from a full-looking one.
+
+**`?kind=` narrows the history** to `video` (films, episodes and home videos),
+`music` (songs), `books` (audiobooks and their parts) or `comics`. It does not
+touch `stats` or `most_played`. Anything else is `400 bad_request`, so a typo
+cannot pass for an empty filter. Retro games are not a kind: they leave no play
+record, only saves, which `GET /api/profile/kinds` lists.
+
+### `GET /api/profile/kinds`
+
+The profile Overview's books, comics and games: up to six of each, newest
+first.
+
+```json
+{ "books":  { "in_progress": [ { "item": { "id": 501, "kind": "book", ... },
+                                 "touched_at": 1755200000 } ],
+              "finished":    [] },
+  "comics": { "in_progress": [ { "item": { "id": 77, "kind": "comic", ... },
+                                 "touched_at": 1755100000,
+                                 "page": { "page": 4, "pages": 20,
+                                           "updated_at": 1755100000 } } ],
+              "finished":    [] },
+  "games":  [ { "item": { "id": 900, "kind": "rom", ... },
+                "saved_at": 1755000000 } ] }
+```
+
+- **In progress** is the resume console's own answer (`GET /api/resume`), so
+  the two cannot disagree, but with no Continue window: the profile does not
+  forget a book after a month.
+- **Finished** is what you finished, newest first. Missing files are left out.
+- **Games** are every game you have a save of on the server, by its newest
+  save. LANcast records no play time, so there is none to report.
+- The account's limits apply (ADR 0084), every list is present (empty rather
+  than null), and items carry `artwork`.
 
 **History is derived from `playback_state`, not from a log of plays.** There is
 one row per item per user, so this is the *last* time each item was played and
@@ -2241,6 +2322,86 @@ alone, not read as `false`, because a client that sent nothing about it has not
 chosen anything. A body with neither is `400`. Acts on the session only; no route sets another account's. Not
 audited. `409` on a server with no accounts.
 
+### `GET /api/profile/home` and `PUT /api/profile/home`
+
+What the caller has chosen about their Home page (ADR 0120). These follow the
+person to every device:
+
+```json
+{
+  "account": true,
+  "spotlight": "pinned",
+  "spotlight_item": 1234,
+  "spoilers": "synopsis",
+  "hidden_shelves": ["rate", "unwatched:3"]
+}
+```
+
+- `spotlight`: what the homepage spotlight shows. One of `continue`,
+  `recent`, `recommended` or `pinned`.
+- `spotlight_item`: the title pinned to it, for `pinned`. `0` is none.
+- `spoilers`: how much a season page hides on an episode nobody has started.
+  One of `show`, `synopsis` or `all`.
+- `hidden_shelves`: built-in Home shelves the caller has turned off. Each is
+  `new` (New this week), `rate` (Rate what you've watched), `watchlist`, or
+  `unwatched:<library id>`. A hidden Unwatched shelf goes with its library.
+  Pinned shelves are separate, under `/api/home/shelves`.
+
+**`null` means never chosen.** The client then shows its default:
+`continue`, no pinned title, and `synopsis`. Before this route, a device kept
+these choices for itself, so the first device to find `null` carries its own
+older choice over once. `hidden_shelves` is always a list.
+
+`account` is `false` on a server with no accounts yet. There, every field reads
+`null` and the client keeps these choices on the device as it used to.
+
+`PUT` takes the same fields, **each optional**: a field left out is left
+alone. `hidden_shelves`, when sent, replaces the whole list. The answer is the
+new state, as `GET` returns it. A body with none of the fields is `400`; so
+are an unknown value and an Unwatched key naming no library (`bad_spotlight`,
+`bad_spotlight_item`, `bad_spoilers`, `bad_hidden_shelves`). It acts on the
+session only, and it is not audited. `409 no_account` on a server with no
+accounts.
+
+### `GET /api/profile/reading` and `PUT /api/profile/reading`
+
+The caller's reading and listening defaults (ADR 0120). They follow the person
+to every device:
+
+```json
+{
+  "account": true,
+  "book_speed": 1.5,
+  "book_sleep": "30",
+  "comic_layout": "spread",
+  "comic_fit": "page"
+}
+```
+
+- `book_speed`: the speed a book starts at until it has one of its own
+  (`PUT /api/items/{id}/speed`), which then wins. One of `0.75`, `1`, `1.25`,
+  `1.5`, `1.75` or `2`.
+- `book_sleep`: a sleep timer set when a book starts playing. One of `off`,
+  `15`, `30`, `45`, `60` (minutes) or `chapter` (the end of the chapter). The
+  book player can still change or clear it.
+- `comic_layout`: `single` (a page at a time) or `spread` (two facing pages,
+  the cover alone).
+- `comic_fit`: `page` (the whole page on screen) or `width` (as wide as the
+  screen, scrolled down).
+
+**`null` means never chosen.** The client then plays at 1x, sets no timer,
+and shows one page fitted to the screen.
+
+`account` is `false` on a server with no accounts yet, where every field reads
+`null`.
+
+`PUT` takes the same fields, **each optional**: a field left out is left
+alone. The answer is the new state, as `GET` returns it. A body with none of
+the fields is `400`; so is an unknown value (`bad_book_speed`,
+`bad_book_sleep`, `bad_comic_layout`, `bad_comic_fit`). It acts on the
+session only, and it is not audited. `409 no_account` on a server with no
+accounts.
+
 ### `GET /api/profile/subtitle-style` and `PUT /api/profile/subtitle-style`
 
 How subtitles look for the calling account. It follows the person to every
@@ -2273,8 +2434,13 @@ second server to federate with.
 
 ```json
 { "people": [ { "id": "u_3f9", "name": "Sam", "role": "member",
-                "sharing": true, "watched": 41, "joined_at": 1739000000 } ] }
+                "sharing": true, "watched": 41, "joined_at": 1739000000,
+                "avatar": "owl", "picture": null } ] }
 ```
+
+`avatar` is the drawn animal they chose (`""` for none) and `picture` the hash
+of a picture they uploaded (`null` for none; `GET /api/pictures/{hash}`). Draw
+the picture if there is one, else the animal, else initials.
 
 The caller is excluded from their own list. `sharing` is reported even when
 false, so a page can say "has not shared" rather than showing an empty list that
@@ -2455,6 +2621,42 @@ key it does not recognise, since a later server may add to it (ADR 0018).
 
 The caller's own choice — there is no administrator variant. Read it back from
 `user.avatar` on `GET /api/auth/status`, where `""` means none chosen.
+
+### `PUT /api/profile/picture`
+
+The body is the image itself, not JSON: JPEG, PNG or WebP, at most 10 MB. The
+caller's own picture, replacing any earlier one ([ADR 0121](adr/0121-a-picture-of-your-own.md)).
+Answers `{ "picture": "<hash>" }`.
+
+**The server keeps none of what was sent.** It decodes the image, crops the
+centre square, and stores two JPEGs it drew itself, 256 and 64 pixels. EXIF,
+GPS included, does not survive. What the bytes are is decided by the decoder,
+not by `Content-Type`.
+
+`400` for anything that is not a JPEG, PNG or WebP (a GIF is refused though it
+decodes), larger than 10 MB, more than 8,000 pixels on a side or 40 megapixels,
+or smaller than 16 pixels on a side; the message says which. `403` for a member
+when the `member_pictures` setting is off; an administrator may always upload
+their own. `409 no_account` on a server with no accounts.
+
+A picture wins over `avatar` wherever a person is drawn. Read it back from
+`user.picture` on `GET /api/auth/status`: the hash, or `null`.
+
+### `DELETE /api/profile/picture`
+
+Clears the caller's own picture → `204`. Their `avatar`, if they chose one,
+shows again.
+
+### `GET /api/pictures/{hash}`
+
+`?size=64` or `?size=256` (the default) → `image/jpeg`. Any signed-in account on
+this server may fetch any picture; a federated guest may not, and pictures are
+never sent to a paired server. `404` for a hash no account has, `400` for any
+other size.
+
+`Cache-Control: private, max-age=31536000, immutable`: the hash changes when the
+picture does, so a client never needs to ask twice, and no shared cache should
+hold somebody's face.
 
 ### `GET /api/profile/year`
 
@@ -5492,6 +5694,7 @@ prevent.
 | `all` | every item a provider could answer for |
 | `unmatched` | only items no provider identified |
 | `settled` | only items whose match is **locked**, re-fetched by the id they already carry |
+| `language` | every item TMDB identified, **matched or locked**, re-fetched by the id it already carries — for a new `metadata_language` (ADR 0122) |
 
 **GET prices it without performing it**, the way the history reset does. This is
 not destructive but it *is* expensive — roughly 1,480 lookups for a real film
@@ -5548,6 +5751,28 @@ nothing to say so. What came of it goes to the log: `settled refresh finished`
 with `attempted`, `updated` and `failed`. Those differing is information rather
 than a fault: a row whose provider is no longer configured, or whose id no
 longer resolves at the provider, is skipped rather than failed.
+
+#### `language` is `settled`, wider
+
+A change of `metadata_language` (ADR 0122) is news about every identified
+title's **text** and about nobody's **identity**. So this scope takes the
+`settled` door — fetch by the recorded id, write `match_state` and
+`match_score` back unchanged, honour every field lock — and widens who goes
+through it: rows whose match is `matched` as well as `locked`.
+
+It never searches. An ordinary refresh would re-score every film against
+titles in the new language, and a file named in English is exactly the case a
+translated title scores worst on.
+
+Only rows whose provider is `tmdb` and that carry an id are counted: TMDB is
+the provider whose answers depend on the language. Rows in **`review` are left
+out** — their id is a candidate's that nobody confirmed, and fetching by it
+would fill the row with a suggestion's text as though it had been chosen.
+
+Changing the language never starts this. The client offers it once the setting
+is saved, with the count from GET, because a library of 1,480 films is 1,480
+lookups. POST behaves as `settled`'s does: it reports how many it will
+attempt, runs detached, and logs `language refresh finished`.
 
 ### `POST /api/libraries/{id}/reparse`
 
@@ -5845,7 +6070,10 @@ to "have I watched this".
 | `retro_artwork` | `false` | — | Fetch box art and a screenshot for each identified ROM from libretro-thumbnails (ADR 0073). **Off by default**: it is a network fetch per game, and no phone-home has no convenience exception. Identifying ROMs is offline and does not depend on it. **Switching it on re-queues identified ROMs** so their pictures arrive now, by lookup against hashes already stored rather than by reading every file again |
 | `photo_places` | `false` | — | Read where photographs were taken and group picture libraries by town (ADR 0078). **Off by default.** Turning it on starts the location pass at once. **Turning it off deletes every location and place read** — not hides them — so off means nothing is held, as before the feature existed. Reading again costs seconds: the pass reads only the start of each file |
 | `login_picker` | `true` | boolean | Show the accounts on the sign-in page, as names to pick from, to devices on the home network only (`GET /api/auth/accounts`). Audited |
+| `member_pictures` | `true` | boolean | Members may upload a picture of themselves (`PUT /api/profile/picture`). Off refuses their uploads with `403` and leaves existing pictures; administrators may always set their own ([ADR 0121](adr/0121-a-picture-of-your-own.md)). Audited |
 | `certification_country` | `""` | one of `certification_countries` | Whose certificate to prefer on films and programmes, as an ISO 3166-1 alpha-2 code. Empty is the default order: the US certificate, falling back to the British one. A chosen country is placed **in front of** that default rather than replacing it — TMDB's coverage is uneven, and narrowing would strip the label off every title the chosen country has no entry for, which a rating ceiling then reads as unrated and **blocks**. The offered list is **served by `GET /api/settings`, not known by the client**: what may be offered is a fact about the server's rating ladder, and a country whose labels the ladder cannot place would populate `content_rating` with strings every ceiling treats as unrated. France is the worked example — `Tous publics` is a real certificate with no rung on the ladder. A code outside the list is **rejected with 400** rather than stored and ignored. Takes effect on the next metadata fetch and does **not** rewrite certificates already stored; a metadata refresh does that |
+| `metadata_language` | `"en-US"` | one of `metadata_languages` | The language titles, synopses and taglines are fetched from TMDB in (ADR 0122), as a language-region tag. Server-wide. Where TMDB has no translation the **English text fills the gap**, so a choice never blanks a synopsis English had. Matching still works on English filenames: every name a candidate has — its title in this language, its original title, its English title — is scored. A tag outside the list is **400**. `en-US` is stored as the default. Takes effect on the next fetch and does **not** rewrite what is stored; the `language` refresh scope does that, and is offered rather than started. The region of certificates is `certification_country`, not this |
+| `metadata_languages` | — | read-only | The languages `metadata_language` may be set to, each `{code, name, native}` — `name` in English, `native` in the language itself. **Served rather than known by the client**, for the reason `certification_countries` is |
 | `artwork_cache_mb` | `0` | 0 or more | A cap on the artwork cache, in megabytes. **0 is no limit**, the default. A *target* rather than a guarantee: a daily pass removes things in the order of what can be recovered — **orphans** (artwork nothing references) at any setting, then **derived sizes** oldest-first to meet the cap, and **never a live original**. An original is the only copy that cannot be rebuilt without going back to a provider, so a cap that could remove one would turn a disk-space setting into "some of your posters are gone now". A library whose live originals alone exceed the cap keeps them and says so in the log rather than meeting the number. Orphans are removed even at 0, because they are waste under every policy and removing one cannot cost a visible picture. No upper bound: a large array may reasonably hold a great deal of artwork, and an invented ceiling would be wrong with no way to say so |
 | `max_transcodes` | `3` | 1 to 64 | How many conversions may run at once. Each is a whole ffmpeg, so this is a statement about the machine rather than a preference. A **ceiling, not a queue**: past it a request is refused and the client reports a busy server, which is honest — admitting everybody and letting every stream stutter is not. **Direct play does not count**; a file sent as it is costs no session however many people are watching. Applied live, so an operator relieving a struggling server does not have to restart it and drop the sessions they are trying to help; those already running are left alone and the ceiling decides what is admitted next |
 | `scan_at_hour` | `null` | 0–23 or `null` | The hour of the **local** day a due scan may start. `null` is any time, the default. A **gate on top of `scan_interval_hours`, not a schedule replacing it**: the interval still says how often, this says when a due scan may begin — so `24`+`3` is nightly, and `1`+`3` is also nightly because the gate holds the others back. It does **not** make a scan due: `at 3` on a weekly interval is still weekly. Redefining the interval instead would mean somebody who had set "every 6 hours" and then picked an hour silently got a daily scan, with two settings on screen contradicting each other. **Local time**, because 3am means 3am where the server is; 3am UTC would wake the disk at 10pm for this household, which is the one time of day the setting exists to avoid. Send `null` to clear it; omitting the field leaves it alone |
@@ -6372,6 +6600,60 @@ Recorded as `metrics.token`.
 ### `DELETE /api/metrics/token`
 
 Administrators only. Revokes it. `204`, whether or not there was one.
+
+## Storage
+
+### `GET /api/storage`
+
+What LANcast keeps on disk, part by part. **Administrators only**, and
+**read-only**: nothing here deletes, and nothing offers to.
+
+```json
+{ "measuring": false,
+  "report": {
+    "data_dir": "C:\\ProgramData\\LANcast",
+    "parts": [
+      { "id": "database", "path": "C:\\ProgramData\\LANcast", "bytes": 93613560, "files": 3 },
+      { "id": "artwork",  "path": "C:\\ProgramData\\LANcast\\artwork", "bytes": 7574702154, "files": 36289 },
+      { "id": "optimized", "path": "E:\\Optimized", "bytes": 0, "files": 0, "outside": true },
+      { "id": "other", "path": "C:\\ProgramData\\LANcast", "bytes": 157362148, "files": 13,
+        "largest": [ { "name": "lancast.db.replaced-20261026-171854", "bytes": 45346816 } ] }
+    ],
+    "total_bytes": 13244276826, "measured_at": 1794202501, "took_ms": 2346,
+    "disk_free_bytes": 459414482944, "disk_total_bytes": 999180726272 } }
+```
+
+**Measuring is a walk of the data folder and never runs inside the request.**
+The artwork cache alone is tens of thousands of files. A GET answers at once
+with the last measurement — `report` is `null` before the first — and, when
+there is none or it is older than ten minutes, starts one in the background.
+`measuring` is `true` while one runs; ask again until it is `false`.
+`?fresh=1` measures again now. One measurement runs at a time however many
+callers ask, and one that takes over five minutes is reported as far as it
+got with `partial: true`.
+
+**Every file in the data folder is counted once**, against the part its
+top-level entry belongs to:
+
+| `id` | What |
+| --- | --- |
+| `database` | `lancast.db` and its `-wal` and `-shm` |
+| `artwork` | posters, backdrops, faces and their resized copies |
+| `previews` | scrub-bar preview sheets ([ADR 0105](adr/0105-a-preview-is-a-keyframe-every-ten-seconds.md)) |
+| `optimized` | optimized copies ([ADR 0087](adr/0087-an-optimized-copy-is-converted-once.md)). May be another drive: `outside` is then `true` and it is walked on its own, never counted twice |
+| `backups` | database backups |
+| `transcode` | conversion scratch, while conversions run |
+| `subtitles` | subtitles extracted or downloaded |
+| `models` | face and picture-search models |
+| `saves` | retro game saves — **the one part that cannot be fetched again** |
+| `downloads` | media tools, browser cores, game databases, plugins, visualizer presets: fetched, and fetched again if removed |
+| `logs` | `lancastd.log` and its rotations |
+| `other` | anything else, with its five `largest` entries named |
+
+Every part is reported, at zero when there is none of it. `disk_free_bytes`
+and `disk_total_bytes` are the drive holding the data folder, `0` where the
+system would not say. A folder that cannot be read is skipped rather than
+failing the walk, and links are counted as themselves, never followed.
 
 ## Backups
 

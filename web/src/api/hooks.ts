@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import {
   useQuery,
   useInfiniteQuery,
@@ -47,6 +47,8 @@ import type {
   AuthStatus,
   AuthUser,
   ComicPages,
+  ReadingDirection,
+  StorageAnswer,
   LoginResult,
   ManagedUser,
   RecoveryCodes,
@@ -74,6 +76,7 @@ import type {
   Plugin,
   PluginCaps,
   Profile,
+  ProfileKinds,
   RatedItem,
   Rating,
   Viewing,
@@ -138,8 +141,71 @@ export function useSetAvatar() {
   return useMutation({
     mutationFn: (avatar: string) =>
       apiSend("/api/profile/avatar", "PUT", { avatar }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["auth-status"] }),
+    // Other people see the animal too now (People, a room), so the same lists
+    // as a picture.
+    onSuccess: () => invalidatePictures(qc),
   });
+}
+
+/*
+ * Pictures (ADR 0121).
+ *
+ * A picture is drawn wherever a person is: the rail (auth-status), People
+ * (people), the Users pane (users), and a Watch Together room, which reads
+ * the first two. So a change invalidates all three. Each is a top-level key,
+ * not a child of another, so this list is the whole of it.
+ */
+const PICTURE_KEYS = [["auth-status"], ["people"], ["users"]] as const;
+
+function invalidatePictures(qc: QueryClient) {
+  return Promise.all(PICTURE_KEYS.map((queryKey) => qc.invalidateQueries({ queryKey })));
+}
+
+/** Upload your own picture: the cropped square, as an image file. */
+export function useUploadPicture() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (image: Blob) =>
+      apiUpload<{ picture: string }>("/api/profile/picture", await image.arrayBuffer(), "PUT"),
+    onSuccess: () => invalidatePictures(qc),
+  });
+}
+
+/** Clear your own picture; your animal, if any, shows again. */
+export function useClearPicture() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => apiSend("/api/profile/picture", "DELETE"),
+    onSuccess: () => invalidatePictures(qc),
+  });
+}
+
+/** An administrator clearing somebody's picture (ADR 0121 §5). */
+export function useClearUserPicture() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) =>
+      apiSend(`/api/users/${encodeURIComponent(id)}/picture`, "DELETE"),
+    onSuccess: () => invalidatePictures(qc),
+  });
+}
+
+/*
+ * What to draw for an account id, from what this client already holds: you,
+ * from auth-status, and everybody else from People. Somebody from a paired
+ * server is in neither and gets initials, which is the rule (ADR 0121 §4).
+ */
+export function usePersonLook(): (id: string) => { picture?: string | null; avatar?: string } {
+  const me = useCurrentUser();
+  const { data } = usePeople(!!me);
+  return useCallback(
+    (id: string) => {
+      if (me && id === me.id) return { picture: me.picture, avatar: me.avatar };
+      const p = data?.people.find((x) => x.id === id);
+      return p ? { picture: p.picture, avatar: p.avatar } : {};
+    },
+    [me, data],
+  );
 }
 
 export function useIsAdmin(): boolean {
@@ -675,13 +741,27 @@ export function useCreateLibrary() {
 export function useUpdateLibrary() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (v: { id: number; name?: string; path?: string }) =>
+    mutationFn: (v: {
+      id: number;
+      name?: string;
+      path?: string;
+      // A library's own options (ADR 0123); "" clears one.
+      metadata_language?: string;
+      reading_direction?: string;
+    }) =>
       apiSend(`/api/libraries/${v.id}`, "PATCH", {
         name: v.name,
         path: v.path,
+        metadata_language: v.metadata_language,
+        reading_direction: v.reading_direction,
       }),
-    onSuccess: () => {
+    onSuccess: (_res, v) => {
       qc.invalidateQueries({ queryKey: ["libraries"] });
+      // Every comic in the library may now read the other way, and each
+      // comic's direction is carried on its pages answer.
+      if (v.reading_direction !== undefined) {
+        qc.invalidateQueries({ queryKey: ["comic-pages"] });
+      }
       // A repoint rewrites every item path in the library, so anything holding
       // items has to be re-read rather than trusted.
       qc.invalidateQueries({ queryKey: ["items"] });
@@ -906,8 +986,12 @@ export function useScanAllLibraries() {
  * `settled` names exactly those locked rows and re-fetches each by the provider
  * id it already carries — nothing searched, nothing re-scored. It is the only
  * way a locked title can learn a field the provider did not used to return.
+ *
+ * `language` is `settled` widened to matched rows too (ADR 0122): every title
+ * TMDB identified, re-fetched by id in the new metadata language. Offered once
+ * the language changes, never started by the change.
  */
-export type RefreshScope = "all" | "unmatched" | "settled";
+export type RefreshScope = "all" | "unmatched" | "settled" | "language";
 
 /**
  * How many items a refresh would re-ask about, before it is asked for.
@@ -1093,12 +1177,52 @@ export function useLibraries() {
  * the last page marks the comic read, which changes everything a watched tick
  * is drawn on.
  */
+/*
+ * What LANcast keeps on disk (settings-3-plan step 7). The server measures in
+ * the background and answers with what it last measured, so this asks again
+ * every second while `measuring` is true and not otherwise.
+ */
+export function useStorage() {
+  return useQuery({
+    queryKey: ["storage"],
+    queryFn: ({ signal }) => apiGet<StorageAnswer>("/api/storage", signal),
+    refetchInterval: (q) => (q.state.data?.measuring ? 1000 : false),
+  });
+}
+
+/** Measure again now, then follow it as useStorage does. */
+export function useMeasureStorage() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => apiGet<StorageAnswer>("/api/storage?fresh=1"),
+    onSuccess: (data) => qc.setQueryData(["storage"], data),
+  });
+}
+
 export function useComicPages(id: number) {
   return useQuery({
     queryKey: ["comic-pages", id],
     queryFn: ({ signal }) => apiGet<ComicPages>(`/api/items/${id}/pages`, signal),
     enabled: id > 0,
     retry: false,
+  });
+}
+
+/*
+ * Which way a comic's whole series reads (ADR 0123). Admin only. "" hands the
+ * series back to its library's direction.
+ *
+ * Every comic in the series carries its direction on its pages answer, so all
+ * of them are stale, not only this one's — hence the prefix.
+ */
+export function useSetSeriesDirection(id: number) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (direction: "" | "ltr" | "rtl") =>
+      apiPost<ReadingDirection>(`/api/items/${id}/series-direction`, { direction }, "PUT"),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["comic-pages"] });
+    },
   });
 }
 
@@ -3814,12 +3938,35 @@ export function useRemovePlaylistEntry(id: number) {
  * an infinite query for a list nobody scrolls to the end of buys nothing but a
  * cache that never shrinks. `has_more` from the server drives the button.
  */
-export function useProfile(limit = 50, offset = 0) {
+export function useProfile(limit = 50, offset = 0, kind: HistoryKind = "") {
   return useQuery({
-    queryKey: ["profile", limit, offset],
+    queryKey: ["profile", limit, offset, kind],
     queryFn: ({ signal }) =>
-      apiGet<Profile>(`/api/profile?limit=${limit}&offset=${offset}`, signal),
+      apiGet<Profile>(
+        `/api/profile?limit=${limit}&offset=${offset}${kind ? `&kind=${kind}` : ""}`,
+        signal,
+      ),
     placeholderData: keepPreviousData,
+    staleTime: 10_000,
+  });
+}
+
+/*
+ * A filter on either history (profile-2-plan §4e). The server owns which media
+ * kinds each one means, so both lists agree; "" is everything.
+ */
+export type HistoryKind = "" | "video" | "music" | "books" | "comics";
+
+/*
+ * The Overview's books, comics and games (profile-2-plan §4d).
+ *
+ * Under ["profile"], so a history reset, which invalidates the profile,
+ * empties these too without a second key to remember.
+ */
+export function useProfileKinds() {
+  return useQuery({
+    queryKey: ["profile", "kinds"],
+    queryFn: ({ signal }) => apiGet<ProfileKinds>("/api/profile/kinds", signal),
     staleTime: 10_000,
   });
 }
@@ -4029,11 +4176,12 @@ export function useAfterwards(itemID: number) {
   });
 }
 
-export function useToRate() {
+export function useToRate(enabled = true) {
   return useQuery({
     queryKey: ["to-rate"],
     queryFn: ({ signal }) =>
       apiGet<{ items: Item[] }>("/api/profile/ratings/pending", signal),
+    enabled,
   });
 }
 
@@ -4386,12 +4534,13 @@ export function useChannelSchedule(channelID: number | null, hours = 12) {
 
 // -------------------------------------------------------------- people
 
-export function usePeople() {
+export function usePeople(enabled = true) {
   return useQuery({
     queryKey: ["people"],
     queryFn: ({ signal }) =>
       apiGet<{ people: Person[] }>("/api/people", signal),
     staleTime: 60_000,
+    enabled,
   });
 }
 
@@ -4452,13 +4601,13 @@ export function useHistoryCount(scope: HistoryScope, enabled = true) {
  * Under ["profile"], which a history reset invalidates, so clearing finished
  * history empties this list without a second key to remember.
  */
-export function useViewings(pageSize = 100) {
+export function useViewings(pageSize = 100, kind: HistoryKind = "") {
   return useInfiniteQuery({
-    queryKey: ["profile", "viewings", pageSize],
+    queryKey: ["profile", "viewings", pageSize, kind],
     initialPageParam: 0,
     queryFn: ({ pageParam, signal }) =>
       apiGet<{ viewings: Viewing[]; total: number }>(
-        `/api/profile/viewings?limit=${pageSize}&offset=${pageParam as number}`,
+        `/api/profile/viewings?limit=${pageSize}&offset=${pageParam as number}${kind ? `&kind=${kind}` : ""}`,
         signal,
       ),
     getNextPageParam: (last, pages) => {

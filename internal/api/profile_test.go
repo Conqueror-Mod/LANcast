@@ -1,6 +1,8 @@
 package api
 
 import (
+	"context"
+	"encoding/json"
 	"net/http"
 	"testing"
 
@@ -8,10 +10,11 @@ import (
 )
 
 type profileBody struct {
-	User    profileUser          `json:"user"`
-	Stats   store.ProfileStats   `json:"stats"`
-	History []store.HistoryEntry `json:"history"`
-	HasMore bool                 `json:"has_more"`
+	User       profileUser          `json:"user"`
+	Stats      store.ProfileStats   `json:"stats"`
+	History    []store.HistoryEntry `json:"history"`
+	HasMore    bool                 `json:"has_more"`
+	MostPlayed []store.PlayedItem   `json:"most_played"`
 }
 
 func (h *harness) profile(t *testing.T, query string) profileBody {
@@ -124,5 +127,113 @@ func TestProfileReportsMorePages(t *testing.T) {
 	}
 	if last := h.profile(t, "?limit=2&offset=2"); last.HasMore {
 		t.Error("has_more = true on the final page")
+	}
+}
+
+// The rows draw posters, so the posters come with them. Both lists shipped
+// without, and every row drew the first letter of its title instead.
+func TestProfileListsCarryPosters(t *testing.T) {
+	h := newHarness(t)
+	id := h.addFile(t, "Postered.mkv", []byte("x"))
+	if err := h.st.PutArtwork(context.Background(), id, "posterhash", "poster", "u", 342, 513, 1); err != nil {
+		t.Fatal(err)
+	}
+	h.do(t, "PUT", "/api/items/"+itoa(id)+"/progress",
+		map[string]any{"position_ms": 1000}).Body.Close()
+	h.do(t, "PUT", "/api/items/"+itoa(id)+"/rating", map[string]any{"score": 7}).Body.Close()
+
+	body := h.profile(t, "")
+	if len(body.History) != 1 {
+		t.Fatalf("history has %d entries, want 1", len(body.History))
+	}
+	if a := body.History[0].Item.Artwork; a == nil || a.Poster != "posterhash" {
+		t.Errorf("history item artwork = %+v, want poster %q", a, "posterhash")
+	}
+
+	var list struct {
+		Ratings []store.RatedItem `json:"ratings"`
+	}
+	decode(t, h.do(t, "GET", "/api/profile/ratings", nil), &list)
+	if len(list.Ratings) != 1 {
+		t.Fatalf("ratings = %d, want 1", len(list.Ratings))
+	}
+	if a := list.Ratings[0].Item.Artwork; a == nil || a.Poster != "posterhash" {
+		t.Errorf("rated item artwork = %+v, want poster %q", a, "posterhash")
+	}
+}
+
+// The totals split by kind, and the titles finished most often, with their
+// posters (profile-2-plan §4c).
+func TestProfileSplitsTotalsByKindAndListsMostPlayed(t *testing.T) {
+	h := newHarness(t)
+	ctx := context.Background()
+	id := h.addFile(t, "Twice.mkv", []byte("x"))
+	if err := h.st.PutArtwork(ctx, id, "posterhash", "poster", "u", 342, 513, 1); err != nil {
+		t.Fatal(err)
+	}
+	// Finished, started again, finished again: two plays.
+	for _, finished := range []bool{true, false, true} {
+		if err := h.st.SaveProgress(ctx, id, "local", 0, finished); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	body := h.profile(t, "")
+	if len(body.Stats.ByKind) != 1 || body.Stats.ByKind[0].Kind != "movie" ||
+		body.Stats.ByKind[0].Viewings != 2 {
+		t.Errorf("by_kind = %+v, want one movie seen twice", body.Stats.ByKind)
+	}
+	if len(body.MostPlayed) != 1 || body.MostPlayed[0].Plays != 2 {
+		t.Fatalf("most_played = %+v, want the film with 2 plays", body.MostPlayed)
+	}
+	if a := body.MostPlayed[0].Item.Artwork; a == nil || a.Poster != "posterhash" {
+		t.Errorf("most played artwork = %+v, want its poster", a)
+	}
+}
+
+// ?kind= narrows both histories, a kind it does not know is a 400 rather than
+// everything, and /api/profile/kinds answers with empty lists, not nulls, and
+// with its rows' posters (profile-2-plan §4d, §4e).
+func TestProfileKindFilterAndKinds(t *testing.T) {
+	h := newHarness(t)
+	ctx := context.Background()
+	id := h.addFile(t, "Film.mkv", []byte("x"))
+	if err := h.st.SaveProgress(ctx, id, "local", 0, true); err != nil {
+		t.Fatal(err)
+	}
+
+	if b := h.profile(t, "?kind=video"); len(b.History) != 1 {
+		t.Errorf("video history = %d rows, want the film", len(b.History))
+	}
+	if b := h.profile(t, "?kind=music"); len(b.History) != 0 {
+		t.Errorf("music history = %d rows, want none", len(b.History))
+	}
+	for _, path := range []string{"/api/profile?kind=games", "/api/profile/viewings?kind=film"} {
+		if resp := h.do(t, "GET", path, nil); resp.StatusCode != http.StatusBadRequest {
+			t.Errorf("%s = %d, want 400", path, resp.StatusCode)
+		}
+	}
+	resp := h.do(t, "GET", "/api/profile/viewings?kind=video", nil)
+	var log struct {
+		Total int `json:"total"`
+	}
+	decode(t, resp, &log)
+	if log.Total != 1 {
+		t.Errorf("video log total = %d, want 1", log.Total)
+	}
+
+	resp = h.do(t, "GET", "/api/profile/kinds", nil)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("kinds = %d", resp.StatusCode)
+	}
+	var k map[string]json.RawMessage
+	decode(t, resp, &k)
+	for _, want := range []string{"books", "comics", "games"} {
+		if string(k[want]) == "null" || k[want] == nil {
+			t.Errorf("%s = %s; want a value, never null", want, k[want])
+		}
+	}
+	if string(k["games"]) != "[]" {
+		t.Errorf("games = %s, want []", k["games"])
 	}
 }

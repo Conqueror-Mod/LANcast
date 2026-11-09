@@ -27,6 +27,54 @@
   display: block;
 }
 
+/* Two facing pages: each takes half the width, and they meet in the middle
+   with no gutter, as a printed spread does. */
+.reader--spread .reader__page {
+  max-width: 50%;
+}
+
+/* Fitted to the width: the page is as wide as the screen and the stage
+   scrolls down it. */
+.reader--fit-width .reader__stage {
+  align-items: flex-start;
+  overflow-y: auto;
+}
+
+.reader--fit-width .reader__page {
+  width: 100%;
+  max-height: none;
+  height: auto;
+}
+
+.reader--fit-width.reader--spread .reader__page {
+  width: 50%;
+}
+
+/* Right to left (ADR 0123): a spread's earlier page on the right, and the
+   progress bar filling from the right, the way the pages are going. */
+.reader--rtl .reader__stage {
+  flex-direction: row-reverse;
+}
+
+.reader--rtl .reader__progress-fill {
+  margin-left: auto;
+}
+
+/* The series' direction, for an admin: quiet until it is wanted. */
+.reader__direction {
+  background: transparent;
+  color: var(--text-secondary);
+  border: 1px solid var(--gold-dormant);
+  border-radius: var(--radius-tile);
+  padding: 4px 6px;
+  font-size: 13px;
+}
+
+.reader__direction:focus-visible {
+  outline: 2px solid var(--gold);
+  outline-offset: 2px;
+}
+
 .reader__bar {
   flex: 0 0 auto;
   display: flex;

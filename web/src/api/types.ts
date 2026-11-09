@@ -65,6 +65,12 @@ export type HomeSuggestion = components["schemas"]["HomeSuggestion"];
 export type Taste = NonNullable<HomeSuggestion["taste"]>;
 export type HomeShelf = components["schemas"]["HomeShelf"];
 export type HomeShelves = components["schemas"]["HomeShelves"];
+// Home preferences per account (ADR 0120, settings-3-plan step 3).
+export type HomePreferences = components["schemas"]["HomePreferences"];
+export type HomePreferencesUpdate = components["schemas"]["HomePreferencesUpdate"];
+// Reading and listening defaults per account (settings-3-plan step 4).
+export type ReadingPreferences = components["schemas"]["ReadingPreferences"];
+export type ReadingPreferencesUpdate = components["schemas"]["ReadingPreferencesUpdate"];
 export type FinishedMemory = components["schemas"]["FinishedMemory"];
 export type ArtworkTone = components["schemas"]["ArtworkTone"];
 
@@ -219,6 +225,11 @@ export type HistoryEntry = components["schemas"]["HistoryEntry"];
 
 export type Profile = components["schemas"]["Profile"];
 
+// GET /api/profile/kinds — the Overview's books, comics and games.
+export type ProfileKinds = components["schemas"]["ProfileKinds"];
+export type KindEntry = components["schemas"]["KindEntry"];
+export type SavedGame = components["schemas"]["SavedGame"];
+
 // GET /api/crashes — a recovered panic. `where` is the route pattern rather
 // than the URL: the pattern is what somebody fixes.
 export type CrashReport = components["schemas"]["CrashReport"];
@@ -256,6 +267,11 @@ export type RemoteCommandRequest = components["schemas"]["RemoteCommandRequest"]
 // sessions, not a login history: it answers "is this person here right now".
 export type ManagedUser = components["schemas"]["ManagedUser"];
 export type ComicPages = components["schemas"]["ComicPages"];
+/** What LANcast keeps on disk (settings-3-plan step 7). */
+export type StorageAnswer = components["schemas"]["StorageAnswer"];
+export type StoragePart = components["schemas"]["StoragePart"];
+/** Which way a comic reads, and why (ADR 0123). */
+export type ReadingDirection = components["schemas"]["ReadingDirection"];
 export type LoginResult = components["schemas"]["LoginResponse"];
 export type TwoFactorState = components["schemas"]["TwoFactorState"];
 export type TwoFactorSetup = components["schemas"]["TwoFactorSetup"];

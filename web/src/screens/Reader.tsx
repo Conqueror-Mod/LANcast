@@ -1,12 +1,40 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
-import { useComicPages, useItem, useSetComicPlace } from "@/api/hooks";
+import {
+  useComicPages,
+  useIsAdmin,
+  useItem,
+  useSetComicPlace,
+  useSetSeriesDirection,
+} from "@/api/hooks";
+import { comicFitOf, comicLayoutOf, useReadingPrefs } from "@/lib/readingPrefs";
+import { nextSpread, prevSpread, spreadPages } from "./readerLayout";
 import "./Reader.css";
+
+/*
+ * Two facing pages need a screen wider than it is tall. A phone held upright
+ * shows one page whatever the layout says, and turns to two when it is turned
+ * on its side.
+ */
+const LANDSCAPE = "(orientation: landscape)";
+function useLandscape(): boolean {
+  return useSyncExternalStore(
+    (fn) => {
+      if (typeof window.matchMedia !== "function") return () => {};
+      const m = window.matchMedia(LANDSCAPE);
+      m.addEventListener?.("change", fn);
+      return () => m.removeEventListener?.("change", fn);
+    },
+    () => (typeof window.matchMedia === "function" ? window.matchMedia(LANDSCAPE).matches : true),
+    () => true,
+  );
+}
 
 /*
  * The comic reader (ADR 0101).
  *
- * A page at a time, fitted to the screen. The arrow keys, Page Up and Down,
+ * A page at a time or two facing pages, fitted to the screen or to its
+ * width (Your account › Reading & listening). The arrow keys, Page Up and Down,
  * Space, a click or tap on either side, or a swipe turn it; Home and End jump
  * to the ends; Escape goes back. The place is kept as you go, a moment after
  * each turn rather than on every keypress, and once more on the way out.
@@ -14,6 +42,11 @@ import "./Reader.css";
  * It opens where you left off. A comic you finished opens at the start again,
  * because the last page of something you have read is not where anybody wants
  * to be put.
+ *
+ * Right to left (ADR 0123), when the server says so: the next page is to the
+ * left, so the left arrow, a tap on the left, a swipe to the right and the
+ * left-hand button go forward, and a spread puts its earlier page on the
+ * right. Space and Page Down have no side and still go forward.
  */
 export function Reader() {
   const id = Number(useParams().id);
@@ -32,6 +65,18 @@ export function Reader() {
   const pending = useRef<number | null>(null);
 
   const pages = data?.pages ?? 0;
+  const rtl = data?.direction === "rtl";
+  // Which way "left" goes: back when reading left to right, on when not.
+  const leftward = rtl ? 1 : -1;
+
+  const { data: prefs } = useReadingPrefs();
+  const landscape = useLandscape();
+  const spread = comicLayoutOf(prefs) === "spread" && landscape;
+  const fitWidth = comicFitOf(prefs) === "width";
+  // What is on screen, left to right. The place kept is the first of them.
+  const shownPages = page === null ? [] : spread ? spreadPages(page, pages) : [page];
+  const lastShown = shownPages.length > 0 ? shownPages[shownPages.length - 1] : (page ?? 0);
+  const stage = useRef<HTMLDivElement>(null);
 
   // Where to open, once the count and the place are known.
   useEffect(() => {
@@ -82,7 +127,37 @@ export function Reader() {
     },
     [pages],
   );
-  const step = useCallback((d: number) => setPage((cur) => (cur === null ? cur : Math.min(Math.max(cur + d, 0), Math.max(pages - 1, 0)))), [pages]);
+  const step = useCallback(
+    (d: number) =>
+      setPage((cur) => {
+        if (cur === null) return cur;
+        // A spread turns as a whole.
+        if (spread) return d > 0 ? nextSpread(cur, pages) : prevSpread(cur);
+        return Math.min(Math.max(cur + d, 0), Math.max(pages - 1, 0));
+      }),
+    [pages, spread],
+  );
+
+  // A new page starts at its top when it is taller than the screen.
+  useEffect(() => {
+    if (fitWidth) stage.current?.scrollTo?.({ top: 0 });
+  }, [page, fitWidth]);
+
+  /*
+   * Fitted to the width, a page is taller than the screen, so Space and Page
+   * Down read down it first and turn only at its foot, as a long web page
+   * does. Page Up does the same upwards.
+   */
+  const scrollOrStep = useCallback(
+    (d: number) => {
+      const el = stage.current;
+      if (!fitWidth || !el) return step(d);
+      const atEnd = d > 0 ? el.scrollTop + el.clientHeight >= el.scrollHeight - 2 : el.scrollTop <= 2;
+      if (atEnd) step(d);
+      else el.scrollBy?.({ top: d * el.clientHeight * 0.9 });
+    },
+    [fitWidth, step],
+  );
 
   const leave = useCallback(() => {
     flush();
@@ -93,17 +168,27 @@ export function Reader() {
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       if (e.altKey || e.ctrlKey || e.metaKey) return;
+      // The series' direction is a dropdown in the bar; its arrows are its own.
+      if (e.target instanceof HTMLSelectElement) return;
       switch (e.key) {
-        case "ArrowRight":
         case "ArrowDown":
-        case "PageDown":
-        case " ":
-          step(1);
+        case "ArrowUp":
+          // Fitted to the width, up and down scroll the page.
+          if (fitWidth) return;
+          step(e.key === "ArrowDown" ? 1 : -1);
+          break;
+        case "ArrowRight":
+          step(-leftward);
           break;
         case "ArrowLeft":
-        case "ArrowUp":
+          step(leftward);
+          break;
+        case "PageDown":
+        case " ":
+          scrollOrStep(1);
+          break;
         case "PageUp":
-          step(-1);
+          scrollOrStep(-1);
           break;
         case "Home":
           go(0);
@@ -122,17 +207,20 @@ export function Reader() {
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [step, go, leave, pages]);
+  }, [step, scrollOrStep, go, leave, pages, fitWidth, leftward]);
 
   // The next page is fetched before it is asked for, so turning is instant.
   useEffect(() => {
-    if (page === null || page + 1 >= pages) return;
-    const img = new Image();
-    img.src = pageURL(id, page + 1);
-  }, [id, page, pages]);
+    if (page === null) return;
+    for (let n = lastShown + 1; n <= lastShown + (spread ? 2 : 1) && n < pages; n++) {
+      const img = new Image();
+      img.src = pageURL(id, n);
+    }
+  }, [id, page, pages, lastShown, spread]);
 
-  // A swipe turns the page; a tap on the left third goes back, anywhere else
-  // forward, and a tap in the middle shows or hides the bar.
+  // A swipe turns the page; a tap on the left third goes left, on the right
+  // third right, and a tap in the middle shows or hides the bar. Which of
+  // left and right is forward depends on the direction.
   const down = useRef<{ x: number; y: number } | null>(null);
   function onPointerDown(e: React.PointerEvent) {
     down.current = { x: e.clientX, y: e.clientY };
@@ -144,17 +232,21 @@ export function Reader() {
     const dx = e.clientX - start.x;
     const dy = e.clientY - start.y;
     if (Math.abs(dx) > 50 && Math.abs(dx) > Math.abs(dy)) {
-      step(dx < 0 ? 1 : -1);
+      // Swiping left drags the page on the right into view.
+      step(dx < 0 ? -leftward : leftward);
       return;
     }
     const w = (e.currentTarget as HTMLElement).clientWidth || window.innerWidth;
     const x = e.clientX / w;
-    if (x < 1 / 3) step(-1);
-    else if (x > 2 / 3) step(1);
+    if (x < 1 / 3) step(leftward);
+    else if (x > 2 / 3) step(-leftward);
     else setChrome((c) => !c);
   }
 
   const title = item?.title ?? "";
+  const atStart = page === null || page <= 0;
+  const atEnd = page === null || lastShown >= pages - 1;
+  const isAdmin = useIsAdmin();
 
   if (isError) {
     return (
@@ -168,29 +260,40 @@ export function Reader() {
   }
 
   return (
-    <div className={"reader" + (chrome ? "" : " reader--bare")}>
+    <div
+      className={
+        "reader" +
+        (chrome ? "" : " reader--bare") +
+        (spread ? " reader--spread" : "") +
+        (fitWidth ? " reader--fit-width" : "") +
+        (rtl ? " reader--rtl" : "")
+      }
+    >
       <div
+        ref={stage}
         className="reader__stage"
         onPointerDown={onPointerDown}
         onPointerUp={onPointerUp}
-        aria-label={title ? `${title}, page ${(page ?? 0) + 1} of ${pages}` : undefined}
+        aria-label={title ? `${title}, ${pagesLabel(shownPages, pages)}` : undefined}
       >
-        {page !== null && pages > 0 && failed === page && (
-          <p className="reader__missing" role="status">
-            Page {page + 1} cannot be shown. A PDF page that is text or drawing, rather than a
-            picture, is not read — the pages either side of it are.
-          </p>
-        )}
-        {page !== null && pages > 0 && failed !== page && (
-          <img
-            key={page}
-            className="reader__page"
-            src={pageURL(id, page)}
-            alt={`Page ${page + 1}`}
-            draggable={false}
-            onError={() => setFailed(page)}
-          />
-        )}
+        {pages > 0 &&
+          shownPages.map((n) =>
+            failed === n ? (
+              <p key={n} className="reader__missing" role="status">
+                Page {n + 1} cannot be shown. A PDF page that is text or drawing, rather than a
+                picture, is not read — the pages either side of it are.
+              </p>
+            ) : (
+              <img
+                key={n}
+                className="reader__page"
+                src={pageURL(id, n)}
+                alt={`Page ${n + 1}`}
+                draggable={false}
+                onError={() => setFailed(n)}
+              />
+            ),
+          )}
       </div>
       <div className="reader__bar">
         <button type="button" className="reader__btn" onClick={leave} aria-label="Back">
@@ -198,23 +301,24 @@ export function Reader() {
         </button>
         <span className="reader__title">{title}</span>
         <span className="reader__count" aria-live="polite">
-          {page !== null && pages > 0 ? `${page + 1} / ${pages}` : ""}
+          {page !== null && pages > 0 ? `${countLabel(shownPages)} / ${pages}` : ""}
         </span>
+        {isAdmin && data?.series && <SeriesDirection id={id} pages={data} />}
         <button
           type="button"
           className="reader__btn"
-          disabled={page === null || page <= 0}
-          onClick={() => step(-1)}
-          aria-label="Previous page"
+          disabled={rtl ? atEnd : atStart}
+          onClick={() => step(leftward)}
+          aria-label={rtl ? "Next page" : "Previous page"}
         >
           ‹
         </button>
         <button
           type="button"
           className="reader__btn"
-          disabled={page === null || page >= pages - 1}
-          onClick={() => step(1)}
-          aria-label="Next page"
+          disabled={rtl ? atStart : atEnd}
+          onClick={() => step(-leftward)}
+          aria-label={rtl ? "Previous page" : "Next page"}
         >
           ›
         </button>
@@ -222,11 +326,59 @@ export function Reader() {
       <div className="reader__progress" aria-hidden="true">
         <div
           className="reader__progress-fill"
-          style={{ width: pages > 0 && page !== null ? `${((page + 1) / pages) * 100}%` : "0%" }}
+          style={{ width: pages > 0 && page !== null ? `${((lastShown + 1) / pages) * 100}%` : "0%" }}
         />
       </div>
     </div>
   );
+}
+
+/*
+ * Which way this comic's series reads, for an admin (ADR 0123). In the bar
+ * because the reader is where a wrong direction is noticed. "The library's
+ * way" removes the override; the option says which way that is.
+ */
+function SeriesDirection({
+  id,
+  pages,
+}: {
+  id: number;
+  pages: { direction: string; direction_from: string; series?: string | null };
+}) {
+  const set = useSetSeriesDirection(id);
+  const value = pages.direction_from === "series" ? pages.direction : "";
+  // What the library would give, which is what "" means here. Only known when
+  // the library is what decided it; otherwise it is left to right unless the
+  // library says otherwise, and the series' own value hides which.
+  const libraryWay =
+    pages.direction_from === "series" ? "" : pages.direction === "rtl" ? " (right to left)" : " (left to right)";
+  return (
+    <select
+      className="reader__direction"
+      aria-label={`Reading direction for ${pages.series}`}
+      value={value}
+      disabled={set.isPending}
+      onChange={(e) => set.mutate(e.target.value as "" | "ltr" | "rtl")}
+      // The bar's own clicks are not page turns.
+      onPointerUp={(e) => e.stopPropagation()}
+    >
+      <option value="">{`Library's way${libraryWay}`}</option>
+      <option value="ltr">Left to right</option>
+      <option value="rtl">Right to left</option>
+    </select>
+  );
+}
+
+// "3–4" for a spread, "3" for one page; counted from 1.
+function countLabel(shown: number[]): string {
+  if (shown.length === 0) return "";
+  return shown.length > 1 ? `${shown[0] + 1}–${shown[shown.length - 1] + 1}` : `${shown[0] + 1}`;
+}
+
+function pagesLabel(shown: number[], total: number): string {
+  return shown.length > 1
+    ? `pages ${shown[0] + 1} and ${shown[1] + 1} of ${total}`
+    : `page ${(shown[0] ?? 0) + 1} of ${total}`;
 }
 
 export function pageURL(id: number, n: number) {

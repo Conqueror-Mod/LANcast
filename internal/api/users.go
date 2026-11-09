@@ -19,9 +19,17 @@ func (s *Server) listUsers(w http.ResponseWriter, r *http.Request) {
 		s.writeInternal(w, err, "list users")
 		return
 	}
+	// Which accounts have a picture, so the Users pane can show it and offer
+	// to clear it (ADR 0121 §5).
+	pictures, err := s.st.PictureHashes(r.Context())
+	if err != nil {
+		s.writeInternal(w, err, "picture hashes")
+		return
+	}
 	out := make([]map[string]any, 0, len(users))
 	for _, u := range users {
 		row := userJSON(u.ID, u.Name, u.Role)
+		row["picture"] = pictureOrNil(pictures[u.ID])
 		/*
 		 * The content rating ceiling, on this listing only (ADR 0015).
 		 *

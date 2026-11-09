@@ -574,6 +574,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/items/{id}/series-direction": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The item's id. */
+                id: components["parameters"]["ItemId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Set which way this comic's whole series reads
+         * @description Administrators only (ADR 0123). The override belongs to the series — the comic's folder — so every issue in it, including ones added later, reads this way whatever the library does. Addressed through a comic so a client can only name a series that exists, spelled as the library spells it. Answers with this comic's direction as resolved after the change.
+         */
+        put: operations["putSeriesDirection"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/items/{id}/place": {
         parameters: {
             query?: never;
@@ -1487,6 +1510,26 @@ export interface paths {
         patch: operations["renameProfile"];
         trace?: never;
     };
+    "/profile/kinds": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Your books, comics and games, for the profile's Overview
+         * @description Up to six of each, newest first (profile-2-plan §4d). `in_progress` is the resume console's answer (`GET /resume`) without its Continue window; `finished` is what you finished. A game has no play record, so `games` lists each one you have a save of, by its newest save. The account's limits apply (ADR 0084), and items carry `artwork`. Every list is present, empty when there is nothing.
+         */
+        get: operations["getProfileKinds"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/profile/history": {
         parameters: {
             query?: never;
@@ -1662,6 +1705,53 @@ export interface paths {
          *     Read the current value from `user.sharing` on `GET /api/auth/status`, **not** from `GET /api/people` — that list excludes the caller by design, so reading your own setting from it always answers undefined.
          */
         put: operations["putSharing"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/profile/picture": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Upload a picture of yourself
+         * @description The body is the image: JPEG, PNG or WebP, at most 10 MB. **The server keeps none of it**: it decodes the image, crops the centre square, and stores two JPEGs it drew itself (256 and 64 px), so EXIF and GPS do not survive (ADR 0121). The format is decided by the decoder, not by `Content-Type`. Replaces any earlier picture, and wins over `avatar` wherever a person is drawn. Read it back from `user.picture` on `GET /api/auth/status`.
+         */
+        put: operations["putPicture"];
+        post?: never;
+        /**
+         * Clear your picture
+         * @description Your `avatar`, if you chose one, shows again.
+         */
+        delete: operations["deletePicture"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/pictures/{hash}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The `picture` hash from `/auth/status`, `/people` or `/users`. */
+                hash: string;
+            };
+            cookie?: never;
+        };
+        /**
+         * One account's picture
+         * @description Any signed-in account on this server may fetch any picture. A federated guest may not, and pictures are never sent to a paired server (ADR 0121 §4). The hash changes when the picture does, so the response is cached for ever, privately.
+         */
+        get: operations["getPicture"];
+        put?: never;
         post?: never;
         delete?: never;
         options?: never;
@@ -2799,6 +2889,28 @@ export interface paths {
         patch: operations["patchUser"];
         trace?: never;
     };
+    "/users/{id}/picture": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Clear somebody's picture
+         * @description Administrators only. Answers 204 whether or not the account had one; audited as `user.picture.clear` when it did (ADR 0121 §5).
+         */
+        delete: operations["clearUserPicture"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/users/{id}/password": {
         parameters: {
             query?: never;
@@ -3379,6 +3491,26 @@ export interface paths {
          *     Every playlist write **locks `members`**, which is what stops the next scan re-importing the `.m3u` over the edit.
          */
         delete: operations["deletePlaylistEntry"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/storage": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * What LANcast keeps on disk, part by part
+         * @description **Administrators only**, and read-only. Measuring walks the data folder and never runs inside the request: this answers at once with the last measurement (`report` is `null` before the first) and, when there is none or it is older than ten minutes, starts one in the background. `measuring` is `true` while one runs; ask again until it is `false`. One runs at a time however many callers ask.
+         */
+        get: operations["getStorage"];
+        put?: never;
+        post?: never;
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -4934,7 +5066,7 @@ export interface paths {
          * Your watch history: every finished viewing
          * @description One row per finished viewing of a film or an episode, newest first (ADR 0074). Not `GET /profile`'s `history`, which has one row per item dated from its last play: here a film watched three times is three rows.
          *
-         *     Only finished viewings and only video are logged. Rows seeded when the log began carry `estimated`. `DELETE /profile/history` with scope `all` or `finished` clears these rows too. Private to the caller.
+         *     Only finished viewings are logged: films, episodes, audiobooks and comics (ADR 0119), never songs, so `kind=music` is always empty. Rows seeded when the log began carry `estimated`. `DELETE /profile/history` with scope `all` or `finished` clears these rows too. Private to the caller.
          */
         get: operations["listViewings"];
         put?: never;
@@ -5112,6 +5244,54 @@ export interface paths {
          * @description Acts on the session; there is no route by which one account sets another's. `skip_intros` is required: a body without it is **400**, not read as off. Not audited.
          */
         put: operations["setPlaybackPreferences"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/profile/home": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The caller's Home preferences
+         * @description What the caller has chosen about their Home page (ADR 0120): the spotlight, spoilers on a season page, and built-in shelves turned off. A null field has never been chosen; the client shows its default, and a device holding an older choice of its own carries it over once. On a server with no accounts, `account` is false and every field is null.
+         */
+        get: operations["getHomePreferences"];
+        /**
+         * Set the caller's Home preferences
+         * @description Each field is optional and a field left out is left alone; at least one is required. `hidden_shelves`, when sent, replaces the whole list. Acts on the session only. Not audited.
+         */
+        put: operations["setHomePreferences"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/profile/reading": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The caller's reading and listening defaults
+         * @description What a book or a comic does when nothing more specific has been chosen (ADR 0120): the speed a book starts at, a sleep timer set when a book starts, and how comics are laid out. A null field has never been chosen: 1x, no timer, one page fitted to the screen. On a server with no accounts, `account` is false and every field is null.
+         */
+        get: operations["getReadingPreferences"];
+        /**
+         * Set the caller's reading and listening defaults
+         * @description Each field is optional and a field left out is left alone; at least one is required. Acts on the session only. Not audited.
+         */
+        put: operations["setReadingPreferences"];
         post?: never;
         delete?: never;
         options?: never;
@@ -6813,6 +6993,8 @@ export interface components {
             webhook_playback?: boolean;
             /** @description The content rating this account may not exceed (ADR 0015). **Present only on `GET /api/users`**, the administrator's account list, and omitted there when the account has no limit — a limit is a fact an administrator manages, and the object a session gets back about itself at login deliberately does not carry it. */
             max_content_rating?: string;
+            /** @description The hash of the picture this account uploaded, or `null` for none (ADR 0121). Fetch it from `GET /api/pictures/{hash}`. When set it wins over `avatar`. */
+            picture?: string | null;
             /**
              * @description The picture this account chose for itself: `fox`, `owl`, `cat`, `wolf`, `bear` or `rabbit`, or `""` for none. **A key, not an image** — the client draws it. `/auth/status` only, and absent when the server could not read it. A client should draw its ordinary person glyph for a key it does not recognise.
              * @example owl
@@ -6940,6 +7122,13 @@ export interface components {
             /** @description Files in the library — songs, photos, films, episodes — as against `item_count`, which is tiles in the grid. They differ wherever a library groups its media: 1,171 artists holding tens of thousands of songs. */
             media_count: number;
             shape_warning?: components["schemas"]["ShapeWarning"];
+            /** @description The language this film or show library is fetched in (ADR 0123), a code from `metadata_languages`. `null` follows the server's `metadata_language`, so changing the server's setting moves every library nobody set. */
+            metadata_language?: string | null;
+            /**
+             * @description Which way this comics library reads (ADR 0123). `null` is left to right; `rtl` is right to left, as manga reads. A series may differ (`PUT /api/items/{id}/series-direction`).
+             * @enum {string|null}
+             */
+            reading_direction?: "rtl" | null;
         };
         LibraryList: {
             libraries: components["schemas"]["Library"][];
@@ -6961,6 +7150,13 @@ export interface components {
             name?: string;
             path?: string;
             kind?: string;
+            /** @description Film and show libraries only (ADR 0123): a code from `metadata_languages`, or empty to follow the server's language. Anything else, or any language on another kind of library, is `400` — and nothing in the request is applied. Takes effect on the next fetch; the `language` refresh scope rewrites what is stored, and is offered rather than started. */
+            metadata_language?: string;
+            /**
+             * @description Comics libraries only (ADR 0123). `ltr` and empty both mean left to right, and are stored as `null`. On another kind of library it is `400`, and nothing in the request is applied.
+             * @enum {string}
+             */
+            reading_direction?: "ltr" | "rtl" | "";
         };
         RootRequest: {
             path: string;
@@ -7351,6 +7547,9 @@ export interface components {
              * @description The oldest playback this user has, so a client can say what period the numbers cover rather than implying they cover all time.
              */
             first_at: number | null;
+            /** @description The totals split by kind, most time first. These plus `earlier` add up to the totals exactly. **Absent on a server from before Profile 2.0.** */
+            by_kind?: components["schemas"]["KindTotals"][];
+            earlier?: components["schemas"]["KindTotals"];
         };
         HistoryEntry: {
             item: components["schemas"]["Item"];
@@ -7359,6 +7558,51 @@ export interface components {
             watched: boolean;
             /** Format: int64 */
             played_at: number;
+        };
+        /** @description The profile totals for one kind of thing, or (with no `kind`) for what a history reset banked. */
+        KindTotals: {
+            /** @description `movie`, `episode`, `track`, `book_part`, `comic` or any other kind that was played. Absent on `earlier`. */
+            kind?: string;
+            started: number;
+            finished: number;
+            viewings: number;
+            /**
+             * Format: int64
+             * @description Time spent, by the same rule as `ProfileStats.watched_ms`. For songs and chapters it is listening.
+             */
+            watched_ms: number;
+        };
+        PlayedItem: {
+            item: components["schemas"]["Item"];
+            /** @description Times finished, at least 2. */
+            plays: number;
+        };
+        KindEntry: {
+            item: components["schemas"]["Item"];
+            /**
+             * Format: int64
+             * @description When you last played or read it, Unix seconds.
+             */
+            touched_at: number;
+            /** @description A comic in progress: the page it is on. Absent otherwise. */
+            page?: components["schemas"]["ComicPlace"];
+        };
+        KindShelf: {
+            in_progress: components["schemas"]["KindEntry"][];
+            finished: components["schemas"]["KindEntry"][];
+        };
+        SavedGame: {
+            item: components["schemas"]["Item"];
+            /**
+             * Format: int64
+             * @description The newest save of it on the server, Unix seconds. There is no play time to report.
+             */
+            saved_at: number;
+        };
+        ProfileKinds: {
+            books: components["schemas"]["KindShelf"];
+            comics: components["schemas"]["KindShelf"];
+            games: components["schemas"]["SavedGame"][];
         };
         /** @description Identity, statistics and history in one request, because a page needing all three should not discover that from three round trips and three loading states. */
         Profile: {
@@ -7372,6 +7616,8 @@ export interface components {
             history: components["schemas"]["HistoryEntry"][];
             /** @description Whether the history was cut short, so a client can offer the next page rather than infer it from a full-looking one. */
             has_more: boolean;
+            /** @description Finished at least twice, up to five per group (films and episodes, songs, audiobook chapters), in that order. Absent on a server from before Profile 2.0. */
+            most_played?: components["schemas"]["PlayedItem"][];
         };
         /**
          * @description **Your** verdict on an item. A rating is private to the account that wrote it: there is no household average, no count of how many people rated something, and no route that returns somebody else's score.
@@ -7486,6 +7732,8 @@ export interface components {
             photo_places: boolean;
             /** @description Show the accounts on the sign-in page to devices on the home network (`GET /api/auth/accounts`). On by default. */
             login_picker: boolean;
+            /** @description Members may upload a picture of themselves (`PUT /api/profile/picture`). On by default; administrators may always set their own (ADR 0121). */
+            member_pictures: boolean;
             auto_enrich: boolean;
             update_check: boolean;
             /** @description Raises the server's log level to debug. Takes effect on the next line logged — **no restart** — and is persisted, because the faults worth turning it on for are the intermittent ones and losing the toggle on restart is how somebody reproduces a bug three times. */
@@ -7538,6 +7786,21 @@ export interface components {
              *     A chosen country is placed **in front of** that default rather than replacing it. TMDB's coverage is uneven, and narrowing would strip the label off every title the chosen country has no entry for — which a rating ceiling then reads as unrated and blocks.
              */
             certification_country?: string;
+            /**
+             * @description The language titles, synopses and taglines are fetched from TMDB in (ADR 0122), as a language-region tag. Never empty: the default reads back as `en-US`.
+             *
+             *     Where TMDB has no translation the English text fills the gap, and matching scores every name a candidate has, so English filenames keep matching. Takes effect on the next fetch; the `language` refresh scope rewrites what is stored, and is offered rather than started.
+             */
+            metadata_language?: string;
+            /** @description The languages `metadata_language` may be set to. Served rather than known by the client, for the reason `certification_countries` is. */
+            metadata_languages?: {
+                /** @description A language-region tag, such as `de-DE`. */
+                code: string;
+                /** @description The language's name in English. */
+                name: string;
+                /** @description The language's name in itself. */
+                native: string;
+            }[];
             /** @description The countries `certification_country` may be set to. Served rather than known by the client, because what may be offered is a fact about the server's rating ladder: a certificate the ladder cannot place reads as unrated, and an account ceiling blocks unrated. A client carrying its own list would eventually offer a country whose labels no ceiling could place. */
             certification_countries?: {
                 /** @description ISO 3166-1 alpha-2. */
@@ -7629,6 +7892,7 @@ export interface components {
             /** @description Read where photographs were taken and group picture libraries by town (ADR 0078). **Off by default.** Turning it on starts the location pass at once; **turning it off deletes every location and place read**, rather than hiding them. */
             photo_places?: boolean;
             login_picker?: boolean;
+            member_pictures?: boolean;
             hardware_encoder?: string;
             debug_logging?: boolean;
             watched_threshold?: number;
@@ -7655,6 +7919,12 @@ export interface components {
              *     Takes effect on the next metadata fetch. It does **not** rewrite certificates already stored — a metadata refresh does that.
              */
             certification_country?: string;
+            /**
+             * @description The metadata language. Must be one of the codes reported in `metadata_languages`; anything else is rejected with 400. `en-US` returns to the default.
+             *
+             *     Takes effect on the next fetch. It does **not** rewrite what is stored — the `language` refresh scope does that.
+             */
+            metadata_language?: string;
             /**
              * @description The ceiling this server imposes on every stream, as a rung id from `quality_rungs`. Empty means no limit, which is the default.
              *
@@ -8180,6 +8450,10 @@ export interface components {
         PresenceGrantRequest: {
             on: boolean;
         };
+        PictureResponse: {
+            /** @description The hash of the picture now stored. */
+            picture: string;
+        };
         /** @description Another account on this server. **The caller is excluded by design** — a row for yourself in a list of other people is noise — which is why your own sharing setting is read from `user.sharing` on `GET /api/auth/status` and not from here. */
         Person: {
             id: string;
@@ -8190,6 +8464,10 @@ export interface components {
             watched: number;
             /** Format: int64 */
             joined_at: number;
+            /** @description The drawn animal they chose, `""` for none. */
+            avatar: string;
+            /** @description The hash of the picture this account uploaded, or `null` for none (ADR 0121). Fetch it from `GET /api/pictures/{hash}`. When set it wins over `avatar`. */
+            picture: string | null;
         };
         PersonList: {
             people: components["schemas"]["Person"][];
@@ -8251,6 +8529,8 @@ export interface components {
             sessions: number;
             /** @description The ceiling set for this account, **omitted when there is none**. Reported on the management view rather than on the account's own, because it is visible to whoever can change it. */
             max_content_rating?: string;
+            /** @description The hash of the picture this account uploaded, or `null` for none (ADR 0121). Fetch it from `GET /api/pictures/{hash}`. When set it wins over `avatar`. */
+            picture?: string | null;
             /** @description Present and true when the account uses two-factor sign-in (ADR 0100), so an administrator can take it off. Never the secret. */
             two_factor?: boolean;
         };
@@ -8676,8 +8956,35 @@ export interface components {
             /** Format: password */
             current_password: string;
         };
+        /** @description Which way a comic reads, and why (ADR 0123). Resolved by the server, so no client works out the precedence: the series' override, else the library's direction, else left to right. */
+        ReadingDirection: {
+            /** @enum {string} */
+            direction: "ltr" | "rtl";
+            /**
+             * @description Where the direction came from. `default` is left to right because nothing was set.
+             * @enum {string}
+             */
+            direction_from: "series" | "library" | "default";
+            /** @description The comic's series (its folder), or `null` for a comic at the library's root, which can only follow its library. */
+            series: string | null;
+        };
+        SeriesDirectionRequest: {
+            /**
+             * @description Empty removes the override, and the series reads its library's way again.
+             * @enum {string}
+             */
+            direction: "ltr" | "rtl" | "";
+        };
         ComicPages: {
             pages: number;
+            /**
+             * @description Which way to read it (ADR 0123), resolved as `ReadingDirection` describes.
+             * @enum {string}
+             */
+            direction: "ltr" | "rtl";
+            /** @enum {string} */
+            direction_from: "series" | "library" | "default";
+            series: string | null;
             place: components["schemas"]["ComicPlace"] | null;
         };
         ResumeConsole: {
@@ -8782,6 +9089,53 @@ export interface components {
             scheduled: boolean;
             /** @description Whether the server took it on its own, just before an update changed the database. Named with -schema<N>-premigrate before the extension, N being the revision it holds. The newest three are kept; older ones are deleted when the next is taken. Never counted toward backup_keep. */
             pre_migration: boolean;
+        };
+        StorageAnswer: {
+            /** @description A measurement is running now; ask again for its result. */
+            measuring: boolean;
+            /** @description The last measurement, or `null` before the first has finished. */
+            report: components["schemas"]["StorageReport"] | null;
+        };
+        StorageReport: {
+            data_dir: string;
+            /** @description Every part, in a fixed order, `other` last. A part with nothing in it is reported at zero. */
+            parts: components["schemas"]["StoragePart"][];
+            /** Format: int64 */
+            total_bytes: number;
+            /**
+             * Format: int64
+             * @description Unix seconds.
+             */
+            measured_at: number;
+            /** Format: int64 */
+            took_ms: number;
+            /**
+             * Format: int64
+             * @description Free space on the drive holding the data folder; 0 where the system would not say.
+             */
+            disk_free_bytes: number;
+            /** Format: int64 */
+            disk_total_bytes: number;
+            /** @description The walk was stopped before it finished, so the numbers are a lower bound. */
+            partial?: boolean;
+        };
+        StoragePart: {
+            /** @description **An open set.** `database`, `artwork`, `previews`, `optimized`, `backups`, `transcode`, `subtitles`, `models`, `saves`, `downloads`, `logs` and `other` today. */
+            id: string;
+            /** @description The part's folder, or the data folder for a part made of several entries. */
+            path: string;
+            /** Format: int64 */
+            bytes: number;
+            /** Format: int64 */
+            files: number;
+            /** @description The folder is not inside the data folder and may be on another drive. */
+            outside?: boolean;
+            /** @description `other` only: its five largest top-level entries, biggest first. */
+            largest?: {
+                name: string;
+                /** Format: int64 */
+                bytes: number;
+            }[];
         };
         /**
          * @description A backup is a snapshot of the database and nothing else (ADR 0058).
@@ -10056,6 +10410,73 @@ export interface components {
             last_seen: number;
             /** @description This is the device asking. */
             current: boolean;
+        };
+        HomePreferences: {
+            /** @description False on a server with no accounts yet, where the client keeps these choices on the device. */
+            account: boolean;
+            /**
+             * @description What the homepage spotlight shows. Null: never chosen, which shows `continue`.
+             * @enum {string|null}
+             */
+            spotlight: "continue" | "recent" | "recommended" | "pinned" | null;
+            /**
+             * Format: int64
+             * @description The title pinned to the spotlight for `pinned`; 0 is none. Null: never chosen.
+             */
+            spotlight_item: number | null;
+            /**
+             * @description How much a season page hides on an episode nobody has started. Null: never chosen, which hides the synopsis.
+             * @enum {string|null}
+             */
+            spoilers: "show" | "synopsis" | "all" | null;
+            /** @description Built-in Home shelves turned off: `new`, `rate`, `watchlist`, or `unwatched:<library id>`. Pinned shelves are separate (`/home/shelves`). */
+            hidden_shelves: string[];
+        };
+        /** @description A change to the caller's Home preferences. Every field is optional; at least one is required. */
+        HomePreferencesUpdate: {
+            /** @enum {string} */
+            spotlight?: "continue" | "recent" | "recommended" | "pinned";
+            /** Format: int64 */
+            spotlight_item?: number;
+            /** @enum {string} */
+            spoilers?: "show" | "synopsis" | "all";
+            /** @description Replaces the whole list. */
+            hidden_shelves?: string[];
+        };
+        ReadingPreferences: {
+            /** @description False on a server with no accounts yet. */
+            account: boolean;
+            /**
+             * @description The speed a book starts at until it has a speed of its own, which then wins. Null: never chosen, which is 1x.
+             * @enum {number|null}
+             */
+            book_speed: 0.75 | 1 | 1.25 | 1.5 | 1.75 | 2 | null;
+            /**
+             * @description A sleep timer set when a book starts: minutes, the end of the chapter, or off. The book player can change or clear it. Null: never chosen, which is off.
+             * @enum {string|null}
+             */
+            book_sleep: "off" | "15" | "30" | "45" | "60" | "chapter" | null;
+            /**
+             * @description How a comic is shown: a page at a time, or two facing pages with the cover alone. Null: never chosen, which is single.
+             * @enum {string|null}
+             */
+            comic_layout: "single" | "spread" | null;
+            /**
+             * @description How a comic page is sized: the whole page on screen, or the width of the screen, scrolled down. Null: never chosen, which is page.
+             * @enum {string|null}
+             */
+            comic_fit: "page" | "width" | null;
+        };
+        /** @description A change to the caller's reading and listening defaults. Every field is optional; at least one is required. */
+        ReadingPreferencesUpdate: {
+            /** @enum {number} */
+            book_speed?: 0.75 | 1 | 1.25 | 1.5 | 1.75 | 2;
+            /** @enum {string} */
+            book_sleep?: "off" | "15" | "30" | "45" | "60" | "chapter";
+            /** @enum {string} */
+            comic_layout?: "single" | "spread";
+            /** @enum {string} */
+            comic_fit?: "page" | "width";
         };
         /** @description Answered with every field. On PUT each field is optional, and a field left out is left alone; at least one is required. */
         PlaybackPreferences: {
@@ -11416,6 +11837,45 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorEnvelope"];
                 };
             };
+        };
+    };
+    putSeriesDirection: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The item's id. */
+                id: components["parameters"]["ItemId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SeriesDirectionRequest"];
+            };
+        };
+        responses: {
+            /** @description The comic's direction now. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReadingDirection"];
+                };
+            };
+            /** @description `direction` is missing or not `ltr`, `rtl` or empty, or the comic sits at the library's root and has no series — set the library's `reading_direction` instead. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
         };
     };
     putComicPlace: {
@@ -13266,6 +13726,8 @@ export interface operations {
                 limit?: number;
                 /** @description History page offset. */
                 offset?: number;
+                /** @description Narrows the list to one kind of thing: `video` (films, episodes and home videos), `music` (songs), `books` (audiobooks and their parts) or `comics`. Absent for everything. Anything else is `400`. Retro games are not a kind here: they leave no play record, only saves (`GET /profile/kinds`). */
+                kind?: "video" | "music" | "books" | "comics";
             };
             header?: never;
             path?: never;
@@ -13319,6 +13781,27 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorEnvelope"];
                 };
             };
+        };
+    };
+    getProfileKinds: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The caller's books, comics and games. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProfileKinds"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
         };
     };
     countHistoryReset: {
@@ -13682,6 +14165,104 @@ export interface operations {
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
+        };
+    };
+    putPicture: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "image/jpeg": string;
+                "image/png": string;
+                "image/webp": string;
+            };
+        };
+        responses: {
+            /** @description The hash of the new picture. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PictureResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            /** @description This server has no accounts yet. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    deletePicture: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Cleared. No body. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            /** @description This server has no accounts yet. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    getPicture: {
+        parameters: {
+            query?: {
+                /** @description `64` or `256` (the default). */
+                size?: "64" | "256";
+            };
+            header?: never;
+            path: {
+                /** @description The `picture` hash from `/auth/status`, `/people` or `/users`. */
+                hash: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The picture. */
+            200: {
+                headers: {
+                    /** @description `private, max-age=31536000, immutable`. */
+                    "Cache-Control"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "image/jpeg": string;
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
         };
     };
     putAvatar: {
@@ -14556,7 +15137,7 @@ export interface operations {
         parameters: {
             query?: {
                 /**
-                 * @description `all` (every item a provider could answer for) or `unmatched` (only items no provider identified).
+                 * @description `all` (every item a provider could answer for), `unmatched` (only items no provider identified), `settled` (locked items, re-fetched by id) or `language` (every TMDB-identified item, matched or locked, re-fetched by id for a new `metadata_language`; ADR 0122).
                  *
                  *     **An absent scope means `all`**, so a client written before scopes existed keeps the behaviour it had. An unrecognised scope is `400` rather than being widened to everything — doing 1,480 provider lookups because somebody mistyped is the expensive failure scoping exists to prevent.
                  *
@@ -14569,8 +15150,10 @@ export interface operations {
                  *     It exists because a locked item could otherwise never learn a field the provider did not used to return. Certificates are the case that found it: nothing fetched them before v0.9.23, so titles enriched earlier carry none, and an unrated title is one an account rating ceiling blocks.
                  *
                  *     Items with no provider id are excluded — there is nothing to fetch by. The POST returns immediately with the number it will attempt; the work runs in the background and its outcome goes to the log.
+                 *
+                 *     `language` takes the same by-id door and widens it to matched items too: a change of metadata language is news about every identified title's text and nobody's identity, so nothing is searched or re-scored. Only `tmdb` rows with an id are counted, and rows in `review` are left out — their id is an unconfirmed candidate's. Changing the language never starts it; a client offers it.
                  */
-                scope?: string;
+                scope?: "all" | "unmatched" | "settled" | "language";
             };
             header?: never;
             path: {
@@ -14608,7 +15191,7 @@ export interface operations {
         parameters: {
             query?: {
                 /**
-                 * @description `all` (every item a provider could answer for) or `unmatched` (only items no provider identified).
+                 * @description `all` (every item a provider could answer for), `unmatched` (only items no provider identified), `settled` (locked items, re-fetched by id) or `language` (every TMDB-identified item, matched or locked, re-fetched by id for a new `metadata_language`; ADR 0122).
                  *
                  *     **An absent scope means `all`**, so a client written before scopes existed keeps the behaviour it had. An unrecognised scope is `400` rather than being widened to everything — doing 1,480 provider lookups because somebody mistyped is the expensive failure scoping exists to prevent.
                  *
@@ -14621,8 +15204,10 @@ export interface operations {
                  *     It exists because a locked item could otherwise never learn a field the provider did not used to return. Certificates are the case that found it: nothing fetched them before v0.9.23, so titles enriched earlier carry none, and an unrated title is one an account rating ceiling blocks.
                  *
                  *     Items with no provider id are excluded — there is nothing to fetch by. The POST returns immediately with the number it will attempt; the work runs in the background and its outcome goes to the log.
+                 *
+                 *     `language` takes the same by-id door and widens it to matched items too: a change of metadata language is news about every identified title's text and nobody's identity, so nothing is searched or re-scored. Only `tmdb` rows with an id are counted, and rows in `review` are left out — their id is an unconfirmed candidate's. Changing the language never starts it; a client offers it.
                  */
-                scope?: string;
+                scope?: "all" | "unmatched" | "settled" | "language";
             };
             header?: never;
             path: {
@@ -15708,6 +16293,29 @@ export interface operations {
             };
         };
     };
+    clearUserPicture: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Cleared. No body. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
     resetUserPassword: {
         parameters: {
             query?: never;
@@ -16486,6 +17094,31 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorEnvelope"];
                 };
             };
+        };
+    };
+    getStorage: {
+        parameters: {
+            query?: {
+                /** @description `1` measures again now, whatever the age of the last measurement. */
+                fresh?: "1";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The last measurement, and whether one is running. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StorageAnswer"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
         };
     };
     listBackups: {
@@ -18869,6 +19502,8 @@ export interface operations {
             query?: {
                 limit?: number;
                 offset?: number;
+                /** @description Narrows the list to one kind of thing: `video` (films, episodes and home videos), `music` (songs), `books` (audiobooks and their parts) or `comics`. Absent for everything. Anything else is `400`. Retro games are not a kind here: they leave no play record, only saves (`GET /profile/kinds`). */
+                kind?: "video" | "music" | "books" | "comics";
             };
             header?: never;
             path?: never;
@@ -19056,6 +19691,122 @@ export interface operations {
                 content?: never;
             };
             /** @description This server has no accounts yet. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    getHomePreferences: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The caller's Home preferences. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HomePreferences"];
+                };
+            };
+        };
+    };
+    setHomePreferences: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["HomePreferencesUpdate"];
+            };
+        };
+        responses: {
+            /** @description Saved; the preferences as stored. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HomePreferences"];
+                };
+            };
+            /** @description No field sent, or a value Home cannot use: `bad_spotlight`, `bad_spotlight_item`, `bad_spoilers`, `bad_hidden_shelves` (including an Unwatched key naming no library). */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description This server has no accounts yet (`no_account`). */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    getReadingPreferences: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The caller's reading and listening defaults. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReadingPreferences"];
+                };
+            };
+        };
+    };
+    setReadingPreferences: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReadingPreferencesUpdate"];
+            };
+        };
+        responses: {
+            /** @description Saved; the defaults as stored. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReadingPreferences"];
+                };
+            };
+            /** @description No field sent, or a value the players cannot use: `bad_book_speed`, `bad_book_sleep`, `bad_comic_layout`, `bad_comic_fit`. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description This server has no accounts yet (`no_account`). */
             409: {
                 headers: {
                     [name: string]: unknown;

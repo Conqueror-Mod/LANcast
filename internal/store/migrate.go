@@ -6,7 +6,7 @@ import (
 )
 
 // CurrentSchemaVersion is the revision this build expects.
-const CurrentSchemaVersion = 91
+const CurrentSchemaVersion = 95
 
 // migration is one forward step. There are deliberately no down migrations:
 // rolling a media library's schema backwards loses data that a rescan cannot
@@ -205,6 +205,33 @@ var migrations = []migration{
 	// about the book. NULL is "never chosen", which plays at 1×.
 	{version: 90, columns: []column{{"playback_state", "speed", "REAL"}}},
 	{version: 91, sql: schemaRevision91},
+	// Home follows the account (ADR 0120, settings-3-plan step 3): the
+	// spotlight's mode and the title pinned to it, and how much a season page
+	// hides. Null is "never chosen", which takes the default and lets a
+	// device's older choice be carried over once.
+	{version: 92, columns: []column{
+		{"user", "home_spotlight", "TEXT"},
+		{"user", "home_spotlight_item", "INTEGER"},
+		{"user", "spoilers", "TEXT"},
+	}},
+	// Reading and listening defaults (settings-3-plan step 4): the speed a
+	// book starts at before it has one of its own, a sleep timer set when a
+	// book starts, and how comics are laid out. Null is "never chosen".
+	{version: 93, columns: []column{
+		{"user", "book_speed", "REAL"},
+		{"user", "book_sleep", "TEXT"},
+		{"user", "comic_layout", "TEXT"},
+		{"user", "comic_fit", "TEXT"},
+	}},
+	{version: 94, sql: schemaRevision94},
+	// A library's own options (ADR 0123): the metadata language a film or
+	// show library is fetched in, and which way a comics library reads. Null
+	// is "as the server says" and "left to right". A series' direction, when
+	// it differs from its library's, lives in its own table.
+	{version: 95, sql: schemaRevision95, columns: []column{
+		{"library", "metadata_language", "TEXT"},
+		{"library", "reading_direction", "TEXT"},
+	}},
 }
 
 // migrate brings the database up to CurrentSchemaVersion.
@@ -2591,6 +2618,37 @@ CREATE TABLE IF NOT EXISTS invite (
  * No UNIQUE on (user_id, position): moving a shelf rewrites positions inside
  * one transaction, and a unique index would refuse the intermediate state.
  */
+/*
+ * Revision 94 — a picture of your own (ADR 0121).
+ *
+ * The two JPEGs the server drew from an upload, in the database rather than
+ * beside it, because a backup is the database and nothing else (ADR 0058):
+ * files would have been missing from every restore. Roughly 20-30 KB a row.
+ *
+ * hash is the SHA-256 of large, and the URL a client fetches it by; the index
+ * is for that lookup. No foreign key on user_id, like home_shelf: DeleteUser
+ * removes the row by hand.
+ */
+const schemaRevision95 = `
+CREATE TABLE IF NOT EXISTS comic_series_direction (
+    library_id INTEGER NOT NULL REFERENCES library(id) ON DELETE CASCADE,
+    series     TEXT    NOT NULL,
+    direction  TEXT    NOT NULL,
+    PRIMARY KEY (library_id, series)
+);
+`
+
+const schemaRevision94 = `
+CREATE TABLE IF NOT EXISTS user_picture (
+    user_id    TEXT    PRIMARY KEY,
+    hash       TEXT    NOT NULL,
+    large      BLOB    NOT NULL,
+    small      BLOB    NOT NULL,
+    updated_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_user_picture_hash ON user_picture(hash);
+`
+
 const schemaRevision91 = `
 CREATE TABLE IF NOT EXISTS home_shelf (
     id         INTEGER PRIMARY KEY,

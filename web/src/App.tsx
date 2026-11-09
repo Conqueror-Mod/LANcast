@@ -42,6 +42,7 @@ import { BookBar } from "@/playback/BookBar";
 import { JoinRequestPrompt } from "@/components/JoinRequestPrompt";
 import { useAuthStatus, useForgetEndedSession } from "@/api/hooks";
 import { ServerEvents } from "@/api/serverEvents";
+import { HomePrefsCarryOver } from "@/lib/homePrefs";
 import { DesignBench } from "@/screens/DesignBench";
 import "@/playback/playback.css";
 
@@ -90,6 +91,9 @@ export function App() {
       {/* One stream for the signed-in window (ADR 0079). Outside the router's
           routes so it lives as long as the session does, not a screen. */}
       <ServerEvents />
+      {/* Spotlight and spoilers moved from the device to the account
+          (ADR 0120); a device's older choice goes up once. */}
+      <HomePrefsCarryOver />
       <AppShell>
         <Routes>
           <Route path="/" element={<Home />} />

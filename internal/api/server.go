@@ -172,6 +172,9 @@ type Deps struct {
 type Server struct {
 	// chapters caches each file's chapter marks (chapters.go).
 	chapters chapterCache
+	// storage is the last measurement of what LANcast keeps on disk
+	// (storage.go).
+	storage storageState
 	// reports are problem reports sent this hour (reportissue.go), and
 	// reportURL replaces the build's webhook in tests.
 	reports   reportLimiter
@@ -596,6 +599,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("PATCH /api/webhooks/{id}", s.adminOnly(s.patchWebhook))
 	mux.HandleFunc("DELETE /api/webhooks/{id}", s.adminOnly(s.deleteWebhook))
 	mux.HandleFunc("POST /api/webhooks/{id}/test", s.adminOnly(s.testWebhook))
+	mux.HandleFunc("GET /api/storage", s.adminOnly(s.storageOverview))
 	mux.HandleFunc("GET /api/backups", s.adminOnly(s.listBackups))
 	mux.HandleFunc("POST /api/backups", s.adminOnly(s.createBackup))
 	mux.HandleFunc("GET /api/backups/{name}", s.adminOnly(s.downloadBackup))
@@ -647,6 +651,8 @@ func (s *Server) Handler() http.Handler {
 	// Photographs from today's date in an earlier year (ADR 0028).
 	mux.HandleFunc("GET /api/memories", s.memories)
 	mux.HandleFunc("GET /api/profile", s.profile)
+	// The Overview's books, comics and games (profile-2-plan §4d).
+	mux.HandleFunc("GET /api/profile/kinds", s.profileKinds)
 	mux.HandleFunc("PATCH /api/profile", s.patchProfile)
 	// A taste rather than a limit, so it acts on the session and needs no role
 	// check — see internal/api/langpref.go.
@@ -662,6 +668,11 @@ func (s *Server) Handler() http.Handler {
 	// Whether an intro skips itself, per account (ADR 0083).
 	mux.HandleFunc("GET /api/profile/playback", s.playbackPreferences)
 	mux.HandleFunc("PUT /api/profile/playback", s.setPlaybackPreferences)
+	// Home follows the account (ADR 0120).
+	mux.HandleFunc("GET /api/profile/home", s.homePreferences)
+	mux.HandleFunc("PUT /api/profile/home", s.setHomePreferences)
+	mux.HandleFunc("GET /api/profile/reading", s.readingPreferences)
+	mux.HandleFunc("PUT /api/profile/reading", s.setReadingPreferences)
 	mux.HandleFunc("GET /api/profile/ratings", s.listMyRatings)
 	// RetroAchievements (ADR 0090): the caller's own, and nobody else's.
 	mux.HandleFunc("GET /api/profile/retroachievements", s.getRetroAchievements)
@@ -678,6 +689,11 @@ func (s *Server) Handler() http.Handler {
 	// The account's own say over playback webhooks (ADR 0097). No admin route.
 	mux.HandleFunc("PUT /api/profile/webhooks", s.putPlaybackWebhooks)
 	mux.HandleFunc("PUT /api/profile/avatar", s.putAvatar)
+	// An uploaded picture (ADR 0121): the caller's own, and the two JPEGs the
+	// server drew from it, by hash, to anybody signed in here.
+	mux.HandleFunc("PUT /api/profile/picture", s.putPicture)
+	mux.HandleFunc("DELETE /api/profile/picture", s.deletePicture)
+	mux.HandleFunc("GET /api/pictures/{hash}", s.servePicture)
 	// Forgetting what you watched. GET prices it, DELETE does it.
 	/*
 	 * Your year (ADR 0035). On the profile prefix because it is a fact about
@@ -1037,6 +1053,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/users", s.adminOnly(s.listUsers))
 	mux.HandleFunc("POST /api/users", s.adminOnly(s.createUser))
 	mux.HandleFunc("DELETE /api/users/{id}", s.adminOnly(s.deleteUser))
+	mux.HandleFunc("DELETE /api/users/{id}/picture", s.adminOnly(s.clearUserPicture))
 	mux.HandleFunc("PATCH /api/users/{id}", s.adminOnly(s.patchUser))
 	mux.HandleFunc("POST /api/users/{id}/password", s.adminOnly(s.resetUserPassword))
 	mux.HandleFunc("DELETE /api/users/{id}/two-factor", s.adminOnly(s.removeUserTwoFactor))
@@ -1050,6 +1067,7 @@ func (s *Server) Handler() http.Handler {
 	// Comics (ADR 0101): pages out of the archive, and where you are in it.
 	mux.HandleFunc("GET /api/items/{id}/pages", s.comicPages)
 	mux.HandleFunc("GET /api/items/{id}/pages/{n}", s.comicPage)
+	mux.HandleFunc("PUT /api/items/{id}/series-direction", s.adminOnly(s.setSeriesDirection))
 	mux.HandleFunc("PUT /api/items/{id}/place", s.putComicPlace)
 	mux.HandleFunc("GET /api/stream/{id}", s.stream)
 	// A retro game's files and its player's saves (ADR 0073). A ticket minted

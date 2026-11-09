@@ -14,6 +14,9 @@ import { BackupPane } from "./backup";
 import { ConversionsSection } from "./conversions";
 import { DashboardPane } from "./dashboard";
 import { DisplayPane } from "./display";
+import { HomePane } from "./home";
+import { ReadingPane } from "./reading";
+import { AccountsPane } from "./accounts";
 import { DLNASection } from "./dlna";
 import { GeneralPane } from "./general";
 import { LanguagesPane } from "./languages";
@@ -65,8 +68,11 @@ export const PANE_VIEWS: Record<string, ComponentType> = {
   addons: AddonsSection,
   backup: BackupPane,
   profile: ProfileSection,
+  home: HomePane,
   security: SecuritySection,
   languages: LanguagesPane,
+  reading: ReadingPane,
+  accounts: AccountsPane,
   privacy: PrivacySection,
   video: VideoSettings,
   music: MusicSettings,

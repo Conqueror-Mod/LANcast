@@ -1151,6 +1151,62 @@
         }
       }
     },
+    "/items/{id}/series-direction": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/ItemId"
+        }
+      ],
+      "put": {
+        "operationId": "putSeriesDirection",
+        "tags": [
+          "items"
+        ],
+        "summary": "Set which way this comic's whole series reads",
+        "description": "Administrators only (ADR 0123). The override belongs to the series — the comic's folder — so every issue in it, including ones added later, reads this way whatever the library does. Addressed through a comic so a client can only name a series that exists, spelled as the library spells it. Answers with this comic's direction as resolved after the change.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SeriesDirectionRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The comic's direction now.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReadingDirection"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`direction` is missing or not `ltr`, `rtl` or empty, or the comic sits at the library's root and has no series — set the library's `reading_direction` instead.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
     "/items/{id}/place": {
       "parameters": [
         {
@@ -3713,6 +3769,21 @@
               "type": "integer",
               "default": 0
             }
+          },
+          {
+            "name": "kind",
+            "in": "query",
+            "required": false,
+            "description": "Narrows the list to one kind of thing: `video` (films, episodes and home videos), `music` (songs), `books` (audiobooks and their parts) or `comics`. Absent for everything. Anything else is `400`. Retro games are not a kind here: they leave no play record, only saves (`GET /profile/kinds`).",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "video",
+                "music",
+                "books",
+                "comics"
+              ]
+            }
           }
         ],
         "responses": {
@@ -3777,6 +3848,31 @@
                 }
               }
             }
+          }
+        }
+      }
+    },
+    "/profile/kinds": {
+      "get": {
+        "operationId": "getProfileKinds",
+        "tags": [
+          "profile"
+        ],
+        "summary": "Your books, comics and games, for the profile's Overview",
+        "description": "Up to six of each, newest first (profile-2-plan §4d). `in_progress` is the resume console's answer (`GET /resume`) without its Continue window; `finished` is what you finished. A game has no play record, so `games` lists each one you have a save of, by its newest save. The account's limits apply (ADR 0084), and items carry `artwork`. Every list is present, empty when there is nothing.",
+        "responses": {
+          "200": {
+            "description": "The caller's books, comics and games.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProfileKinds"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
           }
         }
       }
@@ -4284,6 +4380,166 @@
           },
           "403": {
             "$ref": "#/components/responses/Forbidden"
+          }
+        }
+      }
+    },
+    "/profile/picture": {
+      "put": {
+        "operationId": "putPicture",
+        "tags": [
+          "profile"
+        ],
+        "summary": "Upload a picture of yourself",
+        "description": "The body is the image: JPEG, PNG or WebP, at most 10 MB. **The server keeps none of it**: it decodes the image, crops the centre square, and stores two JPEGs it drew itself (256 and 64 px), so EXIF and GPS do not survive (ADR 0121). The format is decided by the decoder, not by `Content-Type`. Replaces any earlier picture, and wins over `avatar` wherever a person is drawn. Read it back from `user.picture` on `GET /api/auth/status`.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "image/jpeg": {
+              "schema": {
+                "type": "string",
+                "format": "binary"
+              }
+            },
+            "image/png": {
+              "schema": {
+                "type": "string",
+                "format": "binary"
+              }
+            },
+            "image/webp": {
+              "schema": {
+                "type": "string",
+                "format": "binary"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The hash of the new picture.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PictureResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "409": {
+            "description": "This server has no accounts yet.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "operationId": "deletePicture",
+        "tags": [
+          "profile"
+        ],
+        "summary": "Clear your picture",
+        "description": "Your `avatar`, if you chose one, shows again.",
+        "responses": {
+          "204": {
+            "description": "Cleared. No body."
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "409": {
+            "description": "This server has no accounts yet.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/pictures/{hash}": {
+      "parameters": [
+        {
+          "name": "hash",
+          "in": "path",
+          "required": true,
+          "description": "The `picture` hash from `/auth/status`, `/people` or `/users`.",
+          "schema": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          }
+        }
+      ],
+      "get": {
+        "operationId": "getPicture",
+        "tags": [
+          "profile"
+        ],
+        "summary": "One account's picture",
+        "description": "Any signed-in account on this server may fetch any picture. A federated guest may not, and pictures are never sent to a paired server (ADR 0121 §4). The hash changes when the picture does, so the response is cached for ever, privately.",
+        "parameters": [
+          {
+            "name": "size",
+            "in": "query",
+            "required": false,
+            "description": "`64` or `256` (the default).",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "64",
+                "256"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The picture.",
+            "headers": {
+              "Cache-Control": {
+                "description": "`private, max-age=31536000, immutable`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "image/jpeg": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
           }
         }
       }
@@ -5473,9 +5729,15 @@
             "name": "scope",
             "in": "query",
             "required": false,
-            "description": "`all` (every item a provider could answer for) or `unmatched` (only items no provider identified).\n\n**An absent scope means `all`**, so a client written before scopes existed keeps the behaviour it had. An unrecognised scope is `400` rather than being widened to everything — doing 1,480 provider lookups because somebody mistyped is the expensive failure scoping exists to prevent.\n\n**Every scope excludes the same two sets, and callers cannot opt out.** Kinds no provider can ever answer for — `track`, `album`, `artist`, `photo`, `gallery` (ADR 0024) — because counting them prices work that will never happen, which on a music library means quoting twelve thousand and doing none of it. And rows whose match is `locked`, because a refresh that requeued them would undo a decision somebody made.\n\n`settled` is different in kind from the others and the difference matters. `all` and `unmatched` work by clearing an item's metadata stamp so the enrichment queue picks it up again — and that queue **searches and scores**, which is why both exclude items whose match is `locked`.\n\n`settled` names exactly those locked items instead, and re-fetches each one **by the provider id it already carries**. Nothing is searched, nothing is re-scored, and `match_state` and `match_score` are written back unchanged, so the locked-fields rule is not bent: a locked field is still never overwritten and a locked match is still never re-litigated.\n\nIt exists because a locked item could otherwise never learn a field the provider did not used to return. Certificates are the case that found it: nothing fetched them before v0.9.23, so titles enriched earlier carry none, and an unrated title is one an account rating ceiling blocks.\n\nItems with no provider id are excluded — there is nothing to fetch by. The POST returns immediately with the number it will attempt; the work runs in the background and its outcome goes to the log.",
+            "description": "`all` (every item a provider could answer for), `unmatched` (only items no provider identified), `settled` (locked items, re-fetched by id) or `language` (every TMDB-identified item, matched or locked, re-fetched by id for a new `metadata_language`; ADR 0122).\n\n**An absent scope means `all`**, so a client written before scopes existed keeps the behaviour it had. An unrecognised scope is `400` rather than being widened to everything — doing 1,480 provider lookups because somebody mistyped is the expensive failure scoping exists to prevent.\n\n**Every scope excludes the same two sets, and callers cannot opt out.** Kinds no provider can ever answer for — `track`, `album`, `artist`, `photo`, `gallery` (ADR 0024) — because counting them prices work that will never happen, which on a music library means quoting twelve thousand and doing none of it. And rows whose match is `locked`, because a refresh that requeued them would undo a decision somebody made.\n\n`settled` is different in kind from the others and the difference matters. `all` and `unmatched` work by clearing an item's metadata stamp so the enrichment queue picks it up again — and that queue **searches and scores**, which is why both exclude items whose match is `locked`.\n\n`settled` names exactly those locked items instead, and re-fetches each one **by the provider id it already carries**. Nothing is searched, nothing is re-scored, and `match_state` and `match_score` are written back unchanged, so the locked-fields rule is not bent: a locked field is still never overwritten and a locked match is still never re-litigated.\n\nIt exists because a locked item could otherwise never learn a field the provider did not used to return. Certificates are the case that found it: nothing fetched them before v0.9.23, so titles enriched earlier carry none, and an unrated title is one an account rating ceiling blocks.\n\nItems with no provider id are excluded — there is nothing to fetch by. The POST returns immediately with the number it will attempt; the work runs in the background and its outcome goes to the log.\n\n`language` takes the same by-id door and widens it to matched items too: a change of metadata language is news about every identified title's text and nobody's identity, so nothing is searched or re-scored. Only `tmdb` rows with an id are counted, and rows in `review` are left out — their id is an unconfirmed candidate's. Changing the language never starts it; a client offers it.",
             "schema": {
               "type": "string",
+              "enum": [
+                "all",
+                "unmatched",
+                "settled",
+                "language"
+              ],
               "default": "all"
             }
           }
@@ -5524,9 +5786,15 @@
             "name": "scope",
             "in": "query",
             "required": false,
-            "description": "`all` (every item a provider could answer for) or `unmatched` (only items no provider identified).\n\n**An absent scope means `all`**, so a client written before scopes existed keeps the behaviour it had. An unrecognised scope is `400` rather than being widened to everything — doing 1,480 provider lookups because somebody mistyped is the expensive failure scoping exists to prevent.\n\n**Every scope excludes the same two sets, and callers cannot opt out.** Kinds no provider can ever answer for — `track`, `album`, `artist`, `photo`, `gallery` (ADR 0024) — because counting them prices work that will never happen, which on a music library means quoting twelve thousand and doing none of it. And rows whose match is `locked`, because a refresh that requeued them would undo a decision somebody made.\n\n`settled` is different in kind from the others and the difference matters. `all` and `unmatched` work by clearing an item's metadata stamp so the enrichment queue picks it up again — and that queue **searches and scores**, which is why both exclude items whose match is `locked`.\n\n`settled` names exactly those locked items instead, and re-fetches each one **by the provider id it already carries**. Nothing is searched, nothing is re-scored, and `match_state` and `match_score` are written back unchanged, so the locked-fields rule is not bent: a locked field is still never overwritten and a locked match is still never re-litigated.\n\nIt exists because a locked item could otherwise never learn a field the provider did not used to return. Certificates are the case that found it: nothing fetched them before v0.9.23, so titles enriched earlier carry none, and an unrated title is one an account rating ceiling blocks.\n\nItems with no provider id are excluded — there is nothing to fetch by. The POST returns immediately with the number it will attempt; the work runs in the background and its outcome goes to the log.",
+            "description": "`all` (every item a provider could answer for), `unmatched` (only items no provider identified), `settled` (locked items, re-fetched by id) or `language` (every TMDB-identified item, matched or locked, re-fetched by id for a new `metadata_language`; ADR 0122).\n\n**An absent scope means `all`**, so a client written before scopes existed keeps the behaviour it had. An unrecognised scope is `400` rather than being widened to everything — doing 1,480 provider lookups because somebody mistyped is the expensive failure scoping exists to prevent.\n\n**Every scope excludes the same two sets, and callers cannot opt out.** Kinds no provider can ever answer for — `track`, `album`, `artist`, `photo`, `gallery` (ADR 0024) — because counting them prices work that will never happen, which on a music library means quoting twelve thousand and doing none of it. And rows whose match is `locked`, because a refresh that requeued them would undo a decision somebody made.\n\n`settled` is different in kind from the others and the difference matters. `all` and `unmatched` work by clearing an item's metadata stamp so the enrichment queue picks it up again — and that queue **searches and scores**, which is why both exclude items whose match is `locked`.\n\n`settled` names exactly those locked items instead, and re-fetches each one **by the provider id it already carries**. Nothing is searched, nothing is re-scored, and `match_state` and `match_score` are written back unchanged, so the locked-fields rule is not bent: a locked field is still never overwritten and a locked match is still never re-litigated.\n\nIt exists because a locked item could otherwise never learn a field the provider did not used to return. Certificates are the case that found it: nothing fetched them before v0.9.23, so titles enriched earlier carry none, and an unrated title is one an account rating ceiling blocks.\n\nItems with no provider id are excluded — there is nothing to fetch by. The POST returns immediately with the number it will attempt; the work runs in the background and its outcome goes to the log.\n\n`language` takes the same by-id door and widens it to matched items too: a change of metadata language is news about every identified title's text and nobody's identity, so nothing is searched or re-scored. Only `tmdb` rows with an id are counted, and rows in `review` are left out — their id is an unconfirmed candidate's. Changing the language never starts it; a client offers it.",
             "schema": {
               "type": "string",
+              "enum": [
+                "all",
+                "unmatched",
+                "settled",
+                "language"
+              ],
               "default": "all"
             }
           }
@@ -6920,6 +7188,40 @@
         }
       }
     },
+    "/users/{id}/picture": {
+      "parameters": [
+        {
+          "name": "id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string"
+          }
+        }
+      ],
+      "delete": {
+        "operationId": "clearUserPicture",
+        "tags": [
+          "users"
+        ],
+        "summary": "Clear somebody's picture",
+        "description": "Administrators only. Answers 204 whether or not the account had one; audited as `user.picture.clear` when it did (ADR 0121 §5).",
+        "responses": {
+          "204": {
+            "description": "Cleared. No body."
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
     "/users/{id}/password": {
       "parameters": [
         {
@@ -7994,6 +8296,48 @@
                 }
               }
             }
+          }
+        }
+      }
+    },
+    "/storage": {
+      "get": {
+        "operationId": "getStorage",
+        "tags": [
+          "backups"
+        ],
+        "summary": "What LANcast keeps on disk, part by part",
+        "description": "**Administrators only**, and read-only. Measuring walks the data folder and never runs inside the request: this answers at once with the last measurement (`report` is `null` before the first) and, when there is none or it is older than ten minutes, starts one in the background. `measuring` is `true` while one runs; ask again until it is `false`. One runs at a time however many callers ask.",
+        "parameters": [
+          {
+            "name": "fresh",
+            "in": "query",
+            "required": false,
+            "description": "`1` measures again now, whatever the age of the last measurement.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "1"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The last measurement, and whether one is running.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StorageAnswer"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
           }
         }
       }
@@ -11194,7 +11538,7 @@
           "Profile"
         ],
         "summary": "Your watch history: every finished viewing",
-        "description": "One row per finished viewing of a film or an episode, newest first (ADR 0074). Not `GET /profile`'s `history`, which has one row per item dated from its last play: here a film watched three times is three rows.\n\nOnly finished viewings and only video are logged. Rows seeded when the log began carry `estimated`. `DELETE /profile/history` with scope `all` or `finished` clears these rows too. Private to the caller.",
+        "description": "One row per finished viewing of a film or an episode, newest first (ADR 0074). Not `GET /profile`'s `history`, which has one row per item dated from its last play: here a film watched three times is three rows.\n\nOnly finished viewings are logged: films, episodes, audiobooks and comics (ADR 0119), never songs, so `kind=music` is always empty. Rows seeded when the log began carry `estimated`. `DELETE /profile/history` with scope `all` or `finished` clears these rows too. Private to the caller.",
         "parameters": [
           {
             "name": "limit",
@@ -11215,6 +11559,21 @@
               "type": "integer",
               "minimum": 0,
               "default": 0
+            }
+          },
+          {
+            "name": "kind",
+            "in": "query",
+            "required": false,
+            "description": "Narrows the list to one kind of thing: `video` (films, episodes and home videos), `music` (songs), `books` (audiobooks and their parts) or `comics`. Absent for everything. Anything else is `400`. Retro games are not a kind here: they leave no play record, only saves (`GET /profile/kinds`).",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "video",
+                "music",
+                "books",
+                "comics"
+              ]
             }
           }
         ],
@@ -11511,6 +11870,122 @@
           },
           "409": {
             "description": "This server has no accounts yet."
+          }
+        }
+      }
+    },
+    "/profile/home": {
+      "get": {
+        "operationId": "getHomePreferences",
+        "summary": "The caller's Home preferences",
+        "description": "What the caller has chosen about their Home page (ADR 0120): the spotlight, spoilers on a season page, and built-in shelves turned off. A null field has never been chosen; the client shows its default, and a device holding an older choice of its own carries it over once. On a server with no accounts, `account` is false and every field is null.",
+        "tags": [
+          "Profile"
+        ],
+        "responses": {
+          "200": {
+            "description": "The caller's Home preferences.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HomePreferences"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "operationId": "setHomePreferences",
+        "summary": "Set the caller's Home preferences",
+        "description": "Each field is optional and a field left out is left alone; at least one is required. `hidden_shelves`, when sent, replaces the whole list. Acts on the session only. Not audited.",
+        "tags": [
+          "Profile"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HomePreferencesUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Saved; the preferences as stored.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HomePreferences"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "No field sent, or a value Home cannot use: `bad_spotlight`, `bad_spotlight_item`, `bad_spoilers`, `bad_hidden_shelves` (including an Unwatched key naming no library)."
+          },
+          "409": {
+            "description": "This server has no accounts yet (`no_account`)."
+          }
+        }
+      }
+    },
+    "/profile/reading": {
+      "get": {
+        "operationId": "getReadingPreferences",
+        "summary": "The caller's reading and listening defaults",
+        "description": "What a book or a comic does when nothing more specific has been chosen (ADR 0120): the speed a book starts at, a sleep timer set when a book starts, and how comics are laid out. A null field has never been chosen: 1x, no timer, one page fitted to the screen. On a server with no accounts, `account` is false and every field is null.",
+        "tags": [
+          "Profile"
+        ],
+        "responses": {
+          "200": {
+            "description": "The caller's reading and listening defaults.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReadingPreferences"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "operationId": "setReadingPreferences",
+        "summary": "Set the caller's reading and listening defaults",
+        "description": "Each field is optional and a field left out is left alone; at least one is required. Acts on the session only. Not audited.",
+        "tags": [
+          "Profile"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReadingPreferencesUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Saved; the defaults as stored.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReadingPreferences"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "No field sent, or a value the players cannot use: `bad_book_speed`, `bad_book_sleep`, `bad_comic_layout`, `bad_comic_fit`."
+          },
+          "409": {
+            "description": "This server has no accounts yet (`no_account`)."
           }
         }
       }
@@ -15752,6 +16227,13 @@
             "type": "string",
             "description": "The content rating this account may not exceed (ADR 0015). **Present only on `GET /api/users`**, the administrator's account list, and omitted there when the account has no limit — a limit is a fact an administrator manages, and the object a session gets back about itself at login deliberately does not carry it."
           },
+          "picture": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The hash of the picture this account uploaded, or `null` for none (ADR 0121). Fetch it from `GET /api/pictures/{hash}`. When set it wins over `avatar`."
+          },
           "avatar": {
             "type": "string",
             "description": "The picture this account chose for itself: `fox`, `owl`, `cat`, `wolf`, `bear` or `rabbit`, or `\"\"` for none. **A key, not an image** — the client draws it. `/auth/status` only, and absent when the server could not read it. A client should draw its ordinary person glyph for a key it does not recognise.",
@@ -16033,6 +16515,24 @@
           },
           "shape_warning": {
             "$ref": "#/components/schemas/ShapeWarning"
+          },
+          "metadata_language": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The language this film or show library is fetched in (ADR 0123), a code from `metadata_languages`. `null` follows the server's `metadata_language`, so changing the server's setting moves every library nobody set."
+          },
+          "reading_direction": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "rtl",
+              null
+            ],
+            "description": "Which way this comics library reads (ADR 0123). `null` is left to right; `rtl` is right to left, as manga reads. A series may differ (`PUT /api/items/{id}/series-direction`)."
           }
         }
       },
@@ -16103,6 +16603,19 @@
           },
           "kind": {
             "type": "string"
+          },
+          "metadata_language": {
+            "type": "string",
+            "description": "Film and show libraries only (ADR 0123): a code from `metadata_languages`, or empty to follow the server's language. Anything else, or any language on another kind of library, is `400` — and nothing in the request is applied. Takes effect on the next fetch; the `language` refresh scope rewrites what is stored, and is offered rather than started."
+          },
+          "reading_direction": {
+            "type": "string",
+            "enum": [
+              "ltr",
+              "rtl",
+              ""
+            ],
+            "description": "Comics libraries only (ADR 0123). `ltr` and empty both mean left to right, and are stored as `null`. On another kind of library it is `400`, and nothing in the request is applied."
           }
         }
       },
@@ -16977,6 +17490,16 @@
             ],
             "format": "int64",
             "description": "The oldest playback this user has, so a client can say what period the numbers cover rather than implying they cover all time."
+          },
+          "by_kind": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/KindTotals"
+            },
+            "description": "The totals split by kind, most time first. These plus `earlier` add up to the totals exactly. **Absent on a server from before Profile 2.0.**"
+          },
+          "earlier": {
+            "$ref": "#/components/schemas/KindTotals"
           }
         }
       },
@@ -17002,6 +17525,133 @@
           "played_at": {
             "type": "integer",
             "format": "int64"
+          }
+        }
+      },
+      "KindTotals": {
+        "type": "object",
+        "description": "The profile totals for one kind of thing, or (with no `kind`) for what a history reset banked.",
+        "required": [
+          "started",
+          "finished",
+          "viewings",
+          "watched_ms"
+        ],
+        "properties": {
+          "kind": {
+            "type": "string",
+            "description": "`movie`, `episode`, `track`, `book_part`, `comic` or any other kind that was played. Absent on `earlier`."
+          },
+          "started": {
+            "type": "integer"
+          },
+          "finished": {
+            "type": "integer"
+          },
+          "viewings": {
+            "type": "integer"
+          },
+          "watched_ms": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Time spent, by the same rule as `ProfileStats.watched_ms`. For songs and chapters it is listening."
+          }
+        }
+      },
+      "PlayedItem": {
+        "type": "object",
+        "required": [
+          "item",
+          "plays"
+        ],
+        "properties": {
+          "item": {
+            "$ref": "#/components/schemas/Item"
+          },
+          "plays": {
+            "type": "integer",
+            "description": "Times finished, at least 2."
+          }
+        }
+      },
+      "KindEntry": {
+        "type": "object",
+        "required": [
+          "item",
+          "touched_at"
+        ],
+        "properties": {
+          "item": {
+            "$ref": "#/components/schemas/Item"
+          },
+          "touched_at": {
+            "type": "integer",
+            "format": "int64",
+            "description": "When you last played or read it, Unix seconds."
+          },
+          "page": {
+            "$ref": "#/components/schemas/ComicPlace",
+            "description": "A comic in progress: the page it is on. Absent otherwise."
+          }
+        }
+      },
+      "KindShelf": {
+        "type": "object",
+        "required": [
+          "in_progress",
+          "finished"
+        ],
+        "properties": {
+          "in_progress": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/KindEntry"
+            }
+          },
+          "finished": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/KindEntry"
+            }
+          }
+        }
+      },
+      "SavedGame": {
+        "type": "object",
+        "required": [
+          "item",
+          "saved_at"
+        ],
+        "properties": {
+          "item": {
+            "$ref": "#/components/schemas/Item"
+          },
+          "saved_at": {
+            "type": "integer",
+            "format": "int64",
+            "description": "The newest save of it on the server, Unix seconds. There is no play time to report."
+          }
+        }
+      },
+      "ProfileKinds": {
+        "type": "object",
+        "required": [
+          "books",
+          "comics",
+          "games"
+        ],
+        "properties": {
+          "books": {
+            "$ref": "#/components/schemas/KindShelf"
+          },
+          "comics": {
+            "$ref": "#/components/schemas/KindShelf"
+          },
+          "games": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SavedGame"
+            }
           }
         }
       },
@@ -17031,6 +17681,13 @@
           "has_more": {
             "type": "boolean",
             "description": "Whether the history was cut short, so a client can offer the next page rather than infer it from a full-looking one."
+          },
+          "most_played": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PlayedItem"
+            },
+            "description": "Finished at least twice, up to five per group (films and episodes, songs, audiobook chapters), in that order. Absent on a server from before Profile 2.0."
           }
         }
       },
@@ -17227,6 +17884,7 @@
           "backup_keep",
           "optimized_limit_gb",
           "login_picker",
+          "member_pictures",
           "trusted_proxies",
           "metrics_token",
           "builtin_keys_off"
@@ -17376,6 +18034,10 @@
             "type": "boolean",
             "description": "Show the accounts on the sign-in page to devices on the home network (`GET /api/auth/accounts`). On by default."
           },
+          "member_pictures": {
+            "type": "boolean",
+            "description": "Members may upload a picture of themselves (`PUT /api/profile/picture`). On by default; administrators may always set their own (ADR 0121)."
+          },
           "auto_enrich": {
             "type": "boolean"
           },
@@ -17477,6 +18139,36 @@
           "certification_country": {
             "type": "string",
             "description": "Whose certificate is preferred on films and programmes, as an ISO 3166-1 alpha-2 code. Empty means the default order: the US certificate, falling back to the British one.\n\nA chosen country is placed **in front of** that default rather than replacing it. TMDB's coverage is uneven, and narrowing would strip the label off every title the chosen country has no entry for — which a rating ceiling then reads as unrated and blocks."
+          },
+          "metadata_language": {
+            "type": "string",
+            "description": "The language titles, synopses and taglines are fetched from TMDB in (ADR 0122), as a language-region tag. Never empty: the default reads back as `en-US`.\n\nWhere TMDB has no translation the English text fills the gap, and matching scores every name a candidate has, so English filenames keep matching. Takes effect on the next fetch; the `language` refresh scope rewrites what is stored, and is offered rather than started."
+          },
+          "metadata_languages": {
+            "type": "array",
+            "description": "The languages `metadata_language` may be set to. Served rather than known by the client, for the reason `certification_countries` is.",
+            "items": {
+              "type": "object",
+              "required": [
+                "code",
+                "name",
+                "native"
+              ],
+              "properties": {
+                "code": {
+                  "type": "string",
+                  "description": "A language-region tag, such as `de-DE`."
+                },
+                "name": {
+                  "type": "string",
+                  "description": "The language's name in English."
+                },
+                "native": {
+                  "type": "string",
+                  "description": "The language's name in itself."
+                }
+              }
+            }
           },
           "certification_countries": {
             "type": "array",
@@ -17622,6 +18314,9 @@
           "login_picker": {
             "type": "boolean"
           },
+          "member_pictures": {
+            "type": "boolean"
+          },
           "hardware_encoder": {
             "type": "string"
           },
@@ -17685,6 +18380,10 @@
           "certification_country": {
             "type": "string",
             "description": "Prefer this country's certificate. Must be one of the codes reported in `certification_countries`, or empty to return to the default order; anything else is rejected with 400 rather than stored and ignored.\n\nTakes effect on the next metadata fetch. It does **not** rewrite certificates already stored — a metadata refresh does that."
+          },
+          "metadata_language": {
+            "type": "string",
+            "description": "The metadata language. Must be one of the codes reported in `metadata_languages`; anything else is rejected with 400. `en-US` returns to the default.\n\nTakes effect on the next fetch. It does **not** rewrite what is stored — the `language` refresh scope does that."
           },
           "max_quality": {
             "type": "string",
@@ -18990,6 +19689,18 @@
           }
         }
       },
+      "PictureResponse": {
+        "type": "object",
+        "required": [
+          "picture"
+        ],
+        "properties": {
+          "picture": {
+            "type": "string",
+            "description": "The hash of the picture now stored."
+          }
+        }
+      },
       "Person": {
         "type": "object",
         "description": "Another account on this server. **The caller is excluded by design** — a row for yourself in a list of other people is noise — which is why your own sharing setting is read from `user.sharing` on `GET /api/auth/status` and not from here.",
@@ -18999,7 +19710,9 @@
           "role",
           "sharing",
           "watched",
-          "joined_at"
+          "joined_at",
+          "avatar",
+          "picture"
         ],
         "properties": {
           "id": {
@@ -19021,6 +19734,17 @@
           "joined_at": {
             "type": "integer",
             "format": "int64"
+          },
+          "avatar": {
+            "type": "string",
+            "description": "The drawn animal they chose, `\"\"` for none."
+          },
+          "picture": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The hash of the picture this account uploaded, or `null` for none (ADR 0121). Fetch it from `GET /api/pictures/{hash}`. When set it wins over `avatar`."
           }
         }
       },
@@ -19191,6 +19915,13 @@
           "max_content_rating": {
             "type": "string",
             "description": "The ceiling set for this account, **omitted when there is none**. Reported on the management view rather than on the account's own, because it is visible to whoever can change it."
+          },
+          "picture": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The hash of the picture this account uploaded, or `null` for none (ADR 0121). Fetch it from `GET /api/pictures/{hash}`. When set it wins over `avatar`."
           },
           "two_factor": {
             "type": "boolean",
@@ -20304,15 +21035,91 @@
           }
         }
       },
+      "ReadingDirection": {
+        "type": "object",
+        "description": "Which way a comic reads, and why (ADR 0123). Resolved by the server, so no client works out the precedence: the series' override, else the library's direction, else left to right.",
+        "required": [
+          "direction",
+          "direction_from",
+          "series"
+        ],
+        "properties": {
+          "direction": {
+            "type": "string",
+            "enum": [
+              "ltr",
+              "rtl"
+            ]
+          },
+          "direction_from": {
+            "type": "string",
+            "enum": [
+              "series",
+              "library",
+              "default"
+            ],
+            "description": "Where the direction came from. `default` is left to right because nothing was set."
+          },
+          "series": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The comic's series (its folder), or `null` for a comic at the library's root, which can only follow its library."
+          }
+        }
+      },
+      "SeriesDirectionRequest": {
+        "type": "object",
+        "required": [
+          "direction"
+        ],
+        "properties": {
+          "direction": {
+            "type": "string",
+            "enum": [
+              "ltr",
+              "rtl",
+              ""
+            ],
+            "description": "Empty removes the override, and the series reads its library's way again."
+          }
+        }
+      },
       "ComicPages": {
         "type": "object",
         "required": [
           "pages",
-          "place"
+          "place",
+          "direction",
+          "direction_from",
+          "series"
         ],
         "properties": {
           "pages": {
             "type": "integer"
+          },
+          "direction": {
+            "type": "string",
+            "enum": [
+              "ltr",
+              "rtl"
+            ],
+            "description": "Which way to read it (ADR 0123), resolved as `ReadingDirection` describes."
+          },
+          "direction_from": {
+            "type": "string",
+            "enum": [
+              "series",
+              "library",
+              "default"
+            ]
+          },
+          "series": {
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "place": {
             "oneOf": [
@@ -20624,6 +21431,131 @@
           "pre_migration": {
             "type": "boolean",
             "description": "Whether the server took it on its own, just before an update changed the database. Named with -schema<N>-premigrate before the extension, N being the revision it holds. The newest three are kept; older ones are deleted when the next is taken. Never counted toward backup_keep."
+          }
+        }
+      },
+      "StorageAnswer": {
+        "type": "object",
+        "required": [
+          "measuring",
+          "report"
+        ],
+        "properties": {
+          "measuring": {
+            "type": "boolean",
+            "description": "A measurement is running now; ask again for its result."
+          },
+          "report": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/StorageReport"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The last measurement, or `null` before the first has finished."
+          }
+        }
+      },
+      "StorageReport": {
+        "type": "object",
+        "required": [
+          "data_dir",
+          "parts",
+          "total_bytes",
+          "measured_at",
+          "took_ms",
+          "disk_free_bytes",
+          "disk_total_bytes"
+        ],
+        "properties": {
+          "data_dir": {
+            "type": "string"
+          },
+          "parts": {
+            "type": "array",
+            "description": "Every part, in a fixed order, `other` last. A part with nothing in it is reported at zero.",
+            "items": {
+              "$ref": "#/components/schemas/StoragePart"
+            }
+          },
+          "total_bytes": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "measured_at": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Unix seconds."
+          },
+          "took_ms": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "disk_free_bytes": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Free space on the drive holding the data folder; 0 where the system would not say."
+          },
+          "disk_total_bytes": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "partial": {
+            "type": "boolean",
+            "description": "The walk was stopped before it finished, so the numbers are a lower bound."
+          }
+        }
+      },
+      "StoragePart": {
+        "type": "object",
+        "required": [
+          "id",
+          "path",
+          "bytes",
+          "files"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "**An open set.** `database`, `artwork`, `previews`, `optimized`, `backups`, `transcode`, `subtitles`, `models`, `saves`, `downloads`, `logs` and `other` today."
+          },
+          "path": {
+            "type": "string",
+            "description": "The part's folder, or the data folder for a part made of several entries."
+          },
+          "bytes": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "files": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "outside": {
+            "type": "boolean",
+            "description": "The folder is not inside the data folder and may be on another drive."
+          },
+          "largest": {
+            "type": "array",
+            "description": "`other` only: its five largest top-level entries, biggest first.",
+            "items": {
+              "type": "object",
+              "required": [
+                "name",
+                "bytes"
+              ],
+              "properties": {
+                "name": {
+                  "type": "string"
+                },
+                "bytes": {
+                  "type": "integer",
+                  "format": "int64"
+                }
+              }
+            }
           }
         }
       },
@@ -23965,6 +24897,193 @@
           "current": {
             "type": "boolean",
             "description": "This is the device asking."
+          }
+        }
+      },
+      "HomePreferences": {
+        "type": "object",
+        "required": [
+          "account",
+          "spotlight",
+          "spotlight_item",
+          "spoilers",
+          "hidden_shelves"
+        ],
+        "properties": {
+          "account": {
+            "type": "boolean",
+            "description": "False on a server with no accounts yet, where the client keeps these choices on the device."
+          },
+          "spotlight": {
+            "type": "string",
+            "nullable": true,
+            "enum": [
+              "continue",
+              "recent",
+              "recommended",
+              "pinned"
+            ],
+            "description": "What the homepage spotlight shows. Null: never chosen, which shows `continue`."
+          },
+          "spotlight_item": {
+            "type": "integer",
+            "format": "int64",
+            "nullable": true,
+            "description": "The title pinned to the spotlight for `pinned`; 0 is none. Null: never chosen."
+          },
+          "spoilers": {
+            "type": "string",
+            "nullable": true,
+            "enum": [
+              "show",
+              "synopsis",
+              "all"
+            ],
+            "description": "How much a season page hides on an episode nobody has started. Null: never chosen, which hides the synopsis."
+          },
+          "hidden_shelves": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Built-in Home shelves turned off: `new`, `rate`, `watchlist`, or `unwatched:<library id>`. Pinned shelves are separate (`/home/shelves`)."
+          }
+        }
+      },
+      "HomePreferencesUpdate": {
+        "type": "object",
+        "description": "A change to the caller's Home preferences. Every field is optional; at least one is required.",
+        "properties": {
+          "spotlight": {
+            "type": "string",
+            "enum": [
+              "continue",
+              "recent",
+              "recommended",
+              "pinned"
+            ]
+          },
+          "spotlight_item": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "spoilers": {
+            "type": "string",
+            "enum": [
+              "show",
+              "synopsis",
+              "all"
+            ]
+          },
+          "hidden_shelves": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Replaces the whole list."
+          }
+        }
+      },
+      "ReadingPreferences": {
+        "type": "object",
+        "required": [
+          "account",
+          "book_speed",
+          "book_sleep",
+          "comic_layout",
+          "comic_fit"
+        ],
+        "properties": {
+          "account": {
+            "type": "boolean",
+            "description": "False on a server with no accounts yet."
+          },
+          "book_speed": {
+            "type": "number",
+            "nullable": true,
+            "enum": [
+              0.75,
+              1,
+              1.25,
+              1.5,
+              1.75,
+              2
+            ],
+            "description": "The speed a book starts at until it has a speed of its own, which then wins. Null: never chosen, which is 1x."
+          },
+          "book_sleep": {
+            "type": "string",
+            "nullable": true,
+            "enum": [
+              "off",
+              "15",
+              "30",
+              "45",
+              "60",
+              "chapter"
+            ],
+            "description": "A sleep timer set when a book starts: minutes, the end of the chapter, or off. The book player can change or clear it. Null: never chosen, which is off."
+          },
+          "comic_layout": {
+            "type": "string",
+            "nullable": true,
+            "enum": [
+              "single",
+              "spread"
+            ],
+            "description": "How a comic is shown: a page at a time, or two facing pages with the cover alone. Null: never chosen, which is single."
+          },
+          "comic_fit": {
+            "type": "string",
+            "nullable": true,
+            "enum": [
+              "page",
+              "width"
+            ],
+            "description": "How a comic page is sized: the whole page on screen, or the width of the screen, scrolled down. Null: never chosen, which is page."
+          }
+        }
+      },
+      "ReadingPreferencesUpdate": {
+        "type": "object",
+        "description": "A change to the caller's reading and listening defaults. Every field is optional; at least one is required.",
+        "properties": {
+          "book_speed": {
+            "type": "number",
+            "enum": [
+              0.75,
+              1,
+              1.25,
+              1.5,
+              1.75,
+              2
+            ]
+          },
+          "book_sleep": {
+            "type": "string",
+            "enum": [
+              "off",
+              "15",
+              "30",
+              "45",
+              "60",
+              "chapter"
+            ]
+          },
+          "comic_layout": {
+            "type": "string",
+            "enum": [
+              "single",
+              "spread"
+            ]
+          },
+          "comic_fit": {
+            "type": "string",
+            "enum": [
+              "page",
+              "width"
+            ]
           }
         }
       },

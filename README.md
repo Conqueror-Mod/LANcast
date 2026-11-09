@@ -4,7 +4,7 @@ A self-hosted media server and library service. Plex's streamlined
 functionality, Kodi's customizability and versatility, and neither one's
 compromises.
 
-> **Status: v0.10.10 · M0–M4 built and released.** Point it at a folder and it
+> **Status: v0.10.11 · M0–M4 built and released.** Point it at a folder and it
 > scans, identifies, and plays — direct play, remux, or transcode, with working
 > seek and resume and hardware encoding. Films, TV, **music**, **pictures**,
 > **comics** and **audiobooks** are all first-class. Real metadata, artwork, ratings, subtitles,
@@ -281,7 +281,7 @@ a change to the installer itself needs the installer.
 | [docs/privacy.md](docs/privacy.md) | Everything LANcast sends beyond your network, to whom, and when |
 | [docs/cores.md](docs/cores.md) | Every emulator core, its licence and its source |
 | [docs/roadmap.md](docs/roadmap.md) | Every release, every area's status, and what each pass taught |
-| [docs/adr/](docs/adr/) | 120 decision records — why things are the way they are |
+| [docs/adr/](docs/adr/) | 123 decision records — why things are the way they are |
 
 The `*-plan.md` files in `docs/` are the plans particular areas were built
 from. They are kept as written rather than revised, so they record what was

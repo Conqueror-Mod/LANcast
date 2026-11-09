@@ -1,6 +1,8 @@
 import { usePlayback } from "@/playback/PlaybackProvider";
 import { useTogetherRoom } from "@/playback/TogetherProvider";
 import { OpenSessions } from "@/components/OpenSessions";
+import { PersonPicture } from "@/components/Avatar";
+import { usePersonLook } from "@/api/hooks";
 import "./TogetherPanel.css";
 
 /*
@@ -22,6 +24,7 @@ export function TogetherPanel({ onClose }: { onClose: () => void }) {
   const t = useTogetherRoom();
 
   const members = t.session?.members ?? [];
+  const lookOf = usePersonLook();
 
   return (
     <div className="together" role="dialog" aria-label="Watch together">
@@ -71,6 +74,11 @@ export function TogetherPanel({ onClose }: { onClose: () => void }) {
           <ul className="together__members">
             {members.map((m) => (
               <li className="together__member" key={m.user_id}>
+                {/* Somebody from a paired server gets initials: pictures do
+                    not cross servers (ADR 0121 §4), and their id is another
+                    server's, so looking it up here could find the wrong
+                    person. */}
+                <PersonPicture name={m.name} size={22} {...(m.server ? {} : lookOf(m.user_id))} />
                 <span className="together__name">{m.name}</span>
                 {/* Where a friend from a paired server is watching from, so a
                     stranger's name in the list is never a mystery. */}

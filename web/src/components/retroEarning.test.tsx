@@ -7,7 +7,8 @@ import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { RetroAchievementsCard } from "./RetroAchievementsCard";
+import { MemoryRouter } from "react-router-dom";
+import { RetroAchievementsConnection } from "./RetroAchievementsCard";
 
 declare global {
   // eslint-disable-next-line no-var
@@ -81,7 +82,10 @@ async function render() {
   await act(async () => {
     root.render(
       <QueryClientProvider client={client}>
-        <RetroAchievementsCard />
+        <MemoryRouter>
+          {/* Earning is turned on in Settings › Connected accounts (settings-3-plan step 4). */}
+          <RetroAchievementsConnection />
+        </MemoryRouter>
       </QueryClientProvider>,
     );
   });
