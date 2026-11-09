@@ -7021,6 +7021,12 @@ export interface components {
              *     **Absent must read as capable.** A client older than the server, or a server older than the client, may not see this field; assuming otherwise puts a warning in front of somebody whose playback works.
              */
             can_convert: boolean;
+            /**
+             * @description Whether live TV is on. Off unless `"live_tv": true` is in the server's `config.json`, which nothing in the app sets: live TV is parked work that 1.0 does not offer. While `false`, every channel, guide and channel-source route answers `409` `live_tv_off`, and a client leaves Live TV out entirely, for members too.
+             *
+             *     **Absent must read as on**: a server older than this field always had it on.
+             */
+            live_tv: boolean;
             /** @description Present only when a session is active. */
             user?: components["schemas"]["User"];
             passkeys?: components["schemas"]["PasskeyAvailability"];
