@@ -2,7 +2,7 @@ import { TrayBridge } from "./TrayBridge";
 import { SubtitleStyleSync } from "./SubtitleStyleSync";
 import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import { PeerLibraryLinks } from "@/components/PeerLibraryLinks";
-import { AvatarGlyph } from "@/components/Avatar";
+import { PersonPicture } from "@/components/Avatar";
 import { useBigscreen, useBigscreenShortcut } from "@/lib/bigscreen";
 import { matchesBinding, bindingLabel, useBindings } from "@/lib/keys";
 import {
@@ -431,8 +431,16 @@ export function AppShell({ children }: { children: ReactNode }) {
                     (isActive ? " is-active" : "")
                   }
                 >
-                  {/* The picture the account chose on its profile, if any. */}
-                  <AvatarGlyph avatar={user.avatar} />
+                  {/* Their picture, else the animal they chose, else the
+                      person glyph (ADR 0121). */}
+                  <PersonPicture
+                    name={user.name}
+                    picture={user.picture}
+                    avatar={user.avatar}
+                    size={18}
+                    fallback="glyph"
+                    className="rail-icon"
+                  />
                   <span className="app-shell__lib-name app-shell__label">
                     {user.name}
                   </span>

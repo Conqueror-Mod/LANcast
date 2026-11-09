@@ -225,8 +225,8 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 64px;
-  height: 64px;
+  width: 46px;
+  height: 46px;
   border-radius: var(--radius-panel);
   border: 1px solid var(--gold-dormant);
   background: var(--space-raised);
@@ -382,4 +382,48 @@
 
 a.profile__page {
   text-decoration: none;
+}
+
+/* You, large, with what you can do to it beside you. */
+.profile__me {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.profile__meactions {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.profile__mebtn {
+  padding: 8px 14px;
+  border-radius: var(--radius-tile, 8px);
+  border: 1px solid var(--gold-dormant);
+  background: var(--space-raised);
+  color: var(--text-primary);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.profile__mebtn--quiet {
+  border-color: transparent;
+  background: transparent;
+  color: var(--text-secondary);
+}
+
+.profile__mebtn:hover:not(:disabled),
+.profile__mebtn:focus-visible {
+  outline: none;
+  border-color: var(--gold);
+  box-shadow: 0 0 0 3px var(--gold-ring);
+  color: var(--text-primary);
+}
+
+.profile__orlabel {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-top: 4px;
 }

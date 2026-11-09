@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import {
   useQuery,
   useInfiniteQuery,
@@ -139,8 +139,71 @@ export function useSetAvatar() {
   return useMutation({
     mutationFn: (avatar: string) =>
       apiSend("/api/profile/avatar", "PUT", { avatar }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["auth-status"] }),
+    // Other people see the animal too now (People, a room), so the same lists
+    // as a picture.
+    onSuccess: () => invalidatePictures(qc),
   });
+}
+
+/*
+ * Pictures (ADR 0121).
+ *
+ * A picture is drawn wherever a person is: the rail (auth-status), People
+ * (people), the Users pane (users), and a Watch Together room, which reads
+ * the first two. So a change invalidates all three. Each is a top-level key,
+ * not a child of another, so this list is the whole of it.
+ */
+const PICTURE_KEYS = [["auth-status"], ["people"], ["users"]] as const;
+
+function invalidatePictures(qc: QueryClient) {
+  return Promise.all(PICTURE_KEYS.map((queryKey) => qc.invalidateQueries({ queryKey })));
+}
+
+/** Upload your own picture: the cropped square, as an image file. */
+export function useUploadPicture() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (image: Blob) =>
+      apiUpload<{ picture: string }>("/api/profile/picture", await image.arrayBuffer(), "PUT"),
+    onSuccess: () => invalidatePictures(qc),
+  });
+}
+
+/** Clear your own picture; your animal, if any, shows again. */
+export function useClearPicture() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => apiSend("/api/profile/picture", "DELETE"),
+    onSuccess: () => invalidatePictures(qc),
+  });
+}
+
+/** An administrator clearing somebody's picture (ADR 0121 §5). */
+export function useClearUserPicture() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) =>
+      apiSend(`/api/users/${encodeURIComponent(id)}/picture`, "DELETE"),
+    onSuccess: () => invalidatePictures(qc),
+  });
+}
+
+/*
+ * What to draw for an account id, from what this client already holds: you,
+ * from auth-status, and everybody else from People. Somebody from a paired
+ * server is in neither and gets initials, which is the rule (ADR 0121 §4).
+ */
+export function usePersonLook(): (id: string) => { picture?: string | null; avatar?: string } {
+  const me = useCurrentUser();
+  const { data } = usePeople(!!me);
+  return useCallback(
+    (id: string) => {
+      if (me && id === me.id) return { picture: me.picture, avatar: me.avatar };
+      const p = data?.people.find((x) => x.id === id);
+      return p ? { picture: p.picture, avatar: p.avatar } : {};
+    },
+    [me, data],
+  );
 }
 
 export function useIsAdmin(): boolean {
@@ -4424,12 +4487,13 @@ export function useChannelSchedule(channelID: number | null, hours = 12) {
 
 // -------------------------------------------------------------- people
 
-export function usePeople() {
+export function usePeople(enabled = true) {
   return useQuery({
     queryKey: ["people"],
     queryFn: ({ signal }) =>
       apiGet<{ people: Person[] }>("/api/people", signal),
     staleTime: 60_000,
+    enabled,
   });
 }
 

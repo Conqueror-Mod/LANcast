@@ -2,6 +2,7 @@ import { RetroAchievementsCard } from "@/components/RetroAchievementsCard";
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import {
+  useClearPicture,
   useCurrentUser,
   useMarkedItems,
   useMyRatings,
@@ -10,7 +11,8 @@ import {
   useTags,
 } from "@/api/hooks";
 import { Shelf } from "@/components/Shelf";
-import { AVATARS, AvatarGlyph } from "@/components/Avatar";
+import { AVATARS, AvatarGlyph, PersonPicture } from "@/components/Avatar";
+import { PictureEditor } from "@/components/PictureEditor";
 import { YearInReview } from "@/components/YearInReview";
 import { artworkURL } from "@/api/client";
 import { runtime, episodeCode } from "@/lib/format";
@@ -239,24 +241,53 @@ function HistoryRow({ entry }: { entry: HistoryEntry }) {
 }
 
 /*
- * Which picture sits beside your name in the rail.
+ * Your picture: one you upload (ADR 0121), or one of the six drawn animals.
  *
- * Six drawn animals and nothing else — the server stores a key, not an image
- * (PUT /api/profile/avatar). Pressing the chosen one again clears it, back to
- * the plain person glyph, so there is no separate "none" to find.
+ * The upload wins wherever you are drawn; removing it brings the animal back.
+ * Pressing the chosen animal again clears it, so there is no separate "none".
  *
- * Gold marks the chosen one, and that is the design rule working rather than
- * bending: it is *where you are* in this set, the same thing a selected rail
- * row says.
+ * Gold marks the chosen animal, and that is the design rule working rather
+ * than bending: it is *where you are* in this set, the same thing a selected
+ * rail row says.
  */
 function AvatarPicker() {
   const user = useCurrentUser();
   const setAvatar = useSetAvatar();
+  const clearPicture = useClearPicture();
+  const [editing, setEditing] = useState(false);
   const current = setAvatar.isPending ? setAvatar.variables : (user?.avatar ?? "");
+  const picture = user?.picture ?? null;
   return (
     <section className="profile__avatars" aria-label="Your picture">
       <span className="section-label">Your picture</span>
-      <div className="profile__avatarrow" role="group" aria-label="Choose a picture">
+      <div className="profile__me">
+        <PersonPicture
+          name={user?.name ?? ""}
+          picture={picture}
+          avatar={current}
+          size={96}
+          className="profile__mepic"
+        />
+        <div className="profile__meactions">
+          <button type="button" className="profile__mebtn" onClick={() => setEditing(true)}>
+            {picture ? "Change picture" : "Upload a picture"}
+          </button>
+          {picture && (
+            <button
+              type="button"
+              className="profile__mebtn profile__mebtn--quiet"
+              disabled={clearPicture.isPending}
+              onClick={() => clearPicture.mutate()}
+            >
+              Remove picture
+            </button>
+          )}
+        </div>
+      </div>
+      <span className="profile__orlabel">
+        {picture ? "Shown when you have no picture" : "Or choose one of these"}
+      </span>
+      <div className="profile__avatarrow" role="group" aria-label="Choose a drawn picture">
         {AVATARS.map((a) => {
           const on = current === a.key;
           return (
@@ -270,14 +301,15 @@ function AvatarPicker() {
               disabled={setAvatar.isPending}
               onClick={() => setAvatar.mutate(on ? "" : a.key)}
             >
-              <AvatarGlyph avatar={a.key} size={34} />
+              <AvatarGlyph avatar={a.key} size={26} />
             </button>
           );
         })}
       </div>
-      {setAvatar.isError && (
+      {(setAvatar.isError || clearPicture.isError) && (
         <p className="profile__avatarerr">That picture could not be saved.</p>
       )}
+      {editing && <PictureEditor onClose={() => setEditing(false)} />}
     </section>
   );
 }

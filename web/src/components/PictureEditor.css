@@ -1,0 +1,102 @@
+.picdlg {
+  max-width: 340px;
+}
+
+/* The square that will be kept. The image moves under it; the ring shows the
+   circle drawn beside your name, and darkens the corners outside it. */
+.picdlg__frame {
+  position: relative;
+  margin: 4px auto 12px;
+  overflow: hidden;
+  border-radius: var(--radius-tile, 8px);
+  background: var(--space-deep);
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+  outline: 1px solid var(--gold-dormant);
+}
+
+.picdlg__frame:active {
+  cursor: grabbing;
+}
+
+.picdlg__frame:focus-visible {
+  outline: 2px solid var(--gold);
+  outline-offset: 2px;
+}
+
+.picdlg__img {
+  position: absolute;
+  max-width: none;
+  pointer-events: none;
+}
+
+.picdlg__ring {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  box-shadow: 0 0 0 999px rgba(3, 5, 12, 0.55);
+  pointer-events: none;
+}
+
+.picdlg__zoom {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+  color: var(--text-secondary);
+  margin-bottom: 12px;
+}
+
+.picdlg__zoom input {
+  flex: 1;
+}
+
+.picdlg__hint {
+  margin: 0 0 12px;
+  font-size: 13px;
+}
+
+.picdlg__actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 6px;
+}
+
+.picdlg__actions > * {
+  flex: 1 1 0;
+}
+
+.picdlg__choose,
+.picdlg__save {
+  padding: 9px;
+  border-radius: var(--radius-tile, 8px);
+  font-size: 13px;
+  cursor: pointer;
+  color: var(--text-primary);
+}
+
+.picdlg__choose {
+  border: 1px solid var(--border, rgba(255, 255, 255, 0.12));
+  background: transparent;
+}
+
+.picdlg__save {
+  border: 1px solid var(--gold-dormant);
+  background: rgba(18, 26, 54, 0.82);
+  font-weight: 600;
+}
+
+.picdlg__choose:hover:not(:disabled),
+.picdlg__choose:focus-visible,
+.picdlg__save:hover:not(:disabled),
+.picdlg__save:focus-visible {
+  border-color: var(--gold);
+  box-shadow: 0 0 0 3px var(--gold-ring);
+}
+
+.picdlg__choose:disabled,
+.picdlg__save:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
