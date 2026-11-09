@@ -1,5 +1,4 @@
 import { useState } from "react";
-import { useItem } from "@/api/hooks";
 import {
   capabilities,
   claimable,
@@ -11,9 +10,7 @@ import {
 } from "@/playback/capabilities";
 import { forgetHLS, hlsRecord } from "@/playback/fileTransport";
 import { useBigscreen } from "@/lib/bigscreen";
-import { useSpoilerMode, type SpoilerMode } from "@/lib/spoilers";
 import { useLiveTransport } from "@/lib/liveTransport";
-import { useHeroMode, usePinnedHero, type HeroMode } from "@/lib/heroMode";
 
 /*
  * Display — the device's own view of the app.
@@ -22,92 +19,13 @@ import { useHeroMode, usePinnedHero, type HeroMode } from "@/lib/heroMode";
  * choice: "make everything larger because I am ten feet away" is a fact about
  * the room this device is in. Syncing it would shrink the phone in somebody's
  * hand because the television downstairs is a television.
- */
-/*
- * What the homepage spotlight shows.
  *
- * A device setting, beside bigscreen and spoilers and for the same reason: the
- * hero is what one person sees on one screen, and there is no per-user
- * preference store on the server to put it in.
- *
- * The pinned item is chosen from the item itself rather than here — "Pin to
- * homepage" is a thing you think while looking at a film, not while reading a
- * settings page — so this offers the mode and a way out of it, and says which
- * item is pinned rather than making you go and look.
+ * The spotlight and spoilers lived here too until settings-3-plan step 3, for
+ * want of anywhere per account to put them. They are on Your account › Home now
+ * (ADR 0120).
  */
-function HeroSection() {
-  const [mode, setMode] = useHeroMode();
-  const [pinnedID, setPinned] = usePinnedHero();
-  const { data: pinnedItem } = useItem(pinnedID);
-
-  return (
-    <section className="settings__section">
-      <span className="section-label">Homepage</span>
-      <div className="set-row">
-        <div className="set-row__main">
-          <div className="set-row__title">Spotlight</div>
-          <div className="set-row__sub">
-            What the big panel at the top of the home page shows. Whatever it
-            is set to, an item with no backdrop is never chosen and a mode with
-            nothing to show falls back to the next rather than leaving the
-            panel empty. Applies on this device only.
-          </div>
-        </div>
-        <div className="set-row__actions">
-          <select
-            className="set-input"
-            aria-label="Homepage spotlight"
-            value={mode}
-            onChange={(e) => setMode(e.target.value as HeroMode)}
-          >
-            <option value="continue">Continue watching</option>
-            <option value="recent">Recently added</option>
-            <option value="recommended">Suggested</option>
-            <option value="pinned">A film I pick</option>
-          </select>
-        </div>
-      </div>
-
-      {mode === "recommended" && (
-        // Said plainly, because the alternative is letting somebody believe
-        // there is a recommender here. There is not, and there is not going to
-        // be one that phones home.
-        <p className="set-row__sub">
-          Suggestions come from what you are part-way through: something
-          unwatched from the same library sharing a genre with it. Nothing is
-          sent anywhere, and the spotlight always says which film a suggestion
-          came from.
-        </p>
-      )}
-
-      {mode === "pinned" && (
-        <div className="set-row">
-          <div className="set-row__main">
-            <div className="set-row__title">
-              {pinnedItem ? pinnedItem.title : "Nothing pinned yet"}
-            </div>
-            <div className="set-row__sub">
-              {pinnedItem
-                ? "Pinned to the spotlight on this device."
-                : "Open a film or a show and choose Pin to homepage. Until then the spotlight carries on as Continue watching."}
-            </div>
-          </div>
-          {pinnedID > 0 && (
-            <div className="set-row__actions">
-              <button className="set-btn" onClick={() => setPinned(0)}>
-                Unpin
-              </button>
-            </div>
-          )}
-        </div>
-      )}
-    </section>
-  );
-}
-
 function DisplaySection() {
   const [bigscreen, setBigscreen] = useBigscreen();
-  const [spoilers, setSpoilers] = useSpoilerMode();
   const [liveTransport, setLiveTransport] = useLiveTransport();
 
   return (
@@ -162,35 +80,6 @@ function DisplaySection() {
         </span>
       </label>
 
-      {/*
-       * Spoilers, in the device pane for the same reason bigscreen is: there is
-       * no per-user preference store on the server, and inventing one for a
-       * checkbox would be a schema decision made by a checkbox. Somebody who
-       * watches on two machines sets it twice, which is honest and small.
-       */}
-      <label className="set-row set-row--stacked">
-        <div className="set-row__main">
-          <div className="set-row__title">Spoilers on a season page</div>
-          <div className="set-row__sub">
-            An episode's synopsis is written as a summary, not a tease, so the
-            next one down the list can give away what you were about to watch.
-            This applies only to episodes you have not started — two minutes in,
-            you have already met whatever the first scene gives away.
-          </div>
-        </div>
-        <div className="set-row__actions">
-          <select
-            className="set-input"
-            value={spoilers}
-            onChange={(e) => setSpoilers(e.target.value as SpoilerMode)}
-            aria-label="Spoilers on a season page"
-          >
-            <option value="synopsis">Hide the synopsis</option>
-            <option value="all">Hide the synopsis and the still</option>
-            <option value="show">Show everything</option>
-          </select>
-        </div>
-      </label>
     </section>
   );
 }
@@ -365,7 +254,6 @@ export function DisplayPane() {
   return (
     <>
       <DisplaySection />
-      <HeroSection />
       {/* On the device pane rather than the admin Playback one: a
           denial is stored per browser, so the person it slows down is
           the one sitting here, who may not be an administrator. */}

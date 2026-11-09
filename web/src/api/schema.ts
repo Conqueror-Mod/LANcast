@@ -5119,6 +5119,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/profile/home": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The caller's Home preferences
+         * @description What the caller has chosen about their Home page (ADR 0120): the spotlight, spoilers on a season page, and built-in shelves turned off. A null field has never been chosen; the client shows its default, and a device holding an older choice of its own carries it over once. On a server with no accounts, `account` is false and every field is null.
+         */
+        get: operations["getHomePreferences"];
+        /**
+         * Set the caller's Home preferences
+         * @description Each field is optional and a field left out is left alone; at least one is required. `hidden_shelves`, when sent, replaces the whole list. Acts on the session only. Not audited.
+         */
+        put: operations["setHomePreferences"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/profile/sessions": {
         parameters: {
             query?: never;
@@ -10056,6 +10080,38 @@ export interface components {
             last_seen: number;
             /** @description This is the device asking. */
             current: boolean;
+        };
+        HomePreferences: {
+            /** @description False on a server with no accounts yet, where the client keeps these choices on the device. */
+            account: boolean;
+            /**
+             * @description What the homepage spotlight shows. Null: never chosen, which shows `continue`.
+             * @enum {string|null}
+             */
+            spotlight: "continue" | "recent" | "recommended" | "pinned" | null;
+            /**
+             * Format: int64
+             * @description The title pinned to the spotlight for `pinned`; 0 is none. Null: never chosen.
+             */
+            spotlight_item: number | null;
+            /**
+             * @description How much a season page hides on an episode nobody has started. Null: never chosen, which hides the synopsis.
+             * @enum {string|null}
+             */
+            spoilers: "show" | "synopsis" | "all" | null;
+            /** @description Built-in Home shelves turned off: `new`, `rate`, `watchlist`, or `unwatched:<library id>`. Pinned shelves are separate (`/home/shelves`). */
+            hidden_shelves: string[];
+        };
+        /** @description A change to the caller's Home preferences. Every field is optional; at least one is required. */
+        HomePreferencesUpdate: {
+            /** @enum {string} */
+            spotlight?: "continue" | "recent" | "recommended" | "pinned";
+            /** Format: int64 */
+            spotlight_item?: number;
+            /** @enum {string} */
+            spoilers?: "show" | "synopsis" | "all";
+            /** @description Replaces the whole list. */
+            hidden_shelves?: string[];
         };
         /** @description Answered with every field. On PUT each field is optional, and a field left out is left alone; at least one is required. */
         PlaybackPreferences: {
@@ -19056,6 +19112,64 @@ export interface operations {
                 content?: never;
             };
             /** @description This server has no accounts yet. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    getHomePreferences: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The caller's Home preferences. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HomePreferences"];
+                };
+            };
+        };
+    };
+    setHomePreferences: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["HomePreferencesUpdate"];
+            };
+        };
+        responses: {
+            /** @description Saved; the preferences as stored. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HomePreferences"];
+                };
+            };
+            /** @description No field sent, or a value Home cannot use: `bad_spotlight`, `bad_spotlight_item`, `bad_spoilers`, `bad_hidden_shelves` (including an Unwatched key naming no library). */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description This server has no accounts yet (`no_account`). */
             409: {
                 headers: {
                     [name: string]: unknown;

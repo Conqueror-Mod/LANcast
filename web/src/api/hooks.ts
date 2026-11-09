@@ -4029,11 +4029,12 @@ export function useAfterwards(itemID: number) {
   });
 }
 
-export function useToRate() {
+export function useToRate(enabled = true) {
   return useQuery({
     queryKey: ["to-rate"],
     queryFn: ({ signal }) =>
       apiGet<{ items: Item[] }>("/api/profile/ratings/pending", signal),
+    enabled,
   });
 }
 

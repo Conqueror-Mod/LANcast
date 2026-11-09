@@ -25,6 +25,7 @@ import { HomeHero } from "@/components/HomeHero";
 import { ResumeConsole } from "@/components/ResumeConsole";
 import { NewThisWeek } from "@/components/NewThisWeek";
 import { PinnedShelves } from "@/components/PinnedShelves";
+import { unwatchedShelfLibraries, useHomePrefs } from "@/lib/homePrefs";
 import { FriendsPanel, MemoryPanel, showFriends } from "@/components/BridgePanels";
 import { collectionsMenu } from "@/lib/collectionsMenu";
 import { HomeMasthead } from "@/components/HomeMasthead";
@@ -128,8 +129,16 @@ export function Home() {
   // One shuffle per visit to the page; see UnwatchedShelf.
   const [seed] = useState(() => Math.floor(Math.random() * 2 ** 31));
   // Film and show libraries: music and pictures have nothing to leave unwatched.
-  const unwatchedLibraries = (libraries ?? []).filter(
-    (l) => l.kind === "movie" || l.kind === "show",
+  /*
+   * Built-in shelves you turned off (Your account › Home, ADR 0120). Until the
+   * answer arrives every shelf is drawn, as before the setting existed: a
+   * shelf that blinks in is better than a page that waits on a preference.
+   */
+  const { data: homePrefs, isPending: prefsPending } = useHomePrefs();
+  const hidden = new Set(homePrefs?.hidden_shelves ?? []);
+  const allUnwatched = unwatchedShelfLibraries(libraries);
+  const unwatchedLibraries = allUnwatched.filter(
+    (l) => !hidden.has(`unwatched:${l.id}`),
   );
 
   const navigate = useNavigate();
@@ -187,8 +196,10 @@ export function Home() {
   const { data: peerPresence } = usePeerPresence();
   const friendsShown = showFriends(peerPresence?.peers, admin);
 
-  const { data: watchlist } = useWatchlist();
-  const { data: toRate } = useToRate();
+  // A shelf turned off costs no request, so these two wait to hear whether
+  // they are wanted. A failed answer counts as heard: every shelf is drawn.
+  const { data: watchlist } = useWatchlist(!prefsPending && !hidden.has("watchlist"));
+  const { data: toRate } = useToRate(!prefsPending && !hidden.has("rate"));
 
   const hasAnything =
     (continueWatching?.length ?? 0) > 0 ||
@@ -256,7 +267,7 @@ export function Home() {
         {/* What arrived in the last seven days, and nothing older (ADR 0118):
             first under the spotlight. A quiet week draws nothing here, which
             is what lets Rate what you've watched lead instead. */}
-        <NewThisWeek
+        {!hidden.has("new") && <NewThisWeek
           rows={{
             video: recentVideo,
             music: recentAudio,
@@ -265,17 +276,19 @@ export function Home() {
             games: recentGames,
             photos: recentPictures,
           }}
-        />
+        />}
         {/* What you finished lately and have not rated. Rating one takes it
             off; an empty list is no shelf. */}
-        <Shelf
-          title="Rate what you've watched"
-          items={toRate?.items ?? []}
-          itemFooter={(item) => <QuickRate item={item} />}
-        />
+        {!hidden.has("rate") && (
+          <Shelf
+            title="Rate what you've watched"
+            items={toRate?.items ?? []}
+            itemFooter={(item) => <QuickRate item={item} />}
+          />
+        )}
         {/* What you meant to watch (ADR 0085). Newest first, and empty means
             no shelf. */}
-        <Shelf title="Watchlist" items={watchlistItems(watchlist)} />
+        {!hidden.has("watchlist") && <Shelf title="Watchlist" items={watchlistItems(watchlist)} />}
         {/* The views you pinned from a library grid, in your order (ADR 0119 §2). */}
         <PinnedShelves libraries={libraries} />
         {unwatchedLibraries.map((lib) => (
@@ -283,7 +296,9 @@ export function Home() {
             key={lib.id}
             library={lib}
             seed={seed}
-            named={unwatchedLibraries.length > 1}
+            // Named whenever there are two to tell apart, shown or not: with
+            // TV Shows turned off, a bare "Unwatched" would not say which.
+            named={allUnwatched.length > 1}
             hide={hero?.item.id}
           />
         ))}

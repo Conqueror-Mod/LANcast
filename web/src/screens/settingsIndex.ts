@@ -89,6 +89,8 @@ export const SERVER_PANES: Pane[] = [
 
 export const ACCOUNT_PANES: Pane[] = [
   { id: "profile", label: "Profile" },
+  // What you see on Home, kept on the account (settings-3-plan step 3).
+  { id: "home", label: "Home" },
   { id: "security", label: "Security" },
   { id: "languages", label: "Languages & subtitles" },
   { id: "privacy", label: "Privacy" },
@@ -105,7 +107,7 @@ export const DEVICE_PANES: Pane[] = [
   { id: "theater", label: "Theater output" },
   // Not "remote", which is Remote access: this is your devices playing here.
   { id: "remoteplay", label: "Remote play" },
-  { id: "display", label: "Display & home" },
+  { id: "display", label: "Display" },
   { id: "keyboard", label: "Keyboard" },
   { id: "app", label: "This app" },
   /*
@@ -209,6 +211,10 @@ export const SETTINGS_INDEX: SettingEntry[] = [
 
   // Your account
   { pane: "profile", label: "Display name", terms: "rename name" },
+  { pane: "home", label: "Spotlight", terms: "hero homepage banner pin" },
+  { pane: "home", label: "Spoilers on a season page", terms: "hide synopsis still" },
+  { pane: "home", label: "Shelves on Home", terms: "hide shelf new this week watchlist rate unwatched" },
+  { pane: "home", label: "Pinned shelves", terms: "reorder move unpin shelf" },
   { pane: "security", label: "Passkeys", terms: "webauthn fingerprint face id sign in" },
   { pane: "security", label: "Two-factor sign-in", terms: "2fa totp authenticator mfa" },
   { pane: "security", label: "API keys", terms: "token bearer script" },
@@ -245,8 +251,6 @@ export const SETTINGS_INDEX: SettingEntry[] = [
   { pane: "theater", label: "Match the display to the film's frame rate", terms: "refresh rate 23.976 hz judder" },
   { pane: "display", label: "Bigscreen mode", terms: "tv ten foot scale" },
   { pane: "display", label: "Improved live TV playback", terms: "hls segmented" },
-  { pane: "display", label: "Spoilers on a season page", terms: "hide synopsis still" },
-  { pane: "display", label: "Spotlight", terms: "hero homepage banner pin" },
   { pane: "keyboard", label: "Keyboard", terms: "shortcuts hotkeys keys bindings" },
   { pane: "app", label: "Start LANcast at login", terms: "startup boot tray" },
   { pane: "app", label: "Developer tools", terms: "devtools inspector" },

@@ -75,3 +75,28 @@ export function useDevice<T>(key: string, fallback: T): [T, (v: T) => void] {
   );
   return [value, (v: T) => writeDevice(key, v)];
 }
+
+/**
+ * Forget a device setting: readers go back to their fallback.
+ *
+ * For a setting that has moved to the account (ADR 0120). Once the account
+ * holds it, a copy left here would be a second answer to the same question.
+ */
+export function forgetDevice(key: string): void {
+  cache.delete(key);
+  try {
+    localStorage.removeItem(key);
+  } catch {
+    // Nothing stored is the state being asked for.
+  }
+  notify(key);
+}
+
+/** Whether this device has ever stored a value under key. */
+export function hasDevice(key: string): boolean {
+  try {
+    return localStorage.getItem(key) !== null;
+  } catch {
+    return false;
+  }
+}
