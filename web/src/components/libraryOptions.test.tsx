@@ -23,7 +23,7 @@ let calls: { method: string; url: string; body?: Record<string, unknown> }[];
 const settings = {
   metadata_language: "en-US",
   metadata_languages: [
-    { code: "en-US", name: "English (US)", native: "English (US)" },
+    { code: "en-US", name: "English (United States)", native: "English (United States)" },
     { code: "ja-JP", name: "Japanese", native: "日本語" },
   ],
 };
@@ -99,7 +99,7 @@ describe("a library's own options", () => {
     await render(lib("movie"));
     const el = host.querySelector<HTMLSelectElement>('[aria-label="Library metadata language"]')!;
     expect(el.value).toBe("");
-    expect(el.options[0].textContent).toBe("The server's language (English (US))");
+    expect(el.options[0].textContent).toBe("The server's language (English (United States))");
     expect(host.querySelector('[aria-label="Library reading direction"]')).toBeNull();
   });
 

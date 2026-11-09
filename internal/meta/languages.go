@@ -32,8 +32,8 @@ const DefaultLanguage = "en-US"
 // Languages is every language that may be chosen, English first, then by
 // English name.
 var Languages = []Language{
-	{"en-US", "English (United States)", "English (US)"},
-	{"en-GB", "English (United Kingdom)", "English (UK)"},
+	{"en-US", "English (United States)", "English (United States)"},
+	{"en-GB", "English (United Kingdom)", "English (United Kingdom)"},
 	{"ar-SA", "Arabic", "العربية"},
 	{"zh-CN", "Chinese (Simplified)", "简体中文"},
 	{"zh-TW", "Chinese (Traditional)", "繁體中文"},
