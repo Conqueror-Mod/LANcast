@@ -2029,12 +2029,32 @@ discover that from three round trips and three loading states.
 ```json
 { "user": { "id": "u_3f9", "name": "Dana", "admin": true, "secured": true },
   "stats": { "started": 214, "finished": 168, "viewings": 197,
-             "watched_ms": 913_400_000, "first_at": 1739000000 },
+             "watched_ms": 913_400_000, "first_at": 1739000000,
+             "by_kind": [ { "kind": "movie", "started": 120, "finished": 101,
+                            "viewings": 118, "watched_ms": 801_000_000 },
+                          { "kind": "track", "started": 80, "finished": 60,
+                            "viewings": 70, "watched_ms": 14_000_000 } ],
+             "earlier": { "started": 14, "finished": 7, "viewings": 9,
+                          "watched_ms": 98_400_000 } },
   "history": [ { "item": { "id": 87, "title": "Arrival", ... },
                  "position_ms": 1284000, "watched": false,
                  "played_at": 1755200000 } ],
-  "has_more": true }
+  "has_more": true,
+  "most_played": [ { "item": { "id": 12, "title": "Heat", ... }, "plays": 4 } ] }
 ```
+
+**`by_kind` splits the totals by what was played**: films, episodes, songs
+(`track`), audiobook chapters (`book_part`) and anything else marked played,
+most time first. The totals above it include music, so a client that labels
+`watched_ms` "time watched" should read the split instead. `earlier` is what a
+history reset banked, which was never split by kind; it is absent when nothing
+was banked. The `by_kind` lines plus `earlier` add up to the totals exactly.
+Both are absent on a server from before Profile 2.0.
+
+**`most_played`** is what was finished most often, at least twice, up to five
+in each group: films and episodes together, then songs, then audiobook
+chapters. Per group so an album on repeat cannot push every film off it. Empty
+when nothing has been finished twice. Items carry `artwork`.
 
 `?limit=` defaults to 50 (max 200) and `?offset=` pages. `has_more` says whether
 the history was cut short, so a client can offer the next page rather than infer

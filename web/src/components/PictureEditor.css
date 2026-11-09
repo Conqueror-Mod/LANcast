@@ -100,3 +100,68 @@
   opacity: 0.5;
   cursor: default;
 }
+
+.picdlg__remove {
+  display: block;
+  margin: -4px 0 14px;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--text-secondary);
+  font-size: 13px;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.picdlg__remove:hover,
+.picdlg__remove:focus-visible {
+  outline: none;
+  color: var(--text-primary);
+}
+
+.picdlg__orlabel {
+  display: block;
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-bottom: 8px;
+}
+
+.picdlg__animals {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.picdlg__animal {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border-radius: var(--radius-panel);
+  border: 1px solid var(--gold-dormant);
+  background: var(--space-deep);
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.picdlg__animal:hover {
+  color: var(--text-primary);
+}
+
+.picdlg__animal:focus-visible {
+  outline: none;
+  border-color: var(--gold);
+  box-shadow: 0 0 0 3px var(--gold-ring);
+}
+
+/* Gold on the chosen one: where you are in this set. */
+.picdlg__animal.is-on {
+  border-color: var(--gold);
+  color: var(--text-primary);
+}
+
+.picdlg__animal:disabled {
+  cursor: progress;
+}

@@ -195,7 +195,8 @@ describe("the profile", () => {
       </>,
     );
     expect(host.querySelector(".rail-test img")).not.toBeNull();
-    const remove = [...host.querySelectorAll("button")].find((b) => b.textContent === "Remove picture")!;
+    await act(async () => host.querySelector<HTMLButtonElement>(".profile__edit")!.click());
+    const remove = [...document.querySelectorAll("button")].find((b) => b.textContent === "Remove your picture")!;
     await act(async () => remove.click());
     await settle();
     expect(calls).toContain("DELETE /api/profile/picture");
@@ -206,7 +207,7 @@ describe("the profile", () => {
   it("opens the editor in the page, with the file chooser's button focused", async () => {
     picture = null;
     await render(<Profile />);
-    const open = [...host.querySelectorAll("button")].find((b) => b.textContent === "Upload a picture")!;
+    const open = host.querySelector<HTMLButtonElement>('.profile__edit[aria-label="Edit your picture"]')!;
     await act(async () => open.click());
     const dialog = document.querySelector('[role="dialog"][aria-label="Your picture"]');
     expect(dialog).not.toBeNull();

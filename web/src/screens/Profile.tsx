@@ -1,22 +1,25 @@
-import { RetroAchievementsCard } from "@/components/RetroAchievementsCard";
+import { RetroAchievementsCard, useRetroAchievements } from "@/components/RetroAchievementsCard";
 import { useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import {
-  useClearPicture,
   useCurrentUser,
   useMarkedItems,
   useMyRatings,
   useProfile,
-  useSetAvatar,
   useTags,
 } from "@/api/hooks";
 import { Shelf } from "@/components/Shelf";
-import { AVATARS, AvatarGlyph, PersonPicture } from "@/components/Avatar";
+import { PersonPicture } from "@/components/Avatar";
+import { useFocusZone } from "@/focus/FocusController";
 import { PictureEditor } from "@/components/PictureEditor";
 import { YearInReview } from "@/components/YearInReview";
 import { artworkURL } from "@/api/client";
 import { runtime, episodeCode } from "@/lib/format";
-import type { HistoryEntry, RatedItem } from "@/api/types";
+import type { HistoryEntry, ProfileStats, RatedItem } from "@/api/types";
+import type { components } from "@/api/schema";
+import { kindCards } from "@/lib/profileKinds";
+
+type PlayedItem = components["schemas"]["PlayedItem"];
 import "./Profile.css";
 
 /*
@@ -36,9 +39,42 @@ import "./Profile.css";
 
 const PAGE = 50;
 
+/*
+ * Four tabs (profile-2-plan §4b), named in the address so a tab can be linked
+ * and Back returns to the one you left. With a remote the row is the first
+ * stop under the header, so every section is two presses away instead of the
+ * thirty-two it took to reach Recently played on one long page.
+ */
+const TABS = [
+  { id: "overview", label: "Overview" },
+  { id: "history", label: "History" },
+  { id: "ratings", label: "Ratings & tags" },
+  { id: "achievements", label: "Achievements" },
+] as const;
+type Tab = (typeof TABS)[number]["id"];
+
 export function Profile() {
   const [offset, setOffset] = useState(0);
   const { data, isLoading, isError } = useProfile(PAGE, offset);
+  const [params, setParams] = useSearchParams();
+  const ra = useRetroAchievements();
+  const secured = !!data?.user.secured;
+  /*
+   * Every control on the page, reachable with a remote. Before the tabs only
+   * the shelves registered themselves, so Edit, the tab row, the rating rows
+   * and the pager could not be reached by arrow at all.
+   */
+  const zone = useFocusZone();
+
+  // Tabs that have something behind them: the private lists need an account,
+  // and Achievements needs RetroAchievements on this server.
+  const tabs = TABS.filter((t) => {
+    if (t.id === "ratings") return secured;
+    if (t.id === "achievements") return secured && !!ra.data?.available;
+    return true;
+  });
+  const asked = params.get("tab");
+  const tab: Tab = tabs.some((t) => t.id === asked) ? (asked as Tab) : "overview";
 
   if (isError) {
     return (
@@ -52,122 +88,155 @@ export function Profile() {
   const history = data?.history ?? [];
 
   return (
-    <div className="browse profile">
-      <div className="browse__head browse__head--sticky">
-        <h1 className="browse__title">{data?.user.name ?? "Profile"}</h1>
-        {/* An unconfigured loopback server has no account, and the history
-            belongs to the migrated 'local' id. Saying so beats inventing a
-            person called Local and letting somebody wonder who they are. */}
-        {data && !data.user.secured && (
-          <span className="profile__badge">no account — this server is open on loopback</span>
+    <div className="browse profile" ref={zone}>
+      <ProfileHero
+        name={data?.user.name ?? "Profile"}
+        secured={secured}
+        admin={!!data?.user.admin}
+        loaded={!!data}
+        since={stats?.first_at ?? null}
+      />
+
+      <div className="profile__tabs" role="tablist" aria-label="Your profile">
+        {tabs.map((t) => {
+          const on = t.id === tab;
+          return (
+            <button
+              key={t.id}
+              type="button"
+              role="tab"
+              id={`profile-tab-${t.id}`}
+              className={"profile__tab" + (on ? " is-on" : "")}
+              aria-selected={on}
+              aria-controls="profile-panel"
+              onClick={() => {
+                if (on) return;
+                const next = new URLSearchParams(params);
+                if (t.id === "overview") next.delete("tab");
+                else next.set("tab", t.id);
+                setParams(next);
+              }}
+            >
+              {t.label}
+            </button>
+          );
+        })}
+      </div>
+
+      <div
+        className="profile__panel"
+        id="profile-panel"
+        role="tabpanel"
+        aria-labelledby={`profile-tab-${tab}`}
+      >
+        {tab === "overview" && (
+          <>
+            {stats?.by_kind ? (
+              <KindStats stats={stats} />
+            ) : (
+            <div className="profile__stats">
+              <Stat label="Started" value={stats ? String(stats.started) : "—"} />
+              <Stat label="Finished" value={stats ? String(stats.finished) : "—"} />
+              {/* Shown only when it says something the card beside it does not.
+                  Equal numbers mean nothing has been rewatched, and a second card
+                  repeating the first is noise on most profiles.
+
+                  Absent rather than zero on a server too old to report it: a client
+                  newer than its server is ordinary, and "0 viewings" beside "412
+                  finished" is a wrong statement rather than a missing one. */}
+              {stats?.viewings != null && stats.viewings > stats.finished && (
+                <Stat
+                  label="Viewings"
+                  value={String(stats.viewings)}
+                  note="including rewatches"
+                />
+              )}
+              <Stat
+                label="Time watched"
+                value={stats ? (runtime(stats.watched_ms) || "0m") : "—"}
+                /* The qualifier is the honest part, and it changed when the server
+                   learned to count viewings. It used to say "counted once per title",
+                   which was true of a boolean and stopped being true the moment a
+                   tally sat beside it — a note that describes an older version of the
+                   thing it labels is worse than none.
+
+                   A title with no known runtime is still counted once, because there
+                   is no measurement of how long one viewing of it was. */
+                note="every viewing counted"
+              />
+            </div>
+            )}
+
+            <MostPlayed items={data?.most_played ?? []} />
+
+            {/* The same history read a different way, so it belongs with the
+                numbers it is derived from rather than on a route of its own. */}
+            <YearInReview />
+
+            {secured && <FavouritesShelf />}
+          </>
         )}
-        {data?.user.admin && <span className="profile__badge">admin</span>}
-      </div>
 
-      {data?.user.secured && <AvatarPicker />}
+        {tab === "history" && (
+          <>
+            <div className="profile__labelrow">
+              <span className="section-label profile__label">Recently played</span>
+              {/* The log beside this list: this one shows each title once, dated
+                  from its last play; the history has every time it was finished. */}
+              {secured && (
+                <Link className="profile__loglink" to="/profile/viewings">
+                  Full watch history →
+                </Link>
+              )}
+            </div>
 
-      <div className="profile__stats">
-        <Stat label="Started" value={stats ? String(stats.started) : "—"} />
-        <Stat label="Finished" value={stats ? String(stats.finished) : "—"} />
-        {/* Shown only when it says something the card beside it does not.
-            Equal numbers mean nothing has been rewatched, and a second card
-            repeating the first is noise on most profiles.
+            {isLoading && <p className="browse__message">Loading…</p>}
 
-            Absent rather than zero on a server too old to report it: a client
-            newer than its server is ordinary, and "0 viewings" beside "412
-            finished" is a wrong statement rather than a missing one. */}
-        {stats?.viewings != null && stats.viewings > stats.finished && (
-          <Stat
-            label="Viewings"
-            value={String(stats.viewings)}
-            note="including rewatches"
-          />
+            {!isLoading && history.length === 0 && (
+              <p className="browse__message">
+                Nothing played yet. Anything you watch or listen to shows up here.
+              </p>
+            )}
+
+            <div className="profile__history">
+              {history.map((e) => (
+                <HistoryRow key={`${e.item.id}-${e.played_at}`} entry={e} />
+              ))}
+            </div>
+
+            {(offset > 0 || data?.has_more) && (
+              <div className="profile__pager">
+                <button
+                  className="profile__page"
+                  disabled={offset === 0}
+                  onClick={() => setOffset(Math.max(0, offset - PAGE))}
+                >
+                  ← Newer
+                </button>
+                <button
+                  className="profile__page"
+                  disabled={!data?.has_more}
+                  onClick={() => setOffset(offset + PAGE)}
+                >
+                  Older →
+                </button>
+              </div>
+            )}
+          </>
         )}
-        <Stat
-          label="Time watched"
-          value={stats ? (runtime(stats.watched_ms) || "0m") : "—"}
-          /* The qualifier is the honest part, and it changed when the server
-             learned to count viewings. It used to say "counted once per title",
-             which was true of a boolean and stopped being true the moment a
-             tally sat beside it — a note that describes an older version of the
-             thing it labels is worse than none.
 
-             A title with no known runtime is still counted once, because there
-             is no measurement of how long one viewing of it was. */
-          note="every viewing counted"
-        />
-        <Stat
-          label="Since"
-          value={
-            stats?.first_at
-              ? new Date(stats.first_at * 1000).toLocaleDateString()
-              : "—"
-          }
-        />
-      </div>
-
-      {/*
-        Above Recently played, below the lifetime totals.
-
-        It is the same history read a different way, so it belongs with the
-        numbers it is derived from rather than on a route of its own — and a
-        nav entry for something seasonal would be a permanent fixture for an
-        occasional read.
-      */}
-      <YearInReview />
-
-      {data?.user.secured && (
-        <>
-          <FavouritesShelf />
-          <YourRatings />
-          <YourTags />
-          <RetroAchievementsCard />
-        </>
-      )}
-
-      <div className="profile__labelrow">
-        <span className="section-label profile__label">Recently played</span>
-        {/* The log beside this list: this one shows each title once, dated
-            from its last play; the history has every time it was finished. */}
-        {data?.user.secured && (
-          <Link className="profile__loglink" to="/profile/viewings">
-            Full watch history →
-          </Link>
+        {tab === "ratings" && (
+          <>
+            <YourRatings />
+            <YourTags />
+          </>
         )}
+
+        {/* What you have earned, to look at. Connecting and disconnecting are
+            in Settings › Connected accounts (profile-2-plan §6), which the
+            card links to. */}
+        {tab === "achievements" && <RetroAchievementsCard />}
       </div>
-
-      {isLoading && <p className="browse__message">Loading…</p>}
-
-      {!isLoading && history.length === 0 && (
-        <p className="browse__message">
-          Nothing played yet. Anything you watch or listen to shows up here.
-        </p>
-      )}
-
-      <div className="profile__history">
-        {history.map((e) => (
-          <HistoryRow key={`${e.item.id}-${e.played_at}`} entry={e} />
-        ))}
-      </div>
-
-      {(offset > 0 || data?.has_more) && (
-        <div className="profile__pager">
-          <button
-            className="profile__page"
-            disabled={offset === 0}
-            onClick={() => setOffset(Math.max(0, offset - PAGE))}
-          >
-            ← Newer
-          </button>
-          <button
-            className="profile__page"
-            disabled={!data?.has_more}
-            onClick={() => setOffset(offset + PAGE)}
-          >
-            Older →
-          </button>
-        </div>
-      )}
     </div>
   );
 }
@@ -187,6 +256,92 @@ function Stat({
       <span className="profile__statlabel">{label}</span>
       {note && <span className="profile__statnote">{note}</span>}
     </div>
+  );
+}
+
+/*
+ * The totals split by kind (profile-2-plan §4c, step 4). "Time watched" used to
+ * count songs, so an album on repeat read as hours of film; each group now has
+ * its own card, and what a history reset banked keeps one of its own.
+ */
+function KindStats({ stats }: { stats: ProfileStats }) {
+  const cards = kindCards(stats.by_kind ?? [], stats.earlier);
+  if (cards.length === 0) {
+    return (
+      <p className="browse__message profile__empty">
+        Nothing played yet. Your totals start with the first thing you play.
+      </p>
+    );
+  }
+  return (
+    <div className="profile__stats">
+      {cards.map((c) => (
+        <Stat
+          key={c.id}
+          label={c.label}
+          value={c.ms == null ? c.finished.toLocaleString() : runtime(c.ms) || "0m"}
+          note={c.note}
+        />
+      ))}
+    </div>
+  );
+}
+
+const PLAYED_GROUPS: { label: string; kinds: string[] }[] = [
+  { label: "Films & shows", kinds: ["movie", "episode"] },
+  { label: "Music", kinds: ["track"] },
+  { label: "Audiobooks", kinds: ["book_part"] },
+];
+
+/*
+ * What you came back to most: finished at least twice, five per group, so a
+ * song on repeat cannot push every film off the list. Nothing is shown until
+ * something has been played twice; a list of ties is History's job.
+ */
+function MostPlayed({ items }: { items: PlayedItem[] }) {
+  if (items.length === 0) return null;
+  return (
+    <section className="profile__section profile__mostplayed" aria-label="Most played">
+      <span className="section-label profile__label">Most played</span>
+      {PLAYED_GROUPS.map((g) => {
+        const rows = items.filter((p) => g.kinds.includes(p.item.kind));
+        if (rows.length === 0) return null;
+        return (
+          <div key={g.label} className="profile__playedgroup">
+            <h3 className="profile__grouplabel">{g.label}</h3>
+            <div className="profile__history">
+              {rows.map((p) => (
+                <PlayedRow key={p.item.id} played={p} />
+              ))}
+            </div>
+          </div>
+        );
+      })}
+    </section>
+  );
+}
+
+function PlayedRow({ played }: { played: PlayedItem }) {
+  const { item } = played;
+  const poster = artworkURL(item.artwork?.poster, "thumb");
+  const detail = [item.series ?? item.artist, episodeCode(item)].filter(Boolean).join(" · ");
+  return (
+    <Link className="profile__row" to={`/item/${item.id}`}>
+      <div className="profile__art">
+        {poster ? (
+          <img src={poster} alt="" loading="lazy" />
+        ) : (
+          <span aria-hidden="true">{item.title.slice(0, 1).toUpperCase()}</span>
+        )}
+      </div>
+      <div className="profile__what">
+        <span className="profile__titleline">{item.title}</span>
+        {detail && <span className="profile__detail">{detail}</span>}
+      </div>
+      <div className="profile__when">
+        <span className="profile__state">{played.plays.toLocaleString()} plays</span>
+      </div>
+    </Link>
   );
 }
 
@@ -241,76 +396,73 @@ function HistoryRow({ entry }: { entry: HistoryEntry }) {
 }
 
 /*
- * Your picture: one you upload (ADR 0121), or one of the six drawn animals.
+ * Who you are, at the top of the page (profile-2-plan §4a).
  *
- * The upload wins wherever you are drawn; removing it brings the animal back.
- * Pressing the chosen animal again clears it, so there is no separate "none".
- *
- * Gold marks the chosen animal, and that is the design rule working rather
- * than bending: it is *where you are* in this set, the same thing a selected
- * rail row says.
+ * Your picture, your name, since when, and your role. Edit beside the picture
+ * opens the picture editor, which also holds the six drawn animals. The name is
+ * changed in Settings › Profile, where the account's facts are kept (ADR 0120);
+ * the page only shows it, with a link there.
  */
-function AvatarPicker() {
+function ProfileHero({
+  name,
+  secured,
+  admin,
+  loaded,
+  since,
+}: {
+  name: string;
+  secured: boolean;
+  admin: boolean;
+  loaded: boolean;
+  since: number | null;
+}) {
   const user = useCurrentUser();
-  const setAvatar = useSetAvatar();
-  const clearPicture = useClearPicture();
   const [editing, setEditing] = useState(false);
-  const current = setAvatar.isPending ? setAvatar.variables : (user?.avatar ?? "");
-  const picture = user?.picture ?? null;
   return (
-    <section className="profile__avatars" aria-label="Your picture">
-      <span className="section-label">Your picture</span>
-      <div className="profile__me">
+    <header className="profile__hero">
+      <div className="profile__heropic">
         <PersonPicture
-          name={user?.name ?? ""}
-          picture={picture}
-          avatar={current}
+          name={name}
+          picture={secured ? user?.picture : null}
+          avatar={secured ? user?.avatar : null}
           size={96}
           className="profile__mepic"
         />
-        <div className="profile__meactions">
-          <button type="button" className="profile__mebtn" onClick={() => setEditing(true)}>
-            {picture ? "Change picture" : "Upload a picture"}
+        {secured && (
+          <button
+            type="button"
+            className="profile__edit"
+            aria-label="Edit your picture"
+            onClick={() => setEditing(true)}
+          >
+            Edit
           </button>
-          {picture && (
-            <button
-              type="button"
-              className="profile__mebtn profile__mebtn--quiet"
-              disabled={clearPicture.isPending}
-              onClick={() => clearPicture.mutate()}
-            >
-              Remove picture
-            </button>
+        )}
+      </div>
+      <div className="profile__whoami">
+        <h1 className="browse__title profile__name">{name}</h1>
+        <div className="profile__meta">
+          {admin && <span className="profile__badge">admin</span>}
+          {/* An unconfigured loopback server has no account, and the history
+              belongs to the migrated 'local' id. Saying so beats inventing a
+              person called Local and letting somebody wonder who they are. */}
+          {loaded && !secured && (
+            <span className="profile__badge">no account — this server is open on loopback</span>
+          )}
+          {since != null && (
+            <span className="profile__since">
+              Since {new Date(since * 1000).toLocaleDateString()}
+            </span>
+          )}
+          {secured && (
+            <Link className="profile__namelink" to="/settings?pane=profile">
+              Change name
+            </Link>
           )}
         </div>
       </div>
-      <span className="profile__orlabel">
-        {picture ? "Shown when you have no picture" : "Or choose one of these"}
-      </span>
-      <div className="profile__avatarrow" role="group" aria-label="Choose a drawn picture">
-        {AVATARS.map((a) => {
-          const on = current === a.key;
-          return (
-            <button
-              key={a.key}
-              type="button"
-              className={"profile__avatar" + (on ? " is-on" : "")}
-              aria-pressed={on}
-              aria-label={a.label}
-              title={on ? `${a.label} — press again to remove` : a.label}
-              disabled={setAvatar.isPending}
-              onClick={() => setAvatar.mutate(on ? "" : a.key)}
-            >
-              <AvatarGlyph avatar={a.key} size={26} />
-            </button>
-          );
-        })}
-      </div>
-      {(setAvatar.isError || clearPicture.isError) && (
-        <p className="profile__avatarerr">That picture could not be saved.</p>
-      )}
       {editing && <PictureEditor onClose={() => setEditing(false)} />}
-    </section>
+    </header>
   );
 }
 

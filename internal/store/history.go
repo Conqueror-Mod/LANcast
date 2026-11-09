@@ -51,6 +51,34 @@ type ProfileStats struct {
 	// FirstAt is the oldest playback this user has, so the client can say what
 	// period the numbers cover rather than implying they cover all time.
 	FirstAt *int64 `json:"first_at"`
+	/*
+	 * ByKind is the same totals split by what was played (profile-2-plan §4c):
+	 * films, episodes, songs and audiobook chapters, each with its own count
+	 * and time. "Time watched" had been counting music, and a song played
+	 * once was one more title started.
+	 *
+	 * The live rows only. Their sums plus Earlier are exactly the totals
+	 * above, because both come from one grouped query.
+	 */
+	ByKind []KindTotals `json:"by_kind"`
+	/*
+	 * Earlier is what a history reset banked (profile_totals), which was never
+	 * split by kind, so it cannot be shared out now. Reported as its own line
+	 * rather than folded into a kind, and absent when nothing was banked, so
+	 * clearing a history never quietly shrinks a total. Its first_at is
+	 * already in FirstAt.
+	 */
+	Earlier *KindTotals `json:"earlier,omitempty"`
+}
+
+// KindTotals is ProfileStats for one kind of thing, or for the banked rest.
+// Kind is empty on the banked line.
+type KindTotals struct {
+	Kind      string `json:"kind,omitempty"`
+	Started   int    `json:"started"`
+	Finished  int    `json:"finished"`
+	Viewings  int    `json:"viewings"`
+	WatchedMS int64  `json:"watched_ms"`
 }
 
 /*
@@ -129,7 +157,7 @@ func (s *Store) History(ctx context.Context, userID string, limit, offset int) (
 
 // ProfileStatistics totals the same rows the history lists.
 func (s *Store) ProfileStatistics(ctx context.Context, userID string) (ProfileStats, error) {
-	var st ProfileStats
+	st := ProfileStats{ByKind: []KindTotals{}}
 	/*
 	 * Time watched counts every viewing, and the partial one on top.
 	 *
@@ -145,8 +173,9 @@ func (s *Store) ProfileStatistics(ctx context.Context, userID string) (ProfileSt
 	 * because a total that grows on its own is harder to disbelieve than one
 	 * that is missing.
 	 */
-	err := s.db.QueryRowContext(ctx, `
+	rows, err := s.db.QueryContext(ctx, `
 		SELECT
+		  mi.kind,
 		  COUNT(*),
 		  COALESCE(SUM(ps.watched), 0),
 		  COALESCE(SUM(ps.watch_count), 0),
@@ -159,10 +188,32 @@ func (s *Store) ProfileStatistics(ctx context.Context, userID string) (ProfileSt
 		  MIN(ps.updated_at)
 		FROM playback_state ps
 		JOIN media_item mi ON mi.id = ps.item_id
-		WHERE ps.user_id = ? AND (ps.position_ms > 0 OR ps.watched = 1)`,
+		WHERE ps.user_id = ? AND (ps.position_ms > 0 OR ps.watched = 1)
+		GROUP BY mi.kind
+		ORDER BY 5 DESC, mi.kind`,
 		userID,
-	).Scan(&st.Started, &st.Finished, &st.Viewings, &st.WatchedMS, &st.FirstAt)
+	)
 	if err != nil {
+		return st, fmt.Errorf("profile statistics: %w", err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var k KindTotals
+		var first int64
+		if err := rows.Scan(&k.Kind, &k.Started, &k.Finished, &k.Viewings, &k.WatchedMS, &first); err != nil {
+			return st, fmt.Errorf("profile statistics: %w", err)
+		}
+		st.ByKind = append(st.ByKind, k)
+		st.Started += k.Started
+		st.Finished += k.Finished
+		st.Viewings += k.Viewings
+		st.WatchedMS += k.WatchedMS
+		if st.FirstAt == nil || first < *st.FirstAt {
+			f := first
+			st.FirstAt = &f
+		}
+	}
+	if err := rows.Err(); err != nil {
 		return st, fmt.Errorf("profile statistics: %w", err)
 	}
 
@@ -195,10 +246,73 @@ func (s *Store) ProfileStatistics(ctx context.Context, userID string) (ProfileSt
 	st.Finished += banked.Finished
 	st.Viewings += banked.Viewings
 	st.WatchedMS += banked.WatchedMS
+	if banked.Started > 0 || banked.WatchedMS > 0 {
+		st.Earlier = &KindTotals{
+			Started: banked.Started, Finished: banked.Finished,
+			Viewings: banked.Viewings, WatchedMS: banked.WatchedMS,
+		}
+	}
 	// The oldest playback either half knows about. A reset does not make an
 	// account younger than it is.
 	if st.FirstAt == nil || (banked.FirstAt != nil && *banked.FirstAt < *st.FirstAt) {
 		st.FirstAt = banked.FirstAt
 	}
 	return st, nil
+}
+
+// PlayedItem is a title and how many times it was finished.
+type PlayedItem struct {
+	Item  Item `json:"item"`
+	Plays int  `json:"plays"`
+}
+
+/*
+ * MostPlayed is the titles finished most often, per group of kinds
+ * (profile-2-plan §4c), up to `per` in each: films and episodes together,
+ * songs, and audiobook chapters. Per group because one album on repeat would
+ * otherwise push every film off the list.
+ *
+ * Only titles finished at least twice. Everything finished once ties, and a
+ * list of ties is a list of whatever happened to be watched lately, which is
+ * History's job.
+ */
+func (s *Store) MostPlayed(ctx context.Context, userID string, per int) ([]PlayedItem, error) {
+	if per <= 0 || per > 20 {
+		per = 5
+	}
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT `+itemColsMI+`, ranked.watch_count
+		FROM (
+		  SELECT ps.item_id, ps.watch_count,
+		         ROW_NUMBER() OVER (
+		           PARTITION BY CASE m.kind WHEN 'episode' THEN 'movie' ELSE m.kind END
+		           ORDER BY ps.watch_count DESC, ps.updated_at DESC, ps.item_id DESC
+		         ) AS n,
+		         CASE m.kind WHEN 'movie' THEN 0 WHEN 'episode' THEN 0
+		                     WHEN 'track' THEN 1 ELSE 2 END AS grp,
+		         ps.updated_at
+		  FROM playback_state ps
+		  JOIN media_item m ON m.id = ps.item_id
+		  WHERE ps.user_id = ? AND ps.watch_count >= 2
+		    AND m.kind IN ('movie', 'episode', 'track', 'book_part')
+		) AS ranked
+		JOIN media_item mi ON mi.id = ranked.item_id
+		WHERE ranked.n <= ?
+		ORDER BY ranked.grp, ranked.watch_count DESC, ranked.updated_at DESC, mi.id DESC`,
+		userID, per)
+	if err != nil {
+		return nil, fmt.Errorf("most played: %w", err)
+	}
+	defer rows.Close()
+	out := []PlayedItem{}
+	for rows.Next() {
+		var p PlayedItem
+		it, err := scanItemThen(rows, &p.Plays)
+		if err != nil {
+			return nil, fmt.Errorf("most played: %w", err)
+		}
+		p.Item = *it
+		out = append(out, p)
+	}
+	return out, rows.Err()
 }
