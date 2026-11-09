@@ -7507,6 +7507,9 @@ export interface components {
              * @description The oldest playback this user has, so a client can say what period the numbers cover rather than implying they cover all time.
              */
             first_at: number | null;
+            /** @description The totals split by kind, most time first. These plus `earlier` add up to the totals exactly. **Absent on a server from before Profile 2.0.** */
+            by_kind?: components["schemas"]["KindTotals"][];
+            earlier?: components["schemas"]["KindTotals"];
         };
         HistoryEntry: {
             item: components["schemas"]["Item"];
@@ -7515,6 +7518,24 @@ export interface components {
             watched: boolean;
             /** Format: int64 */
             played_at: number;
+        };
+        /** @description The profile totals for one kind of thing, or (with no `kind`) for what a history reset banked. */
+        KindTotals: {
+            /** @description `movie`, `episode`, `track`, `book_part`, `comic` or any other kind that was played. Absent on `earlier`. */
+            kind?: string;
+            started: number;
+            finished: number;
+            viewings: number;
+            /**
+             * Format: int64
+             * @description Time spent, by the same rule as `ProfileStats.watched_ms`. For songs and chapters it is listening.
+             */
+            watched_ms: number;
+        };
+        PlayedItem: {
+            item: components["schemas"]["Item"];
+            /** @description Times finished, at least 2. */
+            plays: number;
         };
         /** @description Identity, statistics and history in one request, because a page needing all three should not discover that from three round trips and three loading states. */
         Profile: {
@@ -7528,6 +7549,8 @@ export interface components {
             history: components["schemas"]["HistoryEntry"][];
             /** @description Whether the history was cut short, so a client can offer the next page rather than infer it from a full-looking one. */
             has_more: boolean;
+            /** @description Finished at least twice, up to five per group (films and episodes, songs, audiobook chapters), in that order. Absent on a server from before Profile 2.0. */
+            most_played?: components["schemas"]["PlayedItem"][];
         };
         /**
          * @description **Your** verdict on an item. A rating is private to the account that wrote it: there is no household average, no count of how many people rated something, and no route that returns somebody else's score.

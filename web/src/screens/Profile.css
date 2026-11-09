@@ -454,3 +454,20 @@ a.profile__page {
   box-shadow: 0 0 0 3px var(--gold-ring);
   border-radius: 3px;
 }
+
+/* Most played (profile-2-plan §4c): one small list per group, under a quiet
+   heading, so films and songs are never ranked against each other. */
+.profile__mostplayed {
+  padding-bottom: 10px;
+}
+
+.profile__grouplabel {
+  margin: 10px 0 4px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+
+.profile__mostplayed .profile__history {
+  padding-bottom: 8px;
+}

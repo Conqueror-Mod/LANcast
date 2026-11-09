@@ -27,6 +27,9 @@ type profileResponse struct {
 	// HasMore says whether the history was cut short, so the client can offer
 	// to fetch the next page instead of guessing from a full-looking one.
 	HasMore bool `json:"has_more"`
+	// MostPlayed is what was finished most often, up to five in each group
+	// (store.MostPlayed): films and episodes, songs, audiobook chapters.
+	MostPlayed []store.PlayedItem `json:"most_played"`
 }
 
 type profileUser struct {
@@ -93,6 +96,20 @@ func (s *Server) profile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	most, err := s.st.MostPlayed(ctx, userID, 5)
+	if err != nil {
+		s.writeInternal(w, err, "most played")
+		return
+	}
+	mostRows := make([]*store.Item, len(most))
+	for i := range most {
+		mostRows[i] = &most[i].Item
+	}
+	if err := s.attachArtworkTo(r, mostRows); err != nil {
+		s.writeInternal(w, err, "attach artwork")
+		return
+	}
+
 	stats, err := s.st.ProfileStatistics(ctx, userID)
 	if err != nil {
 		s.writeInternal(w, err, "profile statistics")
@@ -109,6 +126,6 @@ func (s *Server) profile(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, profileResponse{
-		User: who, Stats: stats, History: entries, HasMore: more,
+		User: who, Stats: stats, History: entries, HasMore: more, MostPlayed: most,
 	})
 }
