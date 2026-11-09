@@ -263,6 +263,35 @@ func (s *Server) federationItem(w http.ResponseWriter, r *http.Request) {
 	if it.DurationMS != nil {
 		out["duration_ms"] = *it.DurationMS
 	}
+	/*
+	 * The file's audio tracks and its intro and credits, so a friend's player
+	 * can offer what the household's does: another language, and a skip.
+	 *
+	 * Facts about a file the caller may already play, so they say nothing a
+	 * friend could not hear or see for themselves. Choosing a track is then
+	 * `audio=` on the playback routes, which are this server's own handlers.
+	 * Each is left out when there is nothing to say, and a lookup that fails
+	 * costs the field, not the answer: the title and length are what the
+	 * player cannot do without.
+	 */
+	if streams, err := s.st.Streams(r.Context(), id); err != nil {
+		s.log.Warn("federation item: streams", "item", id, "error", err)
+	} else {
+		audio := make([]store.MediaStream, 0, len(streams))
+		for _, st := range streams {
+			if st.Kind == "audio" {
+				audio = append(audio, st)
+			}
+		}
+		if len(audio) > 0 {
+			out["audio"] = audio
+		}
+	}
+	if markers, err := s.st.MarkersFor(r.Context(), id); err != nil {
+		s.log.Warn("federation item: markers", "item", id, "error", err)
+	} else if len(markers) > 0 {
+		out["markers"] = markers
+	}
 	writeJSON(w, http.StatusOK, out)
 }
 
