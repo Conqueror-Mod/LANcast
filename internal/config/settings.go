@@ -50,6 +50,9 @@ type Settings struct {
 	 * shrink, quietly, with the cause three screens away.
 	 */
 	CertificationCountry string `json:"certification_country,omitempty"`
+	// MetadataLanguage is the language metadata is fetched in (ADR 0122): a
+	// tag from meta.Languages, or empty for meta.DefaultLanguage.
+	MetadataLanguage string `json:"metadata_language,omitempty"`
 	/*
 	 * MaxQuality is the ceiling this server imposes on every stream, as a rung
 	 * id from QualityRungs. Empty means no limit, which is the default.

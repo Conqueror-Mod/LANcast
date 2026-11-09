@@ -180,6 +180,7 @@ export const SETTINGS_INDEX: SettingEntry[] = [
   { pane: "metadata", label: "OpenSubtitles account", terms: "subtitles login provider" },
   { pane: "metadata", label: "Use LANcast's built-in keys", terms: "tmdb omdb api key provider" },
   { pane: "metadata", label: "Age rating country", terms: "certification pg-13 fsk country" },
+  { pane: "metadata", label: "Metadata language", terms: "language translation german french spanish tmdb region" },
   { pane: "metadata", label: "Automatically fetch metadata after a scan", terms: "auto enrich match" },
   { pane: "metadata", label: "Write NFO sidecar files next to media", terms: "nfo kodi sidecar" },
   { pane: "metadata", label: "Provider requests", terms: "rate limit tmdb" },

@@ -48,6 +48,9 @@ type Client struct {
 	// certCountry is the ISO 3166-1 alpha-2 code whose certificate is
 	// preferred. Empty means the default order — see certificationOrder.
 	certCountry string
+	// language is the tag every request asks for (ADR 0122); empty is
+	// meta.DefaultLanguage.
+	language string
 
 	// MaxRetries bounds 429 and 5xx retries.
 	MaxRetries int
@@ -73,6 +76,23 @@ func WithLimiter(l *meta.Limiter) Option   { return func(c *Client) { c.limiter 
  */
 func WithCertificationCountry(code string) Option {
 	return func(c *Client) { c.certCountry = strings.ToUpper(strings.TrimSpace(code)) }
+}
+
+/*
+ * WithLanguage asks for metadata in one language (ADR 0122). Validation
+ * belongs to the caller (meta.KnownLanguage), for the reason the country's
+ * does; an unknown or empty tag fetches in meta.DefaultLanguage.
+ */
+func WithLanguage(code string) Option {
+	return func(c *Client) { c.language = meta.LanguageOrDefault(strings.TrimSpace(code)) }
+}
+
+// lang is the language this client asks for.
+func (c *Client) lang() string {
+	if c.language == "" {
+		return meta.DefaultLanguage
+	}
+	return c.language
 }
 
 // New builds a TMDB client. An empty apiKey yields a client that reports
@@ -155,17 +175,44 @@ func (c *Client) Search(ctx context.Context, q meta.Query) ([]meta.Candidate, er
 		return nil, err
 	}
 
+	/*
+	 * Every name a result has, for the scorer (ADR 0122).
+	 *
+	 * Asked in German, TMDB returns "Der Pate" for a file called
+	 * `The Godfather (1972).mkv`. The original-language title is always on the
+	 * result; the English one costs a second search, made only when the
+	 * chosen language is not English, and cached like the first. A failure of
+	 * that second search only loses the English names, never the match.
+	 */
+	english := map[int]string{}
+	if !meta.IsEnglish(c.lang()) {
+		var en searchResponse
+		if err := c.get(ctx, path, url.Values{"query": {title}, "language": {meta.DefaultLanguage}}, &en); err == nil {
+			for _, r := range en.Results {
+				english[r.ID] = r.displayTitle()
+			}
+		}
+	}
+
 	out := make([]meta.Candidate, 0, len(raw.Results))
 	for _, r := range raw.Results {
+		display := r.displayTitle()
+		var others []string
+		for _, t := range []string{r.originalTitle(), english[r.ID]} {
+			if t = strings.TrimSpace(t); t != "" && t != display {
+				others = append(others, t)
+			}
+		}
 		out = append(out, meta.Candidate{
-			Provider:   ID,
-			ExternalID: strconv.Itoa(r.ID),
-			Kind:       kind,
-			Title:      r.displayTitle(),
-			Year:       yearOf(r.releaseDate()),
-			Overview:   r.Overview,
-			Popularity: r.Popularity,
-			PosterURL:  imageURL(r.PosterPath),
+			Provider:    ID,
+			ExternalID:  strconv.Itoa(r.ID),
+			Kind:        kind,
+			Title:       display,
+			OtherTitles: others,
+			Year:        yearOf(r.releaseDate()),
+			Overview:    r.Overview,
+			Popularity:  r.Popularity,
+			PosterURL:   imageURL(r.PosterPath),
 		})
 	}
 	return out, nil
@@ -190,14 +237,25 @@ func (c *Client) Fetch(ctx context.Context, ref meta.Ref) (*meta.Record, error) 
 }
 
 /*
- * The language TMDB is asked for.
+ * The language TMDB is asked for is the server's metadata language (ADR 0122),
+ * set with WithLanguage. It was a constant, en-US, on the grounds that metadata
+ * disagreeing with an English interface would be strange; a film's title and
+ * synopsis turned out to be content, like its subtitles, not interface.
  *
- * A constant rather than a setting, because LANcast's own interface is English
- * and a metadata language that disagreed with the interface would be a stranger
- * result than either on its own. When there is a UI language there should be a
- * setting here, and this is the one place it would go.
+ * Where the chosen language has no translation, TMDB answers with an empty
+ * field. englishGaps fills those from en-US, so choosing a language never
+ * leaves a synopsis blank that English had.
  */
-const language = "en-US"
+
+// englishGaps asks for path in en-US into out, when this client asks in
+// another language. It reports whether it asked; a failure is "no fill", never
+// a failed fetch, because the record in the chosen language is already good.
+func (c *Client) englishGaps(ctx context.Context, path string, out any) bool {
+	if meta.IsEnglish(c.lang()) {
+		return false
+	}
+	return c.get(ctx, path, url.Values{"language": {meta.DefaultLanguage}}, out) == nil
+}
 
 func (c *Client) fetchMovie(ctx context.Context, id string) (*meta.Record, error) {
 	var m movieDetail
@@ -207,6 +265,18 @@ func (c *Client) fetchMovie(ctx context.Context, id string) (*meta.Record, error
 	if err := c.get(ctx, "/movie/"+id,
 		url.Values{"append_to_response": {"credits,keywords,release_dates"}}, &m); err != nil {
 		return nil, err
+	}
+
+	if strings.TrimSpace(m.Title) == "" || strings.TrimSpace(m.Overview) == "" {
+		var en movieDetail
+		if c.englishGaps(ctx, "/movie/"+id, &en) {
+			if strings.TrimSpace(m.Title) == "" {
+				m.Title = en.Title
+			}
+			if strings.TrimSpace(m.Overview) == "" {
+				m.Overview = en.Overview
+			}
+		}
 	}
 
 	rec := &meta.Record{Source: ID, ExternalID: id, Kind: meta.KindMovie, IMDbID: m.IMDbID}
@@ -354,6 +424,18 @@ func (c *Client) fetchShow(ctx context.Context, id string) (*meta.Record, error)
 		return nil, err
 	}
 
+	if strings.TrimSpace(s.Name) == "" || strings.TrimSpace(s.Overview) == "" {
+		var en showDetail
+		if c.englishGaps(ctx, "/tv/"+id, &en) {
+			if strings.TrimSpace(s.Name) == "" {
+				s.Name = en.Name
+			}
+			if strings.TrimSpace(s.Overview) == "" {
+				s.Overview = en.Overview
+			}
+		}
+	}
+
 	rec := &meta.Record{Source: ID, ExternalID: id, Kind: meta.KindShow, IMDbID: s.ExternalIDs.IMDbID}
 	rec.Fields.Title = meta.S(s.Name)
 	rec.Fields.Series = meta.S(s.Name)
@@ -397,6 +479,18 @@ func (c *Client) fetchSeason(ctx context.Context, ref meta.Ref) (*meta.Record, e
 		return nil, err
 	}
 
+	if strings.TrimSpace(s.Name) == "" || strings.TrimSpace(s.Overview) == "" {
+		var en seasonDetail
+		if c.englishGaps(ctx, path, &en) {
+			if strings.TrimSpace(s.Name) == "" {
+				s.Name = en.Name
+			}
+			if strings.TrimSpace(s.Overview) == "" {
+				s.Overview = en.Overview
+			}
+		}
+	}
+
 	rec := &meta.Record{Source: ID, ExternalID: ref.ExternalID, Kind: meta.KindSeason}
 	if s.Name != "" {
 		rec.Fields.Title = meta.S(s.Name)
@@ -424,6 +518,18 @@ func (c *Client) fetchEpisode(ctx context.Context, ref meta.Ref) (*meta.Record, 
 	var e episodeDetail
 	if err := c.get(ctx, path, nil, &e); err != nil {
 		return nil, err
+	}
+
+	if strings.TrimSpace(e.Name) == "" || strings.TrimSpace(e.Overview) == "" {
+		var en episodeDetail
+		if c.englishGaps(ctx, path, &en) {
+			if strings.TrimSpace(e.Name) == "" {
+				e.Name = en.Name
+			}
+			if strings.TrimSpace(e.Overview) == "" {
+				e.Overview = en.Overview
+			}
+		}
 	}
 
 	rec := &meta.Record{Source: ID, ExternalID: ref.ExternalID, Kind: meta.KindEpisode}
@@ -473,7 +579,17 @@ func (c *Client) Trailer(ctx context.Context, ref meta.Ref) (*meta.Trailer, erro
 			PublishedAt string `json:"published_at"`
 		} `json:"results"`
 	}
-	if err := c.get(ctx, path, nil, &doc); err != nil {
+	/*
+	 * /videos filters by language, and many films have no trailer tagged in a
+	 * language other than English. So ask for the chosen one, then English,
+	 * then untagged, and let the ranking below choose among them (ADR 0122).
+	 */
+	langs := strings.SplitN(c.lang(), "-", 2)[0]
+	if langs != "en" {
+		langs += ",en"
+	}
+	params := url.Values{"include_video_language": {langs + ",null"}}
+	if err := c.get(ctx, path, params, &doc); err != nil {
 		return nil, err
 	}
 
@@ -512,10 +628,36 @@ func (c *Client) Trailer(ctx context.Context, ref meta.Ref) (*meta.Trailer, erro
 
 // get performs a cached, rate-limited, retrying GET and decodes into out.
 func (c *Client) get(ctx context.Context, path string, params url.Values, out any) error {
+	/*
+	 * The language, stated rather than assumed, and set before the cache key
+	 * is made, so an answer in one language is never served for another
+	 * (ADR 0122). A caller that asks for a particular language — the English
+	 * gap fill — keeps it.
+	 *
+	 * Every request until v0.9 sent none and took whatever TMDB's default was.
+	 * That default is en-US and it mostly looked right, which is precisely what
+	 * made it worth fixing — a behaviour nobody asked for and nobody can see is
+	 * one that changes underneath you. It is set here rather than at each call
+	 * site so a request cannot be added later that forgets it.
+	 */
 	if params == nil {
 		params = url.Values{}
 	}
-	cacheKey := path + "?" + params.Encode()
+	if params.Get("language") == "" {
+		params.Set("language", c.lang())
+	}
+	// English keeps the key it always had, so an upgrade does not throw away
+	// every cached answer; any other language is part of the key.
+	keyed := params
+	if params.Get("language") == meta.DefaultLanguage {
+		keyed = url.Values{}
+		for k, v := range params {
+			if k != "language" {
+				keyed[k] = v
+			}
+		}
+	}
+	cacheKey := path + "?" + keyed.Encode()
 
 	if c.cache != nil {
 		if payload, ok, err := c.cache.CachedResponse(ctx, ID, cacheKey, cacheTTL); err == nil && ok {
@@ -524,16 +666,6 @@ func (c *Client) get(ctx context.Context, path string, params url.Values, out an
 	}
 
 	params.Set("api_key", c.apiKey)
-	/*
-	 * The language, stated rather than assumed.
-	 *
-	 * Every request until now sent none and took whatever TMDB's default was.
-	 * That default is en-US and it mostly looked right, which is precisely what
-	 * made it worth fixing — a behaviour nobody asked for and nobody can see is
-	 * one that changes underneath you. It is set here rather than at each call
-	 * site so a request cannot be added later that forgets it.
-	 */
-	params.Set("language", language)
 	endpoint := c.baseURL + path + "?" + params.Encode()
 
 	body, err := c.doWithRetry(ctx, endpoint)
@@ -614,6 +746,16 @@ type searchResult struct {
 	Overview     string  `json:"overview"`
 	Popularity   float64 `json:"popularity"`
 	PosterPath   string  `json:"poster_path"`
+	// The title in the work's own language, whatever language was asked for.
+	OriginalTitle string `json:"original_title"` // movies
+	OriginalName  string `json:"original_name"`  // tv
+}
+
+func (r searchResult) originalTitle() string {
+	if r.OriginalTitle != "" {
+		return r.OriginalTitle
+	}
+	return r.OriginalName
 }
 
 func (r searchResult) displayTitle() string {

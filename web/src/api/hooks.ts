@@ -969,8 +969,12 @@ export function useScanAllLibraries() {
  * `settled` names exactly those locked rows and re-fetches each by the provider
  * id it already carries — nothing searched, nothing re-scored. It is the only
  * way a locked title can learn a field the provider did not used to return.
+ *
+ * `language` is `settled` widened to matched rows too (ADR 0122): every title
+ * TMDB identified, re-fetched by id in the new metadata language. Offered once
+ * the language changes, never started by the change.
  */
-export type RefreshScope = "all" | "unmatched" | "settled";
+export type RefreshScope = "all" | "unmatched" | "settled" | "language";
 
 /**
  * How many items a refresh would re-ask about, before it is asked for.

@@ -7659,6 +7659,21 @@ export interface components {
              *     A chosen country is placed **in front of** that default rather than replacing it. TMDB's coverage is uneven, and narrowing would strip the label off every title the chosen country has no entry for — which a rating ceiling then reads as unrated and blocks.
              */
             certification_country?: string;
+            /**
+             * @description The language titles, synopses and taglines are fetched from TMDB in (ADR 0122), as a language-region tag. Never empty: the default reads back as `en-US`.
+             *
+             *     Where TMDB has no translation the English text fills the gap, and matching scores every name a candidate has, so English filenames keep matching. Takes effect on the next fetch; the `language` refresh scope rewrites what is stored, and is offered rather than started.
+             */
+            metadata_language?: string;
+            /** @description The languages `metadata_language` may be set to. Served rather than known by the client, for the reason `certification_countries` is. */
+            metadata_languages?: {
+                /** @description A language-region tag, such as `de-DE`. */
+                code: string;
+                /** @description The language's name in English. */
+                name: string;
+                /** @description The language's name in itself. */
+                native: string;
+            }[];
             /** @description The countries `certification_country` may be set to. Served rather than known by the client, because what may be offered is a fact about the server's rating ladder: a certificate the ladder cannot place reads as unrated, and an account ceiling blocks unrated. A client carrying its own list would eventually offer a country whose labels no ceiling could place. */
             certification_countries?: {
                 /** @description ISO 3166-1 alpha-2. */
@@ -7777,6 +7792,12 @@ export interface components {
              *     Takes effect on the next metadata fetch. It does **not** rewrite certificates already stored — a metadata refresh does that.
              */
             certification_country?: string;
+            /**
+             * @description The metadata language. Must be one of the codes reported in `metadata_languages`; anything else is rejected with 400. `en-US` returns to the default.
+             *
+             *     Takes effect on the next fetch. It does **not** rewrite what is stored — the `language` refresh scope does that.
+             */
+            metadata_language?: string;
             /**
              * @description The ceiling this server imposes on every stream, as a rung id from `quality_rungs`. Empty means no limit, which is the default.
              *
@@ -14853,7 +14874,7 @@ export interface operations {
         parameters: {
             query?: {
                 /**
-                 * @description `all` (every item a provider could answer for) or `unmatched` (only items no provider identified).
+                 * @description `all` (every item a provider could answer for), `unmatched` (only items no provider identified), `settled` (locked items, re-fetched by id) or `language` (every TMDB-identified item, matched or locked, re-fetched by id for a new `metadata_language`; ADR 0122).
                  *
                  *     **An absent scope means `all`**, so a client written before scopes existed keeps the behaviour it had. An unrecognised scope is `400` rather than being widened to everything — doing 1,480 provider lookups because somebody mistyped is the expensive failure scoping exists to prevent.
                  *
@@ -14866,8 +14887,10 @@ export interface operations {
                  *     It exists because a locked item could otherwise never learn a field the provider did not used to return. Certificates are the case that found it: nothing fetched them before v0.9.23, so titles enriched earlier carry none, and an unrated title is one an account rating ceiling blocks.
                  *
                  *     Items with no provider id are excluded — there is nothing to fetch by. The POST returns immediately with the number it will attempt; the work runs in the background and its outcome goes to the log.
+                 *
+                 *     `language` takes the same by-id door and widens it to matched items too: a change of metadata language is news about every identified title's text and nobody's identity, so nothing is searched or re-scored. Only `tmdb` rows with an id are counted, and rows in `review` are left out — their id is an unconfirmed candidate's. Changing the language never starts it; a client offers it.
                  */
-                scope?: string;
+                scope?: "all" | "unmatched" | "settled" | "language";
             };
             header?: never;
             path: {
@@ -14905,7 +14928,7 @@ export interface operations {
         parameters: {
             query?: {
                 /**
-                 * @description `all` (every item a provider could answer for) or `unmatched` (only items no provider identified).
+                 * @description `all` (every item a provider could answer for), `unmatched` (only items no provider identified), `settled` (locked items, re-fetched by id) or `language` (every TMDB-identified item, matched or locked, re-fetched by id for a new `metadata_language`; ADR 0122).
                  *
                  *     **An absent scope means `all`**, so a client written before scopes existed keeps the behaviour it had. An unrecognised scope is `400` rather than being widened to everything — doing 1,480 provider lookups because somebody mistyped is the expensive failure scoping exists to prevent.
                  *
@@ -14918,8 +14941,10 @@ export interface operations {
                  *     It exists because a locked item could otherwise never learn a field the provider did not used to return. Certificates are the case that found it: nothing fetched them before v0.9.23, so titles enriched earlier carry none, and an unrated title is one an account rating ceiling blocks.
                  *
                  *     Items with no provider id are excluded — there is nothing to fetch by. The POST returns immediately with the number it will attempt; the work runs in the background and its outcome goes to the log.
+                 *
+                 *     `language` takes the same by-id door and widens it to matched items too: a change of metadata language is news about every identified title's text and nobody's identity, so nothing is searched or re-scored. Only `tmdb` rows with an id are counted, and rows in `review` are left out — their id is an unconfirmed candidate's. Changing the language never starts it; a client offers it.
                  */
-                scope?: string;
+                scope?: "all" | "unmatched" | "settled" | "language";
             };
             header?: never;
             path: {
