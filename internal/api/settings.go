@@ -9,6 +9,7 @@ import (
 
 	"lancast/internal/auth"
 	"lancast/internal/config"
+	"lancast/internal/meta"
 	"lancast/internal/rating"
 )
 
@@ -99,12 +100,17 @@ func (s *Server) getSettings(w http.ResponseWriter, r *http.Request) {
 			}
 			return out
 		}(),
-		"detect_markers": cur.DetectMarkers,
-		"scrub_previews": cur.ScrubPreviews,
-		"retro_artwork":  cur.RetroArtwork,
-		"photo_places":   cur.PhotoPlaces,
-		"match_music":    cur.MatchMusic,
-		"login_picker":   cur.LoginPicker,
+		// The metadata language (ADR 0121), and the list it may be chosen
+		// from, served for the reason the countries are: what a provider
+		// will honour is the server's to say. "" reads as the default.
+		"metadata_language":  meta.LanguageOrDefault(cur.MetadataLanguage),
+		"metadata_languages": meta.Languages,
+		"detect_markers":     cur.DetectMarkers,
+		"scrub_previews":     cur.ScrubPreviews,
+		"retro_artwork":      cur.RetroArtwork,
+		"photo_places":       cur.PhotoPlaces,
+		"match_music":        cur.MatchMusic,
+		"login_picker":       cur.LoginPicker,
 
 		// The pre-roll folder (ADR 0099), "" when off.
 		"preroll_dir": cur.PrerollDir,
@@ -162,6 +168,7 @@ func (s *Server) putSettings(w http.ResponseWriter, r *http.Request) {
 		HardwareEncoder  *string  `json:"hardware_encoder"`
 
 		CertificationCountry *string `json:"certification_country"`
+		MetadataLanguage     *string `json:"metadata_language"`
 		MaxQuality           *string `json:"max_quality"`
 
 		DebugLogging       *bool `json:"debug_logging"`
@@ -304,6 +311,21 @@ func (s *Server) putSettings(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		next.CertificationCountry = code
+	}
+	if req.MetadataLanguage != nil {
+		// Refused rather than ignored, for the reason the country is: a
+		// language the provider would not be asked in is a setting that
+		// changes nothing (ADR 0121). The default is stored as "".
+		code := strings.TrimSpace(*req.MetadataLanguage)
+		if code != "" && !meta.KnownLanguage(code) {
+			writeError(w, http.StatusBadRequest, "bad_request",
+				"metadata_language must be one of the languages reported by GET /api/settings")
+			return
+		}
+		if code == meta.DefaultLanguage {
+			code = ""
+		}
+		next.MetadataLanguage = code
 	}
 	// Ranges are rejected rather than clamped, because a client sending 200%
 	// has a bug and silently storing 90 hides it. config.clamp is the floor
@@ -584,6 +606,7 @@ func changedSettings(prev, next config.Settings) []string {
 	add("sensitive_marking", prev.SensitiveMarking != next.SensitiveMarking)
 	add("scrub_previews", prev.ScrubPreviews != next.ScrubPreviews)
 	add("certification_country", prev.CertificationCountry != next.CertificationCountry)
+	add("metadata_language", prev.MetadataLanguage != next.MetadataLanguage)
 	add("max_quality", prev.MaxQuality != next.MaxQuality)
 	add("detect_markers", prev.DetectMarkers != next.DetectMarkers)
 	add("retro_artwork", prev.RetroArtwork != next.RetroArtwork)

@@ -84,7 +84,7 @@ func ScoreBreakdown(q Query, c Candidate) Breakdown {
 	// films — so the result lands in the review band instead of auto-applying.
 	// Inflating the title weight to compensate would manufacture confidence
 	// the evidence does not support.
-	t := titleScore(q.Title, c.Title)
+	t := bestTitleScore(q.Title, c)
 	y := yearScore(q.Year, c.Year)
 	p := popularityScore(c.Popularity)
 	b := Breakdown{
@@ -108,7 +108,7 @@ func scoreEpisode(q Query, c Candidate) Breakdown {
 	if series == "" {
 		series = q.Title
 	}
-	t := titleScore(series, c.Title)
+	t := bestTitleScore(series, c)
 	p := popularityScore(c.Popularity)
 	// The year weight folds into the title for episodes; report Year as 1.0 so
 	// the breakdown does not read as a year failure where year does not apply.
@@ -362,6 +362,19 @@ func SortTitleOf(title string) string { return media.SortTitle(title) }
 // titleScore compares normalized titles. It reuses the normalizer in
 // internal/media so scanning and matching cannot disagree about what a title
 // is — two normalizers that drift is a bug factory (see CLAUDE.md).
+// bestTitleScore is the title score against whichever of a candidate's names
+// is closest (ADR 0121): its title in the language it was asked in, its
+// original title, and its English one.
+func bestTitleScore(a string, c Candidate) float64 {
+	best := titleScore(a, c.Title)
+	for _, t := range c.OtherTitles {
+		if s := titleScore(a, t); s > best {
+			best = s
+		}
+	}
+	return best
+}
+
 func titleScore(a, b string) float64 {
 	na, nb := normalize(a), normalize(b)
 	if na == "" || nb == "" {
