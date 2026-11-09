@@ -78,7 +78,7 @@ type Candidate struct {
 	Title      string
 	// OtherTitles are the candidate's other names: its original-language
 	// title, and its English one when it was searched in another language
-	// (ADR 0121). The scorer takes the best of Title and these, so a file
+	// (ADR 0122). The scorer takes the best of Title and these, so a file
 	// named in either language matches.
 	OtherTitles []string `json:"-"`
 	Year        int

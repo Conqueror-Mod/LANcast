@@ -606,7 +606,7 @@ delete, `match`, item `refresh`); `GET`/`PUT /api/settings`; and all of
 
 | Route | Purpose |
 |---|---|
-| `GET /api/users` | `{users: [{id, name, role}]}` |
+| `GET /api/users` | `{users: [{id, name, role, picture}]}`. `picture` is the hash of the account's uploaded picture, or `null` ([ADR 0121](adr/0121-a-picture-of-your-own.md)) |
 | `POST /api/users` | `{username, password, role?}` → `201 {id, name, role}`. Role defaults to `member`. `409` if the name is taken |
 | `PATCH /api/users/{id}` | `{name?, role?, max_content_rating?}` — rename an account, change its role, set the content rating it may not exceed, or any combination. At least one field is required. The account **id** is unchanged, which is what makes it a rename rather than a replacement: sessions, history, ratings and playlist membership hang off the id and follow silently. `409 last_admin` when it would demote the only administrator, refused in the store inside a transaction with the count. `max_content_rating` is a **ceiling set for the account by an administrator**, and empty clears it; `400` for a label this server cannot place on its scale, because a ceiling that means nothing would leave a household believing a limit was in force. It is deliberately the mirror image of the sharing switch, which has no administrator route at all: a switch somebody else can flip is not consent, and a limit you can lift is not a limit |
 
@@ -614,6 +614,7 @@ delete, `match`, item `refresh`); `GET`/`PUT /api/settings`; and all of
 
 **What a hidden library does** (ADR 0084). It is the same kind of limit as the ceiling and is enforced in the same places: the library leaves the account's `GET /api/libraries`, every listing, and every route that turns an id into an item or bytes, which answer `404`. Every `/api/libraries/{id}/` route answers `404` for it, exactly as for a library that does not exist. A **deny list**: an account nobody narrowed sees everything, and a library added later is visible to everyone until somebody narrows them. Administrators are never restricted. What a paired server may see is decided by its share and is unaffected.
 | `DELETE /api/users/{id}` | Removes the account, its sessions, and its watch state. `409` if it is the last admin |
+| `DELETE /api/users/{id}/picture` | Clears that account's uploaded picture → `204`, whether or not it had one. `404` for no such account. Audited as `user.picture.clear` when there was one ([ADR 0121](adr/0121-a-picture-of-your-own.md) §5) |
 | `POST /api/users/{id}/password` | `{new_password}` → resets that user's password and revokes their sessions |
 | `GET /api/users/{id}/libraries` | `{hidden: [libraryID], applies}` — which libraries this account cannot see ([ADR 0084](adr/0084-a-library-can-be-kept-from-an-account.md)). Empty is the default: every library. `applies` is `false` for an administrator, who is never restricted; the rows are kept, so a demotion puts them back |
 | `PUT /api/users/{id}/libraries` | `{hidden: [libraryID]}` → replaces the set and answers as `GET`. `hidden` is required (`400` without it, rather than lifting everything), and an id that is not a library is `400`. Audited as `user.libraries` |
@@ -2354,8 +2355,13 @@ second server to federate with.
 
 ```json
 { "people": [ { "id": "u_3f9", "name": "Sam", "role": "member",
-                "sharing": true, "watched": 41, "joined_at": 1739000000 } ] }
+                "sharing": true, "watched": 41, "joined_at": 1739000000,
+                "avatar": "owl", "picture": null } ] }
 ```
+
+`avatar` is the drawn animal they chose (`""` for none) and `picture` the hash
+of a picture they uploaded (`null` for none; `GET /api/pictures/{hash}`). Draw
+the picture if there is one, else the animal, else initials.
 
 The caller is excluded from their own list. `sharing` is reported even when
 false, so a page can say "has not shared" rather than showing an empty list that
@@ -2536,6 +2542,42 @@ key it does not recognise, since a later server may add to it (ADR 0018).
 
 The caller's own choice — there is no administrator variant. Read it back from
 `user.avatar` on `GET /api/auth/status`, where `""` means none chosen.
+
+### `PUT /api/profile/picture`
+
+The body is the image itself, not JSON: JPEG, PNG or WebP, at most 10 MB. The
+caller's own picture, replacing any earlier one ([ADR 0121](adr/0121-a-picture-of-your-own.md)).
+Answers `{ "picture": "<hash>" }`.
+
+**The server keeps none of what was sent.** It decodes the image, crops the
+centre square, and stores two JPEGs it drew itself, 256 and 64 pixels. EXIF,
+GPS included, does not survive. What the bytes are is decided by the decoder,
+not by `Content-Type`.
+
+`400` for anything that is not a JPEG, PNG or WebP (a GIF is refused though it
+decodes), larger than 10 MB, more than 8,000 pixels on a side or 40 megapixels,
+or smaller than 16 pixels on a side; the message says which. `403` for a member
+when the `member_pictures` setting is off; an administrator may always upload
+their own. `409 no_account` on a server with no accounts.
+
+A picture wins over `avatar` wherever a person is drawn. Read it back from
+`user.picture` on `GET /api/auth/status`: the hash, or `null`.
+
+### `DELETE /api/profile/picture`
+
+Clears the caller's own picture → `204`. Their `avatar`, if they chose one,
+shows again.
+
+### `GET /api/pictures/{hash}`
+
+`?size=64` or `?size=256` (the default) → `image/jpeg`. Any signed-in account on
+this server may fetch any picture; a federated guest may not, and pictures are
+never sent to a paired server. `404` for a hash no account has, `400` for any
+other size.
+
+`Cache-Control: private, max-age=31536000, immutable`: the hash changes when the
+picture does, so a client never needs to ask twice, and no shared cache should
+hold somebody's face.
 
 ### `GET /api/profile/year`
 
@@ -5573,7 +5615,7 @@ prevent.
 | `all` | every item a provider could answer for |
 | `unmatched` | only items no provider identified |
 | `settled` | only items whose match is **locked**, re-fetched by the id they already carry |
-| `language` | every item TMDB identified, **matched or locked**, re-fetched by the id it already carries — for a new `metadata_language` (ADR 0121) |
+| `language` | every item TMDB identified, **matched or locked**, re-fetched by the id it already carries — for a new `metadata_language` (ADR 0122) |
 
 **GET prices it without performing it**, the way the history reset does. This is
 not destructive but it *is* expensive — roughly 1,480 lookups for a real film
@@ -5633,7 +5675,7 @@ longer resolves at the provider, is skipped rather than failed.
 
 #### `language` is `settled`, wider
 
-A change of `metadata_language` (ADR 0121) is news about every identified
+A change of `metadata_language` (ADR 0122) is news about every identified
 title's **text** and about nobody's **identity**. So this scope takes the
 `settled` door — fetch by the recorded id, write `match_state` and
 `match_score` back unchanged, honour every field lock — and widens who goes
@@ -5949,8 +5991,9 @@ to "have I watched this".
 | `retro_artwork` | `false` | — | Fetch box art and a screenshot for each identified ROM from libretro-thumbnails (ADR 0073). **Off by default**: it is a network fetch per game, and no phone-home has no convenience exception. Identifying ROMs is offline and does not depend on it. **Switching it on re-queues identified ROMs** so their pictures arrive now, by lookup against hashes already stored rather than by reading every file again |
 | `photo_places` | `false` | — | Read where photographs were taken and group picture libraries by town (ADR 0078). **Off by default.** Turning it on starts the location pass at once. **Turning it off deletes every location and place read** — not hides them — so off means nothing is held, as before the feature existed. Reading again costs seconds: the pass reads only the start of each file |
 | `login_picker` | `true` | boolean | Show the accounts on the sign-in page, as names to pick from, to devices on the home network only (`GET /api/auth/accounts`). Audited |
+| `member_pictures` | `true` | boolean | Members may upload a picture of themselves (`PUT /api/profile/picture`). Off refuses their uploads with `403` and leaves existing pictures; administrators may always set their own ([ADR 0121](adr/0121-a-picture-of-your-own.md)). Audited |
 | `certification_country` | `""` | one of `certification_countries` | Whose certificate to prefer on films and programmes, as an ISO 3166-1 alpha-2 code. Empty is the default order: the US certificate, falling back to the British one. A chosen country is placed **in front of** that default rather than replacing it — TMDB's coverage is uneven, and narrowing would strip the label off every title the chosen country has no entry for, which a rating ceiling then reads as unrated and **blocks**. The offered list is **served by `GET /api/settings`, not known by the client**: what may be offered is a fact about the server's rating ladder, and a country whose labels the ladder cannot place would populate `content_rating` with strings every ceiling treats as unrated. France is the worked example — `Tous publics` is a real certificate with no rung on the ladder. A code outside the list is **rejected with 400** rather than stored and ignored. Takes effect on the next metadata fetch and does **not** rewrite certificates already stored; a metadata refresh does that |
-| `metadata_language` | `"en-US"` | one of `metadata_languages` | The language titles, synopses and taglines are fetched from TMDB in (ADR 0121), as a language-region tag. Server-wide. Where TMDB has no translation the **English text fills the gap**, so a choice never blanks a synopsis English had. Matching still works on English filenames: every name a candidate has — its title in this language, its original title, its English title — is scored. A tag outside the list is **400**. `en-US` is stored as the default. Takes effect on the next fetch and does **not** rewrite what is stored; the `language` refresh scope does that, and is offered rather than started. The region of certificates is `certification_country`, not this |
+| `metadata_language` | `"en-US"` | one of `metadata_languages` | The language titles, synopses and taglines are fetched from TMDB in (ADR 0122), as a language-region tag. Server-wide. Where TMDB has no translation the **English text fills the gap**, so a choice never blanks a synopsis English had. Matching still works on English filenames: every name a candidate has — its title in this language, its original title, its English title — is scored. A tag outside the list is **400**. `en-US` is stored as the default. Takes effect on the next fetch and does **not** rewrite what is stored; the `language` refresh scope does that, and is offered rather than started. The region of certificates is `certification_country`, not this |
 | `metadata_languages` | — | read-only | The languages `metadata_language` may be set to, each `{code, name, native}` — `name` in English, `native` in the language itself. **Served rather than known by the client**, for the reason `certification_countries` is |
 | `artwork_cache_mb` | `0` | 0 or more | A cap on the artwork cache, in megabytes. **0 is no limit**, the default. A *target* rather than a guarantee: a daily pass removes things in the order of what can be recovered — **orphans** (artwork nothing references) at any setting, then **derived sizes** oldest-first to meet the cap, and **never a live original**. An original is the only copy that cannot be rebuilt without going back to a provider, so a cap that could remove one would turn a disk-space setting into "some of your posters are gone now". A library whose live originals alone exceed the cap keeps them and says so in the log rather than meeting the number. Orphans are removed even at 0, because they are waste under every policy and removing one cannot cost a visible picture. No upper bound: a large array may reasonably hold a great deal of artwork, and an invented ceiling would be wrong with no way to say so |
 | `max_transcodes` | `3` | 1 to 64 | How many conversions may run at once. Each is a whole ffmpeg, so this is a statement about the machine rather than a preference. A **ceiling, not a queue**: past it a request is refused and the client reports a busy server, which is honest — admitting everybody and letting every stream stutter is not. **Direct play does not count**; a file sent as it is costs no session however many people are watching. Applied live, so an operator relieving a struggling server does not have to restart it and drop the sessions they are trying to help; those already running are left alone and the ceiling decides what is admitted next |

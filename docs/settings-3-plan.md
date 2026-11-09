@@ -313,7 +313,7 @@ at all, which matters more than where any one of them lives. Each is one PR.
 
 ## 11. Step 5 as built
 
-ADR 0121 is the decision; this is what landed.
+ADR 0122 is the decision; this is what landed.
 
 - **One server setting**, `metadata_language`, default `en-US`, chosen from a
   list the server serves (33 language-region tags). Per library is step 6.

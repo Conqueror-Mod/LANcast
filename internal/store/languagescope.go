@@ -7,7 +7,7 @@ import (
 
 /*
  * Re-asking about every TMDB-identified title, for a new metadata language
- * (ADR 0121).
+ * (ADR 0122).
  *
  * The `settled` scope's door, wider. That scope fetches each row from its own
  * recorded provider id and applies the result under the row's locks, without

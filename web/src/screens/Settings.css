@@ -893,7 +893,7 @@ pre.set-network__pin {
   background: rgba(190, 208, 255, 0.55);
 }
 
-/* The refresh a metadata-language change offers (ADR 0121). Set apart from
+/* The refresh a metadata-language change offers (ADR 0122). Set apart from
    the rows around it because it is a question, not a setting. */
 .set-lang-offer {
   display: flex;

@@ -1,5 +1,5 @@
 /*
- * Metadata › Metadata language (ADR 0121): the served languages are offered,
+ * Metadata › Metadata language (ADR 0122): the served languages are offered,
  * a choice is saved, and the refresh it makes possible is offered — per film
  * and show library, with its count — and never started by the choice itself.
  */

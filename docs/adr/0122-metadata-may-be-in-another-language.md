@@ -1,4 +1,4 @@
-# ADR 0121 — Metadata may be in another language than the interface
+# ADR 0122 — Metadata may be in another language than the interface
 
 Date: 2026-11-08 · Status: **accepted** 2026-11-08 · Related: [ADR 0019](0019-external-ratings.md), [ADR 0110](0110-lancast-carries-its-own-provider-keys.md), [ADR 0120](0120-a-setting-belongs-to-what-it-describes.md), [docs/settings-3-plan.md](../settings-3-plan.md)
 

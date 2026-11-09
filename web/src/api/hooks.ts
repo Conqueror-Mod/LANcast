@@ -907,7 +907,7 @@ export function useScanAllLibraries() {
  * id it already carries — nothing searched, nothing re-scored. It is the only
  * way a locked title can learn a field the provider did not used to return.
  *
- * `language` is `settled` widened to matched rows too (ADR 0121): every title
+ * `language` is `settled` widened to matched rows too (ADR 0122): every title
  * TMDB identified, re-fetched by id in the new metadata language. Offered once
  * the language changes, never started by the change.
  */

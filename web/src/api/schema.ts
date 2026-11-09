@@ -1669,6 +1669,53 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/profile/picture": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Upload a picture of yourself
+         * @description The body is the image: JPEG, PNG or WebP, at most 10 MB. **The server keeps none of it**: it decodes the image, crops the centre square, and stores two JPEGs it drew itself (256 and 64 px), so EXIF and GPS do not survive (ADR 0121). The format is decided by the decoder, not by `Content-Type`. Replaces any earlier picture, and wins over `avatar` wherever a person is drawn. Read it back from `user.picture` on `GET /api/auth/status`.
+         */
+        put: operations["putPicture"];
+        post?: never;
+        /**
+         * Clear your picture
+         * @description Your `avatar`, if you chose one, shows again.
+         */
+        delete: operations["deletePicture"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/pictures/{hash}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The `picture` hash from `/auth/status`, `/people` or `/users`. */
+                hash: string;
+            };
+            cookie?: never;
+        };
+        /**
+         * One account's picture
+         * @description Any signed-in account on this server may fetch any picture. A federated guest may not, and pictures are never sent to a paired server (ADR 0121 §4). The hash changes when the picture does, so the response is cached for ever, privately.
+         */
+        get: operations["getPicture"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/profile/avatar": {
         parameters: {
             query?: never;
@@ -2797,6 +2844,28 @@ export interface paths {
          * @description Administrators only.
          */
         patch: operations["patchUser"];
+        trace?: never;
+    };
+    "/users/{id}/picture": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Clear somebody's picture
+         * @description Administrators only. Answers 204 whether or not the account had one; audited as `user.picture.clear` when it did (ADR 0121 §5).
+         */
+        delete: operations["clearUserPicture"];
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/users/{id}/password": {
@@ -6861,6 +6930,8 @@ export interface components {
             webhook_playback?: boolean;
             /** @description The content rating this account may not exceed (ADR 0015). **Present only on `GET /api/users`**, the administrator's account list, and omitted there when the account has no limit — a limit is a fact an administrator manages, and the object a session gets back about itself at login deliberately does not carry it. */
             max_content_rating?: string;
+            /** @description The hash of the picture this account uploaded, or `null` for none (ADR 0121). Fetch it from `GET /api/pictures/{hash}`. When set it wins over `avatar`. */
+            picture?: string | null;
             /**
              * @description The picture this account chose for itself: `fox`, `owl`, `cat`, `wolf`, `bear` or `rabbit`, or `""` for none. **A key, not an image** — the client draws it. `/auth/status` only, and absent when the server could not read it. A client should draw its ordinary person glyph for a key it does not recognise.
              * @example owl
@@ -7534,6 +7605,8 @@ export interface components {
             photo_places: boolean;
             /** @description Show the accounts on the sign-in page to devices on the home network (`GET /api/auth/accounts`). On by default. */
             login_picker: boolean;
+            /** @description Members may upload a picture of themselves (`PUT /api/profile/picture`). On by default; administrators may always set their own (ADR 0121). */
+            member_pictures: boolean;
             auto_enrich: boolean;
             update_check: boolean;
             /** @description Raises the server's log level to debug. Takes effect on the next line logged — **no restart** — and is persisted, because the faults worth turning it on for are the intermittent ones and losing the toggle on restart is how somebody reproduces a bug three times. */
@@ -7587,7 +7660,7 @@ export interface components {
              */
             certification_country?: string;
             /**
-             * @description The language titles, synopses and taglines are fetched from TMDB in (ADR 0121), as a language-region tag. Never empty: the default reads back as `en-US`.
+             * @description The language titles, synopses and taglines are fetched from TMDB in (ADR 0122), as a language-region tag. Never empty: the default reads back as `en-US`.
              *
              *     Where TMDB has no translation the English text fills the gap, and matching scores every name a candidate has, so English filenames keep matching. Takes effect on the next fetch; the `language` refresh scope rewrites what is stored, and is offered rather than started.
              */
@@ -7692,6 +7765,7 @@ export interface components {
             /** @description Read where photographs were taken and group picture libraries by town (ADR 0078). **Off by default.** Turning it on starts the location pass at once; **turning it off deletes every location and place read**, rather than hiding them. */
             photo_places?: boolean;
             login_picker?: boolean;
+            member_pictures?: boolean;
             hardware_encoder?: string;
             debug_logging?: boolean;
             watched_threshold?: number;
@@ -8249,6 +8323,10 @@ export interface components {
         PresenceGrantRequest: {
             on: boolean;
         };
+        PictureResponse: {
+            /** @description The hash of the picture now stored. */
+            picture: string;
+        };
         /** @description Another account on this server. **The caller is excluded by design** — a row for yourself in a list of other people is noise — which is why your own sharing setting is read from `user.sharing` on `GET /api/auth/status` and not from here. */
         Person: {
             id: string;
@@ -8259,6 +8337,10 @@ export interface components {
             watched: number;
             /** Format: int64 */
             joined_at: number;
+            /** @description The drawn animal they chose, `""` for none. */
+            avatar: string;
+            /** @description The hash of the picture this account uploaded, or `null` for none (ADR 0121). Fetch it from `GET /api/pictures/{hash}`. When set it wins over `avatar`. */
+            picture: string | null;
         };
         PersonList: {
             people: components["schemas"]["Person"][];
@@ -8320,6 +8402,8 @@ export interface components {
             sessions: number;
             /** @description The ceiling set for this account, **omitted when there is none**. Reported on the management view rather than on the account's own, because it is visible to whoever can change it. */
             max_content_rating?: string;
+            /** @description The hash of the picture this account uploaded, or `null` for none (ADR 0121). Fetch it from `GET /api/pictures/{hash}`. When set it wins over `avatar`. */
+            picture?: string | null;
             /** @description Present and true when the account uses two-factor sign-in (ADR 0100), so an administrator can take it off. Never the secret. */
             two_factor?: boolean;
         };
@@ -13820,6 +13904,104 @@ export interface operations {
             403: components["responses"]["Forbidden"];
         };
     };
+    putPicture: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "image/jpeg": string;
+                "image/png": string;
+                "image/webp": string;
+            };
+        };
+        responses: {
+            /** @description The hash of the new picture. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PictureResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            /** @description This server has no accounts yet. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    deletePicture: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Cleared. No body. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            /** @description This server has no accounts yet. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    getPicture: {
+        parameters: {
+            query?: {
+                /** @description `64` or `256` (the default). */
+                size?: "64" | "256";
+            };
+            header?: never;
+            path: {
+                /** @description The `picture` hash from `/auth/status`, `/people` or `/users`. */
+                hash: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The picture. */
+            200: {
+                headers: {
+                    /** @description `private, max-age=31536000, immutable`. */
+                    "Cache-Control"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "image/jpeg": string;
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
     putAvatar: {
         parameters: {
             query?: never;
@@ -14692,7 +14874,7 @@ export interface operations {
         parameters: {
             query?: {
                 /**
-                 * @description `all` (every item a provider could answer for), `unmatched` (only items no provider identified), `settled` (locked items, re-fetched by id) or `language` (every TMDB-identified item, matched or locked, re-fetched by id for a new `metadata_language`; ADR 0121).
+                 * @description `all` (every item a provider could answer for), `unmatched` (only items no provider identified), `settled` (locked items, re-fetched by id) or `language` (every TMDB-identified item, matched or locked, re-fetched by id for a new `metadata_language`; ADR 0122).
                  *
                  *     **An absent scope means `all`**, so a client written before scopes existed keeps the behaviour it had. An unrecognised scope is `400` rather than being widened to everything — doing 1,480 provider lookups because somebody mistyped is the expensive failure scoping exists to prevent.
                  *
@@ -14746,7 +14928,7 @@ export interface operations {
         parameters: {
             query?: {
                 /**
-                 * @description `all` (every item a provider could answer for), `unmatched` (only items no provider identified), `settled` (locked items, re-fetched by id) or `language` (every TMDB-identified item, matched or locked, re-fetched by id for a new `metadata_language`; ADR 0121).
+                 * @description `all` (every item a provider could answer for), `unmatched` (only items no provider identified), `settled` (locked items, re-fetched by id) or `language` (every TMDB-identified item, matched or locked, re-fetched by id for a new `metadata_language`; ADR 0122).
                  *
                  *     **An absent scope means `all`**, so a client written before scopes existed keeps the behaviour it had. An unrecognised scope is `400` rather than being widened to everything — doing 1,480 provider lookups because somebody mistyped is the expensive failure scoping exists to prevent.
                  *
@@ -15846,6 +16028,29 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorEnvelope"];
                 };
             };
+        };
+    };
+    clearUserPicture: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Cleared. No body. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
         };
     };
     resetUserPassword: {

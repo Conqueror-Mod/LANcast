@@ -363,7 +363,7 @@ func SortTitleOf(title string) string { return media.SortTitle(title) }
 // internal/media so scanning and matching cannot disagree about what a title
 // is — two normalizers that drift is a bug factory (see CLAUDE.md).
 // bestTitleScore is the title score against whichever of a candidate's names
-// is closest (ADR 0121): its title in the language it was asked in, its
+// is closest (ADR 0122): its title in the language it was asked in, its
 // original title, and its English one.
 func bestTitleScore(a string, c Candidate) float64 {
 	best := titleScore(a, c.Title)

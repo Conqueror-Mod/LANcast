@@ -114,7 +114,7 @@ func TestAMissingLibraryIsNotFound(t *testing.T) {
 	wantError(t, h.do(t, "POST", "/api/libraries/999999/refresh?scope=settled", nil), 404, "not_found")
 }
 
-// The `language` scope (ADR 0121) is routed like `settled`: priced first, run
+// The `language` scope (ADR 0122) is routed like `settled`: priced first, run
 // by id, and never through the search-and-score queue.
 func TestTheLanguageScopeIsAcceptedAndRunByID(t *testing.T) {
 	h := newHarness(t)

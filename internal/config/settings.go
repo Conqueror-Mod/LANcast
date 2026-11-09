@@ -50,7 +50,7 @@ type Settings struct {
 	 * shrink, quietly, with the cause three screens away.
 	 */
 	CertificationCountry string `json:"certification_country,omitempty"`
-	// MetadataLanguage is the language metadata is fetched in (ADR 0121): a
+	// MetadataLanguage is the language metadata is fetched in (ADR 0122): a
 	// tag from meta.Languages, or empty for meta.DefaultLanguage.
 	MetadataLanguage string `json:"metadata_language,omitempty"`
 	/*
@@ -159,6 +159,14 @@ type Settings struct {
 	 * continue_weeks).
 	 */
 	LoginPicker bool `json:"login_picker"`
+
+	/*
+	 * MemberPictures lets members upload a picture of themselves (ADR 0121).
+	 * On by default. Off refuses their uploads and leaves existing pictures
+	 * until somebody clears them; an admin can always set their own. Not
+	 * omitempty, for the reason LoginPicker is not.
+	 */
+	MemberPictures bool `json:"member_pictures"`
 
 	// ---- library and playback rules -------------------------------------
 	//
@@ -416,7 +424,7 @@ func Defaults() Settings {
 		AllowMediaDeletion: true, ScanIntervalHours: 0,
 		AuditRetentionDays: 90, MaxTranscodes: DefaultMaxTranscodes,
 		BackupEveryDays: 7, BackupKeep: 4, OptimizedLimitGB: 200,
-		LoginPicker: true, MatchMusic: true}
+		LoginPicker: true, MatchMusic: true, MemberPictures: true}
 }
 
 // SettingsStore reads and writes the settings file.

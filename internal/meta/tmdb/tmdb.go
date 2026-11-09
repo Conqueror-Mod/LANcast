@@ -48,7 +48,7 @@ type Client struct {
 	// certCountry is the ISO 3166-1 alpha-2 code whose certificate is
 	// preferred. Empty means the default order — see certificationOrder.
 	certCountry string
-	// language is the tag every request asks for (ADR 0121); empty is
+	// language is the tag every request asks for (ADR 0122); empty is
 	// meta.DefaultLanguage.
 	language string
 
@@ -79,7 +79,7 @@ func WithCertificationCountry(code string) Option {
 }
 
 /*
- * WithLanguage asks for metadata in one language (ADR 0121). Validation
+ * WithLanguage asks for metadata in one language (ADR 0122). Validation
  * belongs to the caller (meta.KnownLanguage), for the reason the country's
  * does; an unknown or empty tag fetches in meta.DefaultLanguage.
  */
@@ -176,7 +176,7 @@ func (c *Client) Search(ctx context.Context, q meta.Query) ([]meta.Candidate, er
 	}
 
 	/*
-	 * Every name a result has, for the scorer (ADR 0121).
+	 * Every name a result has, for the scorer (ADR 0122).
 	 *
 	 * Asked in German, TMDB returns "Der Pate" for a file called
 	 * `The Godfather (1972).mkv`. The original-language title is always on the
@@ -237,7 +237,7 @@ func (c *Client) Fetch(ctx context.Context, ref meta.Ref) (*meta.Record, error) 
 }
 
 /*
- * The language TMDB is asked for is the server's metadata language (ADR 0121),
+ * The language TMDB is asked for is the server's metadata language (ADR 0122),
  * set with WithLanguage. It was a constant, en-US, on the grounds that metadata
  * disagreeing with an English interface would be strange; a film's title and
  * synopsis turned out to be content, like its subtitles, not interface.
@@ -582,7 +582,7 @@ func (c *Client) Trailer(ctx context.Context, ref meta.Ref) (*meta.Trailer, erro
 	/*
 	 * /videos filters by language, and many films have no trailer tagged in a
 	 * language other than English. So ask for the chosen one, then English,
-	 * then untagged, and let the ranking below choose among them (ADR 0121).
+	 * then untagged, and let the ranking below choose among them (ADR 0122).
 	 */
 	langs := strings.SplitN(c.lang(), "-", 2)[0]
 	if langs != "en" {
@@ -631,7 +631,7 @@ func (c *Client) get(ctx context.Context, path string, params url.Values, out an
 	/*
 	 * The language, stated rather than assumed, and set before the cache key
 	 * is made, so an answer in one language is never served for another
-	 * (ADR 0121). A caller that asks for a particular language — the English
+	 * (ADR 0122). A caller that asks for a particular language — the English
 	 * gap fill — keeps it.
 	 *
 	 * Every request until v0.9 sent none and took whatever TMDB's default was.

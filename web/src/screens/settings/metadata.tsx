@@ -63,7 +63,7 @@ function RateLimitSection() {
 }
 
 /*
- * One library's share of a language refresh (ADR 0121): how many titles it
+ * One library's share of a language refresh (ADR 0122): how many titles it
  * would fetch again, and the button that does it.
  *
  * A button per library rather than one for everything, so the cost is read
@@ -108,7 +108,7 @@ function LanguageRefreshRow({ library }: { library: Library }) {
 }
 
 /*
- * The refresh a language change offers, and never starts (ADR 0121).
+ * The refresh a language change offers, and never starts (ADR 0122).
  *
  * Shown once the new language is saved. It is its own confirmation: the counts
  * are on screen before anything is asked for, and "Not now" puts it away
@@ -213,7 +213,7 @@ export function MetadataPane() {
                 </>
               )}
             {/*
-              The metadata language (ADR 0121). Served by the server like the
+              The metadata language (ADR 0122). Served by the server like the
               countries above, so the client never offers a tag the server
               would refuse.
             */}

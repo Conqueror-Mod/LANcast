@@ -100,7 +100,7 @@ func (s *Server) getSettings(w http.ResponseWriter, r *http.Request) {
 			}
 			return out
 		}(),
-		// The metadata language (ADR 0121), and the list it may be chosen
+		// The metadata language (ADR 0122), and the list it may be chosen
 		// from, served for the reason the countries are: what a provider
 		// will honour is the server's to say. "" reads as the default.
 		"metadata_language":  meta.LanguageOrDefault(cur.MetadataLanguage),
@@ -111,6 +111,8 @@ func (s *Server) getSettings(w http.ResponseWriter, r *http.Request) {
 		"photo_places":       cur.PhotoPlaces,
 		"match_music":        cur.MatchMusic,
 		"login_picker":       cur.LoginPicker,
+		// Whether members may upload a picture of themselves (ADR 0121).
+		"member_pictures": cur.MemberPictures,
 
 		// The pre-roll folder (ADR 0099), "" when off.
 		"preroll_dir": cur.PrerollDir,
@@ -165,6 +167,7 @@ func (s *Server) putSettings(w http.ResponseWriter, r *http.Request) {
 		MatchMusic       *bool    `json:"match_music"`
 		PhotoPlaces      *bool    `json:"photo_places"`
 		LoginPicker      *bool    `json:"login_picker"`
+		MemberPictures   *bool    `json:"member_pictures"`
 		HardwareEncoder  *string  `json:"hardware_encoder"`
 
 		CertificationCountry *string `json:"certification_country"`
@@ -268,6 +271,9 @@ func (s *Server) putSettings(w http.ResponseWriter, r *http.Request) {
 	if req.LoginPicker != nil {
 		next.LoginPicker = *req.LoginPicker
 	}
+	if req.MemberPictures != nil {
+		next.MemberPictures = *req.MemberPictures
+	}
 	if req.PhotoPlaces != nil {
 		next.PhotoPlaces = *req.PhotoPlaces
 	}
@@ -315,7 +321,7 @@ func (s *Server) putSettings(w http.ResponseWriter, r *http.Request) {
 	if req.MetadataLanguage != nil {
 		// Refused rather than ignored, for the reason the country is: a
 		// language the provider would not be asked in is a setting that
-		// changes nothing (ADR 0121). The default is stored as "".
+		// changes nothing (ADR 0122). The default is stored as "".
 		code := strings.TrimSpace(*req.MetadataLanguage)
 		if code != "" && !meta.KnownLanguage(code) {
 			writeError(w, http.StatusBadRequest, "bad_request",
@@ -613,6 +619,7 @@ func changedSettings(prev, next config.Settings) []string {
 	add("match_music", prev.MatchMusic != next.MatchMusic)
 	add("photo_places", prev.PhotoPlaces != next.PhotoPlaces)
 	add("login_picker", prev.LoginPicker != next.LoginPicker)
+	add("member_pictures", prev.MemberPictures != next.MemberPictures)
 	add("auto_enrich", prev.AutoEnrich != next.AutoEnrich)
 	add("update_check", prev.UpdateCheck != next.UpdateCheck)
 	add("hardware_encoder", prev.HardwareEncoder != next.HardwareEncoder)

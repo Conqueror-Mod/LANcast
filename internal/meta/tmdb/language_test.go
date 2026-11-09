@@ -11,7 +11,7 @@ import (
 )
 
 /*
- * Metadata in another language (ADR 0121): every request asks for it, a cached
+ * Metadata in another language (ADR 0122): every request asks for it, a cached
  * answer in one language is never served for another, English fills the gaps,
  * and a file named in English still matches a title searched in German.
  */

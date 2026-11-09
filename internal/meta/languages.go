@@ -3,7 +3,7 @@ package meta
 import "strings"
 
 /*
- * The languages metadata may be fetched in (ADR 0121).
+ * The languages metadata may be fetched in (ADR 0122).
  *
  * A list rather than any tag, for the reason certification countries are a
  * list: a value the server will store but a provider will not honour is a

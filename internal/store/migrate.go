@@ -6,7 +6,7 @@ import (
 )
 
 // CurrentSchemaVersion is the revision this build expects.
-const CurrentSchemaVersion = 93
+const CurrentSchemaVersion = 94
 
 // migration is one forward step. There are deliberately no down migrations:
 // rolling a media library's schema backwards loses data that a rescan cannot
@@ -223,6 +223,7 @@ var migrations = []migration{
 		{"user", "comic_layout", "TEXT"},
 		{"user", "comic_fit", "TEXT"},
 	}},
+	{version: 94, sql: schemaRevision94},
 }
 
 // migrate brings the database up to CurrentSchemaVersion.
@@ -2609,6 +2610,28 @@ CREATE TABLE IF NOT EXISTS invite (
  * No UNIQUE on (user_id, position): moving a shelf rewrites positions inside
  * one transaction, and a unique index would refuse the intermediate state.
  */
+/*
+ * Revision 94 — a picture of your own (ADR 0121).
+ *
+ * The two JPEGs the server drew from an upload, in the database rather than
+ * beside it, because a backup is the database and nothing else (ADR 0058):
+ * files would have been missing from every restore. Roughly 20-30 KB a row.
+ *
+ * hash is the SHA-256 of large, and the URL a client fetches it by; the index
+ * is for that lookup. No foreign key on user_id, like home_shelf: DeleteUser
+ * removes the row by hand.
+ */
+const schemaRevision94 = `
+CREATE TABLE IF NOT EXISTS user_picture (
+    user_id    TEXT    PRIMARY KEY,
+    hash       TEXT    NOT NULL,
+    large      BLOB    NOT NULL,
+    small      BLOB    NOT NULL,
+    updated_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_user_picture_hash ON user_picture(hash);
+`
+
 const schemaRevision91 = `
 CREATE TABLE IF NOT EXISTS home_shelf (
     id         INTEGER PRIMARY KEY,

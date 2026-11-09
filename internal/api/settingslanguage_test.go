@@ -7,7 +7,7 @@ import (
 )
 
 /*
- * The metadata language setting (ADR 0121): the list is served, only a
+ * The metadata language setting (ADR 0122): the list is served, only a
  * language in it is stored, and the default reads back as en-US whether it
  * was never set or set to en-US.
  */

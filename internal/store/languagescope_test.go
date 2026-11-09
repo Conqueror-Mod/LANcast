@@ -7,7 +7,7 @@ import (
 )
 
 /*
- * Which rows a language refresh fetches again (ADR 0121): every TMDB-identified
+ * Which rows a language refresh fetches again (ADR 0122): every TMDB-identified
  * title, matched or locked, and nothing in review, nothing from another
  * provider, nothing with no id to fetch by.
  */

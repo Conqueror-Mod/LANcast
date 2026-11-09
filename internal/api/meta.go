@@ -466,7 +466,7 @@ func refreshScope(r *http.Request) (store.RefreshScope, bool) {
 
 /*
  * scopeLanguage re-asks about every TMDB-identified title, matched or locked,
- * after the metadata language changes (ADR 0121). It goes through the same
+ * after the metadata language changes (ADR 0122). It goes through the same
  * by-id door as scopeSettled — nothing searched, nothing scored, no match
  * state moved, locked fields kept — and, like it, is not a scope refreshWhere
  * knows, so the handlers branch on it first.
