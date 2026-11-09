@@ -665,6 +665,8 @@ func (s *Server) Handler() http.Handler {
 	// Home follows the account (ADR 0120).
 	mux.HandleFunc("GET /api/profile/home", s.homePreferences)
 	mux.HandleFunc("PUT /api/profile/home", s.setHomePreferences)
+	mux.HandleFunc("GET /api/profile/reading", s.readingPreferences)
+	mux.HandleFunc("PUT /api/profile/reading", s.setReadingPreferences)
 	mux.HandleFunc("GET /api/profile/ratings", s.listMyRatings)
 	// RetroAchievements (ADR 0090): the caller's own, and nobody else's.
 	mux.HandleFunc("GET /api/profile/retroachievements", s.getRetroAchievements)

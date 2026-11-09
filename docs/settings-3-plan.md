@@ -289,3 +289,24 @@ at all, which matters more than where any one of them lives. Each is one PR.
 - **Home.** A shelf turned off is not drawn, and Watchlist and Rate what
   you've watched are not fetched. Unwatched shelves keep their library names
   while two exist, shown or not.
+
+## 10. Step 4 as built
+
+- **Server.** Revision 93 adds four nullable columns to `user`
+  (`book_speed`, `book_sleep`, `comic_layout`, `comic_fit`); null is "never
+  chosen". `GET`/`PUT /api/profile/reading`. The values are the ones the
+  players offer and nothing else: a speed the book player's menu cannot show
+  is refused.
+- **Audiobooks.** A book with no speed of its own starts at the account's
+  default; the default is not written to the book, so changing it moves every
+  book nobody has set. The default sleep timer is set when a book starts and
+  no timer is already counting.
+- **Comics.** The reader learned two facing pages (the cover alone, then each
+  pair as printed, one page on a screen taller than it is wide) and fitting to
+  the width (up and down scroll; Space and Page Down read down the page and
+  turn at its foot). Left to right only: reading direction is step 6. There is
+  no switch inside the reader yet; the layout is chosen in Settings.
+- **Connected accounts.** Connecting, disconnecting and earning while playing
+  moved from the profile to *Your account › Connected accounts*. The profile
+  keeps the points, unlocks and progress, with a Manage link, and sends
+  somebody not yet connected to Settings.

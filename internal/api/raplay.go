@@ -131,7 +131,7 @@ func (s *Server) raConnect(w http.ResponseWriter, r *http.Request) {
 	}
 	if acct == nil || len(acct.TokenSealed) == 0 {
 		writeError(w, http.StatusConflict, "earning_off",
-			"earning achievements is off; turn it on in your profile")
+			"earning achievements is off; turn it on in Settings, under Connected accounts")
 		return
 	}
 	form, kind, err := ra.Check(req.Body, acct.RAUser)
@@ -142,7 +142,7 @@ func (s *Server) raConnect(w http.ResponseWriter, r *http.Request) {
 	token, err := s.ra.Sealer.Open(acct.TokenSealed)
 	if err != nil {
 		writeError(w, http.StatusConflict, "earning_off",
-			"this server can't read your RetroAchievements token; turn earning on again in your profile")
+			"this server can't read your RetroAchievements token; turn earning on again in Settings, under Connected accounts")
 		return
 	}
 	agent := s.raAgent(req.UserAgent, req.UserAgentClause)

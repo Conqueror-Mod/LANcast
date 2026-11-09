@@ -29,6 +29,7 @@ import { apiGet, apiSend } from "@/api/client";
 import { invalidateWatchState, useItem } from "@/api/hooks";
 import type { Item } from "@/api/types";
 import { usePlaybackIfAny } from "./PlaybackProvider";
+import { defaultBookSpeed, defaultSleep, useReadingPrefsNow } from "@/lib/readingPrefs";
 import { startedFloorMs } from "./resumePoint";
 import {
   bookTime,
@@ -113,6 +114,9 @@ export function resetBookAudioForTests(a?: HTMLAudioElement): void {
 export function BookProvider({ children }: { children: ReactNode }) {
   const qc = useQueryClient();
   const main = usePlaybackIfAny();
+  const readingPrefs = useReadingPrefsNow();
+  // setSleep is declared below play; play reaches it through this.
+  const applySleep = useRef<(choice: SleepChoice) => void>(() => {});
   const [bookID, setBookID] = useState(0);
   const [info, setInfo] = useState<BookInfo | null>(null);
   const [playing, setPlaying] = useState(false);
@@ -326,6 +330,9 @@ export function BookProvider({ children }: { children: ReactNode }) {
   const play = useCallback(
     async (id: number, fromMs?: number) => {
       setNote("");
+      // Asked alongside the book rather than after it, so a slow answer never
+      // holds the book up.
+      const prefsAsked = readingPrefs();
       let i: BookInfo;
       try {
         i = await apiGet<BookInfo>(`/api/items/${id}/book`);
@@ -346,14 +353,25 @@ export function BookProvider({ children }: { children: ReactNode }) {
       bookRef.current = id;
       partRef.current = -1;
       lastSaved.current = -1;
-      const rate = speedOf(i);
+      const prefs = await prefsAsked;
+      /*
+       * The book's own speed, else the account's default (settings-3-plan
+       * step 4), else 1x. The default is not written to the book: until the
+       * listener chooses, the book has no speed of its own, so changing the
+       * default changes every book nobody has set.
+       */
+      const rate = i.speed != null ? speedOf(i) : defaultBookSpeed(prefs);
       speedRef.current = rate;
       setSpeedState(rate);
       setInfo(i);
       setBookID(id);
       loadAt(fromMs ?? resumeFrom(i), true);
+      // A sleep timer from the account's default, when none is running: one
+      // set by hand, or one still counting on this book, is left alone.
+      const sleepDefault = defaultSleep(prefs);
+      if (sleepDefault && !sleepRef.current) applySleep.current(sleepDefault);
     },
-    [loadAt, main, save, endSleep],
+    [loadAt, main, save, endSleep, readingPrefs],
   );
 
   const toggle = useCallback(() => {
@@ -398,6 +416,7 @@ export function BookProvider({ children }: { children: ReactNode }) {
     },
     [endSleep],
   );
+  applySleep.current = setSleep;
   const skip = useCallback((d: number) => seekTo(timeRef.current + d), [seekTo]);
   const skipBack = useCallback(() => skip(-SKIP_BACK_MS), [skip]);
   const skipForward = useCallback(() => skip(SKIP_FORWARD_MS), [skip]);

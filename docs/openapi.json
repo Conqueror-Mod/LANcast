@@ -11573,6 +11573,64 @@
         }
       }
     },
+    "/profile/reading": {
+      "get": {
+        "operationId": "getReadingPreferences",
+        "summary": "The caller's reading and listening defaults",
+        "description": "What a book or a comic does when nothing more specific has been chosen (ADR 0120): the speed a book starts at, a sleep timer set when a book starts, and how comics are laid out. A null field has never been chosen: 1x, no timer, one page fitted to the screen. On a server with no accounts, `account` is false and every field is null.",
+        "tags": [
+          "Profile"
+        ],
+        "responses": {
+          "200": {
+            "description": "The caller's reading and listening defaults.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReadingPreferences"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "operationId": "setReadingPreferences",
+        "summary": "Set the caller's reading and listening defaults",
+        "description": "Each field is optional and a field left out is left alone; at least one is required. Acts on the session only. Not audited.",
+        "tags": [
+          "Profile"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReadingPreferencesUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Saved; the defaults as stored.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReadingPreferences"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "No field sent, or a value the players cannot use: `bad_book_speed`, `bad_book_sleep`, `bad_comic_layout`, `bad_comic_fit`."
+          },
+          "409": {
+            "description": "This server has no accounts yet (`no_account`)."
+          }
+        }
+      }
+    },
     "/profile/sessions": {
       "get": {
         "operationId": "listMySessions",
@@ -24108,6 +24166,108 @@
               "type": "string"
             },
             "description": "Replaces the whole list."
+          }
+        }
+      },
+      "ReadingPreferences": {
+        "type": "object",
+        "required": [
+          "account",
+          "book_speed",
+          "book_sleep",
+          "comic_layout",
+          "comic_fit"
+        ],
+        "properties": {
+          "account": {
+            "type": "boolean",
+            "description": "False on a server with no accounts yet."
+          },
+          "book_speed": {
+            "type": "number",
+            "nullable": true,
+            "enum": [
+              0.75,
+              1,
+              1.25,
+              1.5,
+              1.75,
+              2
+            ],
+            "description": "The speed a book starts at until it has a speed of its own, which then wins. Null: never chosen, which is 1x."
+          },
+          "book_sleep": {
+            "type": "string",
+            "nullable": true,
+            "enum": [
+              "off",
+              "15",
+              "30",
+              "45",
+              "60",
+              "chapter"
+            ],
+            "description": "A sleep timer set when a book starts: minutes, the end of the chapter, or off. The book player can change or clear it. Null: never chosen, which is off."
+          },
+          "comic_layout": {
+            "type": "string",
+            "nullable": true,
+            "enum": [
+              "single",
+              "spread"
+            ],
+            "description": "How a comic is shown: a page at a time, or two facing pages with the cover alone. Null: never chosen, which is single."
+          },
+          "comic_fit": {
+            "type": "string",
+            "nullable": true,
+            "enum": [
+              "page",
+              "width"
+            ],
+            "description": "How a comic page is sized: the whole page on screen, or the width of the screen, scrolled down. Null: never chosen, which is page."
+          }
+        }
+      },
+      "ReadingPreferencesUpdate": {
+        "type": "object",
+        "description": "A change to the caller's reading and listening defaults. Every field is optional; at least one is required.",
+        "properties": {
+          "book_speed": {
+            "type": "number",
+            "enum": [
+              0.75,
+              1,
+              1.25,
+              1.5,
+              1.75,
+              2
+            ]
+          },
+          "book_sleep": {
+            "type": "string",
+            "enum": [
+              "off",
+              "15",
+              "30",
+              "45",
+              "60",
+              "chapter"
+            ]
+          },
+          "comic_layout": {
+            "type": "string",
+            "enum": [
+              "single",
+              "spread"
+            ]
+          },
+          "comic_fit": {
+            "type": "string",
+            "enum": [
+              "page",
+              "width"
+            ]
           }
         }
       },

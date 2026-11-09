@@ -7,7 +7,8 @@ import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { RetroAchievementsCard } from "./RetroAchievementsCard";
+import { MemoryRouter } from "react-router-dom";
+import { RetroAchievementsCard, RetroAchievementsConnection } from "./RetroAchievementsCard";
 
 declare global {
   // eslint-disable-next-line no-var
@@ -72,12 +73,21 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-async function render() {
+/*
+ * Since settings-3-plan step 4 the connection is in Settings › Connected
+ * accounts and the progress is on the profile. Both read one query, so they
+ * are rendered together here, as one person moving between the two would see
+ * them; `which` renders just one.
+ */
+async function render(which: "both" | "profile" = "both") {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   await act(async () => {
     root.render(
       <QueryClientProvider client={client}>
-        <RetroAchievementsCard />
+        <MemoryRouter>
+          {which === "both" && <RetroAchievementsConnection />}
+          <RetroAchievementsCard />
+        </MemoryRouter>
       </QueryClientProvider>,
     );
   });
@@ -108,7 +118,14 @@ async function submit() {
   }
 }
 
-describe("RetroAchievements on the profile", () => {
+describe("RetroAchievements in Settings and on the profile", () => {
+  it("sends somebody who has not connected to Settings, rather than offering a form on the profile", async () => {
+    await render("profile");
+    expect(host.querySelector("form")).toBeNull();
+    const link = host.querySelector("a")!;
+    expect(link.getAttribute("href")).toBe("/settings?pane=accounts");
+  });
+
   it("offers to connect, and then shows the progress", async () => {
     await render();
     expect(host.textContent).toContain("Only you see it");
