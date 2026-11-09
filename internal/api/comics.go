@@ -2,11 +2,13 @@ package api
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
 	"os"
 	"strconv"
+	"strings"
 
 	"lancast/internal/comic"
 	"lancast/internal/store"
@@ -98,7 +100,106 @@ func (s *Server) comicPages(w http.ResponseWriter, r *http.Request) {
 		}
 		out["place"] = place
 	}
+	d, err := s.comicDirection(r.Context(), it)
+	if err != nil {
+		s.writeInternal(w, err, "read reading direction")
+		return
+	}
+	out["direction"], out["direction_from"], out["series"] = d.Direction, d.From, d.Series
 	writeJSON(w, http.StatusOK, out)
+}
+
+// readingDirection is which way a comic reads and why (ADR 0123).
+type readingDirection struct {
+	Direction string  `json:"direction"`      // ltr | rtl
+	From      string  `json:"direction_from"` // series | library | default
+	Series    *string `json:"series"`         // null for a comic at the library's root
+}
+
+/*
+ * comicDirection resolves a comic's reading direction: its series' override,
+ * else its library's, else left to right. Resolved here so no client works
+ * out the precedence for itself, and two clients cannot disagree about one
+ * book.
+ */
+func (s *Server) comicDirection(ctx context.Context, it *store.Item) (readingDirection, error) {
+	out := readingDirection{Direction: "ltr", From: "default"}
+	if it.Series != nil && *it.Series != "" {
+		out.Series = it.Series
+		dir, err := s.st.SeriesDirection(ctx, it.LibraryID, *it.Series)
+		if err != nil {
+			return out, err
+		}
+		if dir != "" {
+			out.Direction, out.From = dir, "series"
+			return out, nil
+		}
+	}
+	lib, err := s.st.GetLibrary(ctx, it.LibraryID)
+	if err != nil {
+		return out, err
+	}
+	if lib.ReadingDirection != nil && *lib.ReadingDirection != "" {
+		out.Direction, out.From = *lib.ReadingDirection, "library"
+	}
+	return out, nil
+}
+
+/*
+ * setSeriesDirection answers PUT /api/items/{id}/series-direction: the comic's
+ * whole series reads this way, whatever its library does (ADR 0123). Admin
+ * only, like the library's own direction.
+ *
+ * Addressed through a comic rather than by series name, so a client can only
+ * name a series that exists, spelled as the library spells it. "" removes the
+ * override and the series reads its library's way again. Answers with the
+ * comic's direction as resolved after the change.
+ */
+func (s *Server) setSeriesDirection(w http.ResponseWriter, r *http.Request) {
+	id, ok := pathID(r)
+	if !ok {
+		writeError(w, http.StatusBadRequest, "bad_request", "invalid item id")
+		return
+	}
+	var req struct {
+		Direction *string `json:"direction"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.Direction == nil {
+		writeError(w, http.StatusBadRequest, "bad_request", "body must be {\"direction\": \"ltr\" | \"rtl\" | \"\"}")
+		return
+	}
+	dir := strings.TrimSpace(*req.Direction)
+	if dir != "" && dir != "ltr" && dir != "rtl" {
+		writeError(w, http.StatusBadRequest, "bad_request", "direction must be ltr, rtl or empty")
+		return
+	}
+	it, err := s.st.GetItem(r.Context(), id, s.userID(r))
+	if s.notFoundOr(w, err, "get item", "no such item") {
+		return
+	}
+	if it.Kind != "comic" {
+		writeError(w, http.StatusNotFound, "not_found", "item is not a comic")
+		return
+	}
+	if it.Series == nil || *it.Series == "" {
+		writeError(w, http.StatusBadRequest, "bad_request",
+			"this comic is not in a series folder; set the library's reading direction instead")
+		return
+	}
+	if err := s.st.SetSeriesDirection(r.Context(), it.LibraryID, *it.Series, dir); err != nil {
+		s.writeInternal(w, err, "set series direction")
+		return
+	}
+	shown := map[string]string{"": "its library's way", "ltr": "left to right", "rtl": "right to left"}[dir]
+	s.audit(r, "library.update", "library", auditID(it.LibraryID),
+		"Set the series "+*it.Series+" to read "+shown,
+		map[string]any{"series": *it.Series, "direction": dir})
+	d, err := s.comicDirection(r.Context(), it)
+	if err != nil {
+		s.writeInternal(w, err, "read reading direction")
+		return
+	}
+	writeJSON(w, http.StatusOK, d)
 }
 
 // comicPage answers GET /api/items/{id}/pages/{n}: one page, numbered from 0.

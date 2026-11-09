@@ -33,7 +33,9 @@ import {
   useAddRoot,
   useRemoveRoot,
   useRepointRoot,
+  useSettings,
 } from "@/api/hooks";
+import { LanguageRefreshRow } from "./LanguageRefreshRow";
 import { LIBRARY_KINDS, kindLabel } from "@/screens/libraryConfig";
 import { DirectoryPicker } from "./DirectoryPicker";
 import { navCount } from "./AppShell";
@@ -625,6 +627,7 @@ function LibraryEditor({
         />
       </label>
       <LibraryLocations library={library} />
+      <LibraryOptions library={library} />
       <p className="set-row__sub">
         Type: {kindLabel(library.kind)} — a library's type cannot be changed.
         Add the folder again as the type you want.
@@ -641,6 +644,102 @@ function LibraryEditor({
       </div>
     </div>
   );
+}
+
+/*
+ * A library's own options (ADR 0123): the language a film or show library is
+ * fetched in, and which way a comics library reads.
+ *
+ * Each saves when it is changed, like the settings around it, rather than
+ * waiting for the name's Save button: they are independent of the name, and a
+ * dropdown that does nothing until another button is pressed is one people
+ * leave believing they changed something.
+ */
+export function LibraryOptions({ library }: { library: Library }) {
+  const update = useUpdateLibrary();
+  const { data: settings } = useSettings(true);
+  // The language just chosen, while its refresh is on offer.
+  const [offered, setOffered] = useState(false);
+  const languages = settings?.metadata_languages ?? [];
+  const serverName =
+    languages.find((l) => l.code === settings?.metadata_language)?.name ?? "English (US)";
+
+  if (library.kind === "movie" || library.kind === "show") {
+    if (languages.length === 0) return null;
+    return (
+      <div className="set-roots">
+        <span className="section-label">Options</span>
+        <label className="set-row">
+          <span>Metadata language</span>
+          <select
+            className="set-input"
+            aria-label="Library metadata language"
+            value={library.metadata_language ?? ""}
+            disabled={update.isPending}
+            onChange={(e) =>
+              update.mutate(
+                { id: library.id, metadata_language: e.target.value },
+                { onSuccess: () => setOffered(true) },
+              )
+            }
+          >
+            <option value="">{`The server's language (${serverName})`}</option>
+            {languages.map((l) => (
+              <option key={l.code} value={l.code}>
+                {l.name === l.native ? l.name : `${l.name} — ${l.native}`}
+              </option>
+            ))}
+          </select>
+        </label>
+        <p className="set-row__sub">
+          The language this library&rsquo;s titles and descriptions are fetched
+          in — an anime library in Japanese beside films in English, say.
+        </p>
+        {offered && (
+          <div className="set-lang-offer" role="group" aria-label="Refresh in the new language">
+            <p className="set-row__sub">
+              What is already stored is still in the old language. Fetch it
+              again? Nothing is searched again, matches stay as they are, and
+              anything you edited by hand is left alone.
+            </p>
+            <LanguageRefreshRow library={library} />
+            <button className="set-btn" onClick={() => setOffered(false)}>
+              Not now
+            </button>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  if (library.kind === "comics") {
+    return (
+      <div className="set-roots">
+        <span className="section-label">Options</span>
+        <label className="set-row">
+          <span>Reading direction</span>
+          <select
+            className="set-input"
+            aria-label="Library reading direction"
+            value={library.reading_direction ?? "ltr"}
+            disabled={update.isPending}
+            onChange={(e) =>
+              update.mutate({ id: library.id, reading_direction: e.target.value })
+            }
+          >
+            <option value="ltr">Left to right</option>
+            <option value="rtl">Right to left (manga)</option>
+          </select>
+        </label>
+        <p className="set-row__sub">
+          Which way the pages turn. A series that reads the other way can be
+          set on its own from the reader, by an admin.
+        </p>
+      </div>
+    );
+  }
+
+  return null;
 }
 
 /*

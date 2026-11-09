@@ -177,6 +177,8 @@ export const SETTINGS_INDEX: SettingEntry[] = [
   { pane: "libraries", label: "Start scans at", terms: "scan hour time" },
   { pane: "libraries", label: "Allow deleting media files from disk", terms: "delete remove files" },
   { pane: "libraries", label: "Forget missing files after a scan", terms: "empty trash missing" },
+  { pane: "libraries", label: "Reading direction", terms: "manga right to left comics library edit" },
+  { pane: "libraries", label: "Library metadata language", terms: "anime japanese language translation library edit" },
   { pane: "metadata", label: "OpenSubtitles account", terms: "subtitles login provider" },
   { pane: "metadata", label: "Use LANcast's built-in keys", terms: "tmdb omdb api key provider" },
   { pane: "metadata", label: "Age rating country", terms: "certification pg-13 fsk country" },

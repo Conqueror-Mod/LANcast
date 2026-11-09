@@ -1,6 +1,9 @@
 package meta
 
-import "strings"
+import (
+	"context"
+	"strings"
+)
 
 /*
  * The languages metadata may be fetched in (ADR 0122).
@@ -29,8 +32,8 @@ const DefaultLanguage = "en-US"
 // Languages is every language that may be chosen, English first, then by
 // English name.
 var Languages = []Language{
-	{"en-US", "English (United States)", "English (US)"},
-	{"en-GB", "English (United Kingdom)", "English (UK)"},
+	{"en-US", "English (United States)", "English (United States)"},
+	{"en-GB", "English (United Kingdom)", "English (United Kingdom)"},
 	{"ar-SA", "Arabic", "العربية"},
 	{"zh-CN", "Chinese (Simplified)", "简体中文"},
 	{"zh-TW", "Chinese (Traditional)", "繁體中文"},
@@ -87,4 +90,31 @@ func LanguageOrDefault(code string) string {
 // IsEnglish reports whether a language tag is English, in any region.
 func IsEnglish(code string) bool {
 	return code == "" || strings.HasPrefix(strings.ToLower(code), "en")
+}
+
+/*
+ * One fetch's language, carried on its context (ADR 0123).
+ *
+ * A library may be fetched in a language of its own. The caller that knows
+ * which item it is fetching for — the enrichment worker, Fix match, a trailer
+ * lookup — places the library's language here, and a provider whose answers
+ * depend on the language reads it before its own default. The Provider
+ * interface is unchanged, so a provider with no languages never hears of them.
+ */
+type languageKey struct{}
+
+// WithLanguage returns ctx carrying code as the language to fetch in. An
+// empty code returns ctx unchanged, so "follow the server" needs no branch at
+// the call site.
+func WithLanguage(ctx context.Context, code string) context.Context {
+	if code == "" {
+		return ctx
+	}
+	return context.WithValue(ctx, languageKey{}, code)
+}
+
+// LanguageFrom is the language ctx carries, or "" when it carries none.
+func LanguageFrom(ctx context.Context) string {
+	code, _ := ctx.Value(languageKey{}).(string)
+	return code
 }

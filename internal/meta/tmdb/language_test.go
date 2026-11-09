@@ -214,3 +214,25 @@ func TestTrailersAreNotLimitedToTheChosenLanguage(t *testing.T) {
 		t.Errorf("include_video_language = %q, want de,en,null", asked)
 	}
 }
+
+// A library's own language (ADR 0123) rides on the context and beats the
+// server's; one this build does not offer is ignored rather than sent.
+func TestTheContextLanguageBeatsTheClients(t *testing.T) {
+	var got seen
+	srv := fakeTMDB(t, func(w http.ResponseWriter, r *http.Request) {
+		got.add(r)
+		w.Write([]byte(`{"id":1,"title":"ゴッドファーザー","overview":"映画。"}`))
+	})
+	c := newClient(t, srv, WithLanguage("de-DE"))
+	ref := meta.Ref{Kind: meta.KindMovie, ExternalID: "1"}
+	if _, err := c.Fetch(meta.WithLanguage(context.Background(), "ja-JP"), ref); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := c.Fetch(meta.WithLanguage(context.Background(), "xx-YY"), ref); err != nil {
+		t.Fatal(err)
+	}
+	reqs := got.all()
+	if len(reqs) != 2 || reqs[0] != "/movie/1?language=ja-JP" || reqs[1] != "/movie/1?language=de-DE" {
+		t.Errorf("requests = %v, want ja-JP from the context, then the client's de-DE", reqs)
+	}
+}

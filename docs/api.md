@@ -933,6 +933,20 @@ whole library missing.
 **Changing `path` moves the library's *first* location.** With several, the
 per-location endpoints below are the precise form.
 
+**A library's own options** ([ADR 0123](adr/0123-a-library-carries-its-own-options.md)),
+both nullable on the library and both cleared by sending `""`:
+
+| Field | Libraries | Meaning |
+| --- | --- | --- |
+| `metadata_language` | film and show | The language TMDB is asked in, a code from `metadata_languages`. `null` follows the server's `metadata_language` |
+| `reading_direction` | comics | `rtl` reads right to left, as manga does. `null` (or `ltr`, which is stored as `null`) is left to right. A series may differ — `PUT /api/items/{id}/series-direction` |
+
+**An option a library cannot use is `400`**, not stored and ignored — a value
+that does nothing is one somebody sets believing it worked — and a request
+carrying one changes nothing, rename included. Changing a library's language
+rewrites nothing already stored; a client offers that library's `language`
+refresh scope instead.
+
 ---
 
 ## Library locations
@@ -1412,9 +1426,18 @@ is not offered over DLNA.
 
 | Route | Purpose |
 |---|---|
-| `GET /api/items/{id}/pages` | `{pages, place}`: how many, and the caller's own `{page, pages, updated_at}` or `null` |
+| `GET /api/items/{id}/pages` | `{pages, place, direction, direction_from, series}`: how many, the caller's own `{page, pages, updated_at}` or `null`, and which way it reads |
 | `GET /api/items/{id}/pages/{n}` | Page `n`, from 0, as the image it is in the archive |
 | `PUT /api/items/{id}/place` | `{page}` → `204`. Keeps the caller's place; **the last page marks it read** (`watched`) |
+| `PUT /api/items/{id}/series-direction` | `{direction}` → the comic's `{direction, direction_from, series}`. **Admin only.** The comic's whole series reads `ltr` or `rtl`; `""` removes the override |
+
+**Which way a comic reads is resolved by the server** ([ADR 0123](adr/0123-a-library-carries-its-own-options.md)):
+the series' override, else the library's `reading_direction`, else left to
+right, with `direction_from` saying which (`series`, `library`, `default`). No
+client works out the precedence for itself, so two cannot disagree about one
+book. A series is the comic's folder, so an override covers issues added
+later; a comic at the library's root has no series (`series: null`), and its
+override route is `400`.
 
 **Pages are the archive's images in natural name order** — `p2` before `p10` —
 compared folder by folder. `ComicInfo.xml`, `__MACOSX/` and hidden files are not
