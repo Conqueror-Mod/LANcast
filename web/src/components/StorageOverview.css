@@ -1,7 +1,11 @@
 /* What LANcast keeps on disk (settings-3-plan step 7). */
+.storage {
+  margin-bottom: 20px;
+}
+
 .storage__parts {
   list-style: none;
-  margin: 0;
+  margin: 14px 0 0;
   padding: 0;
   display: flex;
   flex-direction: column;
