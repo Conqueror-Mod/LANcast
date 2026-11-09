@@ -9,10 +9,11 @@ import (
 )
 
 type profileBody struct {
-	User    profileUser          `json:"user"`
-	Stats   store.ProfileStats   `json:"stats"`
-	History []store.HistoryEntry `json:"history"`
-	HasMore bool                 `json:"has_more"`
+	User       profileUser          `json:"user"`
+	Stats      store.ProfileStats   `json:"stats"`
+	History    []store.HistoryEntry `json:"history"`
+	HasMore    bool                 `json:"has_more"`
+	MostPlayed []store.PlayedItem   `json:"most_played"`
 }
 
 func (h *harness) profile(t *testing.T, query string) profileBody {
@@ -157,5 +158,34 @@ func TestProfileListsCarryPosters(t *testing.T) {
 	}
 	if a := list.Ratings[0].Item.Artwork; a == nil || a.Poster != "posterhash" {
 		t.Errorf("rated item artwork = %+v, want poster %q", a, "posterhash")
+	}
+}
+
+// The totals split by kind, and the titles finished most often, with their
+// posters (profile-2-plan §4c).
+func TestProfileSplitsTotalsByKindAndListsMostPlayed(t *testing.T) {
+	h := newHarness(t)
+	ctx := context.Background()
+	id := h.addFile(t, "Twice.mkv", []byte("x"))
+	if err := h.st.PutArtwork(ctx, id, "posterhash", "poster", "u", 342, 513, 1); err != nil {
+		t.Fatal(err)
+	}
+	// Finished, started again, finished again: two plays.
+	for _, finished := range []bool{true, false, true} {
+		if err := h.st.SaveProgress(ctx, id, "local", 0, finished); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	body := h.profile(t, "")
+	if len(body.Stats.ByKind) != 1 || body.Stats.ByKind[0].Kind != "movie" ||
+		body.Stats.ByKind[0].Viewings != 2 {
+		t.Errorf("by_kind = %+v, want one movie seen twice", body.Stats.ByKind)
+	}
+	if len(body.MostPlayed) != 1 || body.MostPlayed[0].Plays != 2 {
+		t.Fatalf("most_played = %+v, want the film with 2 plays", body.MostPlayed)
+	}
+	if a := body.MostPlayed[0].Item.Artwork; a == nil || a.Poster != "posterhash" {
+		t.Errorf("most played artwork = %+v, want its poster", a)
 	}
 }

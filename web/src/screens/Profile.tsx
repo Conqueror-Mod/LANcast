@@ -15,7 +15,11 @@ import { PictureEditor } from "@/components/PictureEditor";
 import { YearInReview } from "@/components/YearInReview";
 import { artworkURL } from "@/api/client";
 import { runtime, episodeCode } from "@/lib/format";
-import type { HistoryEntry, RatedItem } from "@/api/types";
+import type { HistoryEntry, ProfileStats, RatedItem } from "@/api/types";
+import type { components } from "@/api/schema";
+import { kindCards } from "@/lib/profileKinds";
+
+type PlayedItem = components["schemas"]["PlayedItem"];
 import "./Profile.css";
 
 /*
@@ -127,6 +131,9 @@ export function Profile() {
       >
         {tab === "overview" && (
           <>
+            {stats?.by_kind ? (
+              <KindStats stats={stats} />
+            ) : (
             <div className="profile__stats">
               <Stat label="Started" value={stats ? String(stats.started) : "—"} />
               <Stat label="Finished" value={stats ? String(stats.finished) : "—"} />
@@ -158,6 +165,9 @@ export function Profile() {
                 note="every viewing counted"
               />
             </div>
+            )}
+
+            <MostPlayed items={data?.most_played ?? []} />
 
             {/* The same history read a different way, so it belongs with the
                 numbers it is derived from rather than on a route of its own. */}
@@ -246,6 +256,92 @@ function Stat({
       <span className="profile__statlabel">{label}</span>
       {note && <span className="profile__statnote">{note}</span>}
     </div>
+  );
+}
+
+/*
+ * The totals split by kind (profile-2-plan §4c, step 4). "Time watched" used to
+ * count songs, so an album on repeat read as hours of film; each group now has
+ * its own card, and what a history reset banked keeps one of its own.
+ */
+function KindStats({ stats }: { stats: ProfileStats }) {
+  const cards = kindCards(stats.by_kind ?? [], stats.earlier);
+  if (cards.length === 0) {
+    return (
+      <p className="browse__message profile__empty">
+        Nothing played yet. Your totals start with the first thing you play.
+      </p>
+    );
+  }
+  return (
+    <div className="profile__stats">
+      {cards.map((c) => (
+        <Stat
+          key={c.id}
+          label={c.label}
+          value={c.ms == null ? c.finished.toLocaleString() : runtime(c.ms) || "0m"}
+          note={c.note}
+        />
+      ))}
+    </div>
+  );
+}
+
+const PLAYED_GROUPS: { label: string; kinds: string[] }[] = [
+  { label: "Films & shows", kinds: ["movie", "episode"] },
+  { label: "Music", kinds: ["track"] },
+  { label: "Audiobooks", kinds: ["book_part"] },
+];
+
+/*
+ * What you came back to most: finished at least twice, five per group, so a
+ * song on repeat cannot push every film off the list. Nothing is shown until
+ * something has been played twice; a list of ties is History's job.
+ */
+function MostPlayed({ items }: { items: PlayedItem[] }) {
+  if (items.length === 0) return null;
+  return (
+    <section className="profile__section profile__mostplayed" aria-label="Most played">
+      <span className="section-label profile__label">Most played</span>
+      {PLAYED_GROUPS.map((g) => {
+        const rows = items.filter((p) => g.kinds.includes(p.item.kind));
+        if (rows.length === 0) return null;
+        return (
+          <div key={g.label} className="profile__playedgroup">
+            <h3 className="profile__grouplabel">{g.label}</h3>
+            <div className="profile__history">
+              {rows.map((p) => (
+                <PlayedRow key={p.item.id} played={p} />
+              ))}
+            </div>
+          </div>
+        );
+      })}
+    </section>
+  );
+}
+
+function PlayedRow({ played }: { played: PlayedItem }) {
+  const { item } = played;
+  const poster = artworkURL(item.artwork?.poster, "thumb");
+  const detail = [item.series ?? item.artist, episodeCode(item)].filter(Boolean).join(" · ");
+  return (
+    <Link className="profile__row" to={`/item/${item.id}`}>
+      <div className="profile__art">
+        {poster ? (
+          <img src={poster} alt="" loading="lazy" />
+        ) : (
+          <span aria-hidden="true">{item.title.slice(0, 1).toUpperCase()}</span>
+        )}
+      </div>
+      <div className="profile__what">
+        <span className="profile__titleline">{item.title}</span>
+        {detail && <span className="profile__detail">{detail}</span>}
+      </div>
+      <div className="profile__when">
+        <span className="profile__state">{played.plays.toLocaleString()} plays</span>
+      </div>
+    </Link>
   );
 }
 
