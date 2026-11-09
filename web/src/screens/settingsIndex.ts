@@ -168,6 +168,7 @@ export const SETTINGS_INDEX: SettingEntry[] = [
   { pane: "remote", label: "Public certificate", terms: "lets encrypt acme domain https outside" },
   { pane: "users", label: "Add user", terms: "account create member admin" },
   { pane: "users", label: "Show accounts on the sign-in page", terms: "login picker names" },
+  { pane: "users", label: "Members can upload a picture of themselves", terms: "profile photo avatar upload moderation" },
   { pane: "users", label: "Signed-in devices", terms: "sessions sign out revoke" },
   { pane: "users", label: "Reset password", terms: "forgot password user" },
   { pane: "users", label: "Content rating limit", terms: "parental controls kids age ceiling" },

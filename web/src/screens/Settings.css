@@ -892,3 +892,8 @@ pre.set-network__pin {
   height: 100%;
   background: rgba(190, 208, 255, 0.55);
 }
+
+/* An account's picture at the start of its row in Users (ADR 0121). */
+.set-user__pic {
+  margin-right: 12px;
+}

@@ -14,7 +14,9 @@ import {
   useDeleteUser,
   useResetUserPassword,
   useRemoveUserTwoFactor,
+  useClearUserPicture,
 } from "@/api/hooks";
+import { PersonPicture } from "@/components/Avatar";
 import { errorMessage } from "@/lib/errors";
 import type { AuthUser, ManagedUser } from "@/api/types";
 import { RATING_CEILINGS } from "./shared";
@@ -22,6 +24,7 @@ import { RATING_CEILINGS } from "./shared";
 function UserRow({ user, isSelf }: { user: ManagedUser; isSelf: boolean }) {
   const del = useDeleteUser();
   const removeTwoFactor = useRemoveUserTwoFactor();
+  const clearPicture = useClearUserPicture();
   const [removingTwoFactor, setRemovingTwoFactor] = useState(false);
   const reset = useResetUserPassword();
   const update = useUpdateUser();
@@ -34,6 +37,12 @@ function UserRow({ user, isSelf }: { user: ManagedUser; isSelf: boolean }) {
   return (
     <div className="set-lib">
       <div className="set-row">
+        <PersonPicture
+          name={user.name}
+          picture={user.picture}
+          size={36}
+          className="set-user__pic"
+        />
         <div className="set-row__main">
           <div className="set-row__title">
             {user.name}
@@ -219,6 +228,18 @@ function UserRow({ user, isSelf }: { user: ManagedUser; isSelf: boolean }) {
                     Remove two-factor…
                   </button>
                 ))}
+              {/* Taking down somebody's picture: the whole of the
+                  moderation ADR 0121 §5 sizes for a household. One press,
+                  because it is undone by them uploading again. */}
+              {user.picture && (
+                <button
+                  className="set-btn"
+                  disabled={clearPicture.isPending}
+                  onClick={() => clearPicture.mutate(user.id)}
+                >
+                  Remove picture
+                </button>
+              )}
               {!isSelf && (
                 <button
                   className="set-btn set-btn--danger"
@@ -232,9 +253,9 @@ function UserRow({ user, isSelf }: { user: ManagedUser; isSelf: boolean }) {
           )}
         </div>
       </div>
-      {(del.isError || reset.isError || removeTwoFactor.isError) && (
+      {(del.isError || reset.isError || removeTwoFactor.isError || clearPicture.isError) && (
         <span className="set-error">
-          {errorMessage(del.error ?? reset.error ?? removeTwoFactor.error)}
+          {errorMessage(del.error ?? reset.error ?? removeTwoFactor.error ?? clearPicture.error)}
         </span>
       )}
       {/* Not for administrators, who are never restricted (ADR 0084), and
@@ -408,6 +429,19 @@ function UsersSection() {
           <p className="set-row__sub">
             Devices on your home network see everyone&rsquo;s name to pick from instead of typing
             it. From the internet the sign-in page never lists them.
+          </p>
+          <label className="set-toggle">
+            <input
+              type="checkbox"
+              checked={settings.member_pictures}
+              onChange={(e) => update.mutate({ member_pictures: e.target.checked })}
+            />
+            Members can upload a picture of themselves
+          </label>
+          <p className="set-row__sub">
+            Shown to everyone signed in to this server, never to other servers. Turning
+            this off keeps pictures already uploaded; remove one with its account&rsquo;s
+            Remove picture. Administrators can always set their own.
           </p>
         </>
       )}
