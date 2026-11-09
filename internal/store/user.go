@@ -266,6 +266,10 @@ func (s *Store) DeleteUser(ctx context.Context, id string) error {
 	if _, err := tx.ExecContext(ctx, `DELETE FROM comic_place WHERE user_id = ?`, id); err != nil {
 		return fmt.Errorf("delete user comic places: %w", err)
 	}
+	// Their picture (ADR 0121).
+	if _, err := tx.ExecContext(ctx, `DELETE FROM user_picture WHERE user_id = ?`, id); err != nil {
+		return fmt.Errorf("delete user picture: %w", err)
+	}
 	// Passkeys (ADR 0082). Left behind they would be credentials nobody can
 	// list or remove, and a sign-in with one already fails (the lookup joins
 	// user), so they would only ever be clutter that looks like access.

@@ -34,6 +34,11 @@ type Person struct {
 	// share. A count is still a fact about a person.
 	Watched  int   `json:"watched"`
 	JoinedAt int64 `json:"joined_at"`
+	// Avatar is the drawn animal they chose ("" for none), and Picture the
+	// hash of the picture they uploaded (ADR 0121), null for none. A picture
+	// wins over an animal, and an animal over initials.
+	Avatar  string  `json:"avatar"`
+	Picture *string `json:"picture"`
 }
 
 // SetShareActivity records one person's own decision. There is deliberately no
@@ -80,8 +85,10 @@ func (s *Store) People(ctx context.Context, excludeUserID string) ([]Person, err
 		       CASE WHEN u.share_activity = 1 THEN (
 		         SELECT COUNT(*) FROM playback_state ps
 		         WHERE ps.user_id = u.id AND ps.watched = 1
-		       ) ELSE 0 END
+		       ) ELSE 0 END,
+		       u.avatar, up.hash
 		FROM user u
+		LEFT JOIN user_picture up ON up.user_id = u.id
 		WHERE u.id != ?
 		ORDER BY u.name`, excludeUserID)
 	if err != nil {
@@ -93,7 +100,8 @@ func (s *Store) People(ctx context.Context, excludeUserID string) ([]Person, err
 	for rows.Next() {
 		var p Person
 		var sharing int
-		if err := rows.Scan(&p.ID, &p.Name, &p.Role, &sharing, &p.JoinedAt, &p.Watched); err != nil {
+		if err := rows.Scan(&p.ID, &p.Name, &p.Role, &sharing, &p.JoinedAt, &p.Watched,
+			&p.Avatar, &p.Picture); err != nil {
 			return nil, fmt.Errorf("list people: %w", err)
 		}
 		p.Sharing = sharing != 0
