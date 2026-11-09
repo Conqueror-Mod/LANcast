@@ -68,6 +68,11 @@ type Worker struct {
 	// rather than at its next refetch. Called on the worker's goroutine; it
 	// must not block.
 	OnProgress func()
+	// LibraryLanguage, when set, names the metadata language a library has
+	// chosen for itself (ADR 0123), or "" when it follows the server. Every
+	// fetch for one item carries it on its context, so a provider whose
+	// answers depend on the language asks in the library's.
+	LibraryLanguage func(ctx context.Context, libraryID int64) string
 
 	mu      sync.Mutex
 	running bool
@@ -300,7 +305,16 @@ func (w *Worker) processBatch(ctx context.Context, items []store.Item) (int, err
 // enrichOne resolves one item through local sources, then providers, then the
 // merge engine. It reports whether the item advanced — false means it was left
 // pending deliberately and will be retried later.
+// inLanguage is ctx carrying the item's library language, when it has one.
+func (w *Worker) inLanguage(ctx context.Context, item store.Item) context.Context {
+	if w.LibraryLanguage == nil {
+		return ctx
+	}
+	return meta.WithLanguage(ctx, w.LibraryLanguage(ctx, item.LibraryID))
+}
+
 func (w *Worker) enrichOne(ctx context.Context, item store.Item) (bool, error) {
+	ctx = w.inLanguage(ctx, item)
 	kind := meta.Kind(item.Kind)
 	if isMusic(kind) {
 		return w.enrichMusic(ctx, item)
@@ -355,6 +369,7 @@ func (w *Worker) enrichOne(ctx context.Context, item store.Item) (bool, error) {
 // is fetched as matchKind but applied under the item's own kind, so the metadata
 // is right without a local-source or nfo path being read against the wrong type.
 func (w *Worker) ApplyMatch(ctx context.Context, item store.Item, providerID, externalID string, matchKind meta.Kind) error {
+	ctx = w.inLanguage(ctx, item)
 	itemKind := meta.Kind(item.Kind)
 	if matchKind == "" {
 		matchKind = itemKind

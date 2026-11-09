@@ -334,3 +334,27 @@ ADR 0122 is the decision; this is what landed.
   locks hold. Titles in review are left out, since their id is a suggestion.
   After the language is saved, *Server › Metadata* shows each film and show
   library with its count and its own Refresh button, and a Not now.
+
+## 12. Step 6 as built
+
+ADR 0123 is the decision; schema 95.
+
+- **Two nullable columns on `library`.** `metadata_language` (film and show
+  libraries; null follows the server's) and `reading_direction` (comics; null
+  is left to right). `PATCH /api/libraries/{id}` sets them, and an option a
+  library cannot use is a 400 that changes nothing.
+- **A series override**, `comic_series_direction`, keyed by library and
+  series name (the comic's folder). Set by an admin from the reader's bar,
+  through `PUT /api/items/{id}/series-direction`, so a client can only name
+  a series that exists.
+- **The server resolves the direction.** The pages answer carries
+  `direction` and `direction_from` (series, library, default).
+- **Right to left** turns the reader round: left arrow, left tap, swipe right
+  and the left button go forward; a spread puts its earlier page on the right;
+  the progress bar fills from the right. Space still goes forward.
+- **The library's language rides the request context** into TMDB, for
+  enrichment, Fix match, both by-id refreshes and trailers. The provider
+  interface is unchanged.
+- **The library editor** (Settings › Libraries › Edit) gains an Options
+  section with whichever applies, and changing the language offers that
+  library's refresh.

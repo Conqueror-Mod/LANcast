@@ -11,6 +11,7 @@ import (
 	"sort"
 	"strings"
 
+	"lancast/internal/meta"
 	"lancast/internal/scan"
 )
 
@@ -190,6 +191,9 @@ func (s *Server) patchLibrary(w http.ResponseWriter, r *http.Request) {
 		Name *string `json:"name"`
 		Path *string `json:"path"`
 		Kind *string `json:"kind"`
+		// The library's own options (ADR 0123); "" clears one.
+		MetadataLanguage *string `json:"metadata_language"`
+		ReadingDirection *string `json:"reading_direction"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeError(w, http.StatusBadRequest, "bad_request", "malformed JSON body")
@@ -208,6 +212,43 @@ func (s *Server) patchLibrary(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "bad_request",
 			"a library's type cannot be changed; add the folder again as the type you want")
 		return
+	}
+
+	/*
+	 * Options are checked before anything is written, so a request that
+	 * renames a library and sends a bad option changes nothing. Each is
+	 * refused on a library it cannot apply to rather than stored and ignored:
+	 * a value that does nothing is one somebody sets believing it worked.
+	 */
+	var lang, dir string
+	if req.MetadataLanguage != nil {
+		lang = strings.TrimSpace(*req.MetadataLanguage)
+		if lang != "" && !meta.KnownLanguage(lang) {
+			writeError(w, http.StatusBadRequest, "bad_request",
+				"metadata_language must be one of the languages reported by GET /api/settings")
+			return
+		}
+		if lang != "" && lib.Kind != "movie" && lib.Kind != "show" {
+			writeError(w, http.StatusBadRequest, "bad_request",
+				"only film and show libraries are fetched in a language")
+			return
+		}
+	}
+	if req.ReadingDirection != nil {
+		dir = strings.TrimSpace(*req.ReadingDirection)
+		if dir != "" && dir != "ltr" && dir != "rtl" {
+			writeError(w, http.StatusBadRequest, "bad_request", "reading_direction must be ltr or rtl")
+			return
+		}
+		if dir != "" && lib.Kind != "comics" {
+			writeError(w, http.StatusBadRequest, "bad_request", "only comics libraries have a reading direction")
+			return
+		}
+		// Left to right is what null means; storing it would make two
+		// spellings of one answer.
+		if dir == "ltr" {
+			dir = ""
+		}
 	}
 
 	if req.Name != nil {
@@ -259,11 +300,45 @@ func (s *Server) patchLibrary(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	if req.MetadataLanguage != nil && lang != derefOr(lib.MetadataLanguage) {
+		if err := s.st.SetLibraryLanguage(r.Context(), id, lang); err != nil {
+			s.writeInternal(w, err, "set library language")
+			return
+		}
+		shown := lang
+		if shown == "" {
+			shown = "the server's language"
+		}
+		s.audit(r, "library.update", "library", auditID(id),
+			"Set "+lib.Name+" to fetch metadata in "+shown,
+			map[string]any{"metadata_language": lang})
+	}
+	if req.ReadingDirection != nil && dir != derefOr(lib.ReadingDirection) {
+		if err := s.st.SetLibraryDirection(r.Context(), id, dir); err != nil {
+			s.writeInternal(w, err, "set library direction")
+			return
+		}
+		shown := "right to left"
+		if dir == "" {
+			shown = "left to right"
+		}
+		s.audit(r, "library.update", "library", auditID(id),
+			"Set "+lib.Name+" to read "+shown, map[string]any{"reading_direction": dir})
+	}
+
 	updated, err := s.st.GetLibrary(r.Context(), id)
 	if s.notFoundOr(w, err, "get library", "no such library") {
 		return
 	}
 	writeJSON(w, http.StatusOK, updated)
+}
+
+// derefOr is *p, or "" for nil.
+func derefOr(p *string) string {
+	if p == nil {
+		return ""
+	}
+	return *p
 }
 
 func (s *Server) startScan(w http.ResponseWriter, r *http.Request) {

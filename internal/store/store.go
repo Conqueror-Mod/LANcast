@@ -191,6 +191,11 @@ type Library struct {
 	// than only in live scan progress, because that progress is lost on restart
 	// and the mistake it reports is permanent.
 	ShapeWarning *ShapeWarning `json:"shape_warning,omitempty"`
+	// The library's own options (ADR 0123). MetadataLanguage is null when the
+	// library follows the server's language; ReadingDirection is null when a
+	// comics library reads left to right.
+	MetadataLanguage *string `json:"metadata_language"`
+	ReadingDirection *string `json:"reading_direction"`
 }
 
 /*
@@ -351,7 +356,8 @@ const libraryItemCount = `(SELECT COUNT(*) FROM media_item
 func (s *Store) ListLibraries(ctx context.Context) ([]Library, error) {
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT l.id, l.name, l.kind, `+firstRootPath+`, l.created_at, l.scanned_at,
-		       `+libraryItemCount+`, `+libraryMediaCount+`, l.shape_warning
+		       `+libraryItemCount+`, `+libraryMediaCount+`, l.shape_warning,
+		       l.metadata_language, l.reading_direction
 		FROM library l ORDER BY l.name`)
 	if err != nil {
 		return nil, fmt.Errorf("list libraries: %w", err)
@@ -363,7 +369,7 @@ func (s *Store) ListLibraries(ctx context.Context) ([]Library, error) {
 		var l Library
 		var warning *string
 		if err := rows.Scan(&l.ID, &l.Name, &l.Kind, &l.Path, &l.CreatedAt, &l.ScannedAt,
-			&l.ItemCount, &l.MediaCount, &warning); err != nil {
+			&l.ItemCount, &l.MediaCount, &warning, &l.MetadataLanguage, &l.ReadingDirection); err != nil {
 			return nil, fmt.Errorf("list libraries: %w", err)
 		}
 		l.ShapeWarning = parseShapeWarning(warning)
@@ -391,10 +397,11 @@ func (s *Store) GetLibrary(ctx context.Context, id int64) (*Library, error) {
 	var warning *string
 	err := s.db.QueryRowContext(ctx, `
 		SELECT l.id, l.name, l.kind, `+firstRootPath+`, l.created_at, l.scanned_at,
-		       `+libraryItemCount+`, `+libraryMediaCount+`, l.shape_warning
+		       `+libraryItemCount+`, `+libraryMediaCount+`, l.shape_warning,
+		       l.metadata_language, l.reading_direction
 		FROM library l WHERE l.id = ?`, id).
 		Scan(&l.ID, &l.Name, &l.Kind, &l.Path, &l.CreatedAt, &l.ScannedAt,
-			&l.ItemCount, &l.MediaCount, &warning)
+			&l.ItemCount, &l.MediaCount, &warning, &l.MetadataLanguage, &l.ReadingDirection)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
 	}

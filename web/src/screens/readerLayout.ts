@@ -7,8 +7,9 @@
  * count leaves one over. Pairing [0, 1] instead puts every two-page panel on
  * the wrong two sheets, which is the one mistake a spread view must not make.
  *
- * Left to right only. Reading direction is a property of the library and
- * comes with per-library options (step 6).
+ * The pages are in reading order whichever way the comic reads. Right to left
+ * (ADR 0123) is the reader laying them out the other way round, not a
+ * different pairing: a manga's spreads pair the same sheets.
  *
  * Pure, so the pairing is tested without a reader on screen.
  */

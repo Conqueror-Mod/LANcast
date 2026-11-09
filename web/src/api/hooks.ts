@@ -47,6 +47,7 @@ import type {
   AuthStatus,
   AuthUser,
   ComicPages,
+  ReadingDirection,
   LoginResult,
   ManagedUser,
   RecoveryCodes,
@@ -738,13 +739,27 @@ export function useCreateLibrary() {
 export function useUpdateLibrary() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (v: { id: number; name?: string; path?: string }) =>
+    mutationFn: (v: {
+      id: number;
+      name?: string;
+      path?: string;
+      // A library's own options (ADR 0123); "" clears one.
+      metadata_language?: string;
+      reading_direction?: string;
+    }) =>
       apiSend(`/api/libraries/${v.id}`, "PATCH", {
         name: v.name,
         path: v.path,
+        metadata_language: v.metadata_language,
+        reading_direction: v.reading_direction,
       }),
-    onSuccess: () => {
+    onSuccess: (_res, v) => {
       qc.invalidateQueries({ queryKey: ["libraries"] });
+      // Every comic in the library may now read the other way, and each
+      // comic's direction is carried on its pages answer.
+      if (v.reading_direction !== undefined) {
+        qc.invalidateQueries({ queryKey: ["comic-pages"] });
+      }
       // A repoint rewrites every item path in the library, so anything holding
       // items has to be re-read rather than trusted.
       qc.invalidateQueries({ queryKey: ["items"] });
@@ -1166,6 +1181,24 @@ export function useComicPages(id: number) {
     queryFn: ({ signal }) => apiGet<ComicPages>(`/api/items/${id}/pages`, signal),
     enabled: id > 0,
     retry: false,
+  });
+}
+
+/*
+ * Which way a comic's whole series reads (ADR 0123). Admin only. "" hands the
+ * series back to its library's direction.
+ *
+ * Every comic in the series carries its direction on its pages answer, so all
+ * of them are stale, not only this one's — hence the prefix.
+ */
+export function useSetSeriesDirection(id: number) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (direction: "" | "ltr" | "rtl") =>
+      apiPost<ReadingDirection>(`/api/items/${id}/series-direction`, { direction }, "PUT"),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["comic-pages"] });
+    },
   });
 }
 

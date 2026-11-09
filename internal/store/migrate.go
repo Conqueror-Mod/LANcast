@@ -6,7 +6,7 @@ import (
 )
 
 // CurrentSchemaVersion is the revision this build expects.
-const CurrentSchemaVersion = 94
+const CurrentSchemaVersion = 95
 
 // migration is one forward step. There are deliberately no down migrations:
 // rolling a media library's schema backwards loses data that a rescan cannot
@@ -224,6 +224,14 @@ var migrations = []migration{
 		{"user", "comic_fit", "TEXT"},
 	}},
 	{version: 94, sql: schemaRevision94},
+	// A library's own options (ADR 0123): the metadata language a film or
+	// show library is fetched in, and which way a comics library reads. Null
+	// is "as the server says" and "left to right". A series' direction, when
+	// it differs from its library's, lives in its own table.
+	{version: 95, sql: schemaRevision95, columns: []column{
+		{"library", "metadata_language", "TEXT"},
+		{"library", "reading_direction", "TEXT"},
+	}},
 }
 
 // migrate brings the database up to CurrentSchemaVersion.
@@ -2621,6 +2629,15 @@ CREATE TABLE IF NOT EXISTS invite (
  * is for that lookup. No foreign key on user_id, like home_shelf: DeleteUser
  * removes the row by hand.
  */
+const schemaRevision95 = `
+CREATE TABLE IF NOT EXISTS comic_series_direction (
+    library_id INTEGER NOT NULL REFERENCES library(id) ON DELETE CASCADE,
+    series     TEXT    NOT NULL,
+    direction  TEXT    NOT NULL,
+    PRIMARY KEY (library_id, series)
+);
+`
+
 const schemaRevision94 = `
 CREATE TABLE IF NOT EXISTS user_picture (
     user_id    TEXT    PRIMARY KEY,

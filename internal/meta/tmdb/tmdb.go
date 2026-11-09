@@ -87,8 +87,13 @@ func WithLanguage(code string) Option {
 	return func(c *Client) { c.language = meta.LanguageOrDefault(strings.TrimSpace(code)) }
 }
 
-// lang is the language this client asks for.
-func (c *Client) lang() string {
+// lang is the language this fetch asks for: the one its context carries
+// (a library's own, ADR 0123), else this client's, else the default. A
+// context language this build does not offer is ignored, never sent.
+func (c *Client) lang(ctx context.Context) string {
+	if code := meta.LanguageFrom(ctx); meta.KnownLanguage(code) {
+		return code
+	}
 	if c.language == "" {
 		return meta.DefaultLanguage
 	}
@@ -185,7 +190,7 @@ func (c *Client) Search(ctx context.Context, q meta.Query) ([]meta.Candidate, er
 	 * that second search only loses the English names, never the match.
 	 */
 	english := map[int]string{}
-	if !meta.IsEnglish(c.lang()) {
+	if !meta.IsEnglish(c.lang(ctx)) {
 		var en searchResponse
 		if err := c.get(ctx, path, url.Values{"query": {title}, "language": {meta.DefaultLanguage}}, &en); err == nil {
 			for _, r := range en.Results {
@@ -251,7 +256,7 @@ func (c *Client) Fetch(ctx context.Context, ref meta.Ref) (*meta.Record, error) 
 // another language. It reports whether it asked; a failure is "no fill", never
 // a failed fetch, because the record in the chosen language is already good.
 func (c *Client) englishGaps(ctx context.Context, path string, out any) bool {
-	if meta.IsEnglish(c.lang()) {
+	if meta.IsEnglish(c.lang(ctx)) {
 		return false
 	}
 	return c.get(ctx, path, url.Values{"language": {meta.DefaultLanguage}}, out) == nil
@@ -584,7 +589,7 @@ func (c *Client) Trailer(ctx context.Context, ref meta.Ref) (*meta.Trailer, erro
 	 * language other than English. So ask for the chosen one, then English,
 	 * then untagged, and let the ranking below choose among them (ADR 0122).
 	 */
-	langs := strings.SplitN(c.lang(), "-", 2)[0]
+	langs := strings.SplitN(c.lang(ctx), "-", 2)[0]
 	if langs != "en" {
 		langs += ",en"
 	}
@@ -644,7 +649,7 @@ func (c *Client) get(ctx context.Context, path string, params url.Values, out an
 		params = url.Values{}
 	}
 	if params.Get("language") == "" {
-		params.Set("language", c.lang())
+		params.Set("language", c.lang(ctx))
 	}
 	// English keeps the key it always had, so an upgrade does not throw away
 	// every cached answer; any other language is part of the key.
