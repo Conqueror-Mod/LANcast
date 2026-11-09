@@ -216,7 +216,7 @@ Each step is its own PR, in this order.
 2. **The picture in the client.** *Built 2026-11-08. The dashboard shows no people, so it has no picture; the Users pane and Watch Together do.* `<Avatar>`, the crop editor (mouse, touch,
    remote, phone), every surface in §3g, the admin clear in Users, and the
    setting in its pane. Invalidation tests per surface.
-3. **Header and tabs.** Move the existing sections into tabs, with no new data.
+3. **Header and tabs.** *Built 2026-11-08. The animals moved into the picture editor; the page is now a focus zone, which it never was, so a remote reaches every control.* Move the existing sections into tabs, with no new data.
    This is where Achievements lands (§6).
 4. **Totals by kind and Most played.** The server split, its tests (including
    the banked amounts), and the client.

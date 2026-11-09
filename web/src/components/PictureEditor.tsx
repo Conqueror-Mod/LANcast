@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { useUploadPicture } from "@/api/hooks";
-import { useBackHandler } from "@/focus/FocusController";
+import { useClearPicture, useCurrentUser, useSetAvatar, useUploadPicture } from "@/api/hooks";
+import { AVATARS, AvatarGlyph } from "./Avatar";
+import { useBackHandler, useFocusScope, useFocusZone } from "@/focus/FocusController";
 import { initialCrop, MAX_ZOOM, pan, sourceRect, zoomTo, type Crop } from "@/lib/pictureCrop";
 import "./RemoveDialog.css";
 import "./PictureEditor.css";
@@ -31,6 +32,10 @@ const STEP = 12;
 
 export function PictureEditor({ onClose }: { onClose: () => void }) {
   const upload = useUploadPicture();
+  const user = useCurrentUser();
+  const setAvatar = useSetAvatar();
+  const clearPicture = useClearPicture();
+  const avatar = setAvatar.isPending ? setAvatar.variables : (user?.avatar ?? "");
   const fileInput = useRef<HTMLInputElement>(null);
   const chooseBtn = useRef<HTMLButtonElement>(null);
   const frame = useRef<HTMLDivElement>(null);
@@ -44,6 +49,20 @@ export function PictureEditor({ onClose }: { onClose: () => void }) {
     if (!upload.isPending) onClose();
   }, [onClose, upload.isPending]);
   useBackHandler(close);
+  /*
+   * A remote reaches every control here and nothing behind the dialog. The
+   * frame keeps the arrows for moving the picture, so on it OK saves and Back
+   * cancels (profile-2-plan §3c).
+   */
+  const zone = useFocusZone();
+  const scope = useFocusScope();
+  const dialogRef = useCallback(
+    (el: HTMLDivElement | null) => {
+      zone(el);
+      scope(el);
+    },
+    [zone, scope],
+  );
 
   useEffect(() => {
     chooseBtn.current?.focus();
@@ -127,6 +146,11 @@ export function PictureEditor({ onClose }: { onClose: () => void }) {
       case "PageDown":
         next = zoomTo(crop, crop.zoom - 0.1);
         break;
+      case "Enter":
+        e.preventDefault();
+        e.stopPropagation();
+        if (!upload.isPending) save();
+        return;
       default:
         return;
     }
@@ -138,11 +162,14 @@ export function PictureEditor({ onClose }: { onClose: () => void }) {
 
   const scale = crop ? (FRAME / Math.min(crop.w, crop.h)) * crop.zoom : 1;
   const error =
-    problem ?? (upload.isError ? (upload.error as Error).message || "The picture could not be saved." : null);
+    problem ??
+    (upload.isError ? (upload.error as Error).message || "The picture could not be saved." : null) ??
+    (setAvatar.isError || clearPicture.isError ? "That could not be saved." : null);
 
   return createPortal(
     <div className="removedlg__overlay" onClick={close}>
       <div
+        ref={dialogRef}
         className="removedlg picdlg"
         role="dialog"
         aria-modal="true"
@@ -176,7 +203,7 @@ export function PictureEditor({ onClose }: { onClose: () => void }) {
               style={{ width: FRAME, height: FRAME }}
               tabIndex={0}
               role="group"
-              aria-label="Picture position. Arrow keys move it, plus and minus zoom."
+              aria-label="Picture position. Arrow keys move it, plus and minus zoom, Enter saves."
               onKeyDown={onKey}
               onPointerDown={(e) => {
                 drag.current = { x: e.clientX, y: e.clientY };
@@ -223,9 +250,52 @@ export function PictureEditor({ onClose }: { onClose: () => void }) {
             </p>
           </>
         ) : (
-          <p className="removedlg__note">
-            A photo of you, or anything you like. Everyone signed in to this server can see it.
-          </p>
+          <>
+            <p className="removedlg__note">
+              A photo of you, or anything you like. Everyone signed in to this server can see it.
+            </p>
+            {user?.picture && (
+              <button
+                type="button"
+                className="picdlg__remove"
+                disabled={clearPicture.isPending}
+                onClick={() => clearPicture.mutate()}
+              >
+                Remove your picture
+              </button>
+            )}
+            {/*
+              The drawn animals, here since the profile got its header
+              (profile-2-plan §4a). Shown under a picture when there is one,
+              because removing it brings the animal back.
+
+              Gold marks the chosen one: it is *where you are* in this set,
+              the same thing a selected rail row says. Pressing it again
+              clears it, so there is no separate "none".
+            */}
+            <span className="picdlg__orlabel">
+              {user?.picture ? "Shown when you have no picture" : "Or choose one of these"}
+            </span>
+            <div className="picdlg__animals" role="group" aria-label="Choose a drawn picture">
+              {AVATARS.map((a) => {
+                const on = avatar === a.key;
+                return (
+                  <button
+                    key={a.key}
+                    type="button"
+                    className={"picdlg__animal" + (on ? " is-on" : "")}
+                    aria-pressed={on}
+                    aria-label={a.label}
+                    title={on ? `${a.label} — press again to remove` : a.label}
+                    disabled={setAvatar.isPending}
+                    onClick={() => setAvatar.mutate(on ? "" : a.key)}
+                  >
+                    <AvatarGlyph avatar={a.key} size={26} />
+                  </button>
+                );
+              })}
+            </div>
+          </>
         )}
 
         {error && <p className="removedlg__error">{error}</p>}

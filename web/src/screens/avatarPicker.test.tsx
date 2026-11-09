@@ -14,6 +14,7 @@ import { MemoryRouter } from "react-router-dom";
 import { Profile } from "./Profile";
 import { AvatarGlyph } from "@/components/Avatar";
 import { useCurrentUser } from "@/api/hooks";
+import { FocusProvider } from "@/focus/FocusController";
 
 declare global {
   // eslint-disable-next-line no-var
@@ -88,8 +89,10 @@ async function render() {
     root.render(
       <QueryClientProvider client={client}>
         <MemoryRouter>
-          <RailAccount />
-          <Profile />
+          <FocusProvider>
+            <RailAccount />
+            <Profile />
+          </FocusProvider>
         </MemoryRouter>
       </QueryClientProvider>,
     );
@@ -107,13 +110,21 @@ async function settle() {
 
 const railAvatar = () =>
   host.querySelector(".rail-account svg")?.getAttribute("data-avatar") ?? null;
+// The animals are in the picture editor, which Edit on the header opens.
 const choice = (label: string) =>
-  host.querySelector<HTMLButtonElement>(`.profile__avatar[aria-label="${label}"]`)!;
+  document.querySelector<HTMLButtonElement>(`.picdlg__animal[aria-label="${label}"]`)!;
+
+async function openEditor() {
+  await act(async () =>
+    host.querySelector<HTMLButtonElement>('.profile__edit[aria-label="Edit your picture"]')!.click(),
+  );
+}
 
 describe("choosing a picture", () => {
   it("offers six, and the rail shows the one chosen", async () => {
     await render();
-    expect(host.querySelectorAll(".profile__avatar").length).toBe(6);
+    await openEditor();
+    expect(document.querySelectorAll(".picdlg__animal").length).toBe(6);
     expect(railAvatar()).toBeNull(); // the plain person glyph
 
     await act(async () => choice("Owl").click());
@@ -129,6 +140,7 @@ describe("choosing a picture", () => {
     await render();
     expect(railAvatar()).toBe("fox");
 
+    await openEditor();
     await act(async () => choice("Fox").click());
     await settle();
 
