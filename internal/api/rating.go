@@ -117,6 +117,15 @@ func (s *Server) listMyRatings(w http.ResponseWriter, r *http.Request) {
 		s.writeInternal(w, err, "list ratings")
 		return
 	}
+	// Each row draws a poster; see profile.
+	rows := make([]*store.Item, len(items))
+	for i := range items {
+		rows[i] = &items[i].Item
+	}
+	if err := s.attachArtworkTo(r, rows); err != nil {
+		s.writeInternal(w, err, "attach artwork")
+		return
+	}
 	writeJSON(w, http.StatusOK, map[string]any{"ratings": items})
 }
 

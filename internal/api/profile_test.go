@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"net/http"
 	"testing"
 
@@ -124,5 +125,37 @@ func TestProfileReportsMorePages(t *testing.T) {
 	}
 	if last := h.profile(t, "?limit=2&offset=2"); last.HasMore {
 		t.Error("has_more = true on the final page")
+	}
+}
+
+// The rows draw posters, so the posters come with them. Both lists shipped
+// without, and every row drew the first letter of its title instead.
+func TestProfileListsCarryPosters(t *testing.T) {
+	h := newHarness(t)
+	id := h.addFile(t, "Postered.mkv", []byte("x"))
+	if err := h.st.PutArtwork(context.Background(), id, "posterhash", "poster", "u", 342, 513, 1); err != nil {
+		t.Fatal(err)
+	}
+	h.do(t, "PUT", "/api/items/"+itoa(id)+"/progress",
+		map[string]any{"position_ms": 1000}).Body.Close()
+	h.do(t, "PUT", "/api/items/"+itoa(id)+"/rating", map[string]any{"score": 7}).Body.Close()
+
+	body := h.profile(t, "")
+	if len(body.History) != 1 {
+		t.Fatalf("history has %d entries, want 1", len(body.History))
+	}
+	if a := body.History[0].Item.Artwork; a == nil || a.Poster != "posterhash" {
+		t.Errorf("history item artwork = %+v, want poster %q", a, "posterhash")
+	}
+
+	var list struct {
+		Ratings []store.RatedItem `json:"ratings"`
+	}
+	decode(t, h.do(t, "GET", "/api/profile/ratings", nil), &list)
+	if len(list.Ratings) != 1 {
+		t.Fatalf("ratings = %d, want 1", len(list.Ratings))
+	}
+	if a := list.Ratings[0].Item.Artwork; a == nil || a.Poster != "posterhash" {
+		t.Errorf("rated item artwork = %+v, want poster %q", a, "posterhash")
 	}
 }

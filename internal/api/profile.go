@@ -39,6 +39,23 @@ type profileUser struct {
 	Secured bool `json:"secured"`
 }
 
+// attachArtworkTo attaches posters to items that live inside other rows (a
+// history entry, a rating). AttachArtwork works on a slice of values, so they
+// are copied out and back.
+func (s *Server) attachArtworkTo(r *http.Request, items []*store.Item) error {
+	vals := make([]store.Item, len(items))
+	for i, it := range items {
+		vals[i] = *it
+	}
+	if err := s.st.AttachArtwork(r.Context(), vals); err != nil {
+		return err
+	}
+	for i := range items {
+		*items[i] = vals[i]
+	}
+	return nil
+}
+
 func (s *Server) profile(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	userID := s.userID(r)
@@ -62,6 +79,18 @@ func (s *Server) profile(w http.ResponseWriter, r *http.Request) {
 	more := len(entries) > limit
 	if more {
 		entries = entries[:limit]
+	}
+
+	// Each row draws a poster, so the posters come with the rows (store.Item
+	// carries none until AttachArtwork). Missing here, every row on the page
+	// drew the first letter of its title instead.
+	rows := make([]*store.Item, len(entries))
+	for i := range entries {
+		rows[i] = &entries[i].Item
+	}
+	if err := s.attachArtworkTo(r, rows); err != nil {
+		s.writeInternal(w, err, "attach artwork")
+		return
 	}
 
 	stats, err := s.st.ProfileStatistics(ctx, userID)
