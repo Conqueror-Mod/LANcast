@@ -87,7 +87,14 @@ func logViewing(ctx context.Context, tx *sql.Tx, userID string, itemID, at int64
 // Viewings returns one page of the account's history, newest first, and how
 // many rows it holds in all. Ties on the second are broken on id, so paging
 // never shows a row twice or skips one.
-func (s *Store) Viewings(ctx context.Context, userID string, limit, offset int) ([]Viewing, int, error) {
+//
+// group narrows it to one kind of thing (profile-2-plan §4e). Music is never
+// logged (logViewing), so GroupMusic is always empty rather than an error: the
+// filter is the same one Recently played takes.
+func (s *Store) Viewings(ctx context.Context, userID string, group HistoryGroup, limit, offset int) ([]Viewing, int, error) {
+	if !group.Valid() {
+		return nil, 0, fmt.Errorf("viewings: unknown group %q", group)
+	}
 	if limit <= 0 || limit > 500 {
 		limit = 100
 	}
@@ -100,14 +107,16 @@ func (s *Store) Viewings(ctx context.Context, userID string, limit, offset int) 
 	if err != nil {
 		return nil, 0, fmt.Errorf("viewings: %w", err)
 	}
+	kinds, kargs := group.kindClause("kind")
+	args := append([]any{userID}, kargs...)
 	var total int
 	if err := s.db.QueryRowContext(ctx,
-		`SELECT COUNT(*) FROM viewing WHERE user_id = ?`+hid, userID).Scan(&total); err != nil {
+		`SELECT COUNT(*) FROM viewing WHERE user_id = ?`+kinds+hid, args...).Scan(&total); err != nil {
 		return nil, 0, fmt.Errorf("viewings: %w", err)
 	}
 	rows, err := s.db.QueryContext(ctx, `SELECT `+viewingCols+` FROM viewing
-		WHERE user_id = ?`+hid+` ORDER BY finished_at DESC, id DESC LIMIT ? OFFSET ?`,
-		userID, limit, offset)
+		WHERE user_id = ?`+kinds+hid+` ORDER BY finished_at DESC, id DESC LIMIT ? OFFSET ?`,
+		append(args, limit, offset)...)
 	if err != nil {
 		return nil, 0, fmt.Errorf("viewings: %w", err)
 	}

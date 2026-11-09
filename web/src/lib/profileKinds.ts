@@ -79,16 +79,25 @@ export function kindCards(byKind: KindTotals[], earlier?: KindTotals | null): Ki
     });
   }
 
-  const chapters = of("book_part", "book");
-  if (chapters.length) {
-    const t = sum(chapters);
+  // A book is played on its own clock (ADR 0116); parts carry rows from
+  // before that. Both are listening, and the note counts each in its own word.
+  const wholeBooks = of("book");
+  const parts = of("book_part");
+  if (wholeBooks.length || parts.length) {
+    const t = sum([...wholeBooks, ...parts]);
+    const b = sum(wholeBooks).finished;
+    const c = sum(parts).finished;
+    const said = [
+      b ? plural(b, "book", "books") : "",
+      c ? plural(c, "chapter", "chapters") : "",
+    ].filter(Boolean);
     cards.push({
       id: "books",
       label: "Audiobooks",
       ms: t.ms,
       finished: t.finished,
       started: t.started,
-      note: `${plural(t.finished, "chapter", "chapters")} finished`,
+      note: said.length ? `${said.join(" · ")} finished` : "nothing finished yet",
     });
   }
 

@@ -30,7 +30,11 @@ func (s *Server) listViewings(w http.ResponseWriter, r *http.Request) {
 	if v, err := strconv.Atoi(r.URL.Query().Get("offset")); err == nil && v > 0 {
 		offset = v
 	}
-	vs, total, err := s.st.Viewings(r.Context(), s.userID(r), limit, offset)
+	group, ok := historyGroup(w, r)
+	if !ok {
+		return
+	}
+	vs, total, err := s.st.Viewings(r.Context(), s.userID(r), group, limit, offset)
 	if err != nil {
 		s.writeInternal(w, err, "viewings")
 		return

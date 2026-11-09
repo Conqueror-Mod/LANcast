@@ -220,7 +220,7 @@ Each step is its own PR, in this order.
    This is where Achievements lands (§6).
 4. **Totals by kind and Most played.** *Built 2026-11-09. One grouped query, so the kinds plus the banked line add up to the totals exactly; a reset's banked amount is its own card, never guessed into a kind. Most played needs two finishes and keeps five per group.* The server split, its tests (including
    the banked amounts), and the client.
-5. **Overview's newer kinds and the merged History.** Including the
+5. **Overview's newer kinds and the merged History.** *Built 2026-11-09. In progress is the resume console's own query with no Continue window; Games left the History filter and Your playlists was parked (§8), both for want of the data.* Including the
    `/profile/viewings` redirect.
 
 Steps 1 and 3 touch different files and could run in parallel. Step 2 needs 1.
@@ -270,6 +270,13 @@ Each took the recommendation.
 - **Play time for retro games.** Nothing records it today (§9c); the Retro
   section shows the last save instead.
 - **Per-kind banking** of history resets. §4c shows the gap instead of fixing it.
+- **Your playlists on Overview** (§4d). A playlist belongs to a library and has
+  no owner, so "the ones you made" has no answer without a new column, a
+  migration, and a decision about the playlists that already exist. Found in
+  step 5.
+- **Games in the History filter** (§4e). A retro game leaves no play record,
+  only saves, so neither history has rows to filter. The Overview's Games
+  section lists them by last save instead.
 
 ## 9. Step 0 findings
 

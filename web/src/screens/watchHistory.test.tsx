@@ -1,14 +1,16 @@
 /*
- * The watch history page (ADR 0074): every finished viewing, grouped by month,
- * with the two downloads.
+ * The watch history (ADR 0074): every finished viewing, grouped by month, with
+ * the two downloads. Since Profile 2.0 step 5 it is History's "Every time",
+ * and its old address redirects there.
  */
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { MemoryRouter } from "react-router-dom";
+import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 import { FocusProvider } from "@/focus/FocusController";
-import { WatchHistory } from "./WatchHistory";
+import { ViewingLog, WatchHistory } from "./WatchHistory";
+import type { HistoryKind } from "@/api/hooks";
 
 declare global {
   // eslint-disable-next-line no-var
@@ -36,6 +38,7 @@ const row = (id: number, extra: object) => ({
 });
 
 let viewings: unknown[];
+let urls: string[];
 let host: HTMLDivElement;
 let root: Root;
 
@@ -57,14 +60,16 @@ beforeEach(() => {
   host = document.createElement("div");
   document.body.append(host);
   root = createRoot(host);
+  urls = [];
   vi.stubGlobal(
     "fetch",
-    vi.fn(async () =>
-      new Response(JSON.stringify({ viewings, total: viewings.length }), {
+    vi.fn(async (input: string) => {
+      urls.push(String(input));
+      return new Response(JSON.stringify({ viewings, total: viewings.length }), {
         status: 200,
         headers: { "Content-Type": "application/json" },
-      }),
-    ),
+      });
+    }),
   );
 });
 
@@ -74,14 +79,14 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-async function render() {
+async function render(kind: HistoryKind = "") {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   await act(async () => {
     root.render(
       <QueryClientProvider client={client}>
         <FocusProvider>
           <MemoryRouter>
-            <WatchHistory />
+            <ViewingLog kind={kind} />
           </MemoryRouter>
         </FocusProvider>
       </QueryClientProvider>,
@@ -140,5 +145,38 @@ describe("watch history", () => {
     await render();
     expect(host.textContent).toContain("Nothing here yet");
     expect(host.querySelector(".profile__exportlinks")).toBeNull();
+  });
+
+  it("asks the server for one kind when filtered", async () => {
+    await render("comics");
+    expect(urls.some((u) => u.includes("kind=comics"))).toBe(true);
+  });
+
+  it("explains that songs are not logged instead of an empty list", async () => {
+    await render("music");
+    expect(host.textContent).toContain("Songs are not kept in the log");
+    expect(host.querySelector(".profile__row")).toBeNull();
+  });
+
+  it("sends the old address to History's Every time", async () => {
+    let at = "";
+    function Where() {
+      at = useLocation().pathname + useLocation().search;
+      return null;
+    }
+    const client = new QueryClient();
+    await act(async () => {
+      root.render(
+        <QueryClientProvider client={client}>
+          <MemoryRouter initialEntries={["/profile/viewings"]}>
+            <Routes>
+              <Route path="/profile/viewings" element={<WatchHistory />} />
+              <Route path="/profile" element={<Where />} />
+            </Routes>
+          </MemoryRouter>
+        </QueryClientProvider>,
+      );
+    });
+    expect(at).toBe("/profile?tab=history&every=1");
   });
 });
