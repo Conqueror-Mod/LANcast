@@ -13,9 +13,9 @@ developer has been the threat model until now.
 
 | # | Item | Found | Cost | Proposed |
 |---|---|---|---|---|
-| 1 | Request bodies have no size limit, before sign-in too | 64 handlers | about a day | **1.0** |
-| 2 | No dependency vulnerability check in CI | none | an hour | **1.0** |
-| 3 | Fuzz the parsers that read files people bring | 2 of ~8 | half a day each | **1.0**, the four named |
+| 1 | Request bodies have no size limit, before sign-in too | 64 handlers | about a day | **built: #1068** |
+| 2 | No dependency vulnerability check in CI | releases built with Go 1.25.0 | a day | **built: #1070** |
+| 3 | Fuzz the parsers that read files people bring | 2 of ~8 | half a day each | **built: #1069** |
 | 4 | ffmpeg runs as LocalSystem | every child | 3–5 days + service checks | **1.1**, said plainly in 1.0 |
 | 5 | The ffmpeg pin moves only with a release | 2026-08-18 build | an hour to check | **1.0**: check, and name it in the notes |
 | 6 | security.md read against the code | — | a day | **1.0** (already §3E) |
@@ -23,6 +23,10 @@ developer has been the threat model until now.
 | 8 | CI actions pinned by tag, not commit | 4 actions | an hour | after 1.0 |
 
 ## 1. Request bodies have no size limit
+
+> **Built in #1068**: a 1 MiB ceiling in front of the router, four upload
+> routes with their own limits, and a test that keeps that list matched to
+> the router. The read deadline was left out (see that PR).
 
 **Found.** 64 handlers decode JSON with `json.NewDecoder(r.Body)` and no
 `http.MaxBytesReader`; only the newer ones (invites, guest sessions, API keys,
@@ -57,6 +61,14 @@ seconds is not a slow phone.
 
 ## 2. No dependency vulnerability check
 
+> **Built in #1070, and bigger than expected.** The first scan found 20
+> vulnerabilities in reachable code. Most were in the Go standard library,
+> because `go.mod` named no toolchain and every release, v0.10.11 included, was
+> built with Go 1.25.0 (the release log says so). It is now pinned to 1.26.10,
+> CI asserts that the pin is the version that builds, and the scan reports 0.
+> `react-router` 6 has two moderate advisories whose fix is the move to v7.
+> That is a follow-up for before 1.0.
+
 **Found.** CI builds, vets and tests, but nothing checks `go.mod` or
 `web/package-lock.json` against known advisories.
 
@@ -66,6 +78,10 @@ something matters. For the client, `npm audit --omit=dev --audit-level=high`,
 since only what ships to the browser is exposure. Both fail the build.
 
 ## 3. Fuzz the parsers of files people bring
+
+> **Built in #1069.** The playlist target found a real fault in under two
+> seconds: a rooted line with no drive (`\Music.mp3`) resolved on the
+> service's own drive, C:, not the playlist's. It is fixed in the same PR.
 
 **Found.** Two packages have fuzz targets, `comic/pdf` and `picture`, and both
 earned them. Other parsers read files LANcast did not write and are not fuzzed:
