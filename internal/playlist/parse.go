@@ -141,6 +141,17 @@ func Resolve(base, p string) (string, bool) {
 		return "", false
 	}
 	p = strings.ReplaceAll(p, "\\", "/")
+	/*
+	 * `\Music\a.mp3` is rooted but names no drive. Windows reads it on the
+	 * drive of whoever asks, which for the service is its own working
+	 * directory's, C:. The person who wrote it meant the playlist's drive, so
+	 * it takes that one. Found by FuzzParse: the line `\` came back neither
+	 * absolute nor joined. No volume names exist off Windows, so this is a
+	 * no-op there.
+	 */
+	if vol := filepath.VolumeName(base); vol != "" && path.IsAbs(p) && filepath.VolumeName(filepath.FromSlash(p)) == "" {
+		return filepath.Clean(vol + filepath.FromSlash(p)), true
+	}
 	if path.IsAbs(p) || filepath.IsAbs(p) || hasDriveLetter(p) {
 		return filepath.Clean(filepath.FromSlash(p)), true
 	}
