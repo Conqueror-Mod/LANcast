@@ -264,7 +264,7 @@ ADR 0044 declines to build.
 | `GET /api/peers/{fingerprint}/subtitles` | `?item=` → the tracks their item already has |
 | `GET /api/peers/{fingerprint}/subtitles/{item}/{key}` | One track, as WebVTT |
 | `PUT /api/peers/{fingerprint}/watching` | `?item=` → still watching one of theirs. A beat, not a record; **no title is accepted** |
-| `GET /api/peers/{fingerprint}/item/{item}` | Their item's name and length. The length is what makes a converted stream seekable |
+| `GET /api/peers/{fingerprint}/item/{item}` | Their item's name and length, and its `audio` tracks and `markers` when they have them. The length is what makes a converted stream seekable; the tracks and markers let a friend's film offer another language and a skip of the intro and credits |
 | `GET /api/peers/{fingerprint}/artwork/{item}/{hash}` | One of their images. A client cannot fetch it directly: the hash names bytes on **their** disk |
 | `PUT /api/peers/{fingerprint}/progress/{item}` | `{position_ms}` → where we are in one of their films. **Written here, never sent to them**; read back on the item route |
 | `POST /api/peers/{fingerprint}/together/requests` | `{person}` → ask to join that person on their server, as the caller. Relayed; see *Watching together across servers* |
@@ -392,7 +392,7 @@ are, and every later capability is granted separately.
 | `GET /api/federation/hls/{item}/{session}/{name}` | **Peer-to-peer.** One segment, named by that playlist |
 | `GET /api/federation/subtitles` | **Peer-to-peer.** `?item=` → the tracks that item already has. Searching a provider is not reachable this way |
 | `GET /api/federation/subtitles/{item}/{key}` | **Peer-to-peer.** One track, as WebVTT |
-| `GET /api/federation/item/{item}` | **Peer-to-peer.** An item's name, its length, and what may be said somebody is watching. All computed here, by the server that owns it |
+| `GET /api/federation/item/{item}` | **Peer-to-peer.** An item's name, its length, what may be said somebody is watching, and the file's `audio` tracks and `markers` (intro, credits) when known. All computed here, by the server that owns it. A track is chosen with `audio=` on the playback routes |
 | `GET /api/federation/artwork/{item}/{hash}` | **Peer-to-peer.** One image belonging to that item. The item is named because **a hash is not an item** — see below |
 
 Presence is a **third disclosure category** and no existing opt-in widens into

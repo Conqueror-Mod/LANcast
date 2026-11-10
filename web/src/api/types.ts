@@ -56,6 +56,8 @@ export type SubtitleTrack = components["schemas"]["SubtitleTrack"];
 // One track inside a media file, as the probe found it. `index` is absolute
 // within the file, which is what `?audio=` takes (docs/api.md).
 export type MediaStream = components["schemas"]["MediaStream"];
+// Where an intro or the credits are in one file (ADR 0054, ADR 0055).
+export type Marker = components["schemas"]["Marker"];
 
 export type Item = components["schemas"]["Item"];
 // The home page's resume console (ADR 0118).

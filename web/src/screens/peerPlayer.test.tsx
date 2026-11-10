@@ -5,7 +5,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter, Routes, Route, useLocation } from "react-router";
 import { FocusProvider } from "@/focus/FocusController";
 import { PeerLibrary } from "./PeerLibrary";
-import { PeerPlayer } from "./PeerPlayer";
+import { PeerPlayer, markerSkip } from "./PeerPlayer";
 
 /*
  * Playing something on somebody else's server (ADR 0071 §5).
@@ -41,6 +41,9 @@ function mockServer(opts: {
   playbackFails?: boolean;
   /** How the peer refuses the items listing, when it does. */
   itemsFail?: { status: number; code: string };
+  /** The file's audio tracks and markers, as a newer peer reports them. */
+  audio?: unknown[];
+  markers?: unknown[];
 }) {
   vi.stubGlobal(
     "fetch",
@@ -58,6 +61,13 @@ function mockServer(opts: {
           decision: { method: opts.method ?? "direct", reason: "" },
         });
       }
+      // One track's WebVTT, fetched by the page to draw itself.
+      if (/\/subtitles\/\d+\//.test(url)) {
+        return new Response("WEBVTT\n\n00:00:01.000 --> 00:00:04.000\nHello there\n", {
+          status: 200,
+          headers: { "Content-Type": "text/vtt" },
+        });
+      }
       if (url.includes("/subtitles"))
         return json({ subtitles: opts.subtitles ?? [] });
       // What the far server says about one item: its name and its length.
@@ -67,6 +77,8 @@ function mockServer(opts: {
           duration_ms: opts.durationMs ?? 7_200_000,
         };
         if (opts.positionMs) info.position_ms = opts.positionMs;
+        if (opts.audio) info.audio = opts.audio;
+        if (opts.markers) info.markers = opts.markers;
         return json(info);
       }
       if (url.includes("/items")) {
@@ -253,11 +265,73 @@ describe("the peer player", () => {
     });
     await render(<PeerLibrary />, `/peers/${FP}/item/42`);
 
-    const tracks = [...host.querySelectorAll("track")];
-    expect(tracks).toHaveLength(1); // the image-based one is not offerable
-    expect(tracks[0].getAttribute("src")).toBe(
-      `/api/peers/${FP}/subtitles/42/en`,
-    );
+    // A picker, with the image-based track left out: it cannot be drawn.
+    const pick = host.querySelector<HTMLSelectElement>('select[aria-label="Subtitles"]');
+    expect(pick, "no subtitle picker").toBeTruthy();
+    expect([...pick!.options].map((o) => o.textContent)).toEqual(["Subtitles off", "English"]);
+    // The file marks English as its default, so it starts chosen, as a
+    // <track default> would have.
+    expect(pick!.value).toBe("en");
+    // Fetched through this server's proxy, to be drawn by the page at the
+    // film's own clock (a <track> runs on the element's, which restarts at
+    // zero on every converted seek).
+    const asked = vi.mocked(fetch).mock.calls.map((c) => String(c[0]));
+    expect(asked).toContain(`/api/peers/${FP}/subtitles/42/en`);
+    expect(host.querySelector("track")).toBeNull();
+  });
+
+  /*
+   * Another audio track asks their server again, with the track named, so a
+   * track the browser cannot decode is converted rather than ignored.
+   */
+  it("asks again with the chosen audio track", async () => {
+    mockServer({
+      method: "direct",
+      audio: [
+        { index: 1, kind: "audio", codec: "aac", language: "eng", channels: 6, default: true, forced: false },
+        { index: 2, kind: "audio", codec: "ac3", language: "fre", title: "Français", default: false, forced: false },
+      ],
+    });
+    await render(<PeerLibrary />, `/peers/${FP}/item/42`);
+
+    const pick = host.querySelector<HTMLSelectElement>('select[aria-label="Audio"]');
+    expect(pick, "no audio picker").toBeTruthy();
+    expect([...pick!.options].map((o) => o.textContent)).toEqual(["ENG 5.1 · AAC", "Français"]);
+    expect(pick!.value).toBe("1");
+
+    await act(async () => {
+      pick!.value = "2";
+      pick!.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+    for (let i = 0; i < 4; i++) {
+      await act(async () => {
+        await new Promise((r) => setTimeout(r, 5));
+      });
+    }
+    const asked = vi.mocked(fetch).mock.calls.map((c) => String(c[0]));
+    expect(asked.some((u) => u.includes("/playback?item=42&audio=2"))).toBe(true);
+  });
+
+  // One track is no choice, so no picker.
+  it("offers no audio picker for a file with one track", async () => {
+    mockServer({
+      method: "direct",
+      audio: [{ index: 1, kind: "audio", codec: "aac", default: true, forced: false }],
+    });
+    await render(<PeerLibrary />, `/peers/${FP}/item/42`);
+    expect(host.querySelector('select[aria-label="Audio"]')).toBeNull();
+  });
+
+  // Ten seconds either way, as in the household player.
+  it("skips ten seconds forward and back", async () => {
+    mockServer({ method: "direct" });
+    await render(<PeerLibrary />, `/peers/${FP}/item/42`);
+    const video = host.querySelector("video")!;
+    const fwd = host.querySelector<HTMLButtonElement>('[aria-label="Forward 10 seconds"]')!;
+    const back = host.querySelector<HTMLButtonElement>('[aria-label="Back 10 seconds"]')!;
+    expect(fwd && back).toBeTruthy();
+    await act(async () => fwd.click());
+    expect(video.currentTime).toBe(10);
   });
 
   /*
@@ -669,5 +743,40 @@ describe("where we got to in a friend's film", () => {
       expect(String(url)).toContain(`/api/peers/${FP}/`);
       expect(String(url)).not.toContain("/federation/");
     }
+  });
+});
+
+/*
+ * Which skip to offer, and where it goes. Pure, so every edge is a line here
+ * rather than a rendered film.
+ */
+describe("markerSkip", () => {
+  const seek = vi.fn();
+  const markers = [
+    { kind: "intro", start_ms: 5_000, end_ms: 95_000, source: "t", confidence: 1, created_at: 0 },
+    { kind: "credits", start_ms: 6_700_000, source: "t", confidence: 1, created_at: 0 },
+  ];
+
+  it("offers nothing before the intro or after it", () => {
+    expect(markerSkip(markers, 2, 7_000, seek)).toBeNull();
+    expect(markerSkip(markers, 100, 7_000, seek)).toBeNull();
+  });
+
+  it("offers the intro inside it, and skips to its end", () => {
+    const s = markerSkip(markers, 30, 7_000, seek)!;
+    expect(s.label).toBe("Skip intro");
+    s.onSkip();
+    expect(seek).toHaveBeenLastCalledWith(95);
+  });
+
+  it("offers the credits, which run to the end of the film", () => {
+    const s = markerSkip(markers, 6_750, 7_000, seek)!;
+    expect(s.label).toBe("Skip credits");
+    s.onSkip();
+    expect(seek).toHaveBeenLastCalledWith(7_000);
+  });
+
+  it("offers nothing for a server too old to send markers", () => {
+    expect(markerSkip(undefined, 30, 7_000, seek)).toBeNull();
   });
 });
