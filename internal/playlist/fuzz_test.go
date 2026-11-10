@@ -38,7 +38,10 @@ func FuzzParse(f *testing.F) {
 			if e.Path == "" || e.Path != strings.TrimSpace(e.Path) {
 				t.Fatalf("entry path %q is empty or untrimmed", e.Path)
 			}
-			if p, ok := Resolve(base, e.Path); ok && !filepath.IsAbs(p) {
+			// A Windows drive path read on Linux is kept as a foreign absolute
+			// path (TestResolveKeepsForeignAbsolutePath), which IsAbs there
+			// does not count.
+			if p, ok := Resolve(base, e.Path); ok && !filepath.IsAbs(p) && !hasDriveLetter(p) {
 				t.Fatalf("Resolve(%q) = %q, not absolute", e.Path, p)
 			}
 		}
