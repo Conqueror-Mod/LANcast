@@ -1,6 +1,10 @@
 package scan
 
-import "testing"
+import (
+	"testing"
+
+	"lancast/internal/store"
+)
 
 func albumOf(t *testing.T, groups []trackGroup, id int64) string {
 	t.Helper()
@@ -112,5 +116,31 @@ func TestFoldersAreJudgedSeparately(t *testing.T) {
 	}
 	if got := albumOf(t, groups, 3); got != "Guero" {
 		t.Errorf("real album became %q", got)
+	}
+}
+
+// The other half of the same library: an artist folder inside the letter
+// bucket, with no album folder, as `G's/GIMS/GIMS - Après Vous Madame.mp3`.
+// Read as Artist/Album, it made an album "GIMS" by an artist "G's", which no
+// provider can match (2026-11-10). Under a bucket, the folder holding the track
+// is the artist, and there is no album to name.
+func TestAnArtistFolderInsideALetterBucketIsTheArtist(t *testing.T) {
+	root := `/music`
+	g := groupFromPath(root, store.Item{ID: 1, Path: `/music/G's/GIMS/GIMS - Après Vous Madame.mp3`})
+	if g.artist != "GIMS" {
+		t.Errorf("artist = %q, want GIMS: G's is an index, not a band", g.artist)
+	}
+	if g.album != "" || g.albumFromFolder {
+		t.Errorf("album = %q (from folder %v), want none: an artist folder is not a record", g.album, g.albumFromFolder)
+	}
+
+	// The ordinary layout is untouched, including inside a bucket.
+	g = groupFromPath(root, store.Item{ID: 2, Path: `/music/P's/Portishead/Dummy/01 Mysterons.flac`})
+	if g.artist != "Portishead" || g.album != "Dummy" {
+		t.Errorf("Artist/Album inside a bucket = %q / %q, want Portishead / Dummy", g.artist, g.album)
+	}
+	g = groupFromPath(root, store.Item{ID: 3, Path: `/music/Portishead/Dummy/01 Mysterons.flac`})
+	if g.artist != "Portishead" || g.album != "Dummy" {
+		t.Errorf("Artist/Album = %q / %q, want Portishead / Dummy", g.artist, g.album)
 	}
 }

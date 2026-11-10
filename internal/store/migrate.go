@@ -6,7 +6,7 @@ import (
 )
 
 // CurrentSchemaVersion is the revision this build expects.
-const CurrentSchemaVersion = 95
+const CurrentSchemaVersion = 96
 
 // migration is one forward step. There are deliberately no down migrations:
 // rolling a media library's schema backwards loses data that a rescan cannot
@@ -232,6 +232,15 @@ var migrations = []migration{
 		{"library", "metadata_language", "TEXT"},
 		{"library", "reading_direction", "TEXT"},
 	}},
+	// Two ways a track was filed under the wrong artist (2026-11-10). A junk
+	// TXXX "ALBUM ARTIST" frame beat the standard TPE2, so OK Go's album
+	// artist read "LBUM"; and an untagged `G's/GIMS/track.mp3` made an artist
+	// "G's". Both are fixed in the reading, and the grouping keys are dropped,
+	// as in 86 and 88, so the next scan of each music library reads every file
+	// once and files those tracks where they belong.
+	{version: 96, sql: `UPDATE media_item SET group_artist = NULL, group_album = NULL,
+		group_dir = NULL, group_album_from_folder = NULL, group_album_at_root = NULL
+		WHERE kind = 'track'`},
 }
 
 // migrate brings the database up to CurrentSchemaVersion.

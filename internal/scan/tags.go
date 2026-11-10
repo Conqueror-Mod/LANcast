@@ -190,7 +190,9 @@ func (s *Scanner) applyTrackTags(ctx context.Context, lib store.Library, p *Prog
 					// the failure mode this project keeps rediscovering.
 					mu.Lock()
 					untagged++
-					groups = append(groups, groupFromPath(rootOf(roots, it.RootID), it))
+					g := groupFromPath(rootOf(roots, it.RootID), it)
+					g.fileChanged = p != nil && p.changed[it.ID]
+					groups = append(groups, g)
 					mu.Unlock()
 					continue
 				}
@@ -208,7 +210,9 @@ func (s *Scanner) applyTrackTags(ctx context.Context, lib store.Library, p *Prog
 				// stopped being a value in flight and became the only reason
 				// to reopen files the walk had just proven unmoved.
 				mu.Lock()
-				groups = append(groups, groupFromTags(rootOf(roots, it.RootID), it, tags))
+				g := groupFromTags(rootOf(roots, it.RootID), it, tags)
+				g.fileChanged = p != nil && p.changed[it.ID]
+				groups = append(groups, g)
 				mu.Unlock()
 			}
 		}()
@@ -316,6 +320,10 @@ type trackGroup struct {
 	// albumAtRoot records that the folder the album name came from sits
 	// directly in the library root, with no artist folder above it.
 	albumAtRoot bool
+	// fileChanged records that the walk wrote this track: its file is new, or
+	// its size or mtime moved. Only then may it leave a locked album
+	// (reconcileMusic).
+	fileChanged bool
 }
 
 // groupFromTags takes the grouping key from a track's tags.
@@ -425,6 +433,13 @@ func groupFromPath(root string, it store.Item) trackGroup {
 		return g
 	}
 	parts := strings.Split(filepath.ToSlash(rel), "/")
+	// Under a letter bucket the folder holding the track is the artist, and
+	// there is no album folder: `G's/GIMS/track.mp3`. Read as Artist/Album it
+	// made an album "GIMS" by an artist "G's" (2026-11-10).
+	if n := len(parts); n >= 2 && media.IsLetterBucket(parts[n-2]) {
+		g.artist = parts[n-1]
+		return g
+	}
 	g.album = parts[len(parts)-1]
 	g.albumFromFolder = g.album != ""
 	g.albumAtRoot = len(parts) == 1
@@ -509,7 +524,27 @@ func (s *Scanner) reconcileMusic(ctx context.Context, lib store.Library, groups 
 		return groups[i].itemID < groups[j].itemID
 	})
 
+	/*
+	 * A locked album keeps its tracks unless their files changed.
+	 *
+	 * Fix match locks an album to the release a person chose. If a track
+	 * leaves it, the album empties and DeleteEmptyMusicContainers takes the
+	 * row and the choice with it. That is right when the owner retagged or
+	 * moved the file: the file now says something else. It is wrong when only
+	 * LANcast's reading changed. Schema 96 re-read every track, the
+	 * letter-bucket rule unfiled six one-track albums a person had matched by
+	 * hand, and all six choices were deleted (2026-11-10). A rescan reconciles
+	 * files; it does not re-litigate a decision.
+	 */
+	lockedAlbum, err := s.st.LockedAlbumsOfTracks(ctx, lib.ID)
+	if err != nil {
+		return err
+	}
+
 	for _, g := range groups {
+		if _, ok := lockedAlbum[g.itemID]; ok && !g.fileChanged {
+			continue
+		}
 		// A track with neither an artist nor an album has nothing to file it
 		// under, and is left top-level rather than filed beneath an invented
 		// one — a decision TestScanLooseTrackStaysTopLevel records.
