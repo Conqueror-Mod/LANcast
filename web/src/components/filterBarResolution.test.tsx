@@ -26,7 +26,7 @@
  * bytes. Between them the payload is checked at both ends of the wire, which is
  * the join neither suite was making.
  */
-import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi, type Mock } from "vitest";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -65,7 +65,7 @@ const facets: Facets = {
 
 let container: HTMLDivElement;
 let root: Root;
-let onToggle: ReturnType<typeof vi.fn>;
+let onToggle: Mock<(key: string, value: string) => void>;
 
 async function render(params = new URLSearchParams()) {
   const qc = new QueryClient({
