@@ -891,21 +891,23 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/federation/together/{room}", s.federationPollTogether)
 	mux.HandleFunc("DELETE /api/federation/together/{room}/members/me", s.federationLeaveTogether)
 
-	mux.HandleFunc("GET /api/channels", s.listChannels)
-	mux.HandleFunc("GET /api/channels/{id}/stream", s.channelStream)
-	mux.HandleFunc("GET /api/channels/{id}/live", s.channelLive)
-	mux.HandleFunc("GET /api/channels/{id}/hls/index.m3u8", s.channelLiveHLS)
-	mux.HandleFunc("GET /api/channels/{id}/hls/{session}/{name}", s.hlsSegment)
+	// Every live TV route answers 409 live_tv_off unless the live_tv setting
+	// is on (livetvswitch.go).
+	mux.HandleFunc("GET /api/channels", s.liveTV(s.listChannels))
+	mux.HandleFunc("GET /api/channels/{id}/stream", s.liveTV(s.channelStream))
+	mux.HandleFunc("GET /api/channels/{id}/live", s.liveTV(s.channelLive))
+	mux.HandleFunc("GET /api/channels/{id}/hls/index.m3u8", s.liveTV(s.channelLiveHLS))
+	mux.HandleFunc("GET /api/channels/{id}/hls/{session}/{name}", s.liveTV(s.hlsSegment))
 	// The viewer leaving is the one thing the HLS path cannot infer (ADR 0065).
-	mux.HandleFunc("POST /api/channels/{id}/stop", s.channelStopLive)
+	mux.HandleFunc("POST /api/channels/{id}/stop", s.liveTV(s.channelStopLive))
 	// The guide is readable by the household, like the channels it describes.
-	mux.HandleFunc("GET /api/guide", s.listGuide)
-	mux.HandleFunc("GET /api/channels/{id}/guide", s.channelGuide)
-	mux.HandleFunc("GET /api/channel-sources", s.adminOnly(s.listChannelSources))
-	mux.HandleFunc("POST /api/channel-sources", s.adminOnly(s.createChannelSource))
-	mux.HandleFunc("POST /api/channel-sources/{id}/refresh", s.adminOnly(s.refreshChannelSource))
-	mux.HandleFunc("PATCH /api/channel-sources/{id}", s.adminOnly(s.patchChannelSource))
-	mux.HandleFunc("DELETE /api/channel-sources/{id}", s.adminOnly(s.deleteChannelSource))
+	mux.HandleFunc("GET /api/guide", s.liveTV(s.listGuide))
+	mux.HandleFunc("GET /api/channels/{id}/guide", s.liveTV(s.channelGuide))
+	mux.HandleFunc("GET /api/channel-sources", s.liveTV(s.adminOnly(s.listChannelSources)))
+	mux.HandleFunc("POST /api/channel-sources", s.liveTV(s.adminOnly(s.createChannelSource)))
+	mux.HandleFunc("POST /api/channel-sources/{id}/refresh", s.liveTV(s.adminOnly(s.refreshChannelSource)))
+	mux.HandleFunc("PATCH /api/channel-sources/{id}", s.liveTV(s.adminOnly(s.patchChannelSource)))
+	mux.HandleFunc("DELETE /api/channel-sources/{id}", s.liveTV(s.adminOnly(s.deleteChannelSource)))
 	mux.HandleFunc("GET /api/items/{id}", s.getItem)
 	mux.HandleFunc("GET /api/items/{id}/collections", s.itemCollections)
 	mux.HandleFunc("GET /api/items/{id}/films", s.collectionFilms)
@@ -1118,8 +1120,11 @@ func (s *Server) Handler() http.Handler {
 	//
 	// The request count is outermost of all, so a request refused anywhere
 	// inside still counts.
+	//
+	// Body ceilings come before auth, because the routes that answer before
+	// sign-in are the ones a stranger can reach (bodylimit.go).
 	return s.countRequests(auth.TrustProxies(s.trustedProxies, logRequests(s.log,
-		s.recoverPanics(negotiateAPIVersion(s.requireAuth(mux))))))
+		s.recoverPanics(limitBodies(mux, negotiateAPIVersion(s.requireAuth(mux)))))))
 }
 
 // countRequests counts every request, for lancast_http_requests_total.

@@ -101,7 +101,7 @@ the server still held its session.
 
 | Route | Purpose |
 |---|---|
-| `GET /api/auth/status` | `{configured, authenticated, lan_enabled, restart_required, can_convert, passkeys, user?}`; `user` carries `sharing`. `passkeys` is `{available, rp_id?, public_name?}` for **this request** — see Passkeys |
+| `GET /api/auth/status` | `{configured, authenticated, lan_enabled, restart_required, can_convert, live_tv, passkeys, user?}`; `user` carries `sharing`. `passkeys` is `{available, rp_id?, public_name?}` for **this request** — see Passkeys |
 | `GET /api/auth/accounts` | `{accounts: [{name}]}` for the sign-in page's account picker, **home network only** — see below |
 | `POST /api/auth/setup` | `{username, password, install_media_tools?}` → creates the first admin; only while unconfigured. Answers `media_tools_installing` |
 | `POST /api/auth/login` | `{username, password}` → session cookie. Throttled per IP, and per account from outside the local network — see below |
@@ -115,6 +115,12 @@ addresses on a network one of this machine's interfaces is on get the list
 IPv6). Everything else gets `{"accounts": []}`, as does every request while
 the `login_picker` setting is off. An empty list rather than a `403`: it says
 nothing about whether there is anything to hide.
+
+**`live_tv` says whether live TV is on.** It is off unless `"live_tv": true` is
+in the server's `config.json`, which nothing in the app sets: live TV is parked
+work that 1.0 does not offer ([v1-plan](v1-plan.md) §8). A client leaves Live
+TV out entirely while it is `false`, for members too, which is why it is here.
+**Absent must read as on**: a server older than this field always had it on.
 
 **`can_convert` says whether ffmpeg is present**, and it is reported to every
 caller rather than only to administrators
@@ -649,9 +655,25 @@ Every error returns a consistent shape. Handlers never surface raw SQL errors.
 | `not_found` | 404 | No such resource |
 | `invalid_preset` | 400 | A visualizer preset that does not parse or breaks a limit; the message says where |
 | `conflict` | 409 | Scan already running; duplicate library path |
-| `too_large` | 413 | An upload over its limit (a save, a preset) |
+| `too_large` | 413 | A request body over its route's limit, or an upload over its own (a save, a preset) |
 | `unavailable` | 503 | File missing from disk |
 | `internal` | 500 | Unexpected failure |
+
+**Every request body has a limit**, applied before sign-in is checked. It is
+1 MiB, except on the routes that take a file:
+
+| Route | Limit |
+|---|---|
+| `PUT /api/profile/picture` | 10 MiB |
+| `PUT /api/items/{id}/saves/{slot}` | 64 MiB |
+| `POST /api/report` | the text and four pictures, about 32 MiB |
+| `POST /api/plugins` | 32 MiB |
+
+A body whose `Content-Length` is over the limit is refused with
+`413 too_large` without being read. A body sent without a length is read up to
+the limit and no further, and the route then answers `400 bad_request`, as it
+would for any body it cannot parse. A route may accept less than this, and
+says so in its own entry.
 
 ---
 
@@ -5180,6 +5202,11 @@ the caller's or not live.
 { "commands": [ { "action": "play", "item_id": 87, "queue": [87, 88, 89],
   "position_ms": 1284000, "from": "Phone", "sent_at": 1762500000000 } ] }
 ```
+
+**Every live TV route below, `/api/channel-sources` included, answers `409`
+`live_tv_off` while live TV is off** (see `live_tv` under `GET /api/auth/status`).
+Turning it off deletes nothing: channel sources, channels and the guide stay,
+and the guide's twelve-hourly fetch stops until it is on again.
 
 ### `GET /api/channels`
 

@@ -460,6 +460,9 @@ func (s *Server) authStatus(w http.ResponseWriter, r *http.Request) {
 		 * whoever runs this to install ffmpeg".
 		 */
 		"can_convert": s.trans.Available(),
+		// Whether live TV is on (livetvswitch.go), so every client, a
+		// member's included, knows whether to offer it at all.
+		"live_tv": s.liveTVOn(),
 	}
 	/*
 	 * Whether passkeys work on this very request (ADR 0082). Reported to

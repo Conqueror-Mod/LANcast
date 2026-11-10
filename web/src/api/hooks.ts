@@ -123,6 +123,18 @@ export function useAuthStatus() {
   });
 }
 
+/*
+ * Whether live TV is on (the server's live_tv setting, off by default): true,
+ * false, or undefined until the status has arrived. A server older than the
+ * field always had live TV on, so absent reads as on. Every place that offers
+ * Live TV asks this, so turning it off takes it out of the app for everybody.
+ */
+export function useLiveTVOn(): boolean | undefined {
+  const { data } = useAuthStatus();
+  if (!data) return undefined;
+  return data.live_tv !== false;
+}
+
 // The signed-in user, or undefined. A thin read over the cached status so any
 // component can role-gate a control without wiring its own query.
 export function useCurrentUser(): AuthUser | undefined {

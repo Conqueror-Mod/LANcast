@@ -32,6 +32,7 @@ import { HomeMasthead } from "@/components/HomeMasthead";
 import type { Item, Library } from "@/api/types";
 import { useContinueMenu } from "@/lib/useContinueMenu";
 import { useHeroSpotlight } from "@/lib/useHero";
+import { useItemActions } from "@/components/itemActions";
 import "./Home.css";
 import "./Bridge.css";
 
@@ -59,6 +60,7 @@ function UnwatchedShelf({
   seed,
   named,
   hide,
+  itemActions,
 }: {
   library: Library;
   seed: number;
@@ -66,6 +68,7 @@ function UnwatchedShelf({
   named: boolean;
   /** The item the hero is already showing. */
   hide?: number;
+  itemActions?: (item: Item) => MenuAction[];
 }) {
   const { data } = useItems({
     libraryID: library.id,
@@ -80,6 +83,7 @@ function UnwatchedShelf({
     <Shelf
       title={named ? `Unwatched in ${library.name}` : "Unwatched"}
       items={items}
+      itemActions={itemActions}
       // A film library's grid, with its own Unwatched filter already on. A
       // show library's grid has no filter that means "not begun", so it opens
       // as it is.
@@ -144,6 +148,16 @@ export function Home() {
   const navigate = useNavigate();
   const admin = useIsAdmin();
   const { continueActions, resumeActions, resumeOpen } = useContinueMenu();
+  /*
+   * What a right-click on any title on Home offers: the same menu as the
+   * library grid and search, so a poster answers the same way wherever it is.
+   * Every shelf here used to pass none, and a tile with no actions leaves the
+   * browser's own menu.
+   */
+  const { actions: itemActions, dialogs: itemDialogs } = useItemActions({
+    // The same condition as the Watchlist shelf's own request, so they share it.
+    watchlist: !prefsPending && !hidden.has("watchlist"),
+  });
 
   /*
    * Which item is in the spotlight, and why.
@@ -237,10 +251,13 @@ export function Home() {
           //
           // And "View collection" for a title in one, on the shelf or not:
           // the spotlight is often the first place a film is seen.
+          //
+          // Off the shelf it offers what a poster offers. It used to offer
+          // nothing, so a spotlight title in no collection had no menu at all.
           actions={heroActions(
             (continueWatching ?? []).some((i) => i.id === hero.item.id)
               ? continueActions(hero.item)
-              : [],
+              : itemActions(hero.item),
             collectionsMenu(hero.item, heroCollections?.items, (id) => navigate(`/item/${id}`)),
           )}
         />
@@ -258,7 +275,7 @@ export function Home() {
           {(friendsShown || onThisDay.length > 0 || watchedThisDay.length > 0) && (
             <div className="bridge__pair">
               {friendsShown && <FriendsPanel peers={peerPresence?.peers ?? []} />}
-              <MemoryPanel items={onThisDay} watched={watchedThisDay} />
+              <MemoryPanel items={onThisDay} watched={watchedThisDay} itemActions={itemActions} />
             </div>
           )}
         </div>
@@ -276,6 +293,7 @@ export function Home() {
             games: recentGames,
             photos: recentPictures,
           }}
+          itemActions={itemActions}
         />}
         {/* What you finished lately and have not rated. Rating one takes it
             off; an empty list is no shelf. */}
@@ -284,13 +302,16 @@ export function Home() {
             title="Rate what you've watched"
             items={toRate?.items ?? []}
             itemFooter={(item) => <QuickRate item={item} />}
+            itemActions={itemActions}
           />
         )}
         {/* What you meant to watch (ADR 0085). Newest first, and empty means
             no shelf. */}
-        {!hidden.has("watchlist") && <Shelf title="Watchlist" items={watchlistItems(watchlist)} />}
+        {!hidden.has("watchlist") && (
+          <Shelf title="Watchlist" items={watchlistItems(watchlist)} itemActions={itemActions} />
+        )}
         {/* The views you pinned from a library grid, in your order (ADR 0119 §2). */}
-        <PinnedShelves libraries={libraries} />
+        <PinnedShelves libraries={libraries} itemActions={itemActions} />
         {unwatchedLibraries.map((lib) => (
           <UnwatchedShelf
             key={lib.id}
@@ -300,9 +321,13 @@ export function Home() {
             // TV Shows turned off, a bare "Unwatched" would not say which.
             named={allUnwatched.length > 1}
             hide={hero?.item.id}
+            itemActions={itemActions}
           />
         ))}
       </div>
+      {/* The dialogs a menu entry opens (Add to playlist, Remove), which the
+          menu cannot own because it closes as the entry is chosen. */}
+      {itemDialogs}
       {/*
         A new install (ADR 0118 §3): one welcome panel, and no empty frames
         around it. Adding a library is an administrator's to do, so anybody

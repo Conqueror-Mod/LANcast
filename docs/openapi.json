@@ -16278,7 +16278,8 @@
           "authenticated",
           "lan_enabled",
           "restart_required",
-          "can_convert"
+          "can_convert",
+          "live_tv"
         ],
         "properties": {
           "configured": {
@@ -16299,6 +16300,10 @@
           "can_convert": {
             "type": "boolean",
             "description": "Whether ffmpeg is present (ADR 0048). Reported to every caller, not only administrators — the install button is admin-only and correctly so, but the *fact* is not a secret and the person most affected is a member who cannot open Settings at all.\n\nA client must use this to explain the failure **before** attempting playback: a `<video>` element handed a refused request reports a bare error with no status, so a client that waits to be told cannot be told, and the viewer sees a black rectangle instead of a reason.\n\n**Absent must read as capable.** A client older than the server, or a server older than the client, may not see this field; assuming otherwise puts a warning in front of somebody whose playback works."
+          },
+          "live_tv": {
+            "type": "boolean",
+            "description": "Whether live TV is on. Off unless `\"live_tv\": true` is in the server's `config.json`, which nothing in the app sets: live TV is parked work that 1.0 does not offer. While `false`, every channel, guide and channel-source route answers `409` `live_tv_off`, and a client leaves Live TV out entirely, for members too.\n\n**Absent must read as on**: a server older than this field always had it on."
           },
           "user": {
             "$ref": "#/components/schemas/User",
