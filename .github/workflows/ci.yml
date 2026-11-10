@@ -198,9 +198,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # One place names the Node version: web/.nvmrc, which nvm reads on a
+      # developer's machine too. Node 20 reached end of life on 2026-04-30.
+      # Node only builds and tests the client; the release embeds the
+      # committed dist and never runs it.
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version-file: web/.nvmrc
           cache: npm
           cache-dependency-path: web/package-lock.json
 
