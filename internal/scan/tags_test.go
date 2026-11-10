@@ -922,3 +922,99 @@ func TestLoudnessIsReadAndBackfilled(t *testing.T) {
 		t.Fatalf("the backfill repeated: %d reads", tags.calls-before)
 	}
 }
+
+/*
+ * A locked album keeps its tracks when only LANcast's guess changed.
+ *
+ * Found on a real library (2026-11-10). Six one-track albums, each named after
+ * its artist's folder, had been given a release in Fix match, which locks it.
+ * Schema 96 had the next scan re-read every track, the letter-bucket rule said
+ * those folders were artists rather than records, the albums emptied, and
+ * DeleteEmptyMusicContainers took the rows and the six choices with them. No
+ * file had changed. A rescan reconciles files; it does not re-litigate a
+ * person's decision.
+ */
+func TestALockedAlbumKeepsItsTracksWhenOnlyTheGuessChanged(t *testing.T) {
+	ctx := context.Background()
+	sc, st := newScanner(t)
+	lib, root := musicFixture(t, st)
+	writeFile(t, root, "T's/Tiesto/Tiesto - The Business.mp3", 10)
+
+	// First scan: tagged as an album named after the artist.
+	tags := &fakeTags{byName: map[string]probe.Tags{
+		"Tiesto - The Business.mp3": {Title: "The Business", Artist: "Tiësto", Album: "Tiësto"},
+	}}
+	sc.SetTagReader(tags)
+	scanAndWait(t, sc, lib)
+	tr := trackByPath(t, st, lib.ID, "Tiesto - The Business.mp3")
+	if tr.ParentID == nil {
+		t.Fatal("setup: the track has no album")
+	}
+	album := *tr.ParentID
+	if err := st.ApplyAlbumMatch(ctx, album, store.AlbumMatch{
+		Provider: "musicbrainz", ExternalID: "d6d9dd28", Score: 1, Confirmed: true,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	// The guess changes and the keys are dropped (schema 96); the file does not.
+	tags.byName = map[string]probe.Tags{}
+	if _, err := st.ClearGroupKeys(ctx, lib.ID); err != nil {
+		t.Fatal(err)
+	}
+	l, err := st.GetLibrary(ctx, lib.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	scanAndWait(t, sc, *l)
+
+	got, err := st.GetItem(ctx, album, "")
+	if err != nil {
+		t.Fatalf("the locked album is gone: %v", err)
+	}
+	if got.MatchState != "locked" {
+		t.Errorf("album match state = %q, want locked", got.MatchState)
+	}
+	if tr := trackByPath(t, st, lib.ID, "Tiesto - The Business.mp3"); tr.ParentID == nil || *tr.ParentID != album {
+		t.Errorf("the track left its locked album (parent %v, want %d)", tr.ParentID, album)
+	}
+}
+
+// The lock holds an album against LANcast's guessing, not against the owner.
+// A file that changed on disk is re-filed by what it now says.
+func TestALockedAlbumLetsAChangedFileGo(t *testing.T) {
+	ctx := context.Background()
+	sc, st := newScanner(t)
+	lib, root := musicFixture(t, st)
+	writeFile(t, root, "Portishead/Dummy/01 Mysterons.mp3", 10)
+	writeFile(t, root, "Portishead/Dummy/02 Sour Times.mp3", 10)
+
+	tags := &fakeTags{byName: map[string]probe.Tags{
+		"01 Mysterons.mp3":  {Title: "Mysterons", Artist: "Portishead", Album: "Dummy"},
+		"02 Sour Times.mp3": {Title: "Sour Times", Artist: "Portishead", Album: "Dummy"},
+	}}
+	sc.SetTagReader(tags)
+	scanAndWait(t, sc, lib)
+	album := *trackByPath(t, st, lib.ID, "01 Mysterons.mp3").ParentID
+	if err := st.ApplyAlbumMatch(ctx, album, store.AlbumMatch{
+		Provider: "musicbrainz", ExternalID: "x", Score: 1, Confirmed: true,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	// Retagged on disk: the file changes size, and now says another album.
+	tags.byName["01 Mysterons.mp3"] = probe.Tags{Title: "Mysterons", Artist: "Portishead", Album: "Roseland NYC Live"}
+	writeFile(t, root, "Portishead/Dummy/01 Mysterons.mp3", 20)
+	l, err := st.GetLibrary(ctx, lib.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	scanAndWait(t, sc, *l)
+
+	if tr := trackByPath(t, st, lib.ID, "01 Mysterons.mp3"); tr.ParentID == nil || *tr.ParentID == album {
+		t.Errorf("a retagged file stayed in its old locked album")
+	}
+	if tr := trackByPath(t, st, lib.ID, "02 Sour Times.mp3"); tr.ParentID == nil || *tr.ParentID != album {
+		t.Errorf("the untouched track left the locked album")
+	}
+}

@@ -226,3 +226,29 @@ func (s *Store) ApplyArtistMatch(ctx context.Context, itemID int64, m ArtistMatc
 	}
 	return s.fillGenres(ctx, itemID, m.Genres, genresLocked)
 }
+
+// LockedAlbumsOfTracks maps each present track in a library that sits in a
+// locked album to that album. The scan leaves these where they are unless the
+// track's own file changed, so a change in how LANcast reads a folder cannot
+// empty an album a person matched by hand, and delete the match with it.
+func (s *Store) LockedAlbumsOfTracks(ctx context.Context, libraryID int64) (map[int64]int64, error) {
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT t.id, a.id
+		  FROM media_item t
+		  JOIN media_item a ON a.id = t.parent_id
+		 WHERE t.library_id = ? AND t.kind = 'track'
+		   AND a.kind = 'album' AND a.match_state = 'locked'`, libraryID)
+	if err != nil {
+		return nil, fmt.Errorf("locked albums of tracks: %w", err)
+	}
+	defer rows.Close()
+	out := map[int64]int64{}
+	for rows.Next() {
+		var track, album int64
+		if err := rows.Scan(&track, &album); err != nil {
+			return nil, fmt.Errorf("locked albums of tracks: %w", err)
+		}
+		out[track] = album
+	}
+	return out, rows.Err()
+}
