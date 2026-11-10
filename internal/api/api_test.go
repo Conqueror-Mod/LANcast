@@ -56,6 +56,13 @@ func newHarness(t *testing.T) *harness {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// Live TV is off by default and on here, so the live TV tests go on
+	// testing the routes; the switch has tests of its own (livetvswitch_test.go).
+	on := settings.Get()
+	on.LiveTV = true
+	if err := settings.Set(on); err != nil {
+		t.Fatal(err)
+	}
 
 	log := slog.New(slog.NewTextHandler(io.Discard, nil))
 	// A real identity from the harness's own data directory, rather than a

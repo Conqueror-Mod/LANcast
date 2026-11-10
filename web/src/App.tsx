@@ -1,4 +1,4 @@
-import { Routes, Route } from "react-router";
+import { Routes, Route, Navigate } from "react-router";
 import { PeerLibrary } from "@/screens/PeerLibrary";
 import { PeerPlayer } from "@/screens/PeerPlayer";
 import { AppShell } from "@/components/AppShell";
@@ -40,7 +40,7 @@ import { TogetherProvider } from "@/playback/TogetherProvider";
 import { BookProvider } from "@/playback/BookPlayer";
 import { BookBar } from "@/playback/BookBar";
 import { JoinRequestPrompt } from "@/components/JoinRequestPrompt";
-import { useAuthStatus, useForgetEndedSession } from "@/api/hooks";
+import { useAuthStatus, useForgetEndedSession, useLiveTVOn } from "@/api/hooks";
 import { ServerEvents } from "@/api/serverEvents";
 import { HomePrefsCarryOver } from "@/lib/homePrefs";
 import { DesignBench } from "@/screens/DesignBench";
@@ -158,7 +158,7 @@ export function App() {
           <Route path="/games" element={<Games />} />
           <Route path="/games/:id" element={<GameDetail />} />
           <Route path="/addons" element={<Addons />} />
-          <Route path="/live" element={<LiveTV />} />
+          <Route path="/live" element={<LiveRoute />} />
           <Route path="/people" element={<People />} />
           <Route path="/devices" element={<Devices />} />
           <Route path="/settings" element={<Settings />} />
@@ -183,4 +183,15 @@ export function App() {
       </BookProvider>
     </PlaybackProvider>
   );
+}
+
+/*
+ * Live TV, while the server has it on. Off, an old bookmark or a typed /live
+ * goes Home rather than to a page whose every request is refused; nothing is
+ * drawn until the status says which.
+ */
+function LiveRoute() {
+  const on = useLiveTVOn();
+  if (on === undefined) return null;
+  return on ? <LiveTV /> : <Navigate to="/" replace />;
 }

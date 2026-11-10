@@ -177,7 +177,9 @@ Every item below gets a line in the 1.0 notes, so nobody has to discover it:
 
 - **Live TV.** Parked 2026-08-29: the guide grid, the native-HLS-versus-MSE
   question, and channels nobody is watching that keep running (ADR 0065,
-  proposed). Whether it ships visible as a preview or hidden is decision 6.
+  proposed). **Off in 1.0** (decision 6, changed 2026-11-09): all of it is
+  kept, and an installed server answers none of it until `"live_tv": true` is
+  in its `config.json`.
 - **Theater output.** HDR to the display and passthrough are off by default and
   wait for cables.
 - **RetroAchievements hardcore.** Built and hidden until RetroAchievements
@@ -252,9 +254,17 @@ Chris took the recommendation on all eight.
    token or a low-privilege account for the child processes costs. A few days
    or less means it is done before 1.0. More than that means security.md says
    so plainly for 1.0, and it is built in 1.1.
-6. **Live TV ships visible, labelled as a preview**, in the interface and in
-   the notes. The label is the only live TV work, and it does not unpark
-   anything else ([the parked scope](roadmap.md#what-is-left) stands).
+6. ~~**Live TV ships visible, labelled as a preview.**~~ **Changed 2026-11-09:
+   live TV is off in 1.0, and kept.** Chris: keep what was built and turn the
+   feature off in installed builds until he works on it further, after 1.0.
+   Built as a server setting, `live_tv`, off by default and on no screen: off,
+   every channel, guide and channel-source route answers `409 live_tv_off`,
+   the guide's fetch stops, and the client leaves Live TV out of the rail, the
+   phone nav, Settings and `/live`. Nothing is deleted, and `"live_tv": true`
+   in `config.json` brings it back as it was. A build tag was the alternative
+   and was not chosen: it would need a second CI run to keep the code tested,
+   and a custom build to work on it. This is the only live TV work; the
+   [parked scope](roadmap.md#what-is-left) stands.
 7. **The roadmap is split at 1.0**, as part of §6 step 7: `roadmap.md` keeps
    the status, what is left, open decisions and the backlog, and the Releases
    table and the *what the pass taught* sections move to a history file.
