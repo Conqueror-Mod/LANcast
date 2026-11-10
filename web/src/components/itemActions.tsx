@@ -200,7 +200,16 @@ export function useMarkAll(): {
   return { markAll, marking };
 }
 
-export function useItemActions(): ItemActions {
+export function useItemActions({
+  watchlist: watchlistWanted = true,
+}: {
+  /*
+   * Whether to read the watchlist, which the Add/Remove entry needs. Home
+   * passes false while its Watchlist shelf is turned off, so a hidden shelf
+   * still costs no request; its menus then leave that one entry out.
+   */
+  watchlist?: boolean;
+} = {}): ItemActions {
   const navigate = useNavigate();
   const setWatched = useSetWatchedByID();
   const pb = usePlayback();
@@ -302,11 +311,14 @@ export function useItemActions(): ItemActions {
    * On or off the watchlist (ADR 0085), for films and shows. One query for the
    * whole grid, so every tile's menu reads the same list the title page does.
    */
-  const { data: watchlist } = useWatchlist();
+  const { data: watchlist } = useWatchlist(watchlistWanted);
   const setWatchlist = useSetWatchlist();
   const watchlistAction = useCallback(
     (item: Item): MenuAction[] => {
       if ((item.kind !== "movie" && item.kind !== "show") || item.missing) return [];
+      // Not read, so not known: an entry that might say "Add" for a title
+      // already on the list is worse than no entry.
+      if (!watchlistWanted || watchlist === undefined) return [];
       const on = watchlistItems(watchlist).some((it) => it.id === item.id);
       return [
         {
@@ -315,7 +327,7 @@ export function useItemActions(): ItemActions {
         },
       ];
     },
-    [watchlist, setWatchlist],
+    [watchlist, setWatchlist, watchlistWanted],
   );
 
   /*

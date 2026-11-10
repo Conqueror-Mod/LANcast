@@ -1,6 +1,7 @@
 import { Link } from "react-router";
 import { AskToJoin } from "./AskToJoin";
 import { PosterTile } from "./PosterTile";
+import type { MenuAction } from "./Menu";
 import { friendRows } from "@/lib/presence";
 import type { FinishedMemory, Item, PeerPresence } from "@/api/types";
 import "./BridgePanels.css";
@@ -130,10 +131,13 @@ export function memoryTiles(
 export function MemoryPanel({
   items,
   watched = [],
+  itemActions,
 }: {
   items: Item[];
   /** What you finished on this date in an earlier year. */
   watched?: FinishedMemory[];
+  /** What a right-click on a tile offers. */
+  itemActions?: (item: Item) => MenuAction[];
 }) {
   const shown = memoryTiles(items, watched);
   if (shown.length === 0) return null;
@@ -158,7 +162,7 @@ export function MemoryPanel({
       <div className="memory__grid">
         {shown.map((t) => (
           <div className="memory__cell" key={t.item.id}>
-            <PosterTile item={t.item} />
+            <PosterTile item={t.item} actions={itemActions} />
             {t.note && <span className="memory__note">{t.note}</span>}
           </div>
         ))}

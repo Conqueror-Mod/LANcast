@@ -649,9 +649,25 @@ Every error returns a consistent shape. Handlers never surface raw SQL errors.
 | `not_found` | 404 | No such resource |
 | `invalid_preset` | 400 | A visualizer preset that does not parse or breaks a limit; the message says where |
 | `conflict` | 409 | Scan already running; duplicate library path |
-| `too_large` | 413 | An upload over its limit (a save, a preset) |
+| `too_large` | 413 | A request body over its route's limit, or an upload over its own (a save, a preset) |
 | `unavailable` | 503 | File missing from disk |
 | `internal` | 500 | Unexpected failure |
+
+**Every request body has a limit**, applied before sign-in is checked. It is
+1 MiB, except on the routes that take a file:
+
+| Route | Limit |
+|---|---|
+| `PUT /api/profile/picture` | 10 MiB |
+| `PUT /api/items/{id}/saves/{slot}` | 64 MiB |
+| `POST /api/report` | the text and four pictures, about 32 MiB |
+| `POST /api/plugins` | 32 MiB |
+
+A body whose `Content-Length` is over the limit is refused with
+`413 too_large` without being read. A body sent without a length is read up to
+the limit and no further, and the route then answers `400 bad_request`, as it
+would for any body it cannot parse. A route may accept less than this, and
+says so in its own entry.
 
 ---
 
