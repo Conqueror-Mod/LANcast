@@ -85,6 +85,35 @@ func TestParseTagsIsDeterministicAcrossSpellings(t *testing.T) {
 	}
 }
 
+// When two spellings disagree, the standard frame wins. ffprobe reports an
+// ID3v2 TPE2 as "album_artist", in its own lowercase. A custom TXXX frame keeps
+// whatever name the tagger gave it, and the uppercase name sorts first. Three
+// real MP3s in one library carried a TXXX whose value was its own name, cut
+// short ("LBUM", "LBUMARTIS", "LB"). That junk became the album artist for 7
+// albums, none of which MusicBrainz could then match (2026-11-10).
+func TestParseTagsPrefersTheStandardFrameWhenSpellingsDisagree(t *testing.T) {
+	for _, tc := range []struct{ name, key, junk, want string }{
+		{"OK Go", "ALBUM ARTIST", "LBUM", "OK Go"},
+		{"Kid Cudi", "ALBUMARTIST", "LBUMARTIS", "Kid Cudi"},
+		{"Last Action Hero", "ALBUM ARTIST", "LB", "Various Artists"},
+	} {
+		got := parseTags(map[string]string{
+			"artist":       "Someone",
+			"album_artist": tc.want,
+			tc.key:         tc.junk,
+		})
+		if got.AlbumArtist != tc.want {
+			t.Errorf("%s: AlbumArtist = %q, want %q (the TPE2 frame)", tc.name, got.AlbumArtist, tc.want)
+		}
+	}
+
+	// A FLAC has no lowercase spelling: its Vorbis comment is the standard
+	// field, and it still resolves on its own.
+	if got := parseTags(map[string]string{"ALBUMARTIST": "Aesop Rock"}); got.AlbumArtist != "Aesop Rock" {
+		t.Errorf("FLAC ALBUMARTIST alone: AlbumArtist = %q", got.AlbumArtist)
+	}
+}
+
 func TestParseTagsEmptyAndJunk(t *testing.T) {
 	if !parseTags(nil).Empty() {
 		t.Error("nil tags should be Empty")

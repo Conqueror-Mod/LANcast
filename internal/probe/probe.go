@@ -571,15 +571,28 @@ func parseTags(raw map[string]string) Tags {
 		return Tags{}
 	}
 
-	// Normalise once, and iterate in sorted order so two spellings of the same
+	// Normalise once, and iterate in a fixed order so two spellings of the same
 	// field resolve the same way on every run rather than however the map
 	// happened to be walked.
+	//
+	// Lowercase keys come first. Those are ffprobe's own names for a format's
+	// standard fields (an ID3v2 TPE2 arrives as "album_artist"), where a custom
+	// TXXX frame keeps the tagger's spelling. Plain sorting put "ALBUM ARTIST"
+	// ahead of "album_artist", so a junk TXXX beat the real frame: three files
+	// whose TXXX held its own name cut short ("LBUM") gave 7 albums that album
+	// artist. A FLAC has only the uppercase spelling, and still resolves.
 	norm := make(map[string]string, len(raw))
 	keys := make([]string, 0, len(raw))
 	for k := range raw {
 		keys = append(keys, k)
 	}
-	sort.Strings(keys)
+	sort.Slice(keys, func(i, j int) bool {
+		li, lj := keys[i] == strings.ToLower(keys[i]), keys[j] == strings.ToLower(keys[j])
+		if li != lj {
+			return li
+		}
+		return keys[i] < keys[j]
+	})
 	for _, k := range keys {
 		v := strings.TrimSpace(raw[k])
 		if v == "" {
