@@ -3,7 +3,7 @@
  * when the facets carry kinds of record, a chip per kind, and a pill once one
  * is chosen. The query string half (release_type=EP) is the server's test.
  */
-import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi, type Mock } from "vitest";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -35,7 +35,7 @@ const base: Facets = {
 
 let container: HTMLDivElement;
 let root: Root;
-let onToggle: ReturnType<typeof vi.fn>;
+let onToggle: Mock<(key: string, value: string) => void>;
 
 async function render(facets: Facets, params = new URLSearchParams()) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } });
