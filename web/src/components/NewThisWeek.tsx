@@ -1,6 +1,7 @@
 import { Shelf } from "./Shelf";
 import { addedThisWeek, rowLabel } from "@/lib/newThisWeek";
 import type { Item } from "@/api/types";
+import type { MenuAction } from "./Menu";
 import "./NewThisWeek.css";
 
 /*
@@ -35,8 +36,11 @@ const ROWS: { key: keyof NewThisWeekRows; title: string }[] = [
 export function NewThisWeek({
   rows,
   now,
+  itemActions,
 }: {
   rows: NewThisWeekRows;
+  /** What a right-click on a tile offers. */
+  itemActions?: (item: Item) => MenuAction[];
   /** Unix seconds; a test passes a fixed one. */
   now?: number;
 }) {
@@ -57,6 +61,7 @@ export function NewThisWeek({
           // both), since a week may bring only one; the others by their kind.
           title={r.key === "video" ? rowLabel(r.items, r.title) : r.title}
           items={r.items}
+          itemActions={itemActions}
         />
       ))}
     </section>

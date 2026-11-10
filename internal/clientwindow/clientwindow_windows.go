@@ -110,6 +110,14 @@ func open(o Options) error {
 		// (dpi_windows.go).
 		scaleForMonitor(hwnd, o.Width, o.Height)
 	}
+	/*
+	 * And then it opens maximized, every time, on the screen it was on.
+	 *
+	 * The remembered rectangle above is still applied first: it picks the
+	 * monitor, and it is what un-maximizing returns to, so a window someone
+	 * sized by hand keeps that size one click away.
+	 */
+	_, _, _ = procShowWindow.Call(hwnd, swMaximize)
 
 	// Fullscreen is the host's job, not the page's.
 	//
@@ -269,6 +277,8 @@ var (
 	user32                  = windows.NewLazySystemDLL("user32")
 	procShowWindow          = user32.NewProc("ShowWindow")
 	procSetForegroundWindow = user32.NewProc("SetForegroundWindow")
+	procIsWindowVisible     = user32.NewProc("IsWindowVisible")
+	procIsIconic            = user32.NewProc("IsIconic")
 )
 
 const (
@@ -287,9 +297,21 @@ type controller struct {
 func (c *controller) Show() {
 	c.w.Dispatch(func() {
 		hwnd := uintptr(c.w.Window())
-		// Restore before showing: a window hidden while minimised comes back
-		// minimised, which reads as the tray having done nothing.
-		_, _, _ = procShowWindow.Call(hwnd, swRestore)
+		/*
+		 * A window coming back from the tray, or from the taskbar, comes back
+		 * maximized, as it does at start. It used to be restored, and
+		 * SW_RESTORE on a maximized window un-maximizes it, so every trip
+		 * through the tray shrank it.
+		 *
+		 * A window already on screen is only raised: it may be fullscreen over
+		 * a film, or sized by hand on purpose, and a second launch asking for
+		 * it is not a reason to change either.
+		 */
+		visible, _, _ := procIsWindowVisible.Call(hwnd)
+		iconic, _, _ := procIsIconic.Call(hwnd)
+		if visible == 0 || iconic != 0 {
+			_, _, _ = procShowWindow.Call(hwnd, swMaximize)
+		}
 		_, _, _ = procShowWindow.Call(hwnd, swShow)
 		_, _, _ = procSetForegroundWindow.Call(hwnd)
 	})

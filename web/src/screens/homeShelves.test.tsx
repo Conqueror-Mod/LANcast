@@ -394,3 +394,47 @@ describe("shelves the account turned off", () => {
     expect(shelfLabels()).toEqual(expect.arrayContaining(["Rate what you've watched", "Watchlist"]));
   });
 });
+
+/*
+ * A right-click on any title on Home opens the same menu a poster opens in a
+ * library grid. Every shelf here used to pass no actions, so a tile left the
+ * browser's own menu, and the spotlight had none unless its title was in
+ * progress or in a collection.
+ */
+describe("a right-click on a title on Home", () => {
+  beforeEach(() => {
+    toRate = [film(20, "Finished Lately")];
+    watchlist = [film(30, "Meant To Watch")];
+  });
+
+  async function menuFor(title: string): Promise<string[]> {
+    const el = [...host.querySelectorAll(".home__shelves *")].find(
+      (e) => e.children.length === 0 && e.textContent === title,
+    );
+    expect(el, `no tile titled ${title}`).toBeTruthy();
+    await act(async () => {
+      el!.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true, clientX: 5, clientY: 5 }));
+    });
+    const menu = document.body.querySelector('[role="menu"]');
+    const items = [...(menu?.querySelectorAll('[role="menuitem"]') ?? [])].map((e) => e.textContent ?? "");
+    await act(async () => {
+      document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+    });
+    return items;
+  }
+
+  it("opens the poster's menu on every shelf", async () => {
+    mount([library(1, "Movies", "movie")]);
+    await render();
+    for (const title of ["Finished Lately", "Meant To Watch", "Never Seen"]) {
+      const items = await menuFor(title);
+      expect(items, title).toContain("Go to details");
+    }
+  });
+
+  it("offers the watchlist entry while the Watchlist shelf is on", async () => {
+    mount([library(1, "Movies", "movie")]);
+    await render();
+    expect(await menuFor("Meant To Watch")).toContain("Remove from Watchlist");
+  });
+});

@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { useEditShelf, useHomeShelves, useItems, useUnpinShelf } from "@/api/hooks";
-import type { HomeShelf, Library } from "@/api/types";
+import type { HomeShelf, Item, Library } from "@/api/types";
 import { libraryItemQuery } from "@/lib/libraryQuery";
 import { configForKind } from "@/screens/libraryConfig";
 import { ButtonMenu, type MenuAction } from "./Menu";
@@ -14,7 +14,14 @@ import { ShelfTitleDialog } from "./ShelfTitleDialog";
  * so a pinned shelf is that grid's first row and nothing else: its sort, its
  * filters, its level. "All" opens the grid with the query on.
  */
-export function PinnedShelves({ libraries }: { libraries?: Library[] }) {
+export function PinnedShelves({
+  libraries,
+  itemActions,
+}: {
+  libraries?: Library[];
+  /** What a right-click on a tile offers. */
+  itemActions?: (item: Item) => MenuAction[];
+}) {
   const { data } = useHomeShelves();
   const shelves = data?.shelves ?? [];
   const byID = useMemo(() => new Map((libraries ?? []).map((l) => [l.id, l])), [libraries]);
@@ -33,6 +40,7 @@ export function PinnedShelves({ libraries }: { libraries?: Library[] }) {
             library={lib}
             first={i === 0}
             last={i === shelves.length - 1}
+            itemActions={itemActions}
           />
         );
       })}
@@ -45,11 +53,13 @@ function PinnedShelf({
   library,
   first,
   last,
+  itemActions,
 }: {
   shelf: HomeShelf;
   library: Library;
   first: boolean;
   last: boolean;
+  itemActions?: (item: Item) => MenuAction[];
 }) {
   const params = useMemo(() => new URLSearchParams(shelf.query), [shelf.query]);
   const query = libraryItemQuery(library.id, params, configForKind(library.kind));
@@ -81,7 +91,13 @@ function PinnedShelf({
   return (
     <>
       {items.length > 0 ? (
-        <Shelf title={shelf.title} items={items} seeAllTo={seeAll} headerActions={menu} />
+        <Shelf
+          title={shelf.title}
+          items={items}
+          seeAllTo={seeAll}
+          headerActions={menu}
+          itemActions={itemActions}
+        />
       ) : (
         isSuccess && (
           /*
