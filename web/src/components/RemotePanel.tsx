@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link } from "react-router";
 import { useQueryClient } from "@tanstack/react-query";
 import type { Item, RemoteCommandRequest, RemotePlayer } from "@/api/types";
 import { useFocusable } from "@/focus/FocusController";

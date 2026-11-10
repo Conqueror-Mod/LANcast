@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router";
 import { apiGet, apiPost, ApiFailure } from "@/api/client";
 import type { RemoteCommand, RemotePlayer } from "@/api/types";
 import { onTopic } from "@/api/serverEvents";

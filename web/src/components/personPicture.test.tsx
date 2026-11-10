@@ -7,7 +7,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { MemoryRouter } from "react-router-dom";
+import { MemoryRouter } from "react-router";
 import { PersonPicture } from "./Avatar";
 import { useClearUserPicture, useCurrentUser, useUploadPicture } from "@/api/hooks";
 import { Profile } from "@/screens/Profile";

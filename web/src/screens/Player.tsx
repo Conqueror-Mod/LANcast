@@ -6,7 +6,7 @@ import {
   useNavigate,
   useParams,
   useSearchParams,
-} from "react-router-dom";
+} from "react-router";
 import { useBackHandler, useSuspendFocus } from "@/focus/FocusController";
 import { shuffleForEntry } from "@/playback/queueOrder";
 import { clock } from "@/lib/format";

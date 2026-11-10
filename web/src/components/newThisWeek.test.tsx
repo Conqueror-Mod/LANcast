@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { MemoryRouter } from "react-router-dom";
+import { MemoryRouter } from "react-router";
 import { FocusProvider } from "@/focus/FocusController";
 import { NewThisWeek } from "./NewThisWeek";
 import { NEW_WINDOW_SECONDS, addedThisWeek, rowLabel } from "@/lib/newThisWeek";

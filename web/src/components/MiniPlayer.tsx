@@ -1,5 +1,5 @@
 import { useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router";
 import { usePlayback } from "@/playback/PlaybackProvider";
 import { useFocusable } from "@/focus/FocusController";
 import { PrevGlyph, NextGlyph, VolumeGlyph } from "@/components/PlayerGlyphs";

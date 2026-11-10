@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { MemoryRouter } from "react-router-dom";
+import { MemoryRouter } from "react-router";
 import { FocusProvider } from "@/focus/FocusController";
 import { FriendsPanel, MemoryPanel, finishedVerb, memoryTiles, showFriends, yearsAgo } from "./BridgePanels";
 import { friendRows } from "@/lib/presence";

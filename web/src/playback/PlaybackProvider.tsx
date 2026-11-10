@@ -15,7 +15,7 @@ import {
   type ReactNode,
 } from "react";
 import { createPortal } from "react-dom";
-import { useInRouterContext, useNavigate, type NavigateFunction } from "react-router-dom";
+import { useInRouterContext, useNavigate, type NavigateFunction } from "react-router";
 import { invalidateWatchState, useAuthStatus, useItem, useSubtitles } from "@/api/hooks";
 import { useQueryClient } from "@tanstack/react-query";
 import { apiGet, apiSend, artworkURL } from "@/api/client";

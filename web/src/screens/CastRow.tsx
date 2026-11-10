@@ -1,4 +1,4 @@
-import { Link } from "react-router-dom";
+import { Link } from "react-router";
 import { artworkURL } from "@/api/client";
 import type { Credit } from "@/api/types";
 

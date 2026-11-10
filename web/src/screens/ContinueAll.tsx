@@ -1,4 +1,4 @@
-import { useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router";
 import { useResume } from "@/api/hooks";
 import { useBackHandler } from "@/focus/FocusController";
 import { ResumeCardRow } from "@/components/ResumeConsole";

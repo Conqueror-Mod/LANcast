@@ -1,4 +1,4 @@
-import { Link } from "react-router-dom";
+import { Link } from "react-router";
 import { useCurrentUser } from "@/api/hooks";
 import { LibraryIcon } from "./LibraryIcon";
 import { navCount } from "./AppShell";

@@ -1,5 +1,5 @@
 import { useRef } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams } from "react-router";
 import { useMarkedItems, useTags, type ItemMark } from "@/api/hooks";
 import { useInfiniteScroll } from "@/lib/useInfiniteScroll";
 import { useBackHandler } from "@/focus/FocusController";

@@ -5,7 +5,7 @@
  * forward 30, chapter skips, speed, and the place on the whole book's clock.
  */
 import { useEffect } from "react";
-import { Link } from "react-router-dom";
+import { Link } from "react-router";
 import { artworkURL } from "@/api/client";
 import { useBookPlayer } from "./BookPlayer";
 import { BOOK_SPEEDS, clock } from "./bookTimeline";

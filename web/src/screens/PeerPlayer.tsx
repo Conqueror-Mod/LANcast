@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { useParams, useSearchParams, Link } from "react-router-dom";
+import { useParams, useSearchParams, Link } from "react-router";
 import { useQuery } from "@tanstack/react-query";
 import { apiGet, apiSend } from "@/api/client";
 import type { SubtitleTrack } from "@/api/types";
