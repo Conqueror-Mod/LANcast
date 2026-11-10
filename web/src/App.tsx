@@ -1,4 +1,4 @@
-import { Routes, Route, Navigate } from "react-router-dom";
+import { Routes, Route, Navigate } from "react-router";
 import { PeerLibrary } from "@/screens/PeerLibrary";
 import { PeerPlayer } from "@/screens/PeerPlayer";
 import { AppShell } from "@/components/AppShell";

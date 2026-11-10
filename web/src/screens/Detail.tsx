@@ -4,7 +4,7 @@ import {
   useHeroMode,
   usePinnedHero,
 } from "@/lib/heroMode";
-import { useLocation, useNavigate, useParams } from "react-router-dom";
+import { useLocation, useNavigate, useParams } from "react-router";
 import {
   useItem,
   useRefreshItem,

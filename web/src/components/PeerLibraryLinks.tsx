@@ -1,5 +1,5 @@
 import { useState, type MouseEventHandler } from "react";
-import { NavLink, useLocation } from "react-router-dom";
+import { NavLink, useLocation } from "react-router";
 import { usePeers, usePeerLibraries } from "@/api/hooks";
 import { LibraryIcon } from "@/components/LibraryIcon";
 

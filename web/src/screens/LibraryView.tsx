@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState, type CSSProperties } from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   useInfiniteItems,

@@ -1,4 +1,4 @@
-import { useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router";
 import { useSetWatchedByID } from "@/api/hooks";
 import { usePlayback } from "@/playback/PlaybackProvider";
 import type { MenuAction } from "@/components/Menu";

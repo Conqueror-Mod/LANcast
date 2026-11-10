@@ -1,4 +1,4 @@
-import { Link } from "react-router-dom";
+import { Link } from "react-router";
 import { AskToJoin } from "./AskToJoin";
 import { PosterTile } from "./PosterTile";
 import type { MenuAction } from "./Menu";

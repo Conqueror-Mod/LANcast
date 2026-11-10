@@ -1,4 +1,4 @@
-import { useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router";
 import { useCurrentUser, useItem } from "@/api/hooks";
 import type { TogetherSession } from "@/api/types";
 import { usePlayback } from "@/playback/PlaybackProvider";

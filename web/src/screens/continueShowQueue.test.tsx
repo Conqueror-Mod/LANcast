@@ -21,7 +21,7 @@ import {
   Route,
   useLocation,
   useParams,
-} from "react-router-dom";
+} from "react-router";
 import { FocusProvider } from "@/focus/FocusController";
 import { PlaybackProvider } from "@/playback/PlaybackProvider";
 import { Detail } from "./Detail";

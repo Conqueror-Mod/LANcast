@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router";
 import { useGlobalSearch, useLibraries } from "@/api/hooks";
 import { useBackHandler } from "@/focus/FocusController";
 import { PosterTile } from "@/components/PosterTile";

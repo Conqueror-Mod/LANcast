@@ -15,7 +15,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
+import { MemoryRouter, Route, Routes, useLocation } from "react-router";
 
 declare global {
   // eslint-disable-next-line no-var

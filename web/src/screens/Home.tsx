@@ -18,7 +18,7 @@ import {
   watchlistItems,
 } from "@/api/hooks";
 import { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router";
 import { Shelf } from "@/components/Shelf";
 import type { MenuAction } from "@/components/Menu";
 import { HomeHero } from "@/components/HomeHero";

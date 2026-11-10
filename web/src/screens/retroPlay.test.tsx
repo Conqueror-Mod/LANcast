@@ -13,7 +13,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { MemoryRouter, Routes, Route } from "react-router-dom";
+import { MemoryRouter, Routes, Route } from "react-router";
 import { FocusProvider } from "@/focus/FocusController";
 import { PlaybackProvider, usePlayback } from "@/playback/PlaybackProvider";
 import { RetroPlay } from "./RetroPlay";

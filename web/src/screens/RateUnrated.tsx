@@ -1,4 +1,4 @@
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams } from "react-router";
 import { useIsAdmin, useLibraries, useUnrated } from "@/api/hooks";
 import { ContentRatingPicker } from "@/components/ContentRatingPicker";
 import { platformLabel } from "@/lib/platforms";

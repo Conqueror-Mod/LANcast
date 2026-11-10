@@ -1,4 +1,4 @@
-import { useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router";
 
 // A placeholder for screens not yet built in this slice (Detail, Player,
 // Settings). Honest about being unfinished rather than faking a screen.

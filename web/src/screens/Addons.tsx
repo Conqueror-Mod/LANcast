@@ -1,4 +1,4 @@
-import { Link } from "react-router-dom";
+import { Link } from "react-router";
 import { usePlugins, useIsAdmin } from "@/api/hooks";
 import "./Addons.css";
 

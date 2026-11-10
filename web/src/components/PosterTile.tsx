@@ -1,5 +1,5 @@
 import { useCallback, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router";
 import { artworkURL } from "@/api/client";
 import { PointMenu, type MenuAction, type MenuPoint } from "./Menu";
 import { useFocusable } from "@/focus/FocusController";

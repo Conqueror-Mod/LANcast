@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Link } from "react-router-dom";
+import { Link } from "react-router";
 import { useYearInReview } from "@/api/hooks";
 import { artworkURL } from "@/api/client";
 import { runtime } from "@/lib/format";

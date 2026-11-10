@@ -1,6 +1,6 @@
 import { TrayBridge } from "./TrayBridge";
 import { SubtitleStyleSync } from "./SubtitleStyleSync";
-import { NavLink, useLocation, useNavigate } from "react-router-dom";
+import { NavLink, useLocation, useNavigate } from "react-router";
 import { PeerLibraryLinks } from "@/components/PeerLibraryLinks";
 import { PersonPicture } from "@/components/Avatar";
 import { useBigscreen, useBigscreenShortcut } from "@/lib/bigscreen";

@@ -3,7 +3,7 @@ import { PeerShares } from "@/components/PeerShares";
 import { AskToJoin } from "@/components/AskToJoin";
 import { OpenSessions } from "@/components/OpenSessions";
 import { PersonPicture } from "@/components/Avatar";
-import { Link } from "react-router-dom";
+import { Link } from "react-router";
 import {
   useGrantPresence,
   usePeerLibraries,

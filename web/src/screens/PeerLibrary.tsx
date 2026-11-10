@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useParams, useNavigate, useLocation, Link } from "react-router-dom";
+import { useParams, useNavigate, useLocation, Link } from "react-router";
 import { ApiFailure } from "@/api/client";
 import { usePeerLibraries, usePeerItems } from "@/api/hooks";
 import { PosterTile } from "@/components/PosterTile";

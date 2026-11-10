@@ -1,4 +1,4 @@
-import { Link } from "react-router-dom";
+import { Link } from "react-router";
 import { useDownloads, downloadURL } from "@/lib/downloads";
 import "./Downloads.css";
 

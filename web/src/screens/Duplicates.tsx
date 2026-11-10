@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams } from "react-router";
 import { useIsAdmin, useLibraries, usePhotoDuplicates, usePhotoNearCopies } from "@/api/hooks";
 import { PosterTile } from "@/components/PosterTile";
 import { PhotoViewer } from "@/components/PhotoViewer";

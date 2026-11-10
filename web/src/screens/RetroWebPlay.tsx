@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useParams, useSearchParams } from "react-router-dom";
+import { useParams, useSearchParams } from "react-router";
 import { apiGet } from "@/api/client";
 import { useItem, useWebCores } from "@/api/hooks";
 import { useBackHandler, useFocusScope, useSuspendFocus } from "@/focus/FocusController";
