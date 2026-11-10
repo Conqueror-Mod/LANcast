@@ -101,7 +101,7 @@ the server still held its session.
 
 | Route | Purpose |
 |---|---|
-| `GET /api/auth/status` | `{configured, authenticated, lan_enabled, restart_required, can_convert, passkeys, user?}`; `user` carries `sharing`. `passkeys` is `{available, rp_id?, public_name?}` for **this request** — see Passkeys |
+| `GET /api/auth/status` | `{configured, authenticated, lan_enabled, restart_required, can_convert, live_tv, passkeys, user?}`; `user` carries `sharing`. `passkeys` is `{available, rp_id?, public_name?}` for **this request** — see Passkeys |
 | `GET /api/auth/accounts` | `{accounts: [{name}]}` for the sign-in page's account picker, **home network only** — see below |
 | `POST /api/auth/setup` | `{username, password, install_media_tools?}` → creates the first admin; only while unconfigured. Answers `media_tools_installing` |
 | `POST /api/auth/login` | `{username, password}` → session cookie. Throttled per IP, and per account from outside the local network — see below |
@@ -115,6 +115,12 @@ addresses on a network one of this machine's interfaces is on get the list
 IPv6). Everything else gets `{"accounts": []}`, as does every request while
 the `login_picker` setting is off. An empty list rather than a `403`: it says
 nothing about whether there is anything to hide.
+
+**`live_tv` says whether live TV is on.** It is off unless `"live_tv": true` is
+in the server's `config.json`, which nothing in the app sets: live TV is parked
+work that 1.0 does not offer ([v1-plan](v1-plan.md) §8). A client leaves Live
+TV out entirely while it is `false`, for members too, which is why it is here.
+**Absent must read as on**: a server older than this field always had it on.
 
 **`can_convert` says whether ffmpeg is present**, and it is reported to every
 caller rather than only to administrators
@@ -5196,6 +5202,11 @@ the caller's or not live.
 { "commands": [ { "action": "play", "item_id": 87, "queue": [87, 88, 89],
   "position_ms": 1284000, "from": "Phone", "sent_at": 1762500000000 } ] }
 ```
+
+**Every live TV route below, `/api/channel-sources` included, answers `409`
+`live_tv_off` while live TV is off** (see `live_tv` under `GET /api/auth/status`).
+Turning it off deletes nothing: channel sources, channels and the guide stay,
+and the guide's twelve-hourly fetch stops until it is on again.
 
 ### `GET /api/channels`
 

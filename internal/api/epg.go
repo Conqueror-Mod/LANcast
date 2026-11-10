@@ -139,6 +139,10 @@ func (s *Server) importEPG(ctx context.Context, src *store.ChannelSource) (int, 
  * stop the others being refreshed, and there is nobody to report to.
  */
 func (s *Server) RefreshGuides(ctx context.Context) {
+	// Live TV off fetches nothing: a parked feature makes no requests.
+	if !s.liveTVOn() {
+		return
+	}
 	// Yesterday, not now: a programme that finished an hour ago is still what
 	// somebody scrolling back wants to see, and "what was on" is a reasonable
 	// question for the length of a day.

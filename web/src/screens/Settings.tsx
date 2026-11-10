@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type RefObject } from "react";
 import { useSearchParams } from "react-router-dom";
-import { useIsAdmin } from "@/api/hooks";
+import { useIsAdmin, useLiveTVOn } from "@/api/hooks";
 import { useFocusZone } from "@/focus/FocusController";
 import {
   ACCOUNT_PANES,
@@ -189,7 +189,12 @@ export function Settings() {
   const [params, setParams] = useSearchParams();
 
   const status = isAdmin ? STATUS_PANES : [];
-  const server = isAdmin ? SERVER_PANES : [];
+  // The Live TV pane only while the server has live TV on; settings search
+  // follows, since it searches the panes listed here.
+  const liveTV = useLiveTVOn();
+  const server = isAdmin
+    ? SERVER_PANES.filter((x) => x.id !== "livetv" || liveTV === true)
+    : [];
   const account = ACCOUNT_PANES;
   const device = DEVICE_PANES.filter(
     (x) => !DESKTOP_ONLY.has(x.id) || desktopAvailable(),
