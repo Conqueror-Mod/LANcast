@@ -435,8 +435,8 @@ interface PlaybackState {
   prefs: Prefs;
   setPrefs: (patch: Partial<Prefs>) => void;
 
-  videoRef: React.RefObject<HTMLVideoElement>;
-  containerRef: React.RefObject<HTMLDivElement>;
+  videoRef: React.RefObject<HTMLVideoElement | null>;
+  containerRef: React.RefObject<HTMLDivElement | null>;
   /** Claimed by the player screen while it is mounted. */
   claimFullSurface: (claimed: boolean) => void;
 

@@ -391,9 +391,9 @@ export function Player() {
   );
 
   // ---- auto-hide chrome -----------------------------------------------------
-  const idleTimer = useRef<number>();
+  const idleTimer = useRef<number | undefined>(undefined);
   // Set by a click on the picture, cancelled by a second one. See the handlers.
-  const clickTimer = useRef<number>();
+  const clickTimer = useRef<number | undefined>(undefined);
   /*
    * Whether the pointer is resting on the controls.
    *
