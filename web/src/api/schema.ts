@@ -20448,6 +20448,10 @@ export interface operations {
                          * @description Absent when the file has not been probed. **This is what makes a converted stream seekable**: a transcode is a sequence of sessions each starting at zero, so the film's own length cannot come from the media element.
                          */
                         duration_ms?: number;
+                        /** @description The file's audio tracks, so a friend's player can offer another one: it names the chosen track's `index` as `audio=` on the playback routes, exactly as the household's player does. Absent when the file has not been probed, or has no audio. Facts about a file the caller may already play. */
+                        audio?: components["schemas"]["MediaStream"][];
+                        /** @description Where the intro and the credits are, so a friend's player can skip them. Absent when nothing has been detected. */
+                        markers?: components["schemas"]["Marker"][];
                     };
                 };
             };
@@ -21129,6 +21133,10 @@ export interface operations {
                          * @description Where **this** household got to, in milliseconds, from this server's own rows. Absent when nothing was watched. It is the one field on this answer that is not the peer's — ADR 0071 §4 puts a friend's progress on the friend's own server, so the host neither writes nor knows it.
                          */
                         position_ms?: number;
+                        /** @description The file's audio tracks, so a friend's player can offer another one: it names the chosen track's `index` as `audio=` on the playback routes, exactly as the household's player does. Absent when the file has not been probed, or has no audio. Facts about a file the caller may already play. */
+                        audio?: components["schemas"]["MediaStream"][];
+                        /** @description Where the intro and the credits are, so a friend's player can skip them. Absent when nothing has been detected. */
+                        markers?: components["schemas"]["Marker"][];
                     };
                 };
             };
