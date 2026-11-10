@@ -51,6 +51,27 @@ func TestAlbumScoringOnMeasuredCases(t *testing.T) {
 		{"a near-identical spelling still agrees",
 			AlbumQuery("Schuld und Sühne", "Blut Engel", 2001),
 			Candidate{ExternalID: "x", Title: "Schuld und Sühne", Artist: "Blutengel", Year: 2001}, StateMatched},
+
+		// The second measurement (2026-11-09), over the albums the live
+		// library had left unmatched.
+		{"a title of symbols matches itself",
+			AlbumQuery("✝", "Justice", 2007),
+			Candidate{ExternalID: "x", Title: "✝", Artist: "Justice", Year: 2007}, StateMatched},
+		{"a title of other symbols matches itself",
+			AlbumQuery("<|°_°|>", "Caravan Palace", 2015),
+			Candidate{ExternalID: "x", Title: "<|°_°|>", Artist: "Caravan Palace", Year: 2015}, StateMatched},
+		{"different symbols are different records",
+			AlbumQuery("✝", "Justice", 2007),
+			Candidate{ExternalID: "x", Title: "†††", Artist: "Justice", Year: 2007}, StateUnmatched},
+		{"the same name spaced differently",
+			AlbumQuery("Шум", "Go A", 2021),
+			Candidate{ExternalID: "x", Title: "Шум", Artist: "Go_A", Year: 2021}, StateMatched},
+		{"a stylized letter is the letter",
+			AlbumQuery("Untouchables", "KoЯn", 2002),
+			Candidate{ExternalID: "x", Title: "Untouchables", Artist: "Korn", Year: 2002}, StateMatched},
+		{"a stylized name is still not another band",
+			AlbumQuery("Untouchables", "KoЯn", 2002),
+			Candidate{ExternalID: "x", Title: "Untouchables", Artist: "Lakeside", Year: 1983}, StateUnmatched},
 	}
 	for _, c := range cases {
 		score, state := albumState(c.q, c.c)
