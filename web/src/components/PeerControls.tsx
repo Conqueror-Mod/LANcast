@@ -29,6 +29,20 @@ import "./PeerControls.css";
  * rather than live-but-ignored: a button that looks pressable and does nothing
  * reads as broken. Volume, mute and fullscreen stay live — nobody else's
  * evening is affected by how loud yours is.
+ *
+ * # What it gained before 1.0
+ *
+ * A friend's film had only play, the scrubber, volume and fullscreen, and that
+ * was reported as missing controls rather than as restraint. Four of the
+ * household's are true here too, because they are about this file and this
+ * viewer rather than about a queue or a resume: skipping back and forward,
+ * subtitles, another audio track, and skipping the intro and the credits. The
+ * tracks and markers come from the friend's server (`audio`, `markers` on
+ * their item answer); a server too old to send them simply offers none.
+ *
+ * In a room the skips and the intro/credits buttons follow play and the
+ * scrubber (the host drives); subtitles and the audio track stay the viewer's
+ * own, as volume does.
  */
 export function PeerControls({
   paused,
@@ -44,6 +58,14 @@ export function PeerControls({
   onToggleMute,
   fullscreen,
   onToggleFullscreen,
+  onSkip,
+  subtitles = [],
+  subtitle = null,
+  onSubtitle,
+  audio = [],
+  audioTrack = null,
+  onAudio,
+  skip = null,
 }: {
   paused: boolean;
   at: number;
@@ -59,6 +81,18 @@ export function PeerControls({
   onToggleMute: () => void;
   fullscreen: boolean;
   onToggleFullscreen: () => void;
+  /** Move by this many seconds: -10 back, 10 forward. */
+  onSkip?: (by: number) => void;
+  /** The subtitle tracks to choose from, and the chosen one's key or null. */
+  subtitles?: { key: string; label: string }[];
+  subtitle?: string | null;
+  onSubtitle?: (key: string | null) => void;
+  /** The audio tracks, by absolute stream index, and the chosen one. */
+  audio?: { index: number; label: string }[];
+  audioTrack?: number | null;
+  onAudio?: (index: number) => void;
+  /** "Skip intro" or "Skip credits" while inside one, with where it goes. */
+  skip?: { label: string; onSkip: () => void } | null;
 }) {
   const seekable = total > 0 && !following;
   const silent = muted || volume === 0;
@@ -75,6 +109,31 @@ export function PeerControls({
       >
         {paused ? "▶" : "❚❚"}
       </button>
+
+      {onSkip && (
+        <button
+          type="button"
+          className="peer-controls__button peer-controls__skip"
+          onClick={() => onSkip(-10)}
+          disabled={!seekable}
+          aria-label="Back 10 seconds"
+          title="Back 10 seconds (←)"
+        >
+          −10
+        </button>
+      )}
+      {onSkip && (
+        <button
+          type="button"
+          className="peer-controls__button peer-controls__skip"
+          onClick={() => onSkip(10)}
+          disabled={!seekable}
+          aria-label="Forward 10 seconds"
+          title="Forward 10 seconds (→)"
+        >
+          +10
+        </button>
+      )}
 
       <span className="peer-controls__time">{clock(at)}</span>
 
@@ -113,6 +172,51 @@ export function PeerControls({
         <span className="peer-controls__note" title="Converted on their machine">
           converting
         </span>
+      )}
+
+      {/* Over the scrubber's end rather than over the picture: this screen has
+          no overlay chrome to put it in, and here it is where the eye already
+          is when the intro starts. */}
+      {skip && !following && (
+        <button type="button" className="peer-controls__skip-marker" onClick={skip.onSkip}>
+          {skip.label}
+        </button>
+      )}
+
+      {/*
+        Native selects: keyboard- and remote-operable as they are, and a screen
+        reader knows what each one is. Only drawn when there is a choice.
+      */}
+      {subtitles.length > 0 && onSubtitle && (
+        <select
+          className="peer-controls__select"
+          value={subtitle ?? ""}
+          onChange={(e) => onSubtitle(e.currentTarget.value === "" ? null : e.currentTarget.value)}
+          aria-label="Subtitles"
+          title="Subtitles"
+        >
+          <option value="">Subtitles off</option>
+          {subtitles.map((s) => (
+            <option key={s.key} value={s.key}>
+              {s.label}
+            </option>
+          ))}
+        </select>
+      )}
+      {audio.length > 1 && onAudio && (
+        <select
+          className="peer-controls__select"
+          value={audioTrack ?? audio[0].index}
+          onChange={(e) => onAudio(Number(e.currentTarget.value))}
+          aria-label="Audio"
+          title="Audio"
+        >
+          {audio.map((a) => (
+            <option key={a.index} value={a.index}>
+              {a.label}
+            </option>
+          ))}
+        </select>
       )}
 
       <button
