@@ -1372,6 +1372,21 @@ export function Player() {
                 <FullscreenGlyph />
               </button>
             )}
+            {/* The way out of a full-screen visualizer, where a film keeps its
+                fullscreen button. The ⛶ that opened it lives in Now Playing,
+                which is not drawn while it is full, so without this the only
+                exits were the ← in the corner and the V and Esc keys. */}
+            {pb.isAudio && pb.vizFull && (
+              <button
+                className="player__icon is-on"
+                onClick={() => setVizFull(false)}
+                aria-label="Leave full-screen visualizer"
+                aria-pressed
+                title="Leave full-screen visualizer (V)"
+              >
+                <FullscreenGlyph />
+              </button>
+            )}
           </div>
         </div>
       </div>

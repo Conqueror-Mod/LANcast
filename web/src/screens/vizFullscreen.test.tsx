@@ -412,6 +412,20 @@ describe("Escape, in order", () => {
     expect(path).toBe("/play");
   });
 
+  // Found on the installed service: the ⛶ that opens it lives in Now Playing,
+  // which is gone while it is full, and the bar had no way back.
+  it("has a button in the bar that leaves it, where a film keeps fullscreen", async () => {
+    await playing();
+    expect(button(/^Leave full-screen visualizer$/)).toBeFalsy();
+    await key("v");
+    expect(pb.vizFull).toBe(true);
+    await act(async () => button(/^Leave full-screen visualizer$/)?.click());
+    await settle();
+    expect(pb.vizFull).toBe(false);
+    expect(path).toBe("/play");
+    expect(button(/^Leave full-screen visualizer$/)).toBeFalsy();
+  });
+
   it("ends when the player docks, so coming back is Now Playing and not the field", async () => {
     await playing();
     await key("v");
