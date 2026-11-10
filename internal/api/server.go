@@ -1118,8 +1118,11 @@ func (s *Server) Handler() http.Handler {
 	//
 	// The request count is outermost of all, so a request refused anywhere
 	// inside still counts.
+	//
+	// Body ceilings come before auth, because the routes that answer before
+	// sign-in are the ones a stranger can reach (bodylimit.go).
 	return s.countRequests(auth.TrustProxies(s.trustedProxies, logRequests(s.log,
-		s.recoverPanics(negotiateAPIVersion(s.requireAuth(mux))))))
+		s.recoverPanics(limitBodies(mux, negotiateAPIVersion(s.requireAuth(mux)))))))
 }
 
 // countRequests counts every request, for lancast_http_requests_total.
