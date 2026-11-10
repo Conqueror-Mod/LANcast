@@ -41,7 +41,10 @@ func FuzzParse(f *testing.F) {
 			// A Windows drive path read on Linux is kept as a foreign absolute
 			// path (TestResolveKeepsForeignAbsolutePath), which IsAbs there
 			// does not count.
-			if p, ok := Resolve(base, e.Path); ok && !filepath.IsAbs(p) && !hasDriveLetter(p) {
+			// The line is checked, not the result: cleaning turns `A:\` into
+			// `A:` on Linux, which no longer looks like a drive at all.
+			foreign := hasDriveLetter(strings.ReplaceAll(e.Path, `\`, "/"))
+			if p, ok := Resolve(base, e.Path); ok && !filepath.IsAbs(p) && !foreign {
 				t.Fatalf("Resolve(%q) = %q, not absolute", e.Path, p)
 			}
 		}
