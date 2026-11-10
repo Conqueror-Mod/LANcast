@@ -23,8 +23,11 @@ globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
 let host: HTMLDivElement;
 let root: Root;
+/** live_tv in /api/auth/status; undefined leaves the field out, as an older server does. */
+let liveTV: boolean | undefined;
 
 beforeEach(() => {
+  liveTV = undefined;
   host = document.createElement("div");
   document.body.append(host);
   root = createRoot(host);
@@ -43,6 +46,7 @@ beforeEach(() => {
           authenticated: true,
           configured: true,
           user: { id: "u1", name: "dana", role: "admin" },
+          ...(liveTV === undefined ? {} : { live_tv: liveTV }),
         });
       }
       if (url.includes("/api/libraries")) {
@@ -102,5 +106,24 @@ describe("the rail", () => {
     // Games appears only in the desktop window, when asked for.
     expect(names(groups[0])).toEqual(["Live TV"]);
     expect(names(groups[1])).toEqual(["Add-ons", "Downloads", "People"]);
+  });
+});
+
+/*
+ * Live TV is off unless the server turns it on (the live_tv setting). Off, it
+ * is not on the rail at all, and neither is the break that set it apart.
+ */
+describe("the rail with live TV off", () => {
+  it("leaves Live TV and its group out", async () => {
+    liveTV = false;
+    await render();
+    const groups = [...host.querySelectorAll(".app-shell__group")];
+    expect(groups.map(names)).toEqual([["Add-ons", "Downloads", "People"]]);
+  });
+
+  it("offers it when the server says it is on", async () => {
+    liveTV = true;
+    await render();
+    expect(names(host.querySelector(".app-shell__group"))).toEqual(["Live TV"]);
   });
 });

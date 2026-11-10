@@ -8,6 +8,7 @@ import {
   useLogout,
   useIsAdmin,
   useHealth,
+  useLiveTVOn,
 } from "@/api/hooks";
 import { ReportIssue } from "./ReportIssue";
 import { gamesSupported } from "@/lib/games";
@@ -52,6 +53,7 @@ type Sheet = "libraries" | "more" | null;
 
 export function MobileNav() {
   const { data: libraries } = useLibraries();
+  const liveTV = useLiveTVOn();
   const user = useCurrentUser();
   const logout = useLogout();
   const isAdmin = useIsAdmin();
@@ -147,10 +149,12 @@ export function MobileNav() {
                   </NavLink>
                 ),
               )}
-              <NavLink to="/live" className={({ isActive }) => row(isActive)}>
-                <LiveIcon />
-                <span>Live TV</span>
-              </NavLink>
+              {liveTV === true && (
+                <NavLink to="/live" className={({ isActive }) => row(isActive)}>
+                  <LiveIcon />
+                  <span>Live TV</span>
+                </NavLink>
+              )}
               {/* Other servers' libraries, under their own heading, as on the
                   rail (ADR 0071 §5). */}
               <div className="mnav__peers">

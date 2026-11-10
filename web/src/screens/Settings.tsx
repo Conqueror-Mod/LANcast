@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type RefObject } from "react";
 import { useSearchParams } from "react-router";
-import { useIsAdmin } from "@/api/hooks";
+import { useIsAdmin, useLiveTVOn } from "@/api/hooks";
 import { useFocusZone } from "@/focus/FocusController";
 import {
   ACCOUNT_PANES,
@@ -144,12 +144,57 @@ function useFoundSetting(
   }, [paneRef, found]);
 }
 
+/*
+ * The category column is never taller than the window below where it starts.
+ *
+ * It sticks 60px from the top once the page scrolls, but at rest it starts
+ * under the page's heading, further down; a fixed CSS height left its last
+ * entries below the fold until the page scrolled, which on a short pane it
+ * never can. So its height follows its own top: the space actually left
+ * beneath it, as the page scrolls and the window resizes. Not on a phone,
+ * where the list is the page and the page scrolls it.
+ */
+function useNavFit(nav: RefObject<HTMLElement | null>) {
+  useEffect(() => {
+    const el = nav.current;
+    if (!el) return;
+    const narrow =
+      typeof window.matchMedia === "function" ? window.matchMedia(NARROW) : null;
+    // Run on each scroll as it comes: one measurement and one style write,
+    // and an animation frame is not guaranteed to run promptly in every
+    // window this page is shown in.
+    const fit = () => {
+      if (narrow?.matches) {
+        el.style.maxHeight = "";
+        return;
+      }
+      const top = Math.max(0, el.getBoundingClientRect().top);
+      el.style.maxHeight = `${Math.max(160, window.innerHeight - top - 16)}px`;
+    };
+    fit();
+    window.addEventListener("scroll", fit, { passive: true });
+    window.addEventListener("resize", fit);
+    narrow?.addEventListener?.("change", fit);
+    return () => {
+      window.removeEventListener("scroll", fit);
+      window.removeEventListener("resize", fit);
+      narrow?.removeEventListener?.("change", fit);
+      el.style.maxHeight = "";
+    };
+  }, [nav]);
+}
+
 export function Settings() {
   const isAdmin = useIsAdmin();
   const [params, setParams] = useSearchParams();
 
   const status = isAdmin ? STATUS_PANES : [];
-  const server = isAdmin ? SERVER_PANES : [];
+  // The Live TV pane only while the server has live TV on; settings search
+  // follows, since it searches the panes listed here.
+  const liveTV = useLiveTVOn();
+  const server = isAdmin
+    ? SERVER_PANES.filter((x) => x.id !== "livetv" || liveTV === true)
+    : [];
   const account = ACCOUNT_PANES;
   const device = DEVICE_PANES.filter(
     (x) => !DESKTOP_ONLY.has(x.id) || desktopAvailable(),
@@ -229,6 +274,8 @@ export function Settings() {
   // before the pane does. Looked for straight away, the setting was searched
   // for in the pane being left. It waits until its own pane is the open one.
   useFoundSetting(paneRef, found?.pane === pane ? found : null);
+  const navRef = useRef<HTMLElement>(null);
+  useNavFit(navRef);
   const zone = useFocusZone();
 
   const navGroup = (label: string, panes: Pane[]) =>
@@ -260,7 +307,12 @@ export function Settings() {
       <h1 className="settings__title">Settings</h1>
 
       <div className="settings__layout">
-        <nav className="settings__nav" aria-label="Settings categories" data-focus-column>
+        <nav
+          ref={navRef}
+          className="settings__nav"
+          aria-label="Settings categories"
+          data-focus-column
+        >
           <input
             ref={searchRef}
             className="set-input settings__search"

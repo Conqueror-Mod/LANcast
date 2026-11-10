@@ -168,6 +168,17 @@ type Settings struct {
 	 */
 	MemberPictures bool `json:"member_pictures"`
 
+	/*
+	 * LiveTV turns live TV on: channels, the guide, channel sources, and the
+	 * guide's twelve-hourly fetch (docs/v1-plan.md §8, decision 6 as changed
+	 * 2026-11-09). Off by default, and off on every server upgraded to a build
+	 * that has this field, because live TV is parked work that 1.0 does not
+	 * offer. Nothing in the app turns it on; `"live_tv": true` in config.json
+	 * does, for whoever is working on it. Off removes nothing: channel sources
+	 * and the guide stay in the database, and come back as they were.
+	 */
+	LiveTV bool `json:"live_tv"`
+
 	// ---- library and playback rules -------------------------------------
 	//
 	// These four are the server's opinion about what a client shows, and they

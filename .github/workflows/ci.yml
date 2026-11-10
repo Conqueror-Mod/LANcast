@@ -50,6 +50,57 @@ jobs:
       - name: go test
         run: go test ./...
 
+      # Known vulnerabilities in code this server actually calls, in the
+      # standard library or a module (docs/hardening-plan.md, item 2). Only
+      # reachable ones fail, so it is quiet until something matters. The
+      # first run found twenty: v0.10.11 shipped built with Go 1.25.0, because
+      # go.mod named no toolchain and setup-go took the bare `go` line.
+      - name: govulncheck
+        run: go run golang.org/x/vuln/cmd/govulncheck@v1.1.4 ./...
+
+      # The toolchain the release is built with, asserted rather than trusted:
+      # the fault above was invisible until a scanner read the version.
+      - name: built with the pinned toolchain
+        run: |
+          want="$(sed -n 's/^toolchain //p' go.mod)"
+          have="$(go env GOVERSION)"
+          echo "go.mod pins $want; this job builds with $have"
+          [ "$want" = "$have" ]
+
+  # The parsers that read files people bring, fuzzed briefly on every pull
+  # request (docs/hardening-plan.md, item 3). Twenty seconds each finds the
+  # shallow faults; the first run of FuzzParse found one in under two. Their
+  # seeds run in `go test` above too, so this job is the search, not the
+  # regression check. A failing input it finds is printed in the log, to be
+  # checked in under that package's testdata/fuzz.
+  fuzz:
+    name: Fuzz
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: fuzz each parser
+        run: |
+          set -e
+          while read -r pkg target; do
+            echo "::group::$pkg $target"
+            go test "$pkg" -run '^$' -fuzz "^${target}\$" -fuzztime 20s
+            echo "::endgroup::"
+          done <<'TARGETS'
+          ./internal/subtitle FuzzSRTToVTT
+          ./internal/playlist FuzzParse
+          ./internal/meta/nfo FuzzRecordFrom
+          ./internal/milkdrop FuzzParse
+          ./internal/milkdrop/eel FuzzCheck
+          ./internal/comic/pdf FuzzIndex
+          ./internal/picture FuzzMake
+          TARGETS
+
   # The native worker, proven on every pull request rather than during a
   # release (ADR 0052).
   #
@@ -165,6 +216,14 @@ jobs:
       # that rule under hundreds of findings nobody asked for.
       - name: lint
         run: npm run lint
+        working-directory: web
+
+      # Advisories in what ships to the browser, high and above. Dev tooling
+      # is left out: it never reaches a user. Moderate is left out too, for
+      # now: react-router 6 carries two, and the fix is the move to 7, which
+      # is its own piece of work (docs/hardening-plan.md, item 2).
+      - name: npm audit (shipped dependencies)
+        run: npm audit --omit=dev --audit-level=high
         working-directory: web
 
       - name: type-check + build
