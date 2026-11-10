@@ -140,4 +140,21 @@ describe("feature detection", () => {
     delete (window as unknown as { documentPictureInPicture?: object })
       .documentPictureInPicture;
   });
+
+  // WebView2 157 has the API and opens a plain about:blank pop-up with it, so
+  // the desktop window is never offered it.
+  it("reports absence in the desktop window even when the API is there", () => {
+    const w = window as unknown as {
+      documentPictureInPicture?: object;
+      lancastDesktopState?: () => Promise<object>;
+    };
+    w.documentPictureInPicture = {};
+    w.lancastDesktopState = async () => ({});
+    try {
+      expect(popoutSupported()).toBe(false);
+    } finally {
+      delete w.documentPictureInPicture;
+      delete w.lancastDesktopState;
+    }
+  });
 });

@@ -38,8 +38,31 @@ declare global {
   }
 }
 
+/*
+ * Not in the desktop window, whatever the API says.
+ *
+ * WebView2 used to report the API and then refuse the call, which the provider
+ * takes as its cue to fall back. Runtime 157 (November 2026) accepts it instead
+ * and opens an ordinary pop-up: an address bar reading about:blank, the size
+ * asked for ignored, and the window tied to the main one. Nothing goes
+ * wrong in the code — the window opens, the controls render — so nothing
+ * fails, and the result is a tall black rectangle. The desktop window plays
+ * films in mpv anyway, which no pop-out can carry. The test is the binding the
+ * window injects before any page script runs.
+ */
+function inDesktopWindow(): boolean {
+  return (
+    typeof (window as { lancastDesktopState?: unknown }).lancastDesktopState ===
+    "function"
+  );
+}
+
 export function popoutSupported(): boolean {
-  return typeof window !== "undefined" && !!window.documentPictureInPicture;
+  return (
+    typeof window !== "undefined" &&
+    !!window.documentPictureInPicture &&
+    !inDesktopWindow()
+  );
 }
 
 /*
