@@ -413,6 +413,29 @@ func TestScanUntaggedGroupsByFolders(t *testing.T) {
 	}
 }
 
+// A real library's untagged downloads sat in `G's/GIMS/`: a letter bucket,
+// then the artist, and no album folder. The scan made an artist "G's" holding an
+// album "GIMS", and MusicBrainz could match neither (2026-11-10).
+func TestScanUntaggedTrackUnderALetterBucketFilesUnderItsArtist(t *testing.T) {
+	sc, st := newScanner(t)
+	lib, root := musicFixture(t, st)
+	writeFile(t, root, "G's/GIMS/GIMS - Apres Vous Madame.mp3", 10)
+	writeFile(t, root, "G's/GIMS/GIMS - Bella.mp3", 10)
+
+	sc.SetTagReader(&fakeTags{byName: map[string]probe.Tags{}})
+	scanAndWait(t, sc, lib)
+
+	tops := topLevel(t, st, lib.ID)
+	if len(tops) != 1 || tops[0].Title != "GIMS" {
+		t.Fatalf("top level = %+v, want the artist GIMS and not the bucket G's", tops)
+	}
+	for _, c := range childrenOf(t, st, tops[0].ID) {
+		if c.Kind == "album" {
+			t.Errorf("album %q invented from an artist folder", c.Title)
+		}
+	}
+}
+
 // A track loose in the library root has no artist and no album to file it
 // under, and is left top-level rather than filed beneath an invented one.
 func TestScanLooseTrackStaysTopLevel(t *testing.T) {

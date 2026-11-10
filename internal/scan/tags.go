@@ -425,6 +425,13 @@ func groupFromPath(root string, it store.Item) trackGroup {
 		return g
 	}
 	parts := strings.Split(filepath.ToSlash(rel), "/")
+	// Under a letter bucket the folder holding the track is the artist, and
+	// there is no album folder: `G's/GIMS/track.mp3`. Read as Artist/Album it
+	// made an album "GIMS" by an artist "G's" (2026-11-10).
+	if n := len(parts); n >= 2 && media.IsLetterBucket(parts[n-2]) {
+		g.artist = parts[n-1]
+		return g
+	}
 	g.album = parts[len(parts)-1]
 	g.albumFromFolder = g.album != ""
 	g.albumAtRoot = len(parts) == 1
