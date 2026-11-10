@@ -170,7 +170,7 @@ function MenuList({
  */
 function useDismiss(
   open: boolean,
-  ref: React.RefObject<HTMLElement>,
+  ref: React.RefObject<HTMLElement | null>,
   close: () => void,
 ) {
   useEffect(() => {

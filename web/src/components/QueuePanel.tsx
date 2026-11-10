@@ -297,7 +297,7 @@ function QueueMore({ count, up, onGrow }: { count: number; up: boolean; onGrow: 
 type RowSight = ((el: Element, onSeen: () => void) => () => void) | null;
 const RowSightContext = createContext<RowSight>(null);
 
-function useRowSight(panel: React.RefObject<HTMLDivElement>): RowSight {
+function useRowSight(panel: React.RefObject<HTMLDivElement | null>): RowSight {
   const [sight, setSight] = useState<RowSight>(null);
   useEffect(() => {
     if (typeof IntersectionObserver === "undefined") return;
@@ -330,7 +330,7 @@ function useRowSight(panel: React.RefObject<HTMLDivElement>): RowSight {
 }
 
 /** Whether this row has been near enough to view to be worth its request. */
-function useSeen(el: React.RefObject<Element>): boolean {
+function useSeen(el: React.RefObject<Element | null>): boolean {
   const sight = useContext(RowSightContext);
   const [seen, setSeen] = useState(false);
   const measurable = typeof IntersectionObserver !== "undefined";
@@ -358,7 +358,7 @@ const QueueRow = memo(function QueueRow({
   /** Its place in the lane, for onDrop. */
   lane?: number;
   current: boolean;
-  rowRef?: React.RefObject<HTMLButtonElement>;
+  rowRef?: React.RefObject<HTMLButtonElement | null>;
   onPick: (id: number, at: number) => void;
   /** Present only on the hand-queued lane, where taking one back off is safe. */
   onDrop?: (at: number) => void;
