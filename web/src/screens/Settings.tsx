@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type RefObject } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useSearchParams } from "react-router";
 import { useIsAdmin } from "@/api/hooks";
 import { useFocusZone } from "@/focus/FocusController";
 import {
@@ -208,7 +208,9 @@ export function Settings() {
   }, [pane, listing]);
 
   const [query, setQuery] = useState("");
-  const [found, setFound] = useState<{ label: string; at: number } | null>(null);
+  const [found, setFound] = useState<{ label: string; pane: string; at: number } | null>(
+    null,
+  );
   const paneRef = useRef<HTMLDivElement>(null);
   const searchRef = useRef<HTMLInputElement>(null);
   const resultsRef = useRef<HTMLDivElement>(null);
@@ -218,10 +220,15 @@ export function Settings() {
     setQuery("");
     go(m.pane);
     // A pane's own name opens the pane and no more; a setting is looked for.
-    setFound(m.label === m.paneLabel ? null : { label: m.label, at: Date.now() });
+    setFound(
+      m.label === m.paneLabel ? null : { label: m.label, pane: m.pane, at: Date.now() },
+    );
   };
 
-  useFoundSetting(paneRef, found);
+  // React Router 7 changes the URL inside a transition, so `found` commits
+  // before the pane does. Looked for straight away, the setting was searched
+  // for in the pane being left. It waits until its own pane is the open one.
+  useFoundSetting(paneRef, found?.pane === pane ? found : null);
   const zone = useFocusZone();
 
   const navGroup = (label: string, panes: Pane[]) =>
