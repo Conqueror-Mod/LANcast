@@ -80,7 +80,7 @@ since only what ships to the browser is exposure. Both fail the build.
 ## 3. Fuzz the parsers of files people bring
 
 > **Built in #1069.** The playlist target found a real fault in under two
-> seconds: a rooted line with no drive (`\Music.mp3`) resolved on the
+> seconds: a rooted line with no drive (`\Music\a.mp3`) resolved on the
 > service's own drive, C:, not the playlist's. It is fixed in the same PR.
 
 **Found.** Two packages have fuzz targets, `comic/pdf` and `picture`, and both
