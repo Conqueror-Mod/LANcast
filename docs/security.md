@@ -159,7 +159,7 @@ Recovery is local instead. Stop the server and run:
 
 ```
 LANcast.exe reset-auth         # reports what it would remove
-LANcast.exe reset-auth -yes    # removes every account and session
+LANcast.exe reset-auth -yes    # removes every account and credential
 ```
 
 (`lancast reset-auth` on Linux. Since [ADR 0080](adr/0080-one-executable-two-roles.md)
@@ -168,6 +168,13 @@ the server is the same executable as the app; see [install.md](install.md).)
 The authority this requires is "can run a program on the server", which is the
 same authority that could read the database file directly — so it grants an
 attacker nothing they did not already have, and grants the owner a way back in.
+
+Every credential goes with the accounts, not only passwords: sessions,
+passkeys, API keys, two-factor secrets and recovery codes, pending invites,
+and a connected RetroAchievements key. The replacement admin takes the old
+first admin's user id, so anything left keyed on it would be inherited — and
+the case this recovers from includes somebody else having taken the admin
+account and added a passkey of their own.
 
 Watch history survives: those rows are the library's data, not the account's,
 and the replacement admin takes the same user id, so resume points reconnect.

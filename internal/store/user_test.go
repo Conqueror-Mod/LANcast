@@ -286,3 +286,79 @@ func TestDeleteAllUsersOnFreshInstall(t *testing.T) {
 		t.Errorf("removed %d users / %d sessions from an empty database", users, sessions)
 	}
 }
+
+/*
+ * R04-2: reset-auth is how an operator gets their server back, including from
+ * somebody who took the admin account. The first admin created afterwards
+ * takes LocalUserID, the id the old one had, so every credential keyed on that
+ * id must go with the accounts -- or the new administrator inherits whatever
+ * the intruder left behind.
+ */
+func TestDeleteAllUsersClearsEveryCredential(t *testing.T) {
+	st := newStore(t)
+	ctx := context.Background()
+
+	if _, err := st.CreateUser(ctx, LocalUserID, "owner", "h1", RoleAdmin); err != nil {
+		t.Fatal(err)
+	}
+	member, err := st.CreateUser(ctx, "", "member", "h1", RoleMember)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.AddPasskey(ctx, Passkey{UserID: LocalUserID, CredentialID: []byte("cred-old"),
+		PublicKey: []byte("pk"), Algorithm: -7, Name: "someone's phone", RPID: "example.test"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.CreateAPIKey(ctx, "key-hash", LocalUserID, "script"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.CreateAPIKey(ctx, "member-key-hash", member.ID, "script"); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.EnableTwoFactor(ctx, LocalUserID, []byte("sealed"), []string{"rec-hash"}, time.Now().Unix()); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.CreateInvite(ctx, Invite{CreatedBy: LocalUserID, ExpiresAt: time.Now().Add(time.Hour).Unix()},
+		[]byte("invite-hash")); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.SetRetroAccount(ctx, RetroAccount{UserID: LocalUserID, RAUser: "ra",
+		RAULID: "01ARZ3NDEKTSV4RRFFQ69G5FAV", APIKeySealed: []byte("sealed")}); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.QueueRetroUnlock(ctx, LocalUserID, `{"a":1}`); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, _, err := st.DeleteAllUsers(ctx); err != nil {
+		t.Fatal(err)
+	}
+	// First-run setup, which always uses LocalUserID.
+	if _, err := st.CreateUser(ctx, LocalUserID, "newadmin", "h2", RoleAdmin); err != nil {
+		t.Fatal(err)
+	}
+
+	if p, err := st.PasskeyByCredentialID(ctx, []byte("cred-old")); err == nil {
+		t.Errorf("the pre-reset passkey %q signs in as %q", p.Name, p.UserID)
+	}
+	for _, h := range []string{"key-hash", "member-key-hash"} {
+		if _, _, err := st.LookupAPIKey(ctx, h); err == nil {
+			t.Errorf("the pre-reset API key %q still resolves", h)
+		}
+	}
+	if tf, err := st.TwoFactorFor(ctx, LocalUserID); err != nil || tf.Enabled || len(tf.Recovery) > 0 {
+		t.Errorf("two-factor after reset = %+v, %v; want none", tf, err)
+	}
+	if inv, err := st.InviteByToken(ctx, []byte("invite-hash"), time.Now()); err == nil {
+		t.Errorf("the pre-reset invite %q is still redeemable", inv.ID)
+	}
+	if invs, err := st.Invites(ctx, time.Now()); err != nil || len(invs) != 0 {
+		t.Errorf("invites after reset = %v, %v; want none", invs, err)
+	}
+	if a, err := st.GetRetroAccount(ctx, LocalUserID); err != nil || a != nil {
+		t.Errorf("the old RetroAchievements account came with the new admin: %+v, %v", a, err)
+	}
+	if n, err := st.CountRetroUnlocks(ctx, LocalUserID); err != nil || n != 0 {
+		t.Errorf("queued unlocks after reset = %d, %v; want 0", n, err)
+	}
+}

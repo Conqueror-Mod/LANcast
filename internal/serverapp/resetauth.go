@@ -24,7 +24,10 @@ import (
 // it — so the authority to use this is "can run a program on the server", which
 // is the same authority that could read the database file directly anyway.
 //
-// Watch history survives: see store.DeleteAllUsers. Libraries, items, artwork
+// Every credential goes with the accounts, passkeys and pending invites
+// included (R04-2): the new first admin takes the old one's id, and must not
+// inherit a way in that somebody else left. Watch history survives: see
+// store.DeleteAllUsers. Libraries, items, artwork
 // and settings are untouched.
 func runResetAuth(args []string) error {
 	fs := flag.NewFlagSet("reset-auth", flag.ContinueOnError)
@@ -34,8 +37,9 @@ func runResetAuth(args []string) error {
 	fs.Usage = func() {
 		fmt.Fprint(fs.Output(), `usage: lancast reset-auth [-data DIR] [-yes]
 
-Removes every LANcast account and session so you can create a new first admin.
-Watch history, libraries, and settings are kept.
+Removes every LANcast account and everything that can sign one in: sessions,
+passkeys, API keys, two-factor secrets and pending invites. You can then
+create a new first admin. Watch history, libraries, and settings are kept.
 
 Stop the server first — it holds the database open.
 
@@ -121,6 +125,7 @@ Without -yes this reports what it would remove and changes nothing.
 
 	if !*yes {
 		fmt.Printf("would remove %s and %s\n", plural(users, "account"), plural(sessions, "session"))
+		fmt.Println("passkeys, API keys, two-factor and pending invites go with them")
 		fmt.Println("watch history, libraries and settings are kept")
 		fmt.Println("re-run with -yes to do it")
 		return nil
