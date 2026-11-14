@@ -137,7 +137,7 @@ func (s *Server) peerStream(w http.ResponseWriter, r *http.Request) {
 	 * a Set-Cookie or a cache directive from another household's server is a
 	 * way to be surprised later.
 	 */
-	copyStreamHeaders(w, resp)
+	copyStreamHeaders(w, resp, relayMedia)
 	w.WriteHeader(resp.StatusCode)
 	//nolint:errcheck // A copy that stops early is a viewer who navigated away.
 	io.Copy(w, resp.Body)

@@ -44,30 +44,30 @@ import (
 // peerPlayback asks the far server how it would deliver one of its items. The
 // decision is theirs: they hold the file and they probed it.
 func (s *Server) peerPlayback(w http.ResponseWriter, r *http.Request) {
-	s.pipeFromPeer(w, r, "/api/federation/playback?item=")
+	s.pipeFromPeer(w, r, "/api/federation/playback?item=", relayJSON)
 }
 
 // peerTranscode pulls a converted stream through. The encode runs on their
 // CPU, because the file is on their disk.
 func (s *Server) peerTranscode(w http.ResponseWriter, r *http.Request) {
-	s.pipeFromPeer(w, r, "/api/federation/transcode?item=")
+	s.pipeFromPeer(w, r, "/api/federation/transcode?item=", relayMedia)
 }
 
 // peerSubtitles lists what tracks their item has.
 func (s *Server) peerSubtitles(w http.ResponseWriter, r *http.Request) {
-	s.pipeFromPeer(w, r, "/api/federation/subtitles?item=")
+	s.pipeFromPeer(w, r, "/api/federation/subtitles?item=", relayJSON)
 }
 
 /*
  * pipeFromPeer is every flat route: resolve the peer, require an item, ask,
- * and copy the answer through.
+ * and copy the answer through, labelled as `allow` says it may be.
  *
  * `item` is the only parameter reproduced by name; everything else on the
  * query is forwarded whole, for the reason `peerItemsPath` gives — a parameter
  * added to the far server's endpoint works the day it ships, and one this side
  * dropped would be this side quietly changing somebody else's playback.
  */
-func (s *Server) pipeFromPeer(w http.ResponseWriter, r *http.Request, base string) {
+func (s *Server) pipeFromPeer(w http.ResponseWriter, r *http.Request, base string, allow relayAllow) {
 	p, ok := s.peerForBrowse(w, r)
 	if !ok {
 		return
@@ -84,7 +84,7 @@ func (s *Server) pipeFromPeer(w http.ResponseWriter, r *http.Request, base strin
 		return
 	}
 	defer resp.Body.Close()
-	copyStreamHeaders(w, resp)
+	copyStreamHeaders(w, resp, allow)
 	w.WriteHeader(resp.StatusCode)
 	//nolint:errcheck // A copy that stops early is a viewer who navigated away.
 	io.Copy(w, resp.Body)
@@ -142,6 +142,8 @@ func (s *Server) peerHLSPlaylist(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/vnd.apple.mpegurl")
 	w.Header().Set("Cache-Control", "no-store")
+	// The type was always set here, but the body is still their text.
+	hardenRelay(w)
 	w.WriteHeader(resp.StatusCode)
 	//nolint:errcheck // As above.
 	w.Write([]byte(repointPlaylistAtPeer(string(body), p.Fingerprint, s.memberQuery(r) != "")))
@@ -171,7 +173,7 @@ func (s *Server) peerHLSSegment(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer resp.Body.Close()
-	copyStreamHeaders(w, resp)
+	copyStreamHeaders(w, resp, relaySegment)
 	w.WriteHeader(resp.StatusCode)
 	//nolint:errcheck // As above.
 	io.Copy(w, resp.Body)
@@ -200,7 +202,7 @@ func (s *Server) peerSubtitleFile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer resp.Body.Close()
-	copyStreamHeaders(w, resp)
+	copyStreamHeaders(w, resp, relayVTT)
 	w.WriteHeader(resp.StatusCode)
 	//nolint:errcheck // As above.
 	io.Copy(w, resp.Body)
@@ -294,16 +296,23 @@ func forwardedQuery(r *http.Request) string {
  * than about this one, and passing a Set-Cookie or a caching directive from
  * another household's server into this household's client is a way to be
  * surprised much later.
+ *
+ * Content-Type is the exception among the headers that describe the bytes:
+ * it is not copied but chosen, from what the route allows.
  */
-func copyStreamHeaders(w http.ResponseWriter, resp *http.Response) {
+func copyStreamHeaders(w http.ResponseWriter, resp *http.Response, allow relayAllow) {
 	for _, h := range []string{
-		"Content-Type", "Content-Length", "Content-Range",
+		"Content-Length", "Content-Range",
 		"Accept-Ranges", "Last-Modified", "Cache-Control",
 	} {
 		if v := resp.Header.Get(h); v != "" {
 			w.Header().Set(h, v)
 		}
 	}
+	// The type is this server's decision, from the route's own list, and is
+	// never theirs to make: see relaytype.go (R02-1).
+	w.Header().Set("Content-Type", relayContentType(resp.Header.Get("Content-Type"), allow))
+	hardenRelay(w)
 }
 
 /*
@@ -595,7 +604,7 @@ func (s *Server) peerArtwork(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer resp.Body.Close()
-	copyStreamHeaders(w, resp)
+	copyStreamHeaders(w, resp, relayArtwork)
 	/*
 	 * Their caching headers are forwarded and are safe to trust *because* the
 	 * content is addressed by its own bytes: an immutable answer cannot become
