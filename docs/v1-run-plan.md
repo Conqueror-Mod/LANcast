@@ -1,5 +1,7 @@
 # The run to 1.0: two weekly budgets, Saturday 2026-11-14 onward
 
+> **Changed 2026-11-14:** a whole-app review now comes first ([review/README.md](review/README.md)). S1, S5 and S6 run as planned below. S3 and S4 wait until the review's first wave has been triaged, and v0.11.1 is cut after the fixes that triage marks for 1.0.
+
 This is the order of work for [v1-plan.md](v1-plan.md) sections 3B to 3F and 6. Scope froze at v0.11.0, so nothing here is a feature. The plan is built around one constraint: **agent hours are plentiful after a reset, and Chris's hours are not.** Everything a session can prove on its own runs unattended and in parallel. What needs a person (sound, a phone, a pad, a friend, an installer's finish page) is grouped into three short sittings.
 
 ## Rules for every unattended session
