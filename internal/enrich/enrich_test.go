@@ -342,7 +342,9 @@ func TestEnrichIngestsCollection(t *testing.T) {
 }
 
 // The regression that defines the milestone, exercised end to end through the
-// worker rather than only in the merge unit test.
+// worker rather than only in the merge unit test. Its rescan half — a file
+// that reappears or changes bytes — is TestARescanNeverOverwritesALockedField
+// in internal/scan (R04-1).
 func TestLockedFieldSurvivesEnrichment(t *testing.T) {
 	ctx := context.Background()
 	st, lib := harness(t)

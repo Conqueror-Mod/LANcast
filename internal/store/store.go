@@ -775,6 +775,49 @@ type ScanFile struct {
 // UpsertItem inserts or updates an item keyed on its unique path. It returns
 // the row id, so callers that need to attach related records — subtitles, for
 // one — do not have to re-query the whole library to find it.
+/*
+ * keepIdentity is the update-branch expression for one identity column of
+ * UpsertItem: the row's own value when it must not move, the scan's guess
+ * otherwise (R04-1).
+ *
+ * The scanner re-upserts a file it already knows in two ordinary situations —
+ * the file came back after a scan marked it missing (a drive unplugged for one
+ * scan), and its size or mtime changed (re-muxed, tags edited, a better copy
+ * at the same path). Neither says anything about *who* the file is, and both
+ * used to rewrite every identity column from the filename. A person's locked
+ * correction was lost, and an unlocked provider title fell back to the guess
+ * for good, because the row stayed stamped and enrichment never came back.
+ *
+ * So a column keeps its value when:
+ *
+ *   - any of lockFields is held in item_lock for the row. That is the
+ *     locked-fields rule, and it holds unconditionally: even a file whose
+ *     classification moved families keeps a locked value. sort_title also
+ *     follows a lock on title, because a sort key derived from a filename the
+ *     person has overruled would file their title under the wrong letter.
+ *   - the row is settled (match_state matched or locked) and its kind is
+ *     unchanged. A rescan reconciles files; it does not re-litigate identity.
+ *     A kind that moved families is the one case that is meant to re-derive
+ *     identity — the scanner clears the metadata stamp on that path so the
+ *     row is matched again — so there the guess wins for unlocked columns.
+ *
+ * Column and field names are compile-time constants from UpsertItem, never
+ * caller input.
+ */
+func keepIdentity(col string, lockFields ...string) string {
+	quoted := make([]string, len(lockFields))
+	for i, f := range lockFields {
+		quoted[i] = "'" + f + "'"
+	}
+	return `CASE WHEN EXISTS (
+				SELECT 1 FROM item_lock
+				 WHERE item_lock.item_id = media_item.id
+				   AND item_lock.field IN (` + strings.Join(quoted, ", ") + `))
+			  OR (media_item.match_state IN ('matched', 'locked')
+				  AND media_item.kind = excluded.kind)
+			THEN media_item.` + col + ` ELSE excluded.` + col + ` END`
+}
+
 func (s *Store) UpsertItem(ctx context.Context, f ScanFile) (int64, error) {
 	now := time.Now().Unix()
 
@@ -821,9 +864,18 @@ func (s *Store) UpsertItem(ctx context.Context, f ScanFile) (int64, error) {
 			-- check resolves against the wrong directory, so it is cheaper to
 			-- keep it current than to reason about when it cannot drift.
 			root_id = excluded.root_id,
-			kind = excluded.kind, title = excluded.title, sort_title = excluded.sort_title,
-			year = excluded.year, series = excluded.series, season = excluded.season,
-			episode = excluded.episode, edition = excluded.edition,
+			-- Identity columns go through keepIdentity (R04-1): a locked field
+			-- or a settled match is never handed back to the filename guess.
+			-- Every expression in a SET reads the row as it was before the
+			-- update, so media_item.kind in those guards is the old kind
+			-- wherever kind = excluded.kind sits in this list.
+			title = `+keepIdentity("title", "title")+`,
+			sort_title = `+keepIdentity("sort_title", "sort_title", "title")+`,
+			year = `+keepIdentity("year", "year")+`,
+			series = `+keepIdentity("series", "series")+`,
+			season = `+keepIdentity("season", "season")+`,
+			episode = `+keepIdentity("episode", "episode")+`,
+			kind = excluded.kind, edition = excluded.edition,
 			platform = excluded.platform, container = excluded.container,
 			size_bytes = excluded.size_bytes, mtime = excluded.mtime,
 			updated_at = excluded.updated_at, missing = 0,
