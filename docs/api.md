@@ -85,7 +85,10 @@ Every endpoint requires a session cookie except `GET /api/health`,
 web assets. Unauthenticated calls return `401 unauthorized`.
 
 While no account exists the API is open — but the server binds `127.0.0.1`
-only, so it is reachable solely from the machine it runs on.
+only, so it is reachable solely from the machine it runs on. In that state a
+request whose `Host` is not `localhost`, `127.0.0.1`, `[::1]` or the server's
+public name gets `403 forbidden`, and the origin check below applies as it
+always does (security.md: a web page on the same machine is another origin).
 
 **State-changing methods are origin-checked.** `POST`, `PUT`, `PATCH`, and
 `DELETE` must carry an `Origin` or `Referer` matching the request host, or the
