@@ -75,8 +75,19 @@ sleep 30`)
 		}
 	}
 
-	if n := len(m.Sessions()); n != 2 {
-		t.Errorf("%d sessions for two viewers, want 2 — one each", n)
+	/*
+	 * One each, and each viewer's own. A count alone passed while the second
+	 * viewer's seek to 400 reused the first viewer's 400 session and left its
+	 * own 115 behind: still two, owned by the wrong people (review finding
+	 * R09-2).
+	 */
+	owners := map[string]float64{}
+	for _, s := range m.Sessions() {
+		owners[s.Owner] = s.StartAt
+	}
+	if len(m.Sessions()) != 2 || owners["u_3f9"] != 400 || owners["u_a21"] != 400 {
+		t.Errorf("sessions by owner = %v from %d sessions, want each viewer holding their own at 400",
+			owners, len(m.Sessions()))
 	}
 	m.StopAll()
 }

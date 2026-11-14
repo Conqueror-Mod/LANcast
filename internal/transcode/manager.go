@@ -618,11 +618,23 @@ func (m *Manager) EnsureHLS(ctx context.Context, itemID int64, owner string, o O
 		return nil, ErrNotInstalled
 	}
 
-	// Reuse an existing session for the same item and offset. A player
-	// requesting segment after segment must not spawn an ffmpeg per request.
+	/*
+	 * Reuse this viewer's session for the same item and offset. A player
+	 * requesting the playlist again must not spawn an ffmpeg per request.
+	 *
+	 * **This viewer's**, not anybody's. Keyed on item and offset alone, a
+	 * second account pressing play on the same film was handed the first
+	 * account's session — its audio track, its quality ceiling, its codec
+	 * decision — and lost it the moment the first account sought, because
+	 * supersedeHLS below stops sessions by owner and the shared one still
+	 * carried the first owner's name (review finding R09-2). It is also what
+	 * lets the segment route refuse a session to anybody but its owner: a
+	 * session that two owners could be holding has no single owner to check.
+	 */
 	m.mu.Lock()
 	for _, s := range m.sessions {
-		if s.ItemID == itemID && s.Output == HLS && sameOffset(s.StartAt, o.StartAt) {
+		if s.ItemID == itemID && s.Owner == owner && s.Output == HLS &&
+			sameOffset(s.StartAt, o.StartAt) {
 			s.Touch()
 			m.mu.Unlock()
 			return s, nil
