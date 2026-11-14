@@ -103,11 +103,20 @@ func (s *Server) channelStream(w http.ResponseWriter, r *http.Request) {
 	// progressive body. No transcode — a live stream re-encoded per viewer is a
 	// CPU bill this project has not agreed to, and most providers already serve
 	// something a browser can play.
-	for _, h := range []string{"Content-Type", "Content-Length", "Accept-Ranges", "Content-Range"} {
+	for _, h := range []string{"Content-Length", "Accept-Ranges", "Content-Range"} {
 		if v := resp.Header.Get(h); v != "" {
 			w.Header().Set(h, v)
 		}
 	}
+	/*
+	 * The provider's Content-Type is not forwarded: it is a third party's
+	 * label on bytes served from this household's origin, and `text/html`
+	 * there would be script here (R02-1, relaytype.go). Anything that is not
+	 * audio or video is relayed as octet-stream, which a player does not mind
+	 * and a browser will not render.
+	 */
+	w.Header().Set("Content-Type", relayContentType(ct, relayMedia))
+	hardenRelay(w)
 	w.WriteHeader(resp.StatusCode)
 	_, _ = io.Copy(w, resp.Body)
 }
@@ -153,6 +162,7 @@ func (s *Server) relayPlaylist(w http.ResponseWriter, resp *http.Response, chann
 
 	w.Header().Set("Content-Type", "application/vnd.apple.mpegurl")
 	w.Header().Set("Cache-Control", "no-store")
+	hardenRelay(w)
 	w.WriteHeader(http.StatusOK)
 	_, _ = io.WriteString(w, out.String())
 }
