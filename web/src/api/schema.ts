@@ -1415,7 +1415,7 @@ export interface paths {
         };
         /**
          * One HLS segment
-         * @description Clients follow these from the playlist rather than constructing them.
+         * @description Clients follow these from the playlist rather than constructing them. Served only to the caller the session was started for, and only under the item it was started for; anything else is 404, the same as a session that has ended.
          */
         get: operations["streamHLSSegment"];
         put?: never;
@@ -1433,7 +1433,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Running transcode sessions, and whether ffmpeg is available */
+        /**
+         * Running transcode sessions, and whether ffmpeg is available
+         * @description `sessions` lists every running conversion for an administrator, and only the caller's own for anybody else.
+         */
         get: operations["getTranscodeStatus"];
         put?: never;
         post?: never;
@@ -5691,7 +5694,7 @@ export interface paths {
          *
          *     The handler behind this is the same one that serves the household, so the delivery decision, the ffmpeg arguments and the session bookkeeping are one implementation rather than two.
          *
-         *     Named by the playlist above. The session is checked for existence and the segment name is validated before it becomes a path.
+         *     Named by the playlist above. The segment name is validated before it becomes a path, and the session must exist, be for the item in the path, and belong to the calling server; anything else is 404.
          */
         get: operations["federationHLSSegment"];
         put?: never;

@@ -4418,9 +4418,27 @@ growing playlist as live, reloads it straight after the first segment, and fails
 when it has not grown — so a client that remembers refusals should not count a
 refused growing playlist against the device.
 
+### `GET /api/stream/{id}/hls/{session}/{name}`
+
+One segment, or the `init.mp4`, named by the playlist. **Served only to the
+session's owner, and only under the item it was started for.** The session id is
+not the permission: the request must name the same `{id}` the playlist was
+asked for, and come from the same caller — the same account, or for a paired
+server or a guest it vouched for, the same server. Anything else answers `404`,
+exactly as a session that has ended does, so a refusal says nothing about which
+sessions are running.
+
+A session is reused only for the caller who started it. Two accounts playing the
+same film from the same position each get their own, with their own audio track
+and quality, and one seeking never stops the other's.
+
 ### `GET /api/transcode`
 
-Lists running transcode sessions, and whether ffmpeg is available.
+Whether ffmpeg is available, which encoder is in use, and the running transcode
+sessions. **`sessions` lists every conversion for an administrator, and only the
+caller's own for anybody else** — the whole list names an account and a film for
+every conversion, which is why `GET /api/transcodes` is admin only. An API key is
+never treated as an administrator here, as everywhere.
 
 ---
 
@@ -5405,7 +5423,9 @@ dependency decision.
 
 One segment, or the `init.mp4`, from a live session's directory. Identical
 handling to the file HLS segment route, including that the name is validated
-rather than trusted before it becomes a filesystem path.
+rather than trusted before it becomes a filesystem path — except the owner: a
+channel's session is shared by everyone watching it, so only the channel is
+checked. A session that is not this channel's answers `404`.
 
 ### `GET` / `POST /api/channel-sources`
 

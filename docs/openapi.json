@@ -3600,7 +3600,7 @@
           "playback"
         ],
         "summary": "One HLS segment",
-        "description": "Clients follow these from the playlist rather than constructing them.",
+        "description": "Clients follow these from the playlist rather than constructing them. Served only to the caller the session was started for, and only under the item it was started for; anything else is 404, the same as a session that has ended.",
         "responses": {
           "200": {
             "description": "The segment.",
@@ -3629,6 +3629,7 @@
           "playback"
         ],
         "summary": "Running transcode sessions, and whether ffmpeg is available",
+        "description": "`sessions` lists every running conversion for an administrator, and only the caller's own for anybody else.",
         "responses": {
           "200": {
             "description": "Sessions and the selected encoder.",
@@ -12780,7 +12781,7 @@
           "peers"
         ],
         "summary": "One HLS segment of a shared item",
-        "description": "**Peer-to-peer.** Authenticated by the mutual-TLS pin, not a session: the caller is a server. Permission is `store.MayPlay` with a **Friend** principal, resolved per request and **failing closed** — an unshared library, an item above that share's limit, and a question that could not be answered are all refusals (ADR 0071 §6).\n\nA refusal is **404**, indistinguishable from an item that does not exist, so these cannot be used to learn what the host holds.\n\nThe handler behind this is the same one that serves the household, so the delivery decision, the ffmpeg arguments and the session bookkeeping are one implementation rather than two.\n\nNamed by the playlist above. The session is checked for existence and the segment name is validated before it becomes a path.",
+        "description": "**Peer-to-peer.** Authenticated by the mutual-TLS pin, not a session: the caller is a server. Permission is `store.MayPlay` with a **Friend** principal, resolved per request and **failing closed** — an unshared library, an item above that share's limit, and a question that could not be answered are all refusals (ADR 0071 §6).\n\nA refusal is **404**, indistinguishable from an item that does not exist, so these cannot be used to learn what the host holds.\n\nThe handler behind this is the same one that serves the household, so the delivery decision, the ffmpeg arguments and the session bookkeeping are one implementation rather than two.\n\nNamed by the playlist above. The segment name is validated before it becomes a path, and the session must exist, be for the item in the path, and belong to the calling server; anything else is 404.",
         "parameters": [
           {
             "name": "item",

@@ -179,8 +179,52 @@ func writePlaylist(w http.ResponseWriter, complete bool, body string) {
 	_, _ = io.WriteString(w, body)
 }
 
-// hlsSegment serves one segment or the init file from a session directory.
+/*
+ * hlsSegment serves one segment or the init file of a film's or an episode's
+ * session, to the viewer that session belongs to.
+ *
+ * The session is looked up by the id in the path, and that id is not the
+ * permission. Every way in decides on `{id}` — `GetItem` for an account, the
+ * guest gate's object check, `federationPlay` for a paired server — and until
+ * this check nothing related the session to that item or to the caller. So an
+ * account allowed one film could read any running session by naming its id
+ * through that film (review findings R03-1 and R02-2), and an un-share never
+ * reached a stream already running, because every segment request touched the
+ * session and kept it alive.
+ *
+ * Now the session must exist, be for the item in the path, and belong to
+ * `streamOwner(r)` — the account for a signed-in caller, `peer:<fingerprint>`
+ * for a paired server and for a guest that server vouched for. That is the
+ * same owner `hlsPlaylist` started or reused the session under, so an honest
+ * player always passes: it only ever asks for segments of the playlist it was
+ * handed.
+ */
 func (s *Server) hlsSegment(w http.ResponseWriter, r *http.Request) {
+	s.serveHLSSegment(w, r, func(sess *transcode.Session) bool {
+		id, ok := pathID(r)
+		return ok && sess.ItemID == id && sess.Owner == s.streamOwner(r)
+	})
+}
+
+/*
+ * channelHLSSegment serves a live channel's segments.
+ *
+ * A channel's session is shared between viewers on purpose (`LiveHLS`): it has
+ * no owner, and every viewer of the channel reads the same files. So only the
+ * channel is checked — recorded on the session negated, because channel and
+ * item numbering are different — which still stops a channel route being used
+ * to read a film's session.
+ */
+func (s *Server) channelHLSSegment(w http.ResponseWriter, r *http.Request) {
+	s.serveHLSSegment(w, r, func(sess *transcode.Session) bool {
+		id, ok := pathID(r)
+		return ok && sess.ItemID == -id
+	})
+}
+
+// serveHLSSegment serves one file of the session named in the path, when
+// mayRead says the caller may have that session.
+func (s *Server) serveHLSSegment(w http.ResponseWriter, r *http.Request, mayRead func(*transcode.Session) bool) {
 	sessionID := r.PathValue("session")
 	name := r.PathValue("name")
 
@@ -212,6 +256,18 @@ func (s *Server) hlsSegment(w http.ResponseWriter, r *http.Request) {
 		s.log.Warn("hls segment refused: no such session",
 			"session", sessionID, "name", name, "item", r.PathValue("id"),
 			"running", len(s.trans.Sessions()))
+		writeError(w, http.StatusNotFound, "not_found", "transcode session has ended")
+		return
+	}
+	if !mayRead(sess) {
+		/*
+		 * The same answer as a session that does not exist, so a refusal
+		 * cannot be used to learn which ids are running. Logged separately,
+		 * and without touching the session: a refused reader must not keep
+		 * somebody else's encode alive.
+		 */
+		s.log.Warn("hls segment refused: not this caller's session",
+			"session", sessionID, "name", name, "item", r.PathValue("id"))
 		writeError(w, http.StatusNotFound, "not_found", "transcode session has ended")
 		return
 	}
@@ -294,13 +350,47 @@ func (s *Server) hlsSegment(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// transcodeSessions lists running transcodes.
+/*
+ * transcodeSessions says whether this server can convert, with what, and which
+ * conversions are running.
+ *
+ * Every running session for an administrator; for anybody else, only their
+ * own. The whole list names an account, a film and a session id for every
+ * conversion on the server — the reason `GET /api/transcodes` is admin only —
+ * and this route handed it to every signed-in account, where a session id was
+ * the one thing standing between a member and somebody else's segments
+ * (review finding R03-1). `available` and `encoder` are what a client needs
+ * from it and stay open to everyone.
+ */
 func (s *Server) transcodeSessions(w http.ResponseWriter, r *http.Request) {
+	sessions := s.trans.Sessions()
+	if !s.callerIsAdmin(r) {
+		owner := s.streamOwner(r)
+		mine := make([]transcode.SessionInfo, 0, len(sessions))
+		for _, si := range sessions {
+			if si.Owner == owner {
+				mine = append(mine, si)
+			}
+		}
+		sessions = mine
+	}
 	writeJSON(w, http.StatusOK, map[string]any{
 		"available": s.trans.Available(),
 		"encoder":   s.trans.Encoder(),
-		"sessions":  s.trans.Sessions(),
+		"sessions":  sessions,
 	})
+}
+
+// callerIsAdmin answers what adminOnly would: an administrator's signed-in
+// session, never an API key, or the unsecured loopback owner before any
+// account exists.
+func (s *Server) callerIsAdmin(r *http.Request) bool {
+	sess, ok := sessionFromContext(r)
+	if !ok {
+		_, guest := guestFromContext(r)
+		return !guest && !s.secured(r.Context())
+	}
+	return sess.Role == store.RoleAdmin && !authedByKey(r)
 }
 
 // playTarget is a resolved request: which file, how to deliver it, and which
