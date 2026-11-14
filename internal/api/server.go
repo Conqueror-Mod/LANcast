@@ -897,7 +897,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/channels/{id}/stream", s.liveTV(s.channelStream))
 	mux.HandleFunc("GET /api/channels/{id}/live", s.liveTV(s.channelLive))
 	mux.HandleFunc("GET /api/channels/{id}/hls/index.m3u8", s.liveTV(s.channelLiveHLS))
-	mux.HandleFunc("GET /api/channels/{id}/hls/{session}/{name}", s.liveTV(s.hlsSegment))
+	mux.HandleFunc("GET /api/channels/{id}/hls/{session}/{name}", s.liveTV(s.channelHLSSegment))
 	// The viewer leaving is the one thing the HLS path cannot infer (ADR 0065).
 	mux.HandleFunc("POST /api/channels/{id}/stop", s.liveTV(s.channelStopLive))
 	// The guide is readable by the household, like the channels it describes.
