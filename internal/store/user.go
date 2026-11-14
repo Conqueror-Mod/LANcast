@@ -167,8 +167,9 @@ func (s *Store) CountSessions(ctx context.Context) (int, error) {
 	return n, nil
 }
 
-// DeleteAllUsers removes every account and every session, returning the counts
-// removed. It is the recovery path for an operator locked out of their own
+// DeleteAllUsers removes every account and every credential -- sessions,
+// passkeys, API keys, pending invites, two-factor secrets and recovery codes --
+// returning the counts of accounts and sessions removed. It is the recovery path for an operator locked out of their own
 // server, and it is deliberately not reachable over HTTP — an authenticated
 // caller does not need it, and an unauthenticated one must never have it.
 //
@@ -191,6 +192,32 @@ func (s *Store) DeleteAllUsers(ctx context.Context) (users, sessions int64, err 
 	sres, err := tx.ExecContext(ctx, `DELETE FROM session`)
 	if err != nil {
 		return 0, 0, fmt.Errorf("reset auth: delete sessions: %w", err)
+	}
+	/*
+	 * Every other credential that can sign somebody in, or that belongs to
+	 * the account being cleared (R04-2).
+	 *
+	 * The first admin created afterwards takes LocalUserID, the id the old
+	 * first admin had, so anything keyed on that id with no foreign key to
+	 * user is inherited by the new account. A passkey left behind -- including
+	 * one an intruder added, which is the situation this command recovers
+	 * from -- would sign in as the new administrator.
+	 *
+	 *   passkey             no foreign key (revision 70): the one that bit.
+	 *   api_key             cascades from user, deleted here by name anyway so
+	 *                       the list does not rest on PRAGMA foreign_keys.
+	 *   invite              a pending invite creates an account, and on a
+	 *                       server with none it would create the only one.
+	 *   retro_account       a sealed RetroAchievements key and connect token,
+	 *   retro_unlock_queue  and the unlocks waiting to be sent with it.
+	 *
+	 * Password hashes, the TOTP secret and recovery codes are columns of user
+	 * and go with it below. Watch history stays, for the reason above.
+	 */
+	for _, table := range []string{"passkey", "api_key", "invite", "retro_unlock_queue", "retro_account"} {
+		if _, err := tx.ExecContext(ctx, `DELETE FROM `+table); err != nil {
+			return 0, 0, fmt.Errorf("reset auth: delete %s: %w", table, err)
+		}
 	}
 	ures, err := tx.ExecContext(ctx, `DELETE FROM user`)
 	if err != nil {
