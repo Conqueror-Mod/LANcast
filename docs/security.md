@@ -23,6 +23,19 @@ all, not merely refusing. Rejecting requests after accepting them would still
 mean a listening socket answering strangers. Creating the first account (an
 admin) and restarting enables LAN binding.
 
+**Loopback keeps out other machines, not other origins.** Any web page open in
+the owner's browser can send a request to `127.0.0.1`, and a page that rebinds
+its own hostname to `127.0.0.1` can read the answers. So while no account
+exists, two checks still hold even though no session is asked for:
+
+- **The `Host` must name this machine** — `localhost`, `127.0.0.1` or `[::1]`,
+  or the server's public name while its certificate is valid (the desktop
+  window opens that name, mapped to `127.0.0.1`, and after `reset-auth` a server
+  with no account can still have one). A rebinding page's requests carry its
+  own name in `Host` and are refused with `403`.
+- **The CSRF origin check below applies**, exactly as on a configured server,
+  so no other page can `POST /api/auth/setup` and become the first admin.
+
 **Why sessions live server-side.** They are revocable. Changing your own
 password, or an admin resetting yours, deletes your sessions — a password change
 that leaves old sessions alive has not locked anyone out. A self-contained

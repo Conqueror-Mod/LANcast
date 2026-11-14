@@ -136,6 +136,42 @@ func (s *Server) secured(ctx context.Context) bool {
 	return n > 0
 }
 
+/*
+ * loopbackHost reports whether a Host header names this machine, for a server
+ * that has no account yet and so is bound to loopback (R01-1).
+ *
+ * localhost, 127.0.0.1 and ::1 are what every local client sends: the browser
+ * at localhost, the desktop window and tray (desktop.ResolvedURL), the native
+ * player's relay. The one other name is the server's public name while its
+ * certificate is valid. The window opens that name, mapped to 127.0.0.1 in its
+ * own resolver (cmd/lancast/publicname.go), and after `reset-auth` a server
+ * with no account can still have one: refusing it would lock the owner out of
+ * the setup form in their own window. A web page cannot borrow it, because it
+ * would have to make the owner's DNS answer 127.0.0.1 for a name it does not
+ * control.
+ *
+ * The hostname is what is checked, not the port: a rebinding page's Host
+ * carries its own name, which is the part that gives it away. An empty Host is
+ * allowed because no browser sends one; only a hand-made HTTP/1.0 request can.
+ */
+func (s *Server) loopbackHost(hostport string) bool {
+	if hostport == "" {
+		return true
+	}
+	host := hostport
+	if h, _, err := net.SplitHostPort(hostport); err == nil {
+		host = h
+	} else {
+		host = strings.TrimSuffix(strings.TrimPrefix(host, "["), "]")
+	}
+	switch strings.ToLower(host) {
+	case "localhost", "127.0.0.1", "::1":
+		return true
+	}
+	name := s.publicName()
+	return name != "" && strings.EqualFold(host, name)
+}
+
 // requireAuth gates the API behind a session, applies the CSRF checks, and
 // stashes the resolved session so handlers authorize without re-querying.
 func (s *Server) requireAuth(next http.Handler) http.Handler {
@@ -153,10 +189,39 @@ func (s *Server) requireAuth(next http.Handler) http.Handler {
 			return
 		}
 
-		// An unconfigured server (no accounts) is loopback-only, so requiring a
-		// session before setup exists would lock the owner out of their own
-		// setup form.
+		/*
+		 * An unconfigured server (no accounts) is loopback-only, so requiring a
+		 * session before setup exists would lock the owner out of their own
+		 * setup form.
+		 *
+		 * Loopback keeps other *machines* out. It does not keep out other
+		 * *origins* in a browser on this machine (R01-1), so two checks still
+		 * hold here, where nothing else does:
+		 *
+		 *   - The Host must name this machine. A page that rebinds its own
+		 *     hostname to 127.0.0.1 is same-origin with the server as far as
+		 *     the browser is concerned and could read every response; its
+		 *     requests still carry its own name in Host, and that is refused.
+		 *   - A state-changing request must come from this origin, exactly as
+		 *     on a configured server. Without it any page could POST
+		 *     /api/auth/setup as a "simple" text/plain request, with no
+		 *     preflight, and become the first administrator.
+		 */
 		if !s.secured(r.Context()) {
+			if !s.loopbackHost(r.Host) {
+				s.logRefusal(r, slog.LevelWarn, "foreign host before setup", "host", r.Host)
+				writeError(w, http.StatusForbidden, "forbidden",
+					"this server has no account yet; open it at localhost")
+				return
+			}
+			switch r.Method {
+			case http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete:
+				if !auth.SameOriginRequest(r) {
+					s.logRefusal(r, slog.LevelWarn, "cross-origin", "origin", r.Header.Get("Origin"))
+					writeError(w, http.StatusForbidden, "forbidden", "cross-origin request refused")
+					return
+				}
+			}
 			next.ServeHTTP(w, r)
 			return
 		}
