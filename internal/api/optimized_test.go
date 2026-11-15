@@ -276,3 +276,35 @@ func TestACopyDeletedByHandIsNotOffered(t *testing.T) {
 		t.Error("a copy whose file is gone is still marked ready, not queued to be rebuilt")
 	}
 }
+
+// R06-4: while the original waits to be probed again its probe result is nil,
+// and a ready copy outlives that. The playback route must still answer, not
+// panic into a 500 for every optimized title until the worker comes round.
+func TestPlaybackAnswersWhileTheOriginalAwaitsReprobe(t *testing.T) {
+	h := langHarness(t)
+	id := h.addFile(t, "uhd.mkv", []byte("original"))
+	h.probeAsHEVCWithTwoAudioTracks(t, id)
+	readyCopy(t, h, id, "the copy")
+	// What POST /api/probe/refresh?scope=all does.
+	if n, err := h.st.ClearProbe(context.Background(), 0); err != nil || n == 0 {
+		t.Fatalf("clear probe: %d %v", n, err)
+	}
+	for _, query := range []string{"", "?audio=1", "?audio=2"} {
+		resp := h.authed(t, "GET", fmt.Sprintf("/api/items/%d/playback%s", id, query), nil)
+		body, _ := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			t.Fatalf("playback%s while awaiting re-probe = %d %s", query, resp.StatusCode, body)
+		}
+		var a struct {
+			Probed  bool   `json:"probed"`
+			Version string `json:"version"`
+		}
+		if err := json.Unmarshal(body, &a); err != nil {
+			t.Fatal(err)
+		}
+		if a.Probed {
+			t.Errorf("playback%s says probed while the probe is cleared", query)
+		}
+	}
+}
