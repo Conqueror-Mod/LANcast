@@ -182,8 +182,8 @@ Libraries, artwork, and settings are untouched. Afterwards the instance is in
 the state a fresh install is in — unconfigured, and loopback-only until an
 account exists.
 
-On Windows the data directory is owned by the service account, so this needs an
-elevated shell; the command says so rather than reporting a bare SQLite
+On Windows the data directory belongs to SYSTEM and Administrators (*The data
+directory*, below), so this needs an elevated shell; the command says so rather than reporting a bare SQLite
 `readonly database` error.
 
 ## Transport security
@@ -345,6 +345,18 @@ sessions.
 **Browse lists directories only.** Never files, never contents, and hidden or
 system directories are omitted.
 
+**An update is proved twice.** The downloader checks the release's signature
+(a key compiled into the binary) and the archive's digest before anything is
+staged. The service then checks all of it again when it moves the staged files
+into the install directory at shutdown. It checks the signature over the
+checksum list, the archive against it, the archive's name against the staged
+version, and every staged file's SHA-256 against the archive. It refuses any
+name outside the install set, and any version not newer than the one running.
+Each file is checked once more where it lands, and a mismatch puts the install
+back. Before this (R10-1), a staging that any local account could write in the
+data directory was moved into Program Files as SYSTEM unchecked. It no longer
+depends on the data directory's permissions for this.
+
 **A restore runs only from files LANcast wrote.** A restore staged from Settings
 is a marker in `backups\` that the next start acts on before it opens the
 database. As the service, that start asks the tools guard (*Which binary runs*)
@@ -392,6 +404,62 @@ Treat the LAN itself as semi-trusted. A compromised phone, TV, or IoT device on
 your network can reach the login endpoint and is inside the boundary LANcast
 relies on.
 
+## The data directory
+
+As a Windows service the data directory is `C:\ProgramData\LANcast`, and until
+the review (R10-2, R10-3) it kept ProgramData's default permissions. Those let
+every local account read every file in it (the identity and TLS private
+keys, `secrets.key`, the database, the backups) and create files and folders in
+every folder of it. Creating was the worse half: a planted `update-staged`, a
+planted `restore-pending.json` or a planted `faces\lancast-faces.exe` was each
+a way to SYSTEM, or to being a LANcast administrator, that skipped UAC. The
+`0600` modes the code writes its secrets with mean nothing on Windows.
+
+The folder now has its own descriptor (`internal/dataperm`):
+
+| | |
+|---|---|
+| Owner | Administrators |
+| DACL | protected: nothing is inherited from ProgramData |
+| SYSTEM, Administrators | full control, inherited by everything inside |
+| Users | list the top folder only, inherited by nothing |
+| `tls\cert.pem` | Users may also read this one file |
+
+`icacls C:\ProgramData\LANcast` shows it as `BUILTIN\Users:(RX)` with no
+`(OI)(CI)` and no `(I)`.
+
+Users keep two reads, because the desktop window and the tray run as the
+person, not as the service:
+
+- **Whether `lancast.db` exists.** That is how the window knows the library is
+  the service's, and waits for the service instead of starting a second server
+  on an empty per-user library (`sharedDataDir`, `servermode.HasLibrary`).
+  Listing the top folder is what lets that check succeed. NTFS lets whoever
+  may list a folder read its entries' attributes, never their contents.
+- **The public certificate.** Beyond loopback the window trusts the server by
+  the key in `tls\cert.pem` (`certpin.SPKI`) and loads nothing without it. The
+  service grants Users read on that file after loading it, every start, since
+  a new certificate is a new file. `key.pem` beside it gets nothing.
+
+Nothing else a person's process does reads the folder. Logs, crash reports,
+backups, the update and the face models are reached through the API, as the
+server. `service install`, `service tools`, `reset-auth`, `restore` and the
+installer already need an elevated shell.
+
+It is applied by `service install`, by a switch to the service before the
+library is copied in, and **at every start of the service**. An install from
+before it is closed by its first start after the update. That start rewrites
+every inherited entry in the tree, and gives back to Administrators anything
+inside that the tools guard below refuses: an entry owned by an account other
+than SYSTEM or Administrators, or one that grants someone else write. An owner
+can always rewrite its own permissions, so a file planted while the folder was
+open would otherwise stay its planter's. Links are reported, not removed.
+A start that finds the descriptor already in place reads it and moves on.
+
+Not covered: a systemd install. Its data directory is `/var/lib/lancast`,
+created with the service account's mode, and ProgramData's add-files grant has
+no counterpart there.
+
 ## ffmpeg's privileges
 
 ffmpeg and ffprobe read every library file, and those files are untrusted input
@@ -408,6 +476,13 @@ the folder's owner and DACL on every start, and the service's PATH is filtered
 the same way. A per-user install is copied into the protected `tools` folder at
 install, not recorded where the user can replace it. What is left is what the
 binary does with a hostile file.
+
+The face worker is held to the same rule (R10-5, R12-1). As the service,
+`lancast-faces.exe` is run only from beside `LANcast.exe`, where the installer
+puts it, never from the data directory's `faces` folder or from PATH. Before
+every start, the guard checks the worker, its folder, the faces folder and the
+`onnxruntime.dll` the worker loads from it. A refusal is shown in Settings ›
+Photos with its reason.
 
 ### The pinned build
 
@@ -515,9 +590,11 @@ the mitigation available now, and it rots quietly: see *The pinned build*.
 
 ## Threats explicitly out of scope
 
-- **A user with filesystem access to the data directory.** They can read the
-  database and the TMDB key directly; the application cannot defend against
-  its own host.
+- **An administrator, or SYSTEM, reading the data directory.** They can read
+  the database and every key directly; the application cannot defend against
+  its own host. This used to say "a user with filesystem access", which on a
+  default Windows install was every local account. It no longer is: see *The
+  data directory*.
 - **Malicious media files.** ffmpeg and ffprobe process library files, which are
   untrusted input by any strict reading. This is accepted rather than defended:
   the files are the user's own media, the tools are the same ones every other

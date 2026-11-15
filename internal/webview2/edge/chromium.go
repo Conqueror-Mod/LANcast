@@ -28,6 +28,10 @@ type Chromium struct {
 	webResourceRequested  *iCoreWebView2WebResourceRequestedEventHandler
 	acceleratorKeyPressed *ICoreWebView2AcceleratorKeyPressedEventHandler
 	navigationCompleted   *ICoreWebView2NavigationCompletedEventHandler
+	// LOCAL ADDITION (R11-3): see ICoreWebView2_14.go.
+	serverCertificateError *ICoreWebView2ServerCertificateErrorDetectedEventHandler
+	// LOCAL ADDITION (R11-2): see ICoreWebView2NavigationStarting.go.
+	navigationStarting *ICoreWebView2NavigationStartingEventHandler
 
 	environment *ICoreWebView2Environment
 
@@ -39,10 +43,22 @@ type Chromium struct {
 	globalPermission *CoreWebView2PermissionState
 
 	// Callbacks
-	MessageCallback              func(string)
+	//
+	// MessageCallback is given the URI of the document that posted the
+	// message as well as the message (LOCAL CHANGE, R11-2): upstream never
+	// read the source, so a binding could not tell its own page from any
+	// other document the window was sent to.
+	MessageCallback func(source, message string)
+	// NavigationStartingCallback decides whether a top-level navigation may
+	// go ahead (LOCAL ADDITION, R11-2). Nil allows everything, as upstream.
+	NavigationStartingCallback   func(uri string) bool
 	WebResourceRequestedCallback func(request *ICoreWebView2WebResourceRequest, args *ICoreWebView2WebResourceRequestedEventArgs)
 	NavigationCompletedCallback  func(sender *ICoreWebView2, args *ICoreWebView2NavigationCompletedEventArgs)
 	AcceleratorKeyCallback       func(uint) bool
+	// ServerCertificateErrorCallback hears about a certificate this view
+	// refused (LOCAL ADDITION, R11-3). The refusal has already happened; this
+	// is so the host can say why instead of leaving an error page.
+	ServerCertificateErrorCallback func(uri string)
 }
 
 func NewChromium() *Chromium {
@@ -65,6 +81,8 @@ func NewChromium() *Chromium {
 	e.webResourceRequested = newICoreWebView2WebResourceRequestedEventHandler(e)
 	e.acceleratorKeyPressed = newICoreWebView2AcceleratorKeyPressedEventHandler(e)
 	e.navigationCompleted = newICoreWebView2NavigationCompletedEventHandler(e)
+	e.serverCertificateError = newICoreWebView2ServerCertificateErrorDetectedEventHandler(e)
+	e.navigationStarting = newICoreWebView2NavigationStartingEventHandler(e)
 	e.permissions = make(map[CoreWebView2PermissionKind]CoreWebView2PermissionState)
 
 	return e
@@ -214,6 +232,11 @@ func (e *Chromium) CreateCoreWebView2ControllerCompleted(res uintptr, controller
 		uintptr(unsafe.Pointer(e.webResourceRequested)),
 		uintptr(unsafe.Pointer(&token)),
 	)
+	_, _, _ = e.webview.vtbl.AddNavigationStarting.Call(
+		uintptr(unsafe.Pointer(e.webview)),
+		uintptr(unsafe.Pointer(e.navigationStarting)),
+		uintptr(unsafe.Pointer(&token)),
+	)
 	_, _, _ = e.webview.vtbl.AddNavigationCompleted.Call(
 		uintptr(unsafe.Pointer(e.webview)),
 		uintptr(unsafe.Pointer(e.navigationCompleted)),
@@ -221,6 +244,24 @@ func (e *Chromium) CreateCoreWebView2ControllerCompleted(res uintptr, controller
 	)
 
 	_ = e.controller.AddAcceleratorKeyPressed(e.acceleratorKeyPressed, &token)
+
+	/*
+	 * LOCAL ADDITION (R11-3). Certificate errors are refused by the host, not
+	 * offered to the person as an interstitial with a way through. A runtime
+	 * too old for the interface keeps Chromium's behaviour, and says so,
+	 * because silently keeping the click-through is the failure this exists
+	 * to remove.
+	 */
+	if wv14 := e.webview.GetICoreWebView2_14(); wv14 != nil {
+		_, _, _ = wv14.vtbl.AddServerCertificateErrorDetected.Call(
+			uintptr(unsafe.Pointer(wv14)),
+			uintptr(unsafe.Pointer(e.serverCertificateError)),
+			uintptr(unsafe.Pointer(&token)),
+		)
+	} else {
+		log.Printf("webview2: this runtime has no ServerCertificateErrorDetected; " +
+			"a certificate error falls back to the browser's own warning")
+	}
 
 	atomic.StoreUintptr(&e.inited, 1)
 
@@ -238,7 +279,17 @@ func (e *Chromium) MessageReceived(sender *ICoreWebView2, args *iCoreWebView2Web
 		uintptr(unsafe.Pointer(&message)),
 	)
 	if e.MessageCallback != nil {
-		e.MessageCallback(w32.Utf16PtrToString(message))
+		var source *uint16
+		_, _, _ = args.vtbl.GetSource.Call(
+			uintptr(unsafe.Pointer(args)),
+			uintptr(unsafe.Pointer(&source)),
+		)
+		src := ""
+		if source != nil {
+			src = w32.Utf16PtrToString(source)
+			windows.CoTaskMemFree(unsafe.Pointer(source))
+		}
+		e.MessageCallback(src, w32.Utf16PtrToString(message))
 	}
 	_, _, _ = sender.vtbl.PostWebMessageAsString.Call(
 		uintptr(unsafe.Pointer(sender)),

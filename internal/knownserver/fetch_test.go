@@ -213,6 +213,12 @@ func hostPort(t *testing.T, raw string) string {
  */
 func tlsServer(t *testing.T) (*httptest.Server, string) {
 	t.Helper()
+	return tlsServerWith(t, func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) })
+}
+
+// tlsServerWith is tlsServer answering with h.
+func tlsServerWith(t *testing.T, h http.HandlerFunc) (*httptest.Server, string) {
+	t.Helper()
 
 	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	if err != nil {
@@ -239,8 +245,7 @@ func tlsServer(t *testing.T) (*httptest.Server, string) {
 		t.Fatalf("parse certificate: %v", err)
 	}
 
-	srv := httptest.NewUnstartedServer(http.HandlerFunc(
-		func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) }))
+	srv := httptest.NewUnstartedServer(h)
 	srv.TLS = &tls.Config{
 		Certificates: []tls.Certificate{{Certificate: [][]byte{der}, PrivateKey: key, Leaf: leaf}},
 		MinVersion:   tls.VersionTLS12,

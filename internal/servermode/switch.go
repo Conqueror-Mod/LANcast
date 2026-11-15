@@ -60,6 +60,11 @@ type Env struct {
 	// library is copied into it (ADR 0092 §7). Nil where there is nothing to
 	// grant.
 	GrantUser func(dir string) error
+	// ProtectServiceDir gives the machine-wide folder the service's own
+	// permissions before the library is copied into it (R10-3), so no file
+	// of the copy is ever readable by every account. Nil where there is
+	// nothing to protect.
+	ProtectServiceDir func(dir string) error
 	// FreeBytes is the free space on dir's volume; ok=false when unknown.
 	FreeBytes func(dir string) (free uint64, ok bool)
 	Now       func() time.Time
@@ -275,6 +280,11 @@ func ToService(e Env) (res Result, err error) {
 		}
 	}
 
+	if e.ProtectServiceDir != nil {
+		if err := e.ProtectServiceDir(e.ServiceDir); err != nil {
+			return res, fmt.Errorf("protect %s: %w", e.ServiceDir, err)
+		}
+	}
 	total, err := e.copyAndProve(e.UserDir, e.ServiceDir)
 	if err != nil {
 		return res, err

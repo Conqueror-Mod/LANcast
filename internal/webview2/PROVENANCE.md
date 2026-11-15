@@ -116,3 +116,41 @@ in the *same* window never shows a GPU swapchain beneath it, so a second window
 is the only shape that works. It keeps position, size, visibility and focus in
 step with the main window from inside this package's window procedure, which is
 the only place those messages arrive. Outside playback none of it runs.
+
+## Local addition — certificate errors are refused (2026-11-15)
+
+`edge/ICoreWebView2_14.go` (the `ICoreWebView2_14` vtable, the
+`ServerCertificateErrorDetected` handler and its arguments), the
+`serverCertificateError` field and `ServerCertificateErrorCallback` on
+`edge.Chromium`, its registration in `CreateCoreWebView2ControllerCompleted`,
+and `WebViewOptions.OnCertificateError`.
+
+Upstream registers no handler, so a certificate error is Chromium's own
+interstitial, and that offers a way through. In this app that meant a pin
+mismatch could be clicked past, sending the session cookie to whichever key
+answered (review finding R11-3). The handler cancels every certificate error
+and then tells the host, which shows the server picker. The pinned key itself
+never reaches it: `--ignore-certificate-errors-spki-list` exempts that key
+before the event is raised.
+
+`ICoreWebView2_14` extends `_2` to `_13`, and only their slot counts are
+written out (as an anonymous array); `edge/vtable14_test.go` pins the offset.
+A runtime older than 1.0.1245 has no `_14`; that is logged and the old
+behaviour stays.
+
+## Local addition — a window keeps to its own origins (2026-11-15)
+
+`edge/ICoreWebView2NavigationStarting.go` (the handler and its arguments), the
+`navigationStarting` field and `NavigationStartingCallback` on
+`edge.Chromium` with its registration, `MessageCallback` now taking the
+message's source document as well as the message, and
+`WebViewOptions.AllowMessage` / `AllowNavigation` with the check at the top of
+`msgcb`.
+
+Upstream injects every binding into every document and never asks which one
+is calling, and it lets a page navigate the main frame anywhere. Once the
+window could show a remote server's page (ADR 0070), any script there, or any
+site it navigated to, could call every native function (review finding
+R11-2). The policy itself lives in `internal/clientwindow/origins.go`; this
+package only provides the two hooks. `put_Cancel` takes a BOOL by value. A
+generated binding elsewhere passes a pointer, which is wrong.

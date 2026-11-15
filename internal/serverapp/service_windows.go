@@ -13,6 +13,7 @@ import (
 	"golang.org/x/sys/windows/svc"
 
 	"lancast/internal/applog"
+	"lancast/internal/dataperm"
 	"lancast/internal/service"
 	"lancast/internal/singleton"
 )
@@ -118,7 +119,18 @@ func (h *handler) Execute(_ []string, r <-chan svc.ChangeRequest, changes chan<-
 	// Marked before the server starts: it changes what the update endpoint is
 	// allowed to offer, and the answer must not depend on when it is asked.
 	serviceManaged = true
-	go func() { errc <- run(ctx, h.addr, h.dataDir, h.log) }()
+	go func() {
+		// The data directory's own permissions, re-asserted on every start so
+		// an install from before them is closed by its first start after the
+		// update (R10-2, R10-3). Before run, so nothing opens or creates a file
+		// in a folder that is still open to every account; after Running is
+		// reported, because the first one rewrites every entry in a library's
+		// tree and the SCM gives a start pending thirty seconds. A start that
+		// finds it done reads one descriptor and moves on.
+		r, perr := dataperm.Protect(h.dataDir)
+		dataperm.LogReport(h.log, h.dataDir, r, perr)
+		errc <- run(ctx, h.addr, h.dataDir, h.log)
+	}()
 
 	changes <- svc.Status{State: svc.Running, Accepts: accepted}
 	for {

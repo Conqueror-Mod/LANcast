@@ -1,8 +1,11 @@
 package api
 
 import (
+	"encoding/json"
 	"errors"
 	"net/http"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"lancast/internal/release"
@@ -96,10 +99,7 @@ func TestStagedUpdateOutranksAvailable(t *testing.T) {
 // finish" rather than offering a download that already happened.
 func TestUpdateStatusReportsStaged(t *testing.T) {
 	h := newHarness(t)
-	if err := selfupdate.Stage(h.dataDir, "v0.7.0",
-		map[string][]byte{"LANcast-Server.exe": []byte("new")}, 1234); err != nil {
-		t.Fatal(err)
-	}
+	markStaged(t, h.dataDir, "v0.7.0")
 	var body map[string]any
 	decode(t, h.do(t, "GET", "/api/update", nil), &body)
 	if body["staged"] != "v0.7.0" {
@@ -121,9 +121,24 @@ func TestRestartRefusesWithNothingStaged(t *testing.T) {
 // restart has something to finish.
 func stageFakeUpdate(t *testing.T, h *harness) {
 	t.Helper()
-	if err := selfupdate.Stage(h.dataDir, "v0.7.0",
-		map[string][]byte{"LANcast-Server.exe": []byte("new")}, 1234); err != nil {
+	markStaged(t, h.dataDir, "v0.7.0")
+}
+
+// markStaged writes only the manifest Pending reads. These tests are about
+// what the API reports and when it restarts; nothing here applies the
+// staging, whose proof selfupdate's own tests cover.
+func markStaged(t *testing.T, dataDir, version string) {
+	t.Helper()
+	dir := selfupdate.Dir(dataDir)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatal(err)
+	}
+	raw, _ := json.Marshal(selfupdate.Manifest{Version: version, Files: []string{"LANcast.exe"}, StagedAt: 1234})
+	if err := os.WriteFile(filepath.Join(dir, "staged.json"), raw, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := selfupdate.Pending(dataDir); !ok {
+		t.Fatal("the hand-written manifest is not pending")
 	}
 }
 

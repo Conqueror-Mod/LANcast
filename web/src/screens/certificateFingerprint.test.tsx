@@ -111,14 +111,28 @@ describe("the server's certificate fingerprint", () => {
     expect(text).toContain("TLS certificate fingerprint");
 
     /*
-     * Order matters, and it is the whole correction. The identity is the
-     * durable one and the one somebody checking a changed connection key is
-     * sent here to read; leading with the value that is reissued for ordinary
-     * reasons is what made the first version of this wrong.
+     * The identity leads because it is the durable one. It is not, though,
+     * the value somebody checking a changed certificate reads out -- see the
+     * next test.
      */
     expect(text.indexOf("Identity fingerprint")).toBeLessThan(
       text.indexOf("TLS certificate fingerprint"),
     );
+  });
+
+  /*
+   * R11-1. A client that meets a changed certificate already holds this
+   * server's identity, so an impostor in its place shows the same identity
+   * and a comparison of it passes every time. The only value that says
+   * anything about the new connection is the certificate fingerprint, and
+   * this screen must send people to that one.
+   */
+  it("sends somebody checking a changed certificate to the certificate, not the identity", async () => {
+    await render();
+    const text = host.textContent ?? "";
+    expect(text).toContain("certificate has changed");
+    expect(text).toContain("read out the certificate fingerprint below instead");
+    expect(text).not.toContain("this is the one to read out");
   });
 
   it("says which of the two changes and which does not", async () => {

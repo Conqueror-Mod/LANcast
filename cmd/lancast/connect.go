@@ -1,6 +1,9 @@
 package main
 
 import (
+	"net/url"
+	"strings"
+
 	"lancast/internal/knownserver"
 )
 
@@ -122,4 +125,69 @@ func resolve(f facts) (t target, ask bool) {
 // localTarget is the server on this machine.
 func localTarget(f facts) target {
 	return target{address: f.flagAddr, local: true, pin: f.localPin}
+}
+
+/*
+ * remoteLaunchReason is why a remembered remote server is not opened directly,
+ * or "" when it can be (review finding R11-3).
+ *
+ * The window used to open a remembered server straight away with the stored
+ * pin. If the key there had changed -- a reissued certificate or something
+ * answering in its place -- the trust record was never consulted, and the
+ * window met Chromium's warning instead. So the key at the address is read
+ * and checked before the window is given anything, the same check the picker
+ * makes, and anything but a match goes to the picker, where the rotation or
+ * refusal screen is.
+ */
+func remoteLaunchReason(addr string, trust knownserver.Trust, fetchErr error) string {
+	if fetchErr != nil {
+		return "LANcast could not reach " + addr + "."
+	}
+	switch trust {
+	case knownserver.TrustMatch:
+		return ""
+	case knownserver.TrustRotated:
+		return "The TLS certificate at " + addr + " has changed, so LANcast did not " +
+			"connect. Choose it below to look at the new certificate."
+	case knownserver.TrustMismatch:
+		return "The key at " + addr + " is not the one you accepted, so LANcast " +
+			"did not connect. Choose it below to see why."
+	default:
+		return "The server you were using is no longer one you have accepted."
+	}
+}
+
+/*
+ * certificateRefusedReason is what the picker says after the window refused
+ * a certificate while open -- a server that came back from a restart with a
+ * different key, say. The window cannot be re-pinned while it runs, so the
+ * way on is through the picker, which checks the key and relaunches.
+ */
+func certificateRefusedReason(t target) string {
+	if t.local {
+		return "The server on this machine is presenting a certificate this " +
+			"window did not open with, so it was refused. Choose it again to reconnect."
+	}
+	return "The certificate at " + t.address + " is not the one this window " +
+		"trusts, so it was refused. Choose the server again to look at it."
+}
+
+// sameOrigin reports whether uri is on the same scheme, host and port as any
+// of origins. Used to tell the server's own page failing from something else
+// on the page failing.
+func sameOrigin(uri string, origins ...string) bool {
+	u, err := url.Parse(uri)
+	if err != nil || u.Host == "" {
+		return false
+	}
+	for _, o := range origins {
+		v, err := url.Parse(o)
+		if err != nil || v.Host == "" {
+			continue
+		}
+		if strings.EqualFold(u.Scheme, v.Scheme) && strings.EqualFold(u.Host, v.Host) {
+			return true
+		}
+	}
+	return false
 }

@@ -16,6 +16,7 @@ out in [README.md](README.md) and are not negotiable without an ADR.
 cmd/lancastd/      entrypoint only; the server program (subcommands, flags,
                    wiring, shutdown) is internal/serverapp (ADR 0080)
 internal/config/   data dir, listen address, settings
+internal/dataperm/ the service's data dir: SYSTEM and Administrators only (R10-3)
 internal/store/    SQLite access; owns schema.sql
 internal/media/    filename → metadata heuristics (guessing lives ONLY here)
 internal/scan/     filesystem walk and library reconciliation
@@ -60,7 +61,7 @@ cmd/lancast/       LANcast.exe: the app (window + tray) and, by subcommand, the
                    server (ADR 0080). The window itself is internal/clientwindow,
                    internal/webview2 and internal/certpin — not subdirectories
                    of this one, which is only the entrypoint and its bindings.
-docs/adr/          decision records (123 and counting — read before re-deciding)
+docs/adr/          decision records (124 and counting — read before re-deciding)
 ```
 
 ## Rules

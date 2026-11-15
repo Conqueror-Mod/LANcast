@@ -220,6 +220,12 @@ cuts both ways, so both are stated here rather than discovered:
 
 ### 7. `GET /api/identity` is session-gated
 
+> **One narrow exception, 2026-11-15.** [ADR 0124](0124-a-server-proves-its-identity-over-the-connection.md)
+> adds `GET /api/identity/proof` with no session, so a desktop client can ask a
+> server to prove its identity before trusting a new certificate. It keeps this
+> section's reason: it answers only a caller who already names this server's
+> fingerprint, and everybody else gets the 404 of a route that does not exist.
+
 It answers with the fingerprint and display name, for the settings screen and
 for building an invite. Behind a session, because it confirms a LANcast is here
 and what it is called, and an unauthenticated endpoint that does that is a

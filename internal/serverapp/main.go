@@ -28,9 +28,11 @@ import (
 	"lancast/internal/api"
 	"lancast/internal/artwork"
 	"lancast/internal/backup"
+	"lancast/internal/certpin"
 	"lancast/internal/comic"
 	"lancast/internal/config"
 	"lancast/internal/coverart"
+	"lancast/internal/dataperm"
 	"lancast/internal/enrich"
 	"lancast/internal/faces"
 	"lancast/internal/identity"
@@ -555,6 +557,12 @@ func run(ctx context.Context, addr, dataDir string, log *slog.Logger) error {
 		Dir:       faceDir,
 		ModelsDir: faceDir,
 		Runtime:   faceRuntime,
+	}
+	// As the service, Dir is not looked in at all: the worker only from beside
+	// LANcast.exe, and the #1096 guard over it and the runtime before every
+	// start (R10-5, R12-1).
+	if serviceManaged {
+		faceTool.Guard = mediatools.ServiceGuard()
 	}
 	// displayCopy is the upright JPEG the photo worker cached for the grid,
 	// which both face detection and search read when the file itself would be
@@ -1179,6 +1187,16 @@ func run(ctx context.Context, addr, dataDir string, log *slog.Logger) error {
 		if err != nil {
 			return err
 		}
+		// The window pins this certificate by reading it off disk, as the
+		// person rather than as the service, and the data directory gives
+		// Users nothing inside it any more: this one file is let through
+		// (R10-3). Every start, because a certificate made anew is a new file.
+		if serviceManaged {
+			if err := dataperm.ShareCert(certpin.CertPath(cfg.DataDir)); err != nil {
+				log.Warn("the desktop window may not be able to read the server certificate it pins",
+					"error", err, "hint", "the window then fails to load at a LAN or public address; localhost is unaffected")
+			}
+		}
 		/*
 		 * The operator's own certificate, when there is one (ADR 0088).
 		 *
@@ -1549,7 +1567,11 @@ func applyStagedUpdate(dataDir string, log *slog.Logger) {
 	if err != nil {
 		return
 	}
-	m, err := selfupdate.Apply(dataDir, filepath.Dir(exe))
+	// Only an update newer than this build: startup discards an older
+	// staging, and this holds the same line for one staged after it.
+	m, err := selfupdate.Apply(dataDir, filepath.Dir(exe), func(v string) bool {
+		return update.Newer(api.Version, v)
+	})
 	if errors.Is(err, os.ErrNotExist) {
 		return // nothing staged, which is every ordinary shutdown
 	}
