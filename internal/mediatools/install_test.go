@@ -11,6 +11,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -372,5 +373,27 @@ func TestProgressIsReportedBeforeTheFirstByte(t *testing.T) {
 	}
 	if !seen || first.BytesDone != 0 || first.BytesTotal == 0 {
 		t.Errorf("first report = %+v, want a zeroed one carrying the total", first)
+	}
+}
+
+/*
+ * Upstream keeps only the last autobuild of each month and deletes the rest
+ * after about two weeks. v0.11.0 was pinned to a mid-month build that was
+ * deleted, and every "Download ffmpeg" press then answered 404. A pin must name
+ * the last day of its month, or it has an expiry date nobody wrote down.
+ */
+func TestPinnedBuildIsAMonthEndBuild(t *testing.T) {
+	m := regexp.MustCompile(`/autobuild-(\d{4})-(\d{2})-(\d{2})-\d{2}-\d{2}/`).
+		FindStringSubmatch(windowsAMD64.URL)
+	if m == nil {
+		t.Fatalf("pinned URL %q names no autobuild tag", windowsAMD64.URL)
+	}
+	day, err := time.Parse("2006-01-02", m[1]+"-"+m[2]+"-"+m[3])
+	if err != nil {
+		t.Fatal(err)
+	}
+	if next := day.AddDate(0, 0, 1); next.Month() == day.Month() {
+		t.Errorf("pinned build %s is not the last day of its month; upstream deletes "+
+			"mid-month autobuilds after about two weeks", day.Format("2006-01-02"))
 	}
 }

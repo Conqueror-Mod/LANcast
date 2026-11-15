@@ -94,7 +94,7 @@ describe("the setup form's media-tools option", () => {
     // form is the only place the question is ever asked.
     render();
     const text = host.textContent ?? "";
-    expect(text).toContain("160 MB");
+    expect(text).toContain("195 MB");
     expect(text).toContain("ffmpeg");
     expect(text).toContain("GPL");
     expect(text).toContain("FFmpeg-Builds");
