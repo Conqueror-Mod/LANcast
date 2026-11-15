@@ -17,7 +17,10 @@ import (
 type Store interface {
 	ItemIDByPath(ctx context.Context, path string) (int64, error)
 	EnsurePlaylist(ctx context.Context, libraryID int64, path, title, sortTitle string) (int64, error)
-	SetPlaylistEntries(ctx context.Context, playlistID int64, itemIDs []int64) error
+	// ImportPlaylistEntries replaces membership unless a person has edited the
+	// playlist, deciding that in the same transaction as the write and
+	// returning an error (store.ErrPlaylistLocked) rather than writing.
+	ImportPlaylistEntries(ctx context.Context, playlistID int64, itemIDs []int64) error
 }
 
 // Result is what an import did, and what it could not do.
@@ -50,8 +53,8 @@ const maxReported = 20
 // The playlist is keyed by the .m3u's own path, so re-importing the same file
 // updates that playlist rather than making another. Membership is replaced
 // wholesale, which is the ADR's "an .m3u seeds a playlist" and not "an .m3u is
-// the playlist" — see the caller, which is responsible for not re-importing a
-// playlist a human has since edited.
+// the playlist". A playlist a human has since edited is not re-imported: the
+// store refuses the write, and the error says so (R08-4).
 func ImportFile(ctx context.Context, st Store, libraryID int64, m3uPath string) (Result, error) {
 	f, err := os.Open(m3uPath)
 	if err != nil {
@@ -100,7 +103,7 @@ func ImportFile(ctx context.Context, st Store, libraryID int64, m3uPath string) 
 	if err != nil {
 		return Result{}, err
 	}
-	if err := st.SetPlaylistEntries(ctx, pid, ids); err != nil {
+	if err := st.ImportPlaylistEntries(ctx, pid, ids); err != nil {
 		return Result{}, err
 	}
 
