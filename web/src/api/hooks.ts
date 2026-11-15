@@ -1284,16 +1284,45 @@ export function useItem(id: number) {
 // keeps its own, so an album asked for without it arrives alphabetically. It is
 // part of the query key, or two callers wanting different orders would share one
 // cached answer.
+//
+// **Every child, paged to `total`.** The server caps `limit` at 500 and
+// defaults it to 100, and this used to ask once with no limit and drop
+// `total`: a gallery of 250 photos showed 100, counted "100 photos", and a
+// season's Play all queued the first 100 episodes, with nothing on screen
+// saying the list had been cut short (R13-1). fetchDescendantIDs met the same
+// cap and pages for the same reason.
 export function useChildren(parentID: number, enabled: boolean, sort?: string) {
   return useQuery({
     queryKey: ["children", parentID, sort ?? ""],
-    queryFn: ({ signal }) =>
-      apiGet<ItemsPage>(
-        `/api/items?parent_id=${parentID}` + (sort ? `&sort=${sort}` : ""),
-        signal,
-      ).then((r) => r.items),
+    queryFn: ({ signal }) => fetchAllChildren(parentID, sort, signal),
     enabled: enabled && parentID > 0,
   });
+}
+
+// The largest page /api/items will serve.
+const CHILDREN_PAGE = 500;
+
+export async function fetchAllChildren(
+  parentID: number,
+  sort: string | undefined,
+  signal?: AbortSignal,
+): Promise<Item[]> {
+  const kids: Item[] = [];
+  for (let offset = 0; ;) {
+    const page = await apiGet<ItemsPage>(
+      `/api/items?parent_id=${parentID}` +
+        (sort ? `&sort=${sort}` : "") +
+        `&limit=${CHILDREN_PAGE}&offset=${offset}`,
+      signal,
+    );
+    const items = page.items ?? [];
+    kids.push(...items);
+    offset += items.length;
+    // An empty page stops the walk even if `total` disagrees: a row removed
+    // between pages must not become a loop.
+    if (items.length === 0 || offset >= page.total) break;
+  }
+  return kids;
 }
 
 // The members of a collection, in curated order. Membership is many-to-many and
