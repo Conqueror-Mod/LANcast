@@ -316,19 +316,34 @@ func run(ctx context.Context, addr, dataDir string, log *slog.Logger) error {
 	// Under a service the account's PATH does not include a per-user install, and
 	// the failure is silent: nothing probes, every playback decision falls back to
 	// direct play, and undecodable files reach the browser (ADR 0016).
-	toolDir, toolsOK := mediatools.Resolve(settings.Get().FFmpegDir)
-	if toolsOK {
-		log.Info("media tools found", "location", mediatools.Describe(toolDir, true))
+	//
+	// As the service, only a folder that Administrators and SYSTEM alone can
+	// change may supply them, checked now and on every start (R09-1): the
+	// service runs them as SYSTEM, so a folder the user can write was a way to
+	// SYSTEM that skipped UAC. Each refusal is logged with its reason and kept
+	// for Settings, so it never reads as a bare "not found".
+	tools := &mediatools.Locator{Managed: mediatools.ManagedDir(cfg.DataDir)}
+	if serviceManaged {
+		tools.Guard = mediatools.ServiceGuard()
+	}
+	found := tools.Resolve(settings.Get().FFmpegDir)
+	for _, r := range found.Refused {
+		log.Warn("media tools refused", "directory", r.Dir, "reason", r.Reason,
+			"hint", "press Download ffmpeg in Settings, or run `LANcast.exe service tools` as an administrator to copy ffmpeg into LANcast's protected folder")
+	}
+	if found.OK {
+		log.Info("media tools found", "location", mediatools.Describe(found.Dir, true), "checked", tools.Guard != nil)
 		// Remember where they were so the next start does not have to search,
 		// which matters most for a service that cannot see the user's PATH.
-		if cur := settings.Get(); cur.FFmpegDir != toolDir && toolDir != "" {
-			cur.FFmpegDir = toolDir
+		if cur := settings.Get(); cur.FFmpegDir != found.Dir && found.Dir != "" {
+			cur.FFmpegDir = found.Dir
 			if err := settings.Set(cur); err != nil {
 				log.Warn("could not record the media tools location", "error", err)
 			}
 		}
 	} else {
 		log.Warn("ffmpeg/ffprobe not found — files will be direct-played only",
+			"refused", len(found.Refused),
 			"hint", "install ffmpeg, or set its directory in Settings; without it LANcast cannot inspect or convert media")
 	}
 
@@ -934,6 +949,7 @@ func run(ctx context.Context, addr, dataDir string, log *slog.Logger) error {
 		Retro: roms, RetroDB: retroDB, RetroSoon: romSoon,
 		Faces: faceWorker, FaceTool: faceTool, Embedder: embedder,
 		ServiceManaged: serviceManaged, Trans: trans, Subs: subs,
+		Tools: tools,
 		// Only for installs that are not a service; the service path
 		// restarts through the service manager instead.
 		Relaunch: func() error {

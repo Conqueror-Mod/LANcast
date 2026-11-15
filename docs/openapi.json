@@ -18063,6 +18063,13 @@
               },
               "directory": {
                 "type": "string"
+              },
+              "refused": {
+                "type": "array",
+                "description": "Folders that held ffmpeg and were not used, with the reason (R09-1). As the service, tools run only from a folder that Administrators and SYSTEM alone can change, checked on every start; an empty list otherwise.",
+                "items": {
+                  "$ref": "#/components/schemas/MediaToolsRefusal"
+                }
               }
             }
           },
@@ -20500,6 +20507,22 @@
           }
         }
       },
+      "MediaToolsRefusal": {
+        "type": "object",
+        "description": "A folder holding ffprobe that the server would not run tools from, and why, in words a person reads in Settings (R09-1).",
+        "required": [
+          "directory",
+          "reason"
+        ],
+        "properties": {
+          "directory": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      },
       "MediaToolsSource": {
         "type": "object",
         "description": "A pinned build, as offered **before** it is downloaded. A download the user cannot identify is not consent, so this is shown rather than implied.",
@@ -20571,6 +20594,13 @@
           },
           "directory": {
             "type": "string"
+          },
+          "refused": {
+            "type": "array",
+            "description": "Folders that held ffmpeg and were not used, with the reason (R09-1).",
+            "items": {
+              "$ref": "#/components/schemas/MediaToolsRefusal"
+            }
           },
           "available_source": {
             "$ref": "#/components/schemas/MediaToolsSource",

@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"net/http"
-	"path/filepath"
 	"sync"
 	"time"
 
@@ -170,11 +169,20 @@ func (s *Server) runToolsInstall(ctx context.Context, src mediatools.Source, dir
 	s.log.Info("media tools install started",
 		"dir", dir, "version", src.Version, "size_bytes", src.SizeBytes, "url", src.URL)
 
-	err := mediatools.Install(ctx, src, dir, func(p mediatools.Progress) {
-		s.tools.mu.Lock()
-		s.tools.stage, s.tools.done, s.tools.total = p.Stage, p.BytesDone, p.BytesTotal
-		s.tools.mu.Unlock()
-	})
+	/*
+	 * As the service, the folder is protected before a byte lands in it
+	 * (R09-1). It sits in the data directory, which inherits ProgramData's
+	 * grant letting every user add files, so an unprotected tools folder is
+	 * one the service would rightly refuse to run anything from.
+	 */
+	err := s.toolsAt.Prepare(dir)
+	if err == nil {
+		err = mediatools.Install(ctx, src, dir, func(p mediatools.Progress) {
+			s.tools.mu.Lock()
+			s.tools.stage, s.tools.done, s.tools.total = p.Stage, p.BytesDone, p.BytesTotal
+			s.tools.mu.Unlock()
+		})
+	}
 
 	if err == nil {
 		/*
@@ -186,7 +194,15 @@ func (s *Server) runToolsInstall(ctx context.Context, src mediatools.Source, dir
 		 * succeeds and the server keeps reporting the tools as missing until a
 		 * restart, which is indistinguishable from the install having failed.
 		 */
-		mediatools.Ensure(dir)
+		if s.toolsAt != nil {
+			// Checked like any other start; a refusal here is logged and
+			// shown, and the install reports what it says.
+			for _, ref := range s.toolsAt.Resolve(dir).Refused {
+				s.log.Warn("media tools refused", "directory", ref.Dir, "reason", ref.Reason)
+			}
+		} else {
+			mediatools.Ensure(dir)
+		}
 		s.trans.Rescan()
 		if cur := s.settings.Get(); cur.FFmpegDir != dir {
 			cur.FFmpegDir = dir
@@ -235,6 +251,7 @@ func (s *Server) mediaToolsStatus(w http.ResponseWriter, r *http.Request) {
 	out["probe_available"] = s.probes.Available()
 	out["transcode_available"] = s.trans.Available()
 	out["directory"] = s.settings.Get().FFmpegDir
+	out["refused"] = s.toolsRefused()
 
 	if src, err := mediatools.SourceForHost(); err == nil {
 		// What a caller is consenting to, before they consent to it.
@@ -275,5 +292,15 @@ func (s *Server) cancelMediaToolsInstall(w http.ResponseWriter, r *http.Request)
  * too, so a bundled or hand-dropped copy resolves the same way.
  */
 func (s *Server) mediaToolsDir() string {
-	return filepath.Join(s.dataDir, "tools")
+	return mediatools.ManagedDir(s.dataDir)
+}
+
+// toolsRefused is the folders that held ffmpeg and were not used, with why
+// (R09-1). Never null, so a client can render the list without a guard.
+func (s *Server) toolsRefused() []mediatools.Refusal {
+	out := s.toolsAt.Last().Refused
+	if out == nil {
+		out = []mediatools.Refusal{}
+	}
+	return out
 }

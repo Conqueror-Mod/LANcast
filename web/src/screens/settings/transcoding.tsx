@@ -62,6 +62,24 @@ function MediaToolsRow({
             : "Without ffmpeg, LANcast cannot inspect or convert media — files play only if your browser already supports them. Download it below, or set the folder containing it here."}
         </div>
 
+        {/* A folder that holds ffmpeg and was not used says so, and why
+            (R09-1). As the service, tools run only from a folder that
+            administrators alone can change; without this line a person looks
+            at an ffmpeg they can see beside a "missing" that says nothing. */}
+        {(tools?.refused ?? []).map((r) => (
+          <div key={r.directory} className="set-row__sub" role="alert">
+            {`Not used: ${r.directory} — ${r.reason}.`}
+          </div>
+        ))}
+        {!ok && (tools?.refused?.length ?? 0) > 0 && (
+          <div className="set-row__sub">
+            LANcast runs ffmpeg only from a folder that only administrators can
+            change. Download it below, or copy that one in by running{" "}
+            <code>LANcast.exe service tools</code> as an administrator and
+            restarting the server.
+          </div>
+        )}
+
         {/* What is about to be downloaded, before it is: version, size and
             licence. A download the user cannot identify is not consent, and the
             licence is GPL, which is worth saying out loud rather than burying in

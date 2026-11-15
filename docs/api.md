@@ -3524,6 +3524,8 @@ media server that contacts the internet without being asked has broken
   "bytes_total": 194182300,
   "probe_available": false, "transcode_available": false,
   "directory": "C:\ProgramData\LANcast\tools",
+  "refused": [ { "directory": "C:\Users\pat\AppData\Local\Microsoft\WinGet\Links",
+                 "reason": "the folder is owned by EXAMPLE\pat, not by Administrators or SYSTEM" } ],
   "available_source": { "version": "8.1.3 (n8.1.3-27-g8dca1586f4, win64 gpl static)",
                         "licence": "GPL v3", "licence_url": "https://www.gnu.org/licenses/gpl-3.0.html",
                         "size_bytes": 194182300, "url": "https://github.com/FFmpeg-Builds/..." } }
@@ -3535,6 +3537,21 @@ there is nothing pinned for the platform.
 
 `stage` is `downloading`, `verifying` or `installing`. A finished install adds
 `finished_at`; a failed one adds `error`.
+
+`refused` lists folders that held `ffprobe` and were **not** used, each with a
+reason a person can read; it is never null, and `GET /api/settings` carries the
+same list in `media_tools.refused`. As the service, the server runs ffmpeg only
+from a folder that Administrators and SYSTEM alone can change — read from its
+owner and DACL on every start — because it runs them as SYSTEM, and a folder
+the user can write was a way to SYSTEM that skipped UAC (R09-1). A refused
+folder is also taken off the server's PATH, with every other PATH entry that
+fails the same check. A server a person started runs tools with that person's
+rights and refuses nothing. On Linux under systemd the same rule reads owner
+and mode bits: a folder owned by another account, or writable by group or
+others, is refused.
+
+As the service, the install lands in the data directory's `tools` folder,
+which is given a protected DACL before anything is downloaded into it.
 
 `POST /install` answers `202` and runs in the background — 195MB held open on a
 request would make a client timeout look like a failed install. `409` if one is

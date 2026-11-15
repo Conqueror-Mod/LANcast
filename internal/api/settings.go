@@ -136,6 +136,8 @@ func (s *Server) getSettings(w http.ResponseWriter, r *http.Request) {
 			"probe_available":     s.probes.Available(),
 			"transcode_available": s.trans.Available(),
 			"directory":           cur.FFmpegDir,
+			// Folders that held ffmpeg and were not used, and why (R09-1).
+			"refused": s.toolsRefused(),
 		},
 		"encoder": map[string]any{
 			"preference": firstNonEmptyStr(cur.HardwareEncoder, "auto"),

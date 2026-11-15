@@ -46,10 +46,11 @@ func Ensure(dir string) bool {
 /*
  * Detect returns the directory containing ffprobe, or "" if it cannot be found.
  *
- * Beside this executable first, then PATH, then the machine-wide locations a
- * service can actually see. Per-user install dirs are deliberately not guessed
- * at: the service account's home is not the installing user's, so the
- * install-time record is what covers that case.
+ * Beside this executable first, then PATH. Nothing is guessed: it used to try
+ * `C:\ffmpeg\bin` and `%ProgramData%\ffmpeg\bin` as well, which any local
+ * account can create, and the service then ran what they put there as SYSTEM
+ * (R09-1). An install that is in neither place is found by its recorded
+ * directory, or fetched from Settings.
  *
  * Ours-first is the deliberate part. Tools sitting next to the server, or in a
  * `tools` directory beside it, are there because LANcast put them there — a
@@ -58,6 +59,10 @@ func Ensure(dir string) bool {
  * package exists for entirely: a directory found relative to os.Executable()
  * needs no PATH at all, so a service running as LocalSystem resolves it exactly
  * as a desktop process does.
+ *
+ * Detect does not judge what it finds; a service runs only what its Guard
+ * passes (see Locator), and the installer copies a per-user find into the
+ * protected tools folder (Adopt).
  */
 func Detect() string {
 	for _, dir := range selfDirs() {
@@ -70,11 +75,6 @@ func Detect() string {
 			return filepath.Dir(abs)
 		}
 		return filepath.Dir(p)
-	}
-	for _, dir := range commonDirs() {
-		if hasProbe(dir) {
-			return dir
-		}
 	}
 	return ""
 }
@@ -107,45 +107,15 @@ func hasProbe(dir string) bool {
 	return err == nil && !info.IsDir()
 }
 
-// commonDirs are machine-wide install locations worth checking when PATH does
-// not have the tools — the usual places a package manager or a manual install
-// puts them.
-func commonDirs() []string {
-	if runtime.GOOS == "windows" {
-		var out []string
-		for _, base := range []string{
-			os.Getenv("ProgramFiles"),
-			os.Getenv("ProgramFiles(x86)"),
-			os.Getenv("ProgramData"),
-		} {
-			if base == "" {
-				continue
-			}
-			out = append(out,
-				filepath.Join(base, "ffmpeg", "bin"),
-				filepath.Join(base, "chocolatey", "bin"),
-			)
-		}
-		return append(out, `C:\ffmpeg\bin`)
-	}
-	return []string{"/usr/local/bin", "/usr/bin", "/opt/ffmpeg/bin", "/snap/bin"}
-}
-
 // Resolve settles where the tools are for this process: it honours a configured
 // directory, otherwise detects one, and reports the directory in use (empty when
 // the tools genuinely are not installed). Callers persist a newly detected
 // directory so a service that cannot see PATH still finds them next start.
+//
+// It is the Locator with no guard, for a server a person started.
 func Resolve(configured string) (dir string, ok bool) {
-	if Ensure(configured) {
-		return configured, true
-	}
-	found := Detect()
-	if found == "" {
-		return "", false
-	}
-	// Detect may have found it on PATH already; Ensure is harmless then.
-	Ensure(found)
-	return found, true
+	r := (&Locator{}).Resolve(configured)
+	return r.Dir, r.OK
 }
 
 // Describe is a short, honest status line for logs and diagnostics.

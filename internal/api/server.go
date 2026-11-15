@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"errors"
 	"lancast/internal/applog"
+	"lancast/internal/mediatools"
 	"log/slog"
 	"net"
 	"net/http"
@@ -94,6 +95,9 @@ type Deps struct {
 	// restarted for the user, a foreground server can only be told to close and
 	// reopen — and guessing wrong means killing a process nothing will restart.
 	ServiceManaged bool
+	// Tools is where ffmpeg came from, and what was refused (R09-1). Nil in
+	// tests, which then get the unguarded lookup.
+	Tools *mediatools.Locator
 
 	// Relaunch finishes a staged update when this server is *not* a service:
 	// it spawns a detached helper that waits for this process to exit and then
@@ -227,6 +231,7 @@ type Server struct {
 	// (ADR 0077, webcores.go).
 	webCoreInstall *webCoreJob
 	serviceManaged bool
+	toolsAt        *mediatools.Locator
 	relaunch       func() error
 	trans          *transcode.Manager
 	updates        *update.Checker
@@ -383,7 +388,7 @@ func New(d Deps) *Server {
 	}
 	s := &Server{
 		st: d.Store, scanner: d.Scanner, reg: d.Registry, art: d.Artwork,
-		worker: d.Worker, probes: d.Probes, markers: d.Markers, facesW: d.Faces, faceTool: d.FaceTool, faceModelJob: &faceJob{}, semanticModelJob: &faceJob{}, embedder: d.Embedder, covers: d.Covers, photos: d.Photos, serviceManaged: d.ServiceManaged, relaunch: d.Relaunch, trans: d.Trans, subs: d.Subs,
+		worker: d.Worker, probes: d.Probes, markers: d.Markers, facesW: d.Faces, faceTool: d.FaceTool, faceModelJob: &faceJob{}, semanticModelJob: &faceJob{}, embedder: d.Embedder, covers: d.Covers, photos: d.Photos, serviceManaged: d.ServiceManaged, toolsAt: d.Tools, relaunch: d.Relaunch, trans: d.Trans, subs: d.Subs,
 		updates:  d.Updates,
 		tasks:    d.Tasks,
 		settings: d.Settings, dataDir: d.DataDir, log: d.Log, web: web,
