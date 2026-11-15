@@ -4761,7 +4761,10 @@ export function useSetPlaybackWebhooks() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (share: boolean) => apiSend("/api/profile/webhooks", "PUT", { share }),
-    onSuccess: () => {
+    // Settled, not only succeeded: after a refusal the switch is put back to
+    // the stored value, which is only right if the stored value is current
+    // (R15-2).
+    onSettled: () => {
       qc.invalidateQueries({ queryKey: ["auth-status"] });
     },
   });
@@ -4821,6 +4824,10 @@ export function useSetSharing() {
       apiSend("/api/profile/sharing", "PUT", { share }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["people"] });
+    },
+    // Settled, not only succeeded: a refused write puts the switch back to the
+    // stored value, which is only right if the stored value is current (R15-2).
+    onSettled: () => {
       qc.invalidateQueries({ queryKey: ["auth-status"] });
     },
   });
