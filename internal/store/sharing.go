@@ -121,11 +121,30 @@ func (s *Store) People(ctx context.Context, excludeUserID string) ([]Person, err
  * Finished titles only. A resume position says where somebody stopped, which is
  * a different and more intrusive fact than what they watched, and ADR 0035
  * excludes it.
+ *
+ * Filtered by the *viewer's* limits, not the sharer's (ADR 0084, review
+ * finding R06-1). Sharing publishes what somebody watched; it does not lift
+ * what the household keeps from the person reading it, so a title in a
+ * library hidden from the viewer, or above their rating ceiling, is left out
+ * as every other listing leaves it out. In the SQL rather than afterwards, so
+ * the limit counts only rows the viewer may see. The rule is the listing
+ * predicate itself, not a restatement of it.
  */
-func (s *Store) SharedActivity(ctx context.Context, userID string, limit int) ([]HistoryEntry, error) {
+func (s *Store) SharedActivity(ctx context.Context, userID, viewerID string, limit int) ([]HistoryEntry, error) {
 	if limit <= 0 || limit > 100 {
 		limit = 20
 	}
+	access, err := s.accessFor(ctx, viewerID)
+	if err != nil {
+		return nil, fmt.Errorf("shared activity: %w", err)
+	}
+	permitted, permittedArgs := "", []any(nil)
+	if pred, pargs := access.predicate(); pred != "" {
+		permitted = `
+		  AND mi.id IN (SELECT media_item.id FROM media_item WHERE 1 = 1` + pred + `)`
+		permittedArgs = pargs
+	}
+	args := append(append([]any{userID}, permittedArgs...), limit)
 	rows, err := s.db.QueryContext(ctx, `SELECT `+itemColsMI+`,
 		    ps.position_ms, ps.watched, ps.updated_at
 		FROM media_item mi
@@ -133,9 +152,9 @@ func (s *Store) SharedActivity(ctx context.Context, userID string, limit int) ([
 		JOIN user u ON u.id = ps.user_id
 		WHERE ps.user_id = ?
 		  AND u.share_activity = 1
-		  AND ps.watched = 1
+		  AND ps.watched = 1`+permitted+`
 		ORDER BY ps.updated_at DESC, mi.id DESC
-		LIMIT ?`, userID, limit)
+		LIMIT ?`, args...)
 	if err != nil {
 		return nil, fmt.Errorf("shared activity: %w", err)
 	}
