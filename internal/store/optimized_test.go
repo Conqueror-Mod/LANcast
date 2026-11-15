@@ -73,3 +73,48 @@ func TestTheOptimizedQueue(t *testing.T) {
 		t.Errorf("after resume next = %+v, %v", next, err)
 	}
 }
+
+// RequeueOptimized moves only a ready copy (R03-2). A converting one is the
+// worker's, and putting it back in the queue would start the same job twice.
+func TestRequeueMovesOnlyAReadyCopy(t *testing.T) {
+	ctx := context.Background()
+	st := newStore(t)
+	lib := mustLibrary(t, st)
+	add := func(title string) int64 {
+		id, err := st.UpsertItem(ctx, file(lib.ID, filepath.Join(lib.Path, title+".mkv"), title))
+		if err != nil {
+			t.Fatal(err)
+		}
+		return id
+	}
+	ready, busy := add("Ready"), add("Busy")
+	if _, err := st.RequestOptimized(ctx, []int64{ready, busy}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.MarkOptimized(ctx, ready, OptimizedReady, 500, `{"format":{}}`, ""); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.MarkOptimized(ctx, busy, OptimizedConverting, 0, "", ""); err != nil {
+		t.Fatal(err)
+	}
+
+	if moved, err := st.RequeueOptimized(ctx, busy); err != nil || moved {
+		t.Errorf("requeue a converting copy = %v, %v; want left alone", moved, err)
+	}
+	if moved, err := st.RequeueOptimized(ctx, ready); err != nil || !moved {
+		t.Fatalf("requeue a ready copy = %v, %v", moved, err)
+	}
+	if _, err := st.ReadyOptimized(ctx, ready); !errors.Is(err, ErrNotFound) {
+		t.Errorf("after requeue the copy still reads as ready: %v", err)
+	}
+	if n, _ := st.OptimizedBytes(ctx); n != 0 {
+		t.Errorf("space used after requeue = %d, want 0", n)
+	}
+	next, err := st.NextOptimized(ctx)
+	if err != nil || next.ItemID != ready {
+		t.Errorf("next in the queue = %+v, %v; want the re-queued copy", next, err)
+	}
+	if moved, _ := st.RequeueOptimized(ctx, ready); moved {
+		t.Error("a second requeue moved a row that was already queued")
+	}
+}

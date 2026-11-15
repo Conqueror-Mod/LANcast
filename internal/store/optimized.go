@@ -128,6 +128,24 @@ func (s *Store) ReadyOptimized(ctx context.Context, itemID int64) (OptimizedVers
 	return v, err
 }
 
+// RequeueOptimized puts a finished copy whose file is gone back in the queue,
+// so it is rebuilt rather than offered (R03-2). Only a ready row moves: one
+// removed, or already queued, converting or failed, is left alone. Its size
+// is cleared with it, so the space limit stops counting a copy that cannot be
+// played. Reports whether the row moved.
+func (s *Store) RequeueOptimized(ctx context.Context, itemID int64) (bool, error) {
+	res, err := s.db.ExecContext(ctx, `UPDATE optimized_version
+		SET state = ?, size_bytes = 0, probe_json = NULL, error = '', finished_at = NULL,
+		    requested_at = ?
+		WHERE item_id = ? AND state = ?`,
+		OptimizedQueued, time.Now().Unix(), itemID, OptimizedReady)
+	if err != nil {
+		return false, fmt.Errorf("requeue optimized: %w", err)
+	}
+	n, _ := res.RowsAffected()
+	return n > 0, nil
+}
+
 // OptimizedBytes is the space finished copies take, for the limit.
 func (s *Store) OptimizedBytes(ctx context.Context) (int64, error) {
 	var n int64
