@@ -30,6 +30,8 @@ type Chromium struct {
 	navigationCompleted   *ICoreWebView2NavigationCompletedEventHandler
 	// LOCAL ADDITION (R11-3): see ICoreWebView2_14.go.
 	serverCertificateError *ICoreWebView2ServerCertificateErrorDetectedEventHandler
+	// LOCAL ADDITION (R11-2): see ICoreWebView2NavigationStarting.go.
+	navigationStarting *ICoreWebView2NavigationStartingEventHandler
 
 	environment *ICoreWebView2Environment
 
@@ -41,7 +43,15 @@ type Chromium struct {
 	globalPermission *CoreWebView2PermissionState
 
 	// Callbacks
-	MessageCallback              func(string)
+	//
+	// MessageCallback is given the URI of the document that posted the
+	// message as well as the message (LOCAL CHANGE, R11-2): upstream never
+	// read the source, so a binding could not tell its own page from any
+	// other document the window was sent to.
+	MessageCallback func(source, message string)
+	// NavigationStartingCallback decides whether a top-level navigation may
+	// go ahead (LOCAL ADDITION, R11-2). Nil allows everything, as upstream.
+	NavigationStartingCallback   func(uri string) bool
 	WebResourceRequestedCallback func(request *ICoreWebView2WebResourceRequest, args *ICoreWebView2WebResourceRequestedEventArgs)
 	NavigationCompletedCallback  func(sender *ICoreWebView2, args *ICoreWebView2NavigationCompletedEventArgs)
 	AcceleratorKeyCallback       func(uint) bool
@@ -72,6 +82,7 @@ func NewChromium() *Chromium {
 	e.acceleratorKeyPressed = newICoreWebView2AcceleratorKeyPressedEventHandler(e)
 	e.navigationCompleted = newICoreWebView2NavigationCompletedEventHandler(e)
 	e.serverCertificateError = newICoreWebView2ServerCertificateErrorDetectedEventHandler(e)
+	e.navigationStarting = newICoreWebView2NavigationStartingEventHandler(e)
 	e.permissions = make(map[CoreWebView2PermissionKind]CoreWebView2PermissionState)
 
 	return e
@@ -221,6 +232,11 @@ func (e *Chromium) CreateCoreWebView2ControllerCompleted(res uintptr, controller
 		uintptr(unsafe.Pointer(e.webResourceRequested)),
 		uintptr(unsafe.Pointer(&token)),
 	)
+	_, _, _ = e.webview.vtbl.AddNavigationStarting.Call(
+		uintptr(unsafe.Pointer(e.webview)),
+		uintptr(unsafe.Pointer(e.navigationStarting)),
+		uintptr(unsafe.Pointer(&token)),
+	)
 	_, _, _ = e.webview.vtbl.AddNavigationCompleted.Call(
 		uintptr(unsafe.Pointer(e.webview)),
 		uintptr(unsafe.Pointer(e.navigationCompleted)),
@@ -263,7 +279,17 @@ func (e *Chromium) MessageReceived(sender *ICoreWebView2, args *iCoreWebView2Web
 		uintptr(unsafe.Pointer(&message)),
 	)
 	if e.MessageCallback != nil {
-		e.MessageCallback(w32.Utf16PtrToString(message))
+		var source *uint16
+		_, _, _ = args.vtbl.GetSource.Call(
+			uintptr(unsafe.Pointer(args)),
+			uintptr(unsafe.Pointer(&source)),
+		)
+		src := ""
+		if source != nil {
+			src = w32.Utf16PtrToString(source)
+			windows.CoTaskMemFree(unsafe.Pointer(source))
+		}
+		e.MessageCallback(src, w32.Utf16PtrToString(message))
 	}
 	_, _, _ = sender.vtbl.PostWebMessageAsString.Call(
 		uintptr(unsafe.Pointer(sender)),

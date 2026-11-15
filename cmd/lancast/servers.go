@@ -40,6 +40,11 @@ const probeTimeout = 8 * time.Second
 
 // serverBindings is everything the picker page can call. The window is needed
 // because choosing a server ends this one.
+//
+// The ones that decide trust take the picker's token first and refuse without
+// it (R11-2, picker.go). lancastServerPicker and lancastServerIdentity do not:
+// the first only shows the picker, where a person decides, and the second is
+// reported by the server's own page and never replaces what is on record.
 func (l *launcher) serverBindings(win func() clientwindow.Controller) map[string]any {
 	dir := clientDataDir()
 
@@ -53,7 +58,10 @@ func (l *launcher) serverBindings(win func() clientwindow.Controller) map[string
 		 * list that mixed the two would invite a "forget" button beside an
 		 * entry that has nothing to forget.
 		 */
-		"lancastServers": func() map[string]any {
+		"lancastServers": func(token string) map[string]any {
+			if !fromPicker(token) {
+				return notFromPicker()
+			}
 			known, err := knownserver.Load(dir)
 			out := map[string]any{
 				"current": l.target.address,
@@ -80,7 +88,10 @@ func (l *launcher) serverBindings(win func() clientwindow.Controller) map[string
 		 * to answer the question: which key, who it claims to be, and what the
 		 * record already says about that address.
 		 */
-		"lancastServerProbe": func(raw string) map[string]any {
+		"lancastServerProbe": func(token, raw string) map[string]any {
+			if !fromPicker(token) {
+				return notFromPicker()
+			}
 			addr, err := knownserver.ParseAddress(raw)
 			if err != nil {
 				return map[string]any{"error": err.Error()}
@@ -166,7 +177,10 @@ func (l *launcher) serverBindings(win func() clientwindow.Controller) map[string
 		 * the prompt, because a person looking at a scary screen with an
 		 * "accept" button on it will press the button.
 		 */
-		"lancastServerAccept": func(raw, name string) map[string]any {
+		"lancastServerAccept": func(token, raw, name string) map[string]any {
+			if !fromPicker(token) {
+				return notFromPicker()
+			}
 			addr, err := knownserver.ParseAddress(raw)
 			if err != nil {
 				return map[string]any{"error": err.Error()}
@@ -200,7 +214,10 @@ func (l *launcher) serverBindings(win func() clientwindow.Controller) map[string
 		 * the one place that comparison happens before a window is given a
 		 * pin.
 		 */
-		"lancastServerConnect": func(raw string) map[string]any {
+		"lancastServerConnect": func(token, raw string) map[string]any {
+			if !fromPicker(token) {
+				return notFromPicker()
+			}
 			addr, err := knownserver.ParseAddress(raw)
 			if err != nil {
 				return map[string]any{"error": err.Error()}
@@ -229,7 +246,10 @@ func (l *launcher) serverBindings(win func() clientwindow.Controller) map[string
 
 		// lancastServerConnectLocal returns to the server on this machine. No
 		// probe: it is trusted off disk, which is the stronger check.
-		"lancastServerConnectLocal": func() map[string]any {
+		"lancastServerConnectLocal": func(token string) map[string]any {
+			if !fromPicker(token) {
+				return notFromPicker()
+			}
 			return connect("", win)
 		},
 
@@ -295,7 +315,10 @@ func (l *launcher) serverBindings(win func() clientwindow.Controller) map[string
 		 * stored. Without it the key compared and the key saved were two
 		 * separate fetches with nothing tying them together.
 		 */
-		"lancastServerAcceptRotation": func(raw, shown string) map[string]any {
+		"lancastServerAcceptRotation": func(token, raw, shown string) map[string]any {
+			if !fromPicker(token) {
+				return notFromPicker()
+			}
 			addr, err := knownserver.ParseAddress(raw)
 			if err != nil {
 				return map[string]any{"error": err.Error()}
@@ -356,7 +379,10 @@ func (l *launcher) serverBindings(win func() clientwindow.Controller) map[string
 		 * The only route from a refused key back to a connection, and
 		 * deliberately a separate act from meeting the refusal.
 		 */
-		"lancastServerForget": func(raw string) map[string]any {
+		"lancastServerForget": func(token, raw string) map[string]any {
+			if !fromPicker(token) {
+				return notFromPicker()
+			}
 			addr, err := knownserver.ParseAddress(raw)
 			if err != nil {
 				return map[string]any{"error": err.Error()}
