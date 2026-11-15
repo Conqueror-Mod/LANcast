@@ -112,11 +112,11 @@ export function Setup({ restartRequired }: { restartRequired: boolean }) {
             onChange={(e) => setInstallTools(e.target.checked)}
           />
           <span>
-            <strong>Download the media tools (about 160 MB)</strong>
+            <strong>Download the media tools (about 195 MB)</strong>
             <span className="auth__check-desc">
               Most video files need converting before a browser can play them,
               and LANcast uses ffmpeg to do it. It is fetched once from{" "}
-              <code>github.com/BtbN/FFmpeg-Builds</code>, is licensed under the
+              <code>github.com/FFmpeg-Builds/FFmpeg-Builds</code>, is licensed under the
               GPL, and never contacts anything again. Without it, most of a
               library will not play. You can untick this and install it later
               from Settings.

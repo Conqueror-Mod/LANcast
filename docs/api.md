@@ -144,7 +144,7 @@ in front of somebody whose playback works.
 own initiative, and it is why the field is optional rather than a boolean with a
 default** ([ADR 0048](adr/0048-media-tools-install-themselves-on-first-run.md)).
 
-Sending `true` starts a one-off download of ffmpeg — around 160MB, pinned URL,
+Sending `true` starts a one-off download of ffmpeg — around 195MB, pinned URL,
 checksum verified — in the background. The response reports
 `media_tools_installing`, and progress is polled from `GET /api/media-tools`.
 
@@ -3521,12 +3521,12 @@ media server that contacts the internet without being asked has broken
 
 ```json
 { "running": true, "stage": "downloading", "bytes_done": 41943040,
-  "bytes_total": 168274317,
+  "bytes_total": 194182300,
   "probe_available": false, "transcode_available": false,
   "directory": "C:\ProgramData\LANcast\tools",
-  "available_source": { "version": "8.1.2 (n8.1.2-44-g7c533d0f86, win64 gpl static)",
+  "available_source": { "version": "8.1.3 (n8.1.3-27-g8dca1586f4, win64 gpl static)",
                         "licence": "GPL v3", "licence_url": "https://www.gnu.org/licenses/gpl-3.0.html",
-                        "size_bytes": 168274317, "url": "https://github.com/BtbN/..." } }
+                        "size_bytes": 194182300, "url": "https://github.com/FFmpeg-Builds/..." } }
 ```
 
 `available_source` is what a caller is consenting to, returned *before* they
@@ -3536,7 +3536,7 @@ there is nothing pinned for the platform.
 `stage` is `downloading`, `verifying` or `installing`. A finished install adds
 `finished_at`; a failed one adds `error`.
 
-`POST /install` answers `202` and runs in the background — 160MB held open on a
+`POST /install` answers `202` and runs in the background — 195MB held open on a
 request would make a client timeout look like a failed install. `409` if one is
 already running; **`501`** where no build is pinned for the platform, whose
 message names the package manager instead, because Linux and macOS install

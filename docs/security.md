@@ -382,6 +382,125 @@ Treat the LAN itself as semi-trusted. A compromised phone, TV, or IoT device on
 your network can reach the login endpoint and is inside the boundary LANcast
 relies on.
 
+## ffmpeg's privileges
+
+ffmpeg and ffprobe read every library file, and those files are untrusted input
+(see *Threats explicitly out of scope*). The question this section answers is
+how much a malicious file gets if it exploits them. Today the answer is
+everything: **the Windows service runs as LocalSystem, and its children run as
+SYSTEM**. Under systemd the unit has no `User=` line, so they run as root.
+
+### Which binary runs
+
+As of R09-1, which binary runs is settled. The service runs ffmpeg only from a
+folder that Administrators and SYSTEM alone can change. That is checked from
+the folder's owner and DACL on every start, and the service's PATH is filtered
+the same way. A per-user install is copied into the protected `tools` folder at
+install, not recorded where the user can replace it. What is left is what the
+binary does with a hostile file.
+
+### The pinned build
+
+The in-app download is pinned to an exact asset and checksum (ADR 0043):
+BtbN's `autobuild-2026-08-18-15-03`, ffmpeg **n8.1.2-44-g7c533d0f86**, win64
+GPL static. That is 44 commits past n8.1.2 on the 8.1 release branch. n8.1.2
+was tagged 2026-06-17 and the build was made 2026-08-18, so on 2026-11-14 it is
+about **three months old and one point release behind**: n8.1.3 was tagged
+2026-09-21.
+
+The asset itself is **gone**. The repository moved to
+`FFmpeg-Builds/FFmpeg-Builds` and keeps daily autobuilds for about two weeks;
+only month-end builds (`autobuild-YYYY-MM-3x`) are kept long-term. The pinned
+URL answered 404 on 2026-11-14, so Download ffmpeg fails until it is re-pinned.
+Pin month-end builds only.
+
+An update touches:
+
+- `windowsAMD64` in `internal/mediatools/install.go`: URL, SHA-256, size and
+  version string.
+- The two sizes quoted in `docs/api.md`.
+- A check as the service, because a new ffmpeg can change which encoders pass
+  the startup test encode, which filters exist (tone mapping), and what the
+  argument list means. That means the swap-and-play steps in `CLAUDE.md`: a
+  forced transcode on each hardware path the machine has, and `lancastd.log`
+  read for `ffmpeg reported errors`.
+
+Nothing else pins the version. A user's own ffmpeg, recorded or copied at
+install, is whatever they installed.
+
+### Lowering it: what was costed
+
+Every ffmpeg and ffprobe launch already goes through `internal/childproc`
+(`Hide`), which a source test enforces. That is about a dozen files in seven
+packages: `transcode`, `probe`, `preview`, `subtitle`, `marker`, `coverart` and
+`photo`. One wrapper beside `Hide` could change how all of them start. Three
+ways were considered.
+
+**1. A restricted token derived from the service's own (Windows).** Start
+children with `SysProcAttr.Token` set to a token made by `CreateRestrictedToken`
+(`DISABLE_MAX_PRIVILEGE`) and lowered to **Low integrity**. SYSTEM holds
+`SeAssignPrimaryTokenPrivilege`, so `CreateProcessAsUser` works without a
+password.
+
+- *What it buys:* the child holds no privileges (no `SeDebug`, `SeTcb`,
+  `SeImpersonate`, `SeBackup`/`SeRestore`, `SeLoadDriver`), and mandatory
+  integrity stops it writing anything not labelled Low: Program Files, System32,
+  the registry, the data directory, other processes. A compromised decoder
+  cannot install itself, replace LANcast, or take over the machine.
+- *What it does not buy:* it is still the SYSTEM identity, and Low integrity
+  does not stop reading by default. It can still read `secrets.key`, the
+  database, the TLS private key and every user's files, and it still has the
+  network. Limiting reads needs restricting SIDs, and those break libraries in
+  user profiles, which the files' ACLs grant only to their owner.
+- *Work:*
+  - The token, via `advapi32!CreateRestrictedToken` and `SetTokenInformation`
+    (neither is wrapped in `x/sys/windows`), with tests: about a day.
+  - Moving the ffmpeg call sites to the wrapper, keeping the restart helpers on
+    the full token: half a day.
+  - Finding everywhere ffmpeg *writes* and labelling only those folders Low:
+    1–2 days. That covers HLS segments under the transcode root, previews,
+    converted subtitles, optimized copies, and any temp file (SYSTEM's `%TEMP%`
+    is not Low). Each folder labelled Low becomes writable by every Low process
+    on the machine, so the list has to be exact.
+- *The risk that decides it:* GPU work at Low integrity in **session 0**. NVENC,
+  QSV and AMF encoders and D3D11VA decode all open device objects. Whether that
+  works from a Low-integrity child of a service is unknown, and finding out
+  needs the installed service on each vendor's hardware. Only NVIDIA is
+  available here. That is the same class of failure as v0.8.0's `-hwaccel auto`:
+  correct in every test run from a shell, and broken for every user. If it
+  fails, the encoder test at startup must run under the same token, or it
+  certifies an encoder the real sessions cannot open.
+- *Estimate:* **4–6 days, plus a verification sitting as the service, with a
+  vendor matrix that cannot be completed on one machine.**
+
+**2. A separate low-privilege account for the children.** For example a
+dedicated local user, logged on with S4U from the service and started with
+`CreateProcessAsUser`. This limits reads properly, but it means managing an
+account and its rights, and granting it read access to every library folder,
+including those in user profiles. It is also the S4U/LSA plumbing that LANcast
+has none of. Larger than (1), with the same GPU unknown.
+
+**3. Running the whole service as a virtual account (`NT SERVICE\lancastd`).**
+This is the clean end state, and it is not an ffmpeg change. It touches library
+access, NFO writing beside media, the updater writing to Program Files, the
+switch to and from the service (ADR 0092), and certificate and firewall setup.
+This is a 1.x design change with its own ADR.
+
+**On Linux** the cheap step is a `User=` (or `DynamicUser=`) line in the
+systemd unit, plus `ProtectSystem=strict`, `ReadWritePaths=` the data
+directory, and `NoNewPrivileges=`. That would apply to the server and ffmpeg
+alike. Its cost is data-directory ownership on upgrade and read access to
+libraries, and it needs the Linux install run (run plan S6) to prove it.
+
+### Decision
+
+Option 1 is more than a few days of work, and its deciding risk can only be
+retired as the service on hardware this project does not have. **It is a 1.1
+item, not a 1.0 change.** Until then the exposure stays where *Threats
+explicitly out of scope* puts it: a malicious media file that exploits ffmpeg
+runs as SYSTEM, or as root under systemd. Keeping the pinned build current is
+the mitigation available now, and it has just been shown to rot: see above.
+
 ## Threats explicitly out of scope
 
 - **A user with filesystem access to the data directory.** They can read the
@@ -392,7 +511,9 @@ relies on.
   the files are the user's own media, the tools are the same ones every other
   media server uses, and they run as child processes rather than linked
   libraries. It is listed here so the acceptance is deliberate rather than
-  overlooked.
+  overlooked. Those child processes run as SYSTEM under the Windows service
+  (root under systemd); what lowering that would cost is in *ffmpeg's
+  privileges* above, and it is a 1.1 item.
 - **Denial of service.** A large enough scan or enough concurrent streams will
   exhaust resources. Acceptable for a household server.
 
@@ -411,7 +532,8 @@ Tracked in [roadmap.md](roadmap.md):
    out its own devices; administrators can do the same for every account.
 4. ~~**ffmpeg and untrusted input.**~~ **Decided, not resolved** — see *Threats
    explicitly out of scope*. Parsing library media is now routine and the
-   exposure is accepted knowingly.
+   exposure is accepted knowingly. Running ffmpeg with fewer privileges was
+   costed for 1.0 and deferred to 1.1 — see *ffmpeg's privileges*.
 5. ~~**Per-library visibility.**~~ **Resolved** — an administrator can hide a
    library from a member, alongside the content-rating ceiling
    ([ADR 0084](adr/0084-a-library-can-be-kept-from-an-account.md)).
