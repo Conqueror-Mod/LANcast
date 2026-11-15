@@ -67,15 +67,42 @@ func (windowsManager) Install(c Config) error {
 	return nil
 }
 
-// setRecoveryActions asks Windows to restart the service after an unexpected
-// exit.
+/*
+ * setRecoveryActions asks Windows to restart the service after an unexpected
+ * exit — and after a failed one.
+ *
+ * The actions alone cover only a process that dies without reporting STOPPED:
+ * a panic, a kill. A server whose start fails (the port still held by the old
+ * process after an update, a locked database) reports STOPPED with a non-zero
+ * exit code, which Windows counts as a *non-crash* failure, and takes no
+ * action on one unless the failure-actions flag is set (R10-6). It was not,
+ * so the case the comment above names never retried; `sc qfailureflag
+ * lancastd` answered FALSE on the machine that found it.
+ *
+ * A clean stop still exits 0 (handler.Execute), so Stop-Service, the updater
+ * and an uninstall do not bring the service back.
+ */
 func setRecoveryActions(s *mgr.Service) error {
-	return s.SetRecoveryActions([]mgr.RecoveryAction{
+	if err := s.SetRecoveryActions([]mgr.RecoveryAction{
 		{Type: mgr.ServiceRestart, Delay: 5 * time.Second},
 		{Type: mgr.ServiceRestart, Delay: 15 * time.Second},
 		{Type: mgr.ServiceRestart, Delay: 60 * time.Second},
-	}, uint32((24 * time.Hour).Seconds()))
+	}, uint32((24 * time.Hour).Seconds())); err != nil {
+		return err
+	}
+	return s.SetRecoveryActionsOnNonCrashFailures(true)
 }
+
+/*
+ * EnsureRecovery re-applies the recovery policy to the installed service.
+ *
+ * The service calls it on every start, because an install made before the
+ * failure-actions flag existed keeps its old policy until something rewrites
+ * it, and the in-app updater swaps the binary without re-running `service
+ * install`. LocalSystem holds full access to its own service, so the service
+ * can do this for itself; anything else that calls it needs elevation.
+ */
+func EnsureRecovery() error { return withService(setRecoveryActions) }
 
 func withService(fn func(*mgr.Service) error) error {
 	m, err := mgr.Connect()
