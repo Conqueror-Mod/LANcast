@@ -1,5 +1,6 @@
 import { useDeleteItem } from "@/api/hooks";
 import { useBackHandler } from "@/focus/FocusController";
+import { useDialogFocus } from "@/focus/useDialogFocus";
 import type { Item } from "@/api/types";
 import "./RemoveDialog.css";
 
@@ -22,6 +23,9 @@ export function RemoveDialog({
 }) {
   const del = useDeleteItem(item.id);
   useBackHandler(onClose);
+  // Reachable with a remote: registered, scoped, focused, and focus handed
+  // back on close (R16-1).
+  const dialogRef = useDialogFocus();
 
   const run = (mode: "ignore" | "delete") =>
     del.mutate(mode, { onSuccess: onDone });
@@ -30,6 +34,7 @@ export function RemoveDialog({
     <div className="removedlg__overlay" onClick={onClose}>
       <div
         className="removedlg"
+        ref={dialogRef}
         role="dialog"
         aria-label={`Remove ${item.title}`}
         onClick={(e) => e.stopPropagation()}

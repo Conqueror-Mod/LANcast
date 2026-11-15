@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useSetOverview } from "@/api/hooks";
 import { useBackHandler } from "@/focus/FocusController";
+import { useDialogFocus } from "@/focus/useDialogFocus";
 import { errorMessage } from "@/lib/errors";
 import type { Item } from "@/api/types";
 import "./AddToPlaylist.css";
@@ -27,6 +28,9 @@ export function EditDescription({
   const save = useSetOverview(item.id);
   const [text, setText] = useState(item.overview ?? "");
   useBackHandler(onClose);
+  // Reachable with a remote: registered, scoped, focused, and focus handed
+  // back on close (R16-1).
+  const dialogRef = useDialogFocus();
 
   const submit = () => {
     const next = text.trim();
@@ -38,6 +42,7 @@ export function EditDescription({
     <div className="addpl__overlay" onClick={onClose}>
       <div
         className="addpl editdesc"
+        ref={dialogRef}
         role="dialog"
         aria-label={`Description of ${item.title}`}
         onClick={(e) => e.stopPropagation()}

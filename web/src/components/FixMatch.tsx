@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useCandidates, useApplyMatch, useUnlockField } from "@/api/hooks";
 import { useBackHandler } from "@/focus/FocusController";
+import { useDialogFocus } from "@/focus/useDialogFocus";
 import type { Item, MatchCandidate, ScoreBreakdown } from "@/api/types";
 import { scorePct } from "@/lib/format";
 import "./FixMatch.css";
@@ -109,6 +110,9 @@ export function FixMatch({ item, onClose }: { item: Item; onClose: () => void })
   const unlock = useUnlockField(item.id);
 
   useBackHandler(onClose);
+  // Reachable with a remote: registered, scoped, focused, and focus handed
+  // back on close (R16-1).
+  const dialogRef = useDialogFocus();
 
   /*
    * A confirmed match usually locks the row and the dialog closes. It does not
@@ -139,7 +143,12 @@ export function FixMatch({ item, onClose }: { item: Item; onClose: () => void })
 
   return (
     <div className="fixmatch__overlay" onClick={onClose}>
-      <div className="fixmatch" onClick={(e) => e.stopPropagation()} role="dialog">
+      <div
+        ref={dialogRef}
+        className="fixmatch"
+        onClick={(e) => e.stopPropagation()}
+        role="dialog"
+      >
         {unsettled && (
           /*
              Not an error, and not styled as one. The match was applied; this

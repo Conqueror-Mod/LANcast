@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useAddToPlaylist, useCreatePlaylist, usePlaylists } from "@/api/hooks";
 import { useBackHandler } from "@/focus/FocusController";
+import { useDialogFocus } from "@/focus/useDialogFocus";
 import type { Item } from "@/api/types";
 import "./AddToPlaylist.css";
 
@@ -34,6 +35,9 @@ export function AddToPlaylist({
   // under someone who may want to add the same track to a second list.
   const [added, setAdded] = useState<string | null>(null);
   useBackHandler(onClose);
+  // Reachable with a remote: registered, scoped, focused, and focus handed
+  // back on close (R16-1).
+  const dialogRef = useDialogFocus();
 
   const busy = add.isPending || create.isPending;
   const error = (add.error ?? create.error) as Error | null;
@@ -69,6 +73,7 @@ export function AddToPlaylist({
     <div className="addpl__overlay" onClick={onClose}>
       <div
         className="addpl"
+        ref={dialogRef}
         role="dialog"
         aria-label={`Add ${item.title} to a playlist`}
         onClick={(e) => e.stopPropagation()}
