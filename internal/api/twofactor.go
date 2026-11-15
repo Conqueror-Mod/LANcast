@@ -193,6 +193,7 @@ func (s *Server) authLoginTwoFactor(w http.ResponseWriter, r *http.Request) {
 		s.notFoundOr(w, err, "lookup user", "this sign-in has expired; enter your password again")
 		return
 	}
+	s.throttle.Attribute(key, u.Name)
 	inside := auth.InsideNetwork(r)
 	if !inside {
 		if ok, left := s.accountWait.Allow(u.Name); !ok {
@@ -218,7 +219,7 @@ func (s *Server) authLoginTwoFactor(w http.ResponseWriter, r *http.Request) {
 	}
 
 	s.tfBook.done(req.Challenge)
-	s.throttle.Reset(key)
+	s.throttle.Reset(key, u.Name)
 	s.accountWait.Reset(u.Name)
 	if err := s.issueSession(w, r, u.ID); err != nil {
 		return
@@ -297,17 +298,31 @@ func (s *Server) getTwoFactor(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, out)
 }
 
-// startTwoFactor makes a secret for the caller to add to an app. Nothing is
-// stored until a code from that app comes back.
+/*
+ * startTwoFactor makes a secret for the caller to add to an app. Nothing is
+ * stored until a code from that app comes back.
+ *
+ * It asks for the password, as turning it off does (R01-3). Whoever holds a
+ * session left open could otherwise put their own secret on the account: with
+ * two-factor off, that locks the owner out at their next sign-in; with it on,
+ * it replaced the owner's app and handed over ten fresh recovery codes. And it
+ * is refused while two-factor is on, so replacing the app means turning it off
+ * first, which also needs the password.
+ */
 func (s *Server) startTwoFactor(w http.ResponseWriter, r *http.Request) {
-	sess, ok := sessionFromContext(r)
-	if !ok {
-		writeError(w, http.StatusUnauthorized, "unauthorized", "sign in to continue")
+	if !s.twoFactorChangeable(w, r) {
 		return
 	}
 	if s.tfSealer == nil {
 		writeError(w, http.StatusServiceUnavailable, "unavailable",
 			"two-factor sign-in is unavailable: the server could not prepare its sealing key")
+		return
+	}
+	if sess, _ := sessionFromContext(r); s.twoFactorAlreadyOn(w, r, sess.UserID) {
+		return
+	}
+	sess, ok := s.passwordConfirmed(w, r)
+	if !ok {
 		return
 	}
 	sec, err := auth.NewTOTPSecret()
@@ -323,16 +338,20 @@ func (s *Server) startTwoFactor(w http.ResponseWriter, r *http.Request) {
 }
 
 // enableTwoFactor turns it on, once a code shows the app has the secret. The
-// recovery codes are in this answer and never again.
+// recovery codes are in this answer and never again. The password was asked
+// for at setup, which is the only way a secret gets here; and it never
+// replaces a second factor already on (R01-3).
 func (s *Server) enableTwoFactor(w http.ResponseWriter, r *http.Request) {
-	sess, ok := sessionFromContext(r)
-	if !ok {
-		writeError(w, http.StatusUnauthorized, "unauthorized", "sign in to continue")
+	if !s.twoFactorChangeable(w, r) {
 		return
 	}
+	sess, _ := sessionFromContext(r)
 	if s.tfSealer == nil {
 		writeError(w, http.StatusServiceUnavailable, "unavailable",
 			"two-factor sign-in is unavailable: the server could not prepare its sealing key")
+		return
+	}
+	if s.twoFactorAlreadyOn(w, r, sess.UserID) {
 		return
 	}
 	var req struct {
@@ -379,6 +398,9 @@ func (s *Server) enableTwoFactor(w http.ResponseWriter, r *http.Request) {
 // theirs. Both ask for the password: a session left open on somebody else's
 // screen should not be enough to weaken the account or read fresh codes.
 func (s *Server) disableTwoFactor(w http.ResponseWriter, r *http.Request) {
+	if !s.twoFactorChangeable(w, r) {
+		return
+	}
 	sess, ok := s.passwordConfirmed(w, r)
 	if !ok {
 		return
@@ -392,6 +414,9 @@ func (s *Server) disableTwoFactor(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) newRecoveryCodes(w http.ResponseWriter, r *http.Request) {
+	if !s.twoFactorChangeable(w, r) {
+		return
+	}
 	sess, ok := s.passwordConfirmed(w, r)
 	if !ok {
 		return
@@ -439,6 +464,43 @@ func (s *Server) removeUserTwoFactor(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
+/*
+ * twoFactorChangeable refuses a caller using an API key, and one with no
+ * session at all, before anything that changes two-factor (R01-3).
+ *
+ * A key is for a script reading the library. How the account signs in is a
+ * question for the person who types its password, as managing keys is
+ * (keysManageable): a key that could set the second factor could lock its own
+ * owner out.
+ */
+func (s *Server) twoFactorChangeable(w http.ResponseWriter, r *http.Request) bool {
+	if authedByKey(r) {
+		writeError(w, http.StatusForbidden, "forbidden",
+			"an API key cannot change two-factor sign-in; sign in instead")
+		return false
+	}
+	if _, ok := sessionFromContext(r); !ok {
+		writeError(w, http.StatusUnauthorized, "unauthorized", "sign in to continue")
+		return false
+	}
+	return true
+}
+
+// twoFactorAlreadyOn answers 409 when the account already has a second factor:
+// a new one never silently replaces it.
+func (s *Server) twoFactorAlreadyOn(w http.ResponseWriter, r *http.Request, userID string) bool {
+	tf, err := s.st.TwoFactorFor(r.Context(), userID)
+	if s.notFoundOr(w, err, "read two-factor", "no such user") {
+		return true
+	}
+	if tf.Enabled {
+		writeError(w, http.StatusConflict, "conflict",
+			"two-factor sign-in is already on; turn it off first to use a different app")
+		return true
+	}
+	return false
+}
+
 // passwordConfirmed reads {"current_password"} and checks it against the caller's
 // account, on the same throttle as sign-in (see authChangePassword).
 func (s *Server) passwordConfirmed(w http.ResponseWriter, r *http.Request) (*store.Session, bool) {
@@ -464,11 +526,12 @@ func (s *Server) passwordConfirmed(w http.ResponseWriter, r *http.Request) (*sto
 	if s.notFoundOr(w, err, "lookup user", "no such user") {
 		return sess, false
 	}
+	s.throttle.Attribute(key, u.Name)
 	if !auth.CheckPassword(u.PasswordHash, req.Password) {
 		writeError(w, http.StatusForbidden, "forbidden", "that password is not right")
 		return sess, false
 	}
-	s.throttle.Reset(key)
+	s.throttle.Reset(key, u.Name)
 	return sess, true
 }
 

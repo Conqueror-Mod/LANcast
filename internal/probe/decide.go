@@ -489,7 +489,7 @@ func DecideTrack(r *Result, p Profile, audioIndex int) Decision {
 
 	audioOnly := video == nil && audio != nil
 
-	videoOK, videoWhy := videoCompatible(video, p)
+	videoOK, videoWhy := videoCompatible(video, p, videoBitRate(r, video))
 	audioOK, audioWhy := audioCompatible(audio, p)
 
 	if videoOK && audioOK && (p.PlaysEverything || contains(p.Containers, r.Container)) && !alternateAudio {
@@ -652,7 +652,58 @@ func mp4CarriesAudio(s *Stream, p Profile) bool {
 	return false
 }
 
-func videoCompatible(s *Stream, p Profile) (bool, string) {
+/*
+ * videoBitRate is the rate a bit-rate ceiling is judged against.
+ *
+ * ffprobe gives no stream bit_rate for Matroska and often none elsewhere, so
+ * the stream's own figure is frequently zero. A ceiling that only refuses a
+ * *known* rate above it then did nothing for most of a library: with the
+ * server at "1080p · 10 Mbps", a 1080p MKV of any real rate was copied
+ * untouched (R09-4).
+ *
+ * So an unknown rate is estimated from the container — its stated bit rate,
+ * or size × 8 / duration — less every other stream that states its own. It is
+ * an overestimate when the audio is unmeasured too, which errs towards
+ * honouring the ceiling. The estimate is made here rather than stored so that
+ * every item already in a library is covered without a re-probe.
+ *
+ * Zero means nothing at all is known, and only then does the ceiling pass: a
+ * file with neither size nor duration is a broken probe, and re-encoding on a
+ * figure that does not exist is not a cap but a guess.
+ */
+func videoBitRate(r *Result, v *Stream) bitRate {
+	if v == nil {
+		return bitRate{}
+	}
+	if v.BitRate > 0 {
+		return bitRate{bps: v.BitRate}
+	}
+	total := r.BitRate
+	if total <= 0 && r.SizeBytes > 0 && r.DurationMS > 0 {
+		total = r.SizeBytes * 8 * 1000 / r.DurationMS
+	}
+	if total <= 0 {
+		return bitRate{}
+	}
+	for i := range r.Streams {
+		if s := &r.Streams[i]; s != v {
+			total -= s.BitRate
+		}
+	}
+	if total <= 0 {
+		return bitRate{}
+	}
+	return bitRate{bps: total, estimated: true}
+}
+
+// bitRate is a video rate in bits per second, and whether it was measured or
+// worked out from the container. Zero is unknown.
+type bitRate struct {
+	bps       int64
+	estimated bool
+}
+
+func videoCompatible(s *Stream, p Profile, rate bitRate) (bool, string) {
 	if s == nil {
 		// Audio-only content has no video to be incompatible.
 		return true, ""
@@ -663,8 +714,11 @@ func videoCompatible(s *Stream, p Profile) (bool, string) {
 	if p.MaxHeight > 0 && s.Height > p.MaxHeight {
 		return false, fmt.Sprintf("video is %dp, above the %dp limit", s.Height, p.MaxHeight)
 	}
-	if p.MaxVideoBitRate > 0 && s.BitRate > p.MaxVideoBitRate {
-		return false, fmt.Sprintf("video bitrate %d exceeds the limit", s.BitRate)
+	if p.MaxVideoBitRate > 0 && rate.bps > p.MaxVideoBitRate {
+		if rate.estimated {
+			return false, fmt.Sprintf("video bitrate of about %d (estimated from the whole file) exceeds the limit", rate.bps)
+		}
+		return false, fmt.Sprintf("video bitrate %d exceeds the limit", rate.bps)
 	}
 	/*
 	 * 10-bit H.264 is a real trap: the codec name matches, browsers advertise

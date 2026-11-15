@@ -59,8 +59,7 @@ func (e *Extractor) Embedded(ctx context.Context, videoPath string, streamIndex 
 		return nil, ErrNotInstalled
 	}
 
-	key := cacheKey(videoPath, "embedded-"+strconv.Itoa(streamIndex))
-	return e.cached(ctx, key, func(ctx context.Context) ([]byte, error) {
+	return e.cached(ctx, videoPath, "embedded-"+strconv.Itoa(streamIndex), func(ctx context.Context) ([]byte, error) {
 		ctx, cancel := context.WithTimeout(ctx, e.Timeout)
 		defer cancel()
 
@@ -93,9 +92,7 @@ func (e *Extractor) Embedded(ctx context.Context, videoPath string, streamIndex 
 
 // Sidecar converts an external subtitle file to WebVTT.
 func (e *Extractor) Sidecar(ctx context.Context, path, format string) ([]byte, error) {
-	key := cacheKey(path, "sidecar")
-
-	return e.cached(ctx, key, func(ctx context.Context) ([]byte, error) {
+	return e.cached(ctx, path, "sidecar", func(ctx context.Context) ([]byte, error) {
 		switch format {
 		case "srt", "sub":
 			f, err := os.Open(path)
@@ -152,19 +149,35 @@ func (e *Extractor) Sidecar(ctx context.Context, path, format string) ([]byte, e
 	})
 }
 
-// cached runs produce once per key, storing the result on disk.
+// cached runs produce once per source version, storing the result on disk.
 //
 // A subtitle track is requested repeatedly as a player reloads or a viewer
 // toggles tracks; re-running ffmpeg each time would be slow and pointless.
-func (e *Extractor) cached(ctx context.Context, key string, produce func(context.Context) ([]byte, error)) ([]byte, error) {
-	path := filepath.Join(e.cache, key[:2], key+".vtt")
+//
+// The entry is keyed on the source's size and modification time as well as
+// its path (R09-5): a re-synced .srt, or a film replaced by another release
+// under the same name, must not keep serving the conversion of the file that
+// used to be there. Each source keeps one entry, so replacing a file does not
+// leave the old conversion behind for ever.
+func (e *Extractor) cached(ctx context.Context, source, variant string, produce func(context.Context) ([]byte, error)) ([]byte, error) {
+	info, err := os.Stat(source)
+	if err != nil {
+		// Nothing to key a version on. produce reports the real error (a
+		// missing file, a permission problem), and nothing is cached.
+		return produce(ctx)
+	}
+
+	key := cacheKey(source, variant)
+	dir := filepath.Join(e.cache, key[:2])
+	path := filepath.Join(dir, key+"-"+versionStamp(info)+".vtt")
 
 	if body, err := os.ReadFile(path); err == nil && len(body) > 0 {
 		return body, nil
 	}
 
-	// One extraction per key at a time; concurrent requests for the same track
-	// would otherwise each spawn ffmpeg.
+	// One extraction per source at a time; concurrent requests for the same
+	// track would otherwise each spawn ffmpeg. The lock is per source, not per
+	// version, so the lock table grows no faster than it did before.
 	lock := e.lockFor(key)
 	lock.Lock()
 	defer lock.Unlock()
@@ -178,8 +191,8 @@ func (e *Extractor) cached(ctx context.Context, key string, produce func(context
 		return nil, err
 	}
 
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err == nil {
-		tmp, tmpErr := os.CreateTemp(filepath.Dir(path), ".tmp-*")
+	if err := os.MkdirAll(dir, 0o755); err == nil {
+		tmp, tmpErr := os.CreateTemp(dir, ".tmp-*")
 		if tmpErr == nil {
 			name := tmp.Name()
 			_, writeErr := tmp.Write(body)
@@ -187,13 +200,35 @@ func (e *Extractor) cached(ctx context.Context, key string, produce func(context
 			if writeErr == nil {
 				// A cache write failure must not fail the request; the caller
 				// already has the bytes.
-				_ = os.Rename(name, path)
+				if os.Rename(name, path) == nil {
+					pruneOtherVersions(dir, key, path)
+				}
 			} else {
 				os.Remove(name)
 			}
 		}
 	}
 	return body, nil
+}
+
+// versionStamp names one version of a source file. Size catches most
+// replacements on its own; the modification time catches an edit that keeps
+// the length, such as a re-timed cue.
+func versionStamp(info os.FileInfo) string {
+	return strconv.FormatInt(info.Size(), 16) + "-" + strconv.FormatInt(info.ModTime().UnixNano(), 16)
+}
+
+// pruneOtherVersions removes the conversions of earlier versions of a source,
+// so the cache holds one entry per source rather than one per edit. Entries
+// from before versioned keys (named key+".vtt") go too. Failures are ignored:
+// a file still open by a concurrent read on Windows is removed next time.
+func pruneOtherVersions(dir, key, keep string) {
+	matches, _ := filepath.Glob(filepath.Join(dir, key+"*.vtt"))
+	for _, m := range matches {
+		if m != keep {
+			_ = os.Remove(m)
+		}
+	}
 }
 
 func (e *Extractor) lockFor(key string) *sync.Mutex {
@@ -207,7 +242,9 @@ func (e *Extractor) lockFor(key string) *sync.Mutex {
 	return l
 }
 
-// cacheKey derives a stable filename from a source path and a variant.
+// cacheKey derives a stable filename prefix from a source path and a variant.
+// The source's version is appended separately (see cached), so all versions of
+// one source share this prefix and can be pruned together.
 func cacheKey(path, variant string) string {
 	sum := sha256.Sum256([]byte(path + "\x00" + variant))
 	return hex.EncodeToString(sum[:16])

@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
 
@@ -225,16 +226,28 @@ func (s *Store) resolveCeiling(ctx context.Context, who Principal, itemID int64)
 	}
 	if len(hidden) > 0 {
 		var libraryID int64
-		if err := s.db.QueryRowContext(ctx,
-			`SELECT library_id FROM media_item WHERE id = ?`, itemID).Scan(&libraryID); err == nil &&
-			libraryHidden(hidden, libraryID) {
-			return "", ErrNotShared
+		err := s.db.QueryRowContext(ctx,
+			`SELECT library_id FROM media_item WHERE id = ?`, itemID).Scan(&libraryID)
+		switch {
+		case err == nil:
+			if libraryHidden(hidden, libraryID) {
+				return "", ErrNotShared
+			}
+		case !errors.Is(err, sql.ErrNoRows):
+			// Not knowing the item's library is not knowing it is visible.
+			return "", fmt.Errorf("item library: %w", err)
 		}
 	}
+	// Only a missing account means no ceiling; any other failure to read it is
+	// returned, so this backstop refuses rather than lets everything through
+	// (R04-4).
 	var ceiling string
 	if err := s.db.QueryRowContext(ctx,
 		`SELECT max_content_rating FROM user WHERE id = ?`, who.account).Scan(&ceiling); err != nil {
-		return "", nil
+		if errors.Is(err, sql.ErrNoRows) {
+			return "", nil
+		}
+		return "", fmt.Errorf("content ceiling: %w", err)
 	}
 	return ceiling, nil
 }
@@ -333,8 +346,11 @@ func (s *Store) MaxContentRating(ctx context.Context, userID string) (string, er
 	var label string
 	err := s.db.QueryRowContext(ctx,
 		`SELECT max_content_rating FROM user WHERE id = ?`, userID).Scan(&label)
-	if err != nil {
+	if errors.Is(err, sql.ErrNoRows) {
 		return "", ErrNotFound
+	}
+	if err != nil {
+		return "", fmt.Errorf("content ceiling: %w", err)
 	}
 	return label, nil
 }

@@ -33,6 +33,11 @@ import (
 // HiddenLibraries returns the libraries kept from an account, sorted. Empty
 // for an administrator, for an id with no account (the unsecured loopback
 // case, which has no accounts and no limits), and for anyone never narrowed.
+//
+// Only a missing row means "no limit". Any other failure to read the account
+// (a locked database, an I/O error, a cancelled request) is returned, so the
+// caller refuses rather than answering with everything (R04-4): a lookup that
+// failed is not evidence that the account is unrestricted.
 func (s *Store) HiddenLibraries(ctx context.Context, userID string) ([]int64, error) {
 	if userID == "" {
 		return nil, nil
@@ -40,8 +45,11 @@ func (s *Store) HiddenLibraries(ctx context.Context, userID string) ([]int64, er
 	var role string
 	if err := s.db.QueryRowContext(ctx,
 		`SELECT role FROM user WHERE id = ?`, userID).Scan(&role); err != nil {
-		// No account row means no limit, for the reason resolveCeiling records.
-		return nil, nil
+		if errors.Is(err, sql.ErrNoRows) {
+			// No account row means no limit, for the reason resolveCeiling records.
+			return nil, nil
+		}
+		return nil, fmt.Errorf("hidden libraries: %w", err)
 	}
 	if role == RoleAdmin {
 		return nil, nil
@@ -157,7 +165,8 @@ type accountAccess struct {
 	hidden  []int64
 }
 
-// accessFor reads both halves of an account's limits.
+// accessFor reads both halves of an account's limits. As in HiddenLibraries,
+// only a missing account means no limits; any other error is returned.
 func (s *Store) accessFor(ctx context.Context, userID string) (accountAccess, error) {
 	var a accountAccess
 	if userID == "" {
@@ -165,7 +174,10 @@ func (s *Store) accessFor(ctx context.Context, userID string) (accountAccess, er
 	}
 	if err := s.db.QueryRowContext(ctx,
 		`SELECT max_content_rating FROM user WHERE id = ?`, userID).Scan(&a.ceiling); err != nil {
-		return accountAccess{}, nil
+		if errors.Is(err, sql.ErrNoRows) {
+			return accountAccess{}, nil
+		}
+		return accountAccess{}, fmt.Errorf("account limits: %w", err)
 	}
 	hidden, err := s.HiddenLibraries(ctx, userID)
 	if err != nil {

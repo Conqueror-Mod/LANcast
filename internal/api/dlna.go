@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net"
 	"net/http"
@@ -161,7 +162,12 @@ func (s *Server) dlnaBrowse(r *http.Request, account string, b dlna.Browse) ([]d
 	if err != nil {
 		return nil, 0, false
 	}
-	ceiling, _ := s.st.MaxContentRating(ctx, account)
+	// No account row is the unsecured case and carries no ceiling; any other
+	// failure refuses the browse rather than listing past the ceiling (R04-4).
+	ceiling, err := s.st.MaxContentRating(ctx, account)
+	if err != nil && !errors.Is(err, store.ErrNotFound) {
+		return nil, 0, false
+	}
 	limit := b.Count
 	if limit <= 0 || limit > 500 {
 		limit = 500

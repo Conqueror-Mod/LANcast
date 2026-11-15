@@ -13,10 +13,11 @@ import { errorMessage } from "@/lib/errors";
  * Two-factor sign-in, in the Security pane (ADR 0100).
  *
  * Each person's own: off until they turn it on, and nobody can turn it on for
- * them. Turning it on needs a code from the app, which proves the app has the
- * secret. Turning it off, and making new recovery codes, need the password —
- * as adding a passkey does — because a session left open on somebody else's
- * screen should not be enough to weaken the account or read fresh codes.
+ * them. Turning it on needs the password and then a code from the app, which
+ * proves the app has the secret. Turning it off, and making new recovery
+ * codes, need the password too — as adding a passkey does — because a session
+ * left open on somebody else's screen should not be enough to put somebody
+ * else's app on the account, weaken it, or read fresh codes (R01-3).
  *
  * Recovery codes are shown once, in the page, until the person says they have
  * them. Nothing here uses a native confirm() (CLAUDE.md: focus in the desktop
@@ -54,7 +55,59 @@ function TwoFactorOff({ onOn }: { onOn: (codes: string[]) => void }) {
   const start = useStartTwoFactor();
   const enable = useEnableTwoFactor();
   const [code, setCode] = useState("");
+  const [asking, setAsking] = useState(false);
+  const [password, setPassword] = useState("");
   const setup = start.data;
+
+  if (!setup && asking) {
+    return (
+      <form
+        className="set-tf"
+        onSubmit={(e) => {
+          e.preventDefault();
+          start.mutate(password, {
+            onSuccess: () => {
+              setAsking(false);
+              setPassword("");
+            },
+          });
+        }}
+      >
+        <div className="set-row__sub">Your password first, to show it is you.</div>
+        <div className="set-add">
+          <input
+            className="set-input"
+            type="password"
+            autoFocus
+            placeholder="Current password"
+            autoComplete="current-password"
+            aria-label="Current password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+          />
+          <button className="set-btn" type="submit" disabled={start.isPending || !password}>
+            Continue
+          </button>
+          <button
+            className="set-btn"
+            type="button"
+            onClick={() => {
+              setAsking(false);
+              setPassword("");
+              start.reset();
+            }}
+          >
+            Cancel
+          </button>
+        </div>
+        {start.isError && (
+          <span className="set-error" role="alert">
+            {errorMessage(start.error)}
+          </span>
+        )}
+      </form>
+    );
+  }
 
   if (!setup) {
     return (
@@ -64,14 +117,9 @@ function TwoFactorOff({ onOn }: { onOn: (codes: string[]) => void }) {
             After your password, ask for a six-digit code from an authenticator
             app on your phone. Off until you turn it on; passkeys skip it.
           </div>
-          {start.isError && (
-            <div className="set-row__sub" role="alert">
-              {errorMessage(start.error)}
-            </div>
-          )}
         </div>
         <div className="set-row__actions">
-          <button className="set-btn" disabled={start.isPending} onClick={() => start.mutate()}>
+          <button className="set-btn" onClick={() => setAsking(true)}>
             Turn on
           </button>
         </div>

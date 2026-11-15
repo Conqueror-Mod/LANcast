@@ -1245,12 +1245,12 @@ export interface paths {
         put?: never;
         /**
          * Turn two-factor sign-in on
-         * @description With a code from the app the setup's secret was added to, which proves it was. **The recovery codes are in this answer and never again.** Audited as `profile.two_factor_on`.
+         * @description With a code from the app the setup's secret was added to, which proves it was. The password was asked for at setup, the only way a secret gets here. Never replaces a second factor already on, and a session only: an API key is refused. **The recovery codes are in this answer and never again.** Audited as `profile.two_factor_on`.
          */
         post: operations["enableTwoFactor"];
         /**
          * Turn two-factor sign-in off
-         * @description **The password is asked for**: a session left open on somebody else's screen is not enough to weaken the account. Throttled like sign-in. Audited as `profile.two_factor_off`.
+         * @description **The password is asked for**: a session left open on somebody else's screen is not enough to weaken the account. Throttled like sign-in. Audited as `profile.two_factor_off`. A session only; an API key is refused.
          */
         delete: operations["disableTwoFactor"];
         options?: never;
@@ -1269,7 +1269,7 @@ export interface paths {
         put?: never;
         /**
          * Replace your recovery codes
-         * @description Ten new codes; every old one stops working. The password is asked for. Audited as `profile.two_factor_codes`.
+         * @description Ten new codes; every old one stops working. The password is asked for. Audited as `profile.two_factor_codes`. A session only; an API key is refused.
          */
         post: operations["newRecoveryCodes"];
         delete?: never;
@@ -1290,6 +1290,8 @@ export interface paths {
         /**
          * Start adding an authenticator app
          * @description A fresh secret, as a key to type and an `otpauth://` link to scan. Nothing is stored until `POST /api/profile/two-factor` returns a code from it; the secret is held in memory for ten minutes.
+         *
+         *     **The password is asked for**, on the sign-in throttle: a session left open on somebody else's screen is not enough to put another app on the account. Refused while two-factor is already on, so replacing the app means turning it off first. A session only; an API key is refused.
          */
         post: operations["startTwoFactor"];
         delete?: never;
@@ -13172,7 +13174,16 @@ export interface operations {
                 };
             };
             401: components["responses"]["Unauthorized"];
-            /** @description No setup in progress, or it has expired (ten minutes): start again. */
+            /** @description The caller is using an API key. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description No setup in progress, or it has expired (ten minutes): start again. Or two-factor sign-in is already on. */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -13214,7 +13225,7 @@ export interface operations {
             };
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
-            /** @description `current_password` is not right. */
+            /** @description `current_password` is not right, or the caller is using an API key. */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -13258,7 +13269,7 @@ export interface operations {
             };
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
-            /** @description `current_password` is not right. */
+            /** @description `current_password` is not right, or the caller is using an API key. */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -13294,7 +13305,11 @@ export interface operations {
             path?: never;
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CurrentPassword"];
+            };
+        };
         responses: {
             /** @description The secret, for the app. */
             200: {
@@ -13305,7 +13320,35 @@ export interface operations {
                     "application/json": components["schemas"]["TwoFactorSetup"];
                 };
             };
+            400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
+            /** @description `current_password` is not right, or the caller is using an API key. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Two-factor sign-in is already on; turn it off first. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Too many attempts from this client, or at this account from outside; wait a few minutes. */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
             /** @description The server could not prepare the key two-factor secrets are sealed under. */
             503: {
                 headers: {

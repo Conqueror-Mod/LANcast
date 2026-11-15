@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io/fs"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -338,10 +339,22 @@ func (s *Server) sweepOptimized(ctx context.Context) {
 	}
 }
 
-// optimizedFor is a title's finished copy and its probe, or nil.
+/*
+ * optimizedFor is a title's finished copy and its probe, or nil.
+ *
+ * Only a copy serveOptimized could send is offered: the row says the copy was
+ * made, and the file in the *current* folder says it is still there. Without
+ * the second check, moving optimized_dir (or deleting a file by hand) left
+ * every device sent to a stream that answered 503, while the live conversion
+ * that would have worked was never offered (R03-2). A copy whose file is gone
+ * goes back in the queue to be rebuilt where it is now looked for.
+ */
 func (s *Server) optimizedFor(ctx context.Context, itemID int64) *probe.Result {
 	v, err := s.st.ReadyOptimized(ctx, itemID)
 	if err != nil || v.ProbeJSON == "" {
+		return nil
+	}
+	if !s.optimizedOnDisk(ctx, itemID) {
 		return nil
 	}
 	var res probe.Result
@@ -349,6 +362,60 @@ func (s *Server) optimizedFor(ctx context.Context, itemID int64) *probe.Result {
 		return nil
 	}
 	return &res
+}
+
+// optimizedOnDisk reports whether a ready copy's file is in the current
+// folder, the same path serveOptimized opens. A file that is plainly missing
+// re-queues the copy; any other failure to look leaves the row alone and
+// simply does not offer it this time.
+func (s *Server) optimizedOnDisk(ctx context.Context, itemID int64) bool {
+	path, err := s.optimizedPath(itemID)
+	if err != nil {
+		return false
+	}
+	info, err := os.Stat(path)
+	if err == nil {
+		return info.Mode().IsRegular()
+	}
+	if errors.Is(err, fs.ErrNotExist) {
+		s.requeueMissingCopy(ctx, itemID)
+	}
+	return false
+}
+
+// requeueMissingCopy puts one ready copy whose file is gone back in the queue.
+func (s *Server) requeueMissingCopy(ctx context.Context, itemID int64) {
+	moved, err := s.st.RequeueOptimized(ctx, itemID)
+	if err != nil {
+		s.log.Warn("optimized: could not re-queue a missing copy", "item", itemID, "err", err)
+		return
+	}
+	if moved {
+		s.log.Info("optimized: copy missing from the folder, queued to be rebuilt",
+			"item", itemID, "dir", s.optimizedDir())
+		s.wakeOptimizer()
+	}
+}
+
+/*
+ * requeueMissingOptimized re-queues every ready copy whose file is not in the
+ * current folder: what a change of optimized_dir runs, so the queue and the
+ * space limit say what is true at once rather than the first time each title
+ * is played. Copies already moved into the new folder by hand are found there
+ * and kept. The old folder's files are left where they are — the server no
+ * longer owns that folder, and deleting in it is not this function's call.
+ */
+func (s *Server) requeueMissingOptimized(ctx context.Context) {
+	all, err := s.st.ListOptimized(ctx)
+	if err != nil {
+		s.log.Warn("optimized: could not list copies after the folder changed", "err", err)
+		return
+	}
+	for _, v := range all {
+		if v.State == store.OptimizedReady {
+			s.optimizedOnDisk(ctx, v.ItemID)
+		}
+	}
 }
 
 // serveOptimized sends a title's copy, for GET /api/stream/{id}?version=optimized.
