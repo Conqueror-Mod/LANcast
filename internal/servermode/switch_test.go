@@ -496,3 +496,46 @@ func TestSkip(t *testing.T) {
 		}
 	}
 }
+
+// The machine-wide folder is protected before a byte of the library is copied
+// into it (R10-3): a copy made first would sit readable by every account until
+// the service's first start closed it.
+func TestToServiceProtectsTheFolderBeforeCopying(t *testing.T) {
+	w := newWorld(t)
+	w.asApp(t)
+	w.env.GrantUser = nil
+	var protected []string
+	w.env.ProtectServiceDir = func(dir string) error {
+		if HasLibrary(dir) {
+			t.Error("the library was already in the folder when it was protected")
+		}
+		protected = append(protected, dir)
+		return nil
+	}
+	if _, err := ToService(w.env); err != nil {
+		t.Fatalf("ToService: %v", err)
+	}
+	if !reflect.DeepEqual(protected, []string{w.env.ServiceDir}) {
+		t.Errorf("protected %v, want the service's folder once", protected)
+	}
+}
+
+// A folder that cannot be protected is not copied into.
+func TestToServiceStopsWhenTheFolderCannotBeProtected(t *testing.T) {
+	w := newWorld(t)
+	w.asApp(t)
+	w.env.GrantUser = nil
+	w.env.ProtectServiceDir = func(string) error { return errors.New("access denied") }
+	if _, err := ToService(w.env); err == nil {
+		t.Fatal("the switch went ahead into a folder it could not protect")
+	}
+	if HasLibrary(w.env.ServiceDir) {
+		t.Error("the library was copied anyway")
+	}
+	if !HasLibrary(w.env.UserDir) {
+		t.Error("the person's library moved")
+	}
+	if len(w.svc.calls) != 0 {
+		t.Errorf("service calls = %v, want none", w.svc.calls)
+	}
+}
