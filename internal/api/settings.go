@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -504,8 +505,6 @@ func (s *Server) putSettings(w http.ResponseWriter, r *http.Request) {
 		next.OptimizedDir = dir
 	}
 
-	encoderChanged := req.HardwareEncoder != nil &&
-		*req.HardwareEncoder != next.HardwareEncoder
 	if req.HardwareEncoder != nil {
 		next.HardwareEncoder = strings.TrimSpace(*req.HardwareEncoder)
 	}
@@ -522,6 +521,24 @@ func (s *Server) putSettings(w http.ResponseWriter, r *http.Request) {
 			"Changed settings: "+strings.Join(changed, ", "),
 			map[string]any{"fields": changed})
 	}
+	if err := s.settingsChanged(r.Context(), prev, next); err != nil {
+		s.writeInternal(w, err, "apply settings")
+		return
+	}
+
+	s.getSettings(w, r)
+}
+
+// settingsChanged makes a saved change take effect: everything that reacts to
+// a setting moving from prev to next, run once the new value is saved.
+//
+// One place because there are two ways to save: PUT /api/settings and
+// POST /api/settings/reset. The reset used to stop at rebuild, so a reset
+// that moved the optimized folder offered copies it could not serve, one that
+// turned photo places off left every location it read in the database, and
+// one that turned music matching back on left the queue off until a restart
+// (R07-2). A switch moved by a reset is the same switch.
+func (s *Server) settingsChanged(ctx context.Context, prev, next config.Settings) error {
 	// Providers are rebuilt so a newly entered key takes effect immediately
 	// rather than after a restart.
 	if s.rebuild != nil {
@@ -529,15 +546,15 @@ func (s *Server) putSettings(w http.ResponseWriter, r *http.Request) {
 	}
 	// Re-selecting runs a test encode per candidate, so it is only done when
 	// the preference actually changed rather than on every settings save.
-	if encoderChanged {
-		s.trans.DetectHardware(r.Context(), next.HardwareEncoder)
+	if prev.HardwareEncoder != next.HardwareEncoder {
+		s.trans.DetectHardware(ctx, next.HardwareEncoder)
 	}
 	// A new optimized folder holds none of the copies the old one did, unless
 	// somebody moved them there. Every ready copy not found in it goes back in
 	// the queue now, so nothing unservable is offered and the space limit
 	// stops counting it (R03-2).
 	if prev.OptimizedDir != next.OptimizedDir {
-		s.requeueMissingOptimized(r.Context())
+		s.requeueMissingOptimized(ctx)
 	}
 
 	/*
@@ -563,7 +580,7 @@ func (s *Server) putSettings(w http.ResponseWriter, r *http.Request) {
 	// again, by lookup against hashes already stored, so their pictures come
 	// now rather than when each file next changes.
 	if next.RetroArtwork && !prev.RetroArtwork {
-		s.requeueROMs(r.Context())
+		s.requeueROMs(ctx)
 	}
 	// Music matching (ADR 0115): the queue follows the switch at once, and on
 	// starts a pass now rather than at the next scan.
@@ -587,15 +604,13 @@ func (s *Server) putSettings(w http.ResponseWriter, r *http.Request) {
 			if s.placesSoon != nil {
 				s.placesSoon()
 			}
-		} else if n, err := s.locations.Forget(r.Context()); err != nil {
-			s.writeInternal(w, err, "forget photo locations")
-			return
+		} else if n, err := s.locations.Forget(ctx); err != nil {
+			return fmt.Errorf("forget photo locations: %w", err)
 		} else {
 			s.log.Info("forgot where photos were taken", "photos", n)
 		}
 	}
-
-	s.getSettings(w, r)
+	return nil
 }
 
 // changedSettings names the fields that actually differ, so the audit summary

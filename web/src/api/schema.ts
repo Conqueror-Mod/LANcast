@@ -1956,7 +1956,9 @@ export interface paths {
          * Restore the documented defaults
          * @description Administrators only. Returns the settings, like `GET`.
          *
-         *     **Credentials and machine facts survive**: the password hash, the provider API keys, the TLS certificate paths, and the ffmpeg directory. Wiping the first would lock the operator out of their own server and wiping the others would break metadata and HTTPS — none of which is what anybody means by "reset settings", and none of which a reset can restore. What resets is behaviour.
+         *     **Credentials and machine facts survive**: the password hash, the provider API keys and OpenSubtitles login, the TLS certificate paths and public certificate, the ffmpeg directory, the webhooks with their secrets, the metrics token, the trusted proxies, and which account DLNA plays as. Wiping the first would lock the operator out of their own server; wiping the others would break metadata, HTTPS, or a receiver, scraper or proxy configured elsewhere — none of which is what anybody means by "reset settings", and none of which a reset can restore. What resets is behaviour (DLNA itself goes back to off).
+         *
+         *     A reset has the same effects as saving the same changes with `PUT`: moving the optimized folder back to the default re-queues every copy the default folder does not hold, turning photo places off deletes every location read, music matching follows its switch at once, and a switch that a reset turns on starts its pass now.
          */
         post: operations["resetSettings"];
         delete?: never;
