@@ -11,6 +11,7 @@ import (
 
 	"golang.org/x/image/draw"
 
+	"lancast/internal/imagecap"
 	"lancast/internal/store"
 )
 
@@ -95,7 +96,9 @@ func (s *Server) faceThumb(w http.ResponseWriter, r *http.Request) {
 	}
 	defer f.Close()
 
-	src, _, err := image.Decode(f)
+	// The file may be the photograph itself, from the library, so its header
+	// is read before its pixels (imagecap, R08-1).
+	src, _, err := imagecap.DecodeFrom(f)
 	if err != nil {
 		writeError(w, http.StatusServiceUnavailable, "unavailable",
 			"the photograph could not be read")

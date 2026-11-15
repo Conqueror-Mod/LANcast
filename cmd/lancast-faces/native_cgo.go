@@ -31,6 +31,8 @@ import (
 	"sync"
 
 	ort "github.com/yalue/onnxruntime_go"
+
+	"lancast/internal/imagecap"
 )
 
 /*
@@ -262,7 +264,7 @@ func detectOne(path, modelsDir string) ([]Face, error) {
 	if err != nil {
 		return nil, err
 	}
-	src, _, err := image.Decode(f)
+	src, _, err := imagecap.DecodeFrom(f)
 	f.Close()
 	if err != nil {
 		// Not fatal to the batch: a library contains a truncated JPEG
