@@ -140,24 +140,28 @@ func coreOverrides() map[string]string {
 	return out
 }
 
-func setCoreOverride(platform, path string) error {
+/*
+ * setCoreOverride points a console at a core by the name of its .dll in the
+ * cores folder (R12-2). The page names a file this side already manages; it
+ * never supplies a path, so script in the page cannot have the window load a
+ * DLL from anywhere else, a network share included. The person puts the core
+ * in the folder first (lancastRetroOpenCoresFolder opens it).
+ */
+func setCoreOverride(platform, name string) error {
 	if _, ok := cores.For(platform); !ok {
 		return fmt.Errorf("no console called %q", platform)
 	}
-	path = strings.TrimSpace(path)
-	if path != "" {
-		if !strings.EqualFold(filepath.Ext(path), ".dll") || !filepath.IsAbs(path) {
-			return errors.New("choose a core's .dll by its full path")
-		}
-		if st, err := os.Stat(path); err != nil || st.IsDir() {
-			return fmt.Errorf("there is no file at %s", path)
+	name = strings.TrimSpace(name)
+	if name != "" {
+		if _, err := cores.OverridePath(retroDir("cores"), name); err != nil {
+			return err
 		}
 	}
 	m := coreOverrides()
-	if path == "" {
+	if name == "" {
 		delete(m, platform)
 	} else {
-		m[platform] = path
+		m[platform] = name
 	}
 	if err := os.MkdirAll(retroDir(), 0o755); err != nil {
 		return err
@@ -658,8 +662,17 @@ func (r *retroPlayer) bindings() map[string]any {
 		},
 		// Pointing a console at a core DLL already on this machine — the
 		// ADR's advanced option, and the way to play before a build of each
-		// core is pinned. An empty path goes back to the default.
+		// core is pinned. By file name, in the cores folder below; an empty
+		// name goes back to the default.
 		"lancastRetroSetCore": setCoreOverride,
+		// The folder a core of one's own goes in, opened for the person to
+		// drop it into. Like the BIOS folder, it is this side's to name.
+		"lancastRetroOpenCoresFolder": func() error {
+			if err := os.MkdirAll(retroDir("cores"), 0o755); err != nil {
+				return err
+			}
+			return openFolder(retroDir("cores"))
+		},
 		"lancastRetroCores": func() map[string]string {
 			return coreOverrides()
 		},

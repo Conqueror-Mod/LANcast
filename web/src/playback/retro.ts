@@ -164,7 +164,9 @@ declare global {
     lancastRetroDisplay?: (platform: string) => Promise<RetroDisplay>;
     lancastRetroSetDisplay?: (platform: string, d: RetroDisplay) => Promise<void>;
     lancastRetroStop?: () => Promise<void>;
-    lancastRetroSetCore?: (platform: string, path: string) => Promise<void>;
+    /** A core's .dll file name, in the cores folder; never a path (R12-2). */
+    lancastRetroSetCore?: (platform: string, name: string) => Promise<void>;
+    lancastRetroOpenCoresFolder?: () => Promise<void>;
     lancastRetroCores?: () => Promise<Record<string, string>>;
     lancastRetroSetOption?: (platform: string, key: string, value: string) => Promise<void>;
     lancastRetroVolume?: () => Promise<number>;

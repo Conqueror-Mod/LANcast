@@ -67,14 +67,21 @@ func TestResolve(t *testing.T) {
 	if _, _, err := Resolve("gba", dir, nil); !errors.Is(err, ErrNotInstalled) {
 		t.Errorf("nothing installed: %v", err)
 	}
-	mine := filepath.Join(t.TempDir(), "my_mgba.dll")
+	mine := filepath.Join(dir, "my_mgba.dll")
 	os.WriteFile(mine, []byte("x"), 0o644)
-	p, c, err := Resolve("gba", dir, map[string]string{"gba": mine})
+	p, c, err := Resolve("gba", dir, map[string]string{"gba": "my_mgba.dll"})
 	if err != nil || p != mine || c.Name != "mgba" {
 		t.Errorf("override: %q %v %v", p, c.Name, err)
 	}
-	if _, _, err := Resolve("gba", dir, map[string]string{"gba": filepath.Join(dir, "nope.dll")}); err == nil || errors.Is(err, ErrNotInstalled) {
+	if _, _, err := Resolve("gba", dir, map[string]string{"gba": "nope.dll"}); err == nil || errors.Is(err, ErrNotInstalled) {
 		t.Errorf("a missing override: %v", err)
+	}
+	// An override saved as a full path, as one was before R12-2, is refused
+	// even when the file is there: the gate is here, not only where it is set.
+	elsewhere := filepath.Join(t.TempDir(), "my_mgba.dll")
+	os.WriteFile(elsewhere, []byte("x"), 0o644)
+	if _, _, err := Resolve("gba", dir, map[string]string{"gba": elsewhere}); err == nil {
+		t.Errorf("an override by full path, outside the cores folder, resolved")
 	}
 	gba, _ := For("gba")
 	os.MkdirAll(filepath.Dir(gba.Path(dir)), 0o755)
@@ -252,5 +259,51 @@ func TestHasBIOS(t *testing.T) {
 	}
 	if n64, _ := For("n64"); !n64.HasBIOS(t.TempDir()) {
 		t.Error("a console that needs no BIOS is refused for lacking one")
+	}
+}
+
+/*
+ * An override names a .dll in the cores folder and nothing else (R12-2). The
+ * page sets it, so anything a path could reach — another folder, a network
+ * share, a link out of the folder — must be refused here, before the window
+ * hands it to LoadLibrary.
+ */
+func TestOverridePathStaysInTheCoresFolder(t *testing.T) {
+	dir := t.TempDir()
+	os.WriteFile(filepath.Join(dir, "mine_libretro.dll"), []byte("x"), 0o644)
+	os.Mkdir(filepath.Join(dir, "sub.dll"), 0o755)
+	outside := t.TempDir()
+	os.WriteFile(filepath.Join(outside, "evil.dll"), []byte("x"), 0o644)
+
+	if p, err := OverridePath(dir, " mine_libretro.dll "); err != nil || p != filepath.Join(dir, "mine_libretro.dll") {
+		t.Errorf("a core in the folder: %q, %v", p, err)
+	}
+	for _, name := range []string{
+		"",
+		"missing.dll",
+		"sub.dll", // a folder, not a file
+		"mine_libretro.txt",
+		"..",
+		`..\` + filepath.Base(outside) + `\evil.dll`,
+		"../" + filepath.Base(outside) + "/evil.dll",
+		filepath.Join(outside, "evil.dll"),
+		`\\127.0.0.1\share\evil.dll`,
+		`\\host@SSL\share\evil.dll`,
+		`\\?\C:\evil.dll`,
+		"C:evil.dll",
+	} {
+		if p, err := OverridePath(dir, name); err == nil {
+			t.Errorf("OverridePath(%q) = %q; want a refusal", name, p)
+		}
+	}
+
+	// A link in the folder that points out of it is refused once followed.
+	link := filepath.Join(dir, "link.dll")
+	if err := os.Symlink(filepath.Join(outside, "evil.dll"), link); err != nil {
+		t.Logf("no symlink privilege here, link case not run: %v", err)
+		return
+	}
+	if p, err := OverridePath(dir, "link.dll"); err == nil {
+		t.Errorf("a link out of the cores folder resolved to %q", p)
 	}
 }

@@ -10,14 +10,19 @@ import { retroAvailability, retroSupported, type RetroAvailability } from "@/pla
  * A fact about this computer, so it lives in the desktop client and this
  * section appears only there. Each console shows the default core and whether
  * it is ready; a person can point a console at a core .dll already on this
- * machine — the ADR's advanced option. LANcast's own cores come from libretro's
- * pinned stable archive, fetched all at once from here or from a game's page.
+ * machine — the ADR's advanced option — by putting it in the cores folder and
+ * typing the file's name. A name, not a path (R12-2): the window loads a core
+ * from that folder and nowhere else, so script in the page cannot point it at
+ * a DLL on another disk or a network share. LANcast's own cores come from
+ * libretro's pinned stable archive, fetched all at once from here or from a
+ * game's page.
  */
 export function RetroCoreSettings() {
   const [paths, setPaths] = useState<Record<string, string>>({});
   const [status, setStatus] = useState<Record<string, RetroAvailability>>({});
   const [editing, setEditing] = useState<Record<string, string>>({});
   const [error, setError] = useState<Record<string, string>>({});
+  const [folderError, setFolderError] = useState("");
 
   const refresh = async () => {
     const chosen = (await window.lancastRetroCores?.().catch(() => ({}))) ?? {};
@@ -48,14 +53,33 @@ export function RetroCoreSettings() {
     }
   };
 
+  const openFolder = async () => {
+    try {
+      await window.lancastRetroOpenCoresFolder?.();
+      setFolderError("");
+    } catch (err) {
+      setFolderError(String((err as Error)?.message ?? err));
+    }
+  };
+
   return (
     <section className="settings__section">
       <span className="section-label">Retro games</span>
       <p className="set-row__sub">
         Each console plays through an emulator core on this computer. To use one you already
-        have, paste the full path of its <code>.dll</code>. Leave it empty to use LANcast&apos;s
-        default.
+        have, put its <code>.dll</code> in the cores folder and type the file&apos;s name. Leave
+        it empty to use LANcast&apos;s default.
       </p>
+      {window.lancastRetroOpenCoresFolder && (
+        <div className="set-row">
+          <div className="set-row__main">
+            <button className="set-btn" onClick={() => void openFolder()}>
+              Open the cores folder
+            </button>
+            {folderError && <div className="set-row__sub set-row__sub--warn">{folderError}</div>}
+          </div>
+        </div>
+      )}
       {Object.values(status).some((s) => s.installable) && (
         <div className="set-row">
           <div className="set-row__main">
@@ -90,7 +114,7 @@ export function RetroCoreSettings() {
                     type="text"
                     className="set-input"
                     aria-label={`Core for ${p.label}`}
-                    placeholder="C:\\path\\to\\core_libretro.dll"
+                    placeholder="core_libretro.dll"
                     value={value}
                     onChange={(e) => setEditing((m) => ({ ...m, [p.key]: e.target.value }))}
                   />
