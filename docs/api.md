@@ -5673,6 +5673,13 @@ discs, and a 1989 film wearing a 2022 film's identity from a stale `.nfo`.
 **label, never a grouping key**: the file that motivated the decision called
 itself an alternate cut and was byte-for-byte the theatrical copy.
 
+`?compare=<external_id>` samples the files of every collision with that id and
+adds `fingerprint` to each member that could be read, `unreadable: true` to each
+that could not, and `same_bytes` to a collision whose every member was read —
+"identical so far as sampled", never proof. For a show that is every colliding
+episode, so a client matches the answer on the whole work key, season and
+episode included, never on `external_id` alone.
+
 `dismissed_at` is when somebody looked at exactly these members and accepted
 them. Present on the collision rather than filtering it out of the listing, so a
 client can show it as answered rather than as gone — see the endpoint below.

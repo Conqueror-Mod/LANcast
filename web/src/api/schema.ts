@@ -8181,6 +8181,10 @@ export interface components {
             /** Format: int64 */
             library_id: number;
             missing: boolean;
+            /** @description A sample of the file's bytes, present only on a compared collision (`?compare=`). Absent means not asked, never differs. Sampled, not exhaustive. */
+            fingerprint?: string;
+            /** @description Present on a compared collision when this file could not be read: an absence of evidence, not a difference. */
+            unreadable?: boolean;
         };
         /**
          * @description A work claimed by more than one row.
@@ -8198,6 +8202,8 @@ export interface components {
             same_size: boolean;
             /** Format: int64 */
             dismissed_at?: number;
+            /** @description Present only on a compared collision whose every member was read: whether their sampled bytes agree. Identical so far as sampled, never proof of identity. */
+            same_bytes?: boolean;
             members: components["schemas"]["CollisionMember"][];
         };
         CollisionList: {
@@ -15362,7 +15368,7 @@ export interface operations {
             query?: {
                 /** @description Restrict to one library. */
                 library_id?: number;
-                /** @description What counts as the same work. */
+                /** @description An `external_id` whose collisions to compare by sampling their files' bytes. Every collision with that id is compared — for a show, every colliding episode — so a client matches the answer on the whole work key, `(provider, external_id, season, episode)`. */
                 compare?: string;
             };
             header?: never;

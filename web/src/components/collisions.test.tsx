@@ -328,3 +328,72 @@ describe("looking at a collision", () => {
     expect(host.querySelector(".review__count")?.textContent).toBe("0");
   });
 });
+
+/*
+ * Two episodes of one show, each ripped twice (R13-4).
+ *
+ * Every episode carries the show's external_id, so `?compare=903` compares both
+ * collisions and the answer holds two. The card took the first answer with a
+ * matching external_id, so S01E05's card showed S01E01's files and S01E01's
+ * same-bytes verdict, to an administrator deciding which copy to delete.
+ */
+describe("comparing one episode of a show", () => {
+  const episode = (n: number, sizeB: number) => ({
+    provider: "tmdb",
+    external_id: "903",
+    season: 1,
+    episode: n,
+    same_size: false,
+    members: [
+      {
+        id: n * 10 + 1, title: `Episode ${n}`, path: `T:/Show/S01E0${n}.mkv`,
+        size_bytes: 500, library_id: 1, missing: false,
+      },
+      {
+        id: n * 10 + 2, title: `Episode ${n}`, path: `T:/Show/S01E0${n} (copy).mkv`,
+        size_bytes: sizeB, library_id: 1, missing: false,
+      },
+    ],
+  });
+  const e1 = episode(1, 500);
+  const e5 = episode(5, 501);
+
+  it("shows that episode's files, not the first episode with its id", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string) => {
+        const compared = String(url).includes("compare=");
+        // Compared, each member carries a fingerprint, and E01's pair agree.
+        const fp = (c: typeof e1, same: boolean) => ({
+          ...c,
+          same_bytes: same,
+          members: c.members.map((m, i) => ({ ...m, fingerprint: same ? "aa" : `b${i}` })),
+        });
+        const body = compared
+          ? { collisions: [fp(e1, true), fp(e5, false)] }
+          : { collisions: [e1, e5] };
+        return new Response(JSON.stringify(body), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      }),
+    );
+    await render();
+
+    const cards = () => [...host.querySelectorAll<HTMLElement>(".collide")];
+    expect(cards()).toHaveLength(2);
+    const fifth = () =>
+      cards().find((c) => (c.textContent ?? "").includes("Episode 5"))!;
+
+    await act(async () => {
+      fifth().querySelector<HTMLButtonElement>(".collide__compare")!.click();
+    });
+    await settle();
+
+    const shown = fifth().textContent ?? "";
+    expect(shown).toContain("S01E05.mkv");
+    expect(shown).not.toContain("S01E01");
+    // E05's verdict: its sampled bytes differ, so it must not claim a match.
+    expect(shown).not.toContain("so far as sampled");
+  });
+});
