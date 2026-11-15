@@ -6,6 +6,8 @@ import (
 	_ "image/jpeg" // the cache stores every size as JPEG
 	_ "image/png"
 	"math"
+
+	"lancast/internal/imagecap"
 )
 
 /*
@@ -116,7 +118,9 @@ func (c *Cache) Tone(hash string) (Tone, error) {
 		return Tone{}, err
 	}
 	defer f.Close()
-	img, _, err := image.Decode(f)
+	// Usually the thumbnail, but Open falls back to the original when a size
+	// cannot be derived, and that one is only as small as its header says.
+	img, _, err := imagecap.DecodeFrom(f)
 	if err != nil {
 		return Tone{}, fmt.Errorf("artwork tone: %w", err)
 	}

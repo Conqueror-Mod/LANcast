@@ -1156,7 +1156,7 @@ Live scan progress. `state` is `idle`, `running`, or `failed`.
 
 ```json
 { "library_id": 1, "state": "running", "files_seen": 318,
-  "items_changed": 12, "items_missing": 0, "skipped": 2,
+  "items_changed": 12, "items_missing": 0, "skipped": 2, "unreadable": 1,
   "skipped_kind": 0, "skipped_extras": 14, "skipped_untagged": 0,
   "episodes_in_movie_library": 0,
   "issues": [ { "path": "Kids/broken", "reason": "unreadable" } ],
@@ -1167,6 +1167,13 @@ Live scan progress. `state` is `idle`, `running`, or `failed`.
 lists them (capped) with a **library-relative** path — never the absolute
 server path, held back for the same privacy reason item paths are. This is the
 diagnostic answer to "the scan finished but some files are missing — why?"
+
+`unreadable` counts the folders and files among them that the walk could not
+list or stat — an ACL that refuses the service account, an SMB share that
+hiccuped on one folder, a folder renamed mid-walk. The location itself read
+fine, so every known file under such a folder is marked missing; that is true
+of the walk and false of the library, so a scan with any `unreadable` entry
+**never empties the trash**, whatever `empty_trash_on_scan` says.
 
 `skipped_kind` counts media the library's **kind** excludes: audio files in a
 movie or show library, video files in a music library. It is deliberately not
@@ -3256,6 +3263,13 @@ Returns `503` without an API key, `429` when the daily quota is spent.
 `{file_id, language, file_name}` → downloads and attaches the subtitle,
 returning its `key`. Files are written to the data directory, **never beside
 the media** — the same rule NFO writing follows.
+
+`language` defaults to `en` and becomes part of the file's name, so it must be a
+language: a code or name the server recognises (`en`, `eng`, `English`) or a
+plain tag of two or three letters with at most one subtag (`pt-br`). Anything
+else is `400` before the provider is asked, so a refused request spends none of
+the daily allowance. The item must be one the caller may play; an item in a
+library hidden from them is `404`, as though it did not exist.
 
 ### `DELETE /api/items/{id}/subtitles/{key}`
 
@@ -6178,7 +6192,7 @@ to "have I watched this".
 | `continue_weeks` | `16` | 0–520 | Items untouched for this many weeks leave `GET /api/continue` and `GET /api/resume`. **0 means never expire**, which is a different answer from "expire now" |
 | `continue_limit` | `40` | 1–100 | How many items that shelf holds. A client may ask for fewer with `?limit=`; it **cannot ask for more** |
 | `allow_media_deletion` | `true` | — | When false, `DELETE /api/items/{id}?mode=delete` is **403**. `mode=ignore` is unaffected: it writes no file and deletes nothing from disk |
-| `empty_trash_on_scan` | `false` | — | When true, a finished scan removes the library's rows whose files are gone. **About rows, not files**: it destroys the record — watch history, positions, ratings — of media that has already left the disk, which is why it is off by default. A scan that failed, that could not read one of its locations, or that saw **no files at all** leaves them alone whatever this says; those are the shapes an unmounted drive takes, and *"scanning marks missing, never deletes"* is not relaxed by this setting. Audited like `allow_media_deletion` |
+| `empty_trash_on_scan` | `false` | — | When true, a finished scan removes the library's rows whose files are gone. **About rows, not files**: it destroys the record — watch history, positions, ratings — of media that has already left the disk, which is why it is off by default. A scan that failed, that could not read one of its locations or any folder inside one, or that saw **no files at all** leaves them alone whatever this says; those are the shapes an unmounted drive takes, and *"scanning marks missing, never deletes"* is not relaxed by this setting. Audited like `allow_media_deletion` |
 | `scan_interval_hours` | `0` | 0–168 | Rescan every library on a timer. **0 is off**, the default. Takes effect without a restart; a library already scanning is skipped rather than queued |
 | `detect_markers` | `false` | — | Run the credits detector over the library (ADR 0054). **Off by default, and the default is the decision**: it decodes the last quarter of every film and episode — a second full pass over media that probing only read the header of — and nothing yet reads a marker to make a decision, so leaving it on would spend hours of CPU populating a table that changes nothing anyone can see. Turning it off does not delete what was already found, the same shape `sensitive_marking` has. Only **probed** items are examined: detection needs the file's real duration, and before v0.8.51 `duration_ms` was the provider's runtime. **Switching it on starts a pass immediately** rather than waiting for the next scan — it did wait, and a setting whose effect arrives hours later cannot be told apart from one that does nothing |
 | `scrub_previews` | `false` | — | Make scrub-bar previews in the background ([ADR 0105](adr/0105-a-preview-is-a-keyframe-every-ten-seconds.md)): every film and episode is read once, keyframes only, about 40 s and 2 MB each, newest first. **Off by default** for that cost. Turning it on starts a pass; turning it off stops the pass and keeps what was made |

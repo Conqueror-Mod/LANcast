@@ -99,6 +99,7 @@ jobs:
           ./internal/milkdrop/eel FuzzCheck
           ./internal/comic/pdf FuzzIndex
           ./internal/picture FuzzMake
+          ./internal/imagecap FuzzDecode
           ./internal/games FuzzDecodeDIB
           ./internal/games FuzzIcoBest
           ./internal/games FuzzRsrcIcon

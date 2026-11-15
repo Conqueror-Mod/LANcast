@@ -4,7 +4,6 @@ package main
 
 import (
 	"fmt"
-	"image"
 	/*
 	 * The same decoders `internal/photo` registers, and that is the point of
 	 * the list rather than a preference.
@@ -31,6 +30,8 @@ import (
 	"sync"
 
 	ort "github.com/yalue/onnxruntime_go"
+
+	"lancast/internal/imagecap"
 )
 
 /*
@@ -207,7 +208,7 @@ func embedImageFile(path, modelsDir string) ([]float32, error) {
 		return nil, err
 	}
 	defer f.Close()
-	src, _, err := image.Decode(f)
+	src, _, err := imagecap.DecodeFrom(f)
 	if err != nil {
 		return nil, fmt.Errorf("decode: %w", err)
 	}

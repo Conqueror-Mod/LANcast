@@ -25,6 +25,8 @@ import (
 	"time"
 
 	"golang.org/x/image/draw"
+
+	"lancast/internal/imagecap"
 )
 
 // Size names a generated variant.
@@ -131,6 +133,11 @@ func (c *Cache) Put(body []byte) (hash string, w, h int, size int64, err error) 
 	if err != nil {
 		return "", 0, 0, 0, fmt.Errorf("artwork: not a decodable image: %w", err)
 	}
+	// Every size is derived from the original by decoding it, so an original
+	// whose header claims more than imagecap allows is never stored (R08-1).
+	if err := imagecap.Check(cfg); err != nil {
+		return "", 0, 0, 0, fmt.Errorf("artwork: %w", err)
+	}
 
 	sum := sha256.Sum256(body)
 	hash = hex.EncodeToString(sum[:])
@@ -195,7 +202,9 @@ func (c *Cache) derive(hash string, size Size) error {
 	}
 	defer src.Close()
 
-	img, _, err := image.Decode(src)
+	// Checked again here, not only in Put: an original cached before the
+	// limit existed is decoded through this too.
+	img, _, err := imagecap.DecodeFrom(src)
 	if err != nil {
 		return fmt.Errorf("artwork: decode %s: %w", hash, err)
 	}

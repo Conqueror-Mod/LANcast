@@ -3,6 +3,8 @@ package faces
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"os"
 	"os/exec"
 
@@ -68,6 +70,12 @@ type Tool struct {
 	// too old, so "let the loader find it" means binding to a different
 	// library than the one that was downloaded and verified.
 	Runtime string
+	// Guard, when set, makes this the service's lookup (R10-5, R12-1): the
+	// worker only from beside the server's own executable, and the #1096
+	// guard over it, its folder, and the ONNX runtime it loads, before every
+	// start. Nil for a server a person started, which runs the worker with
+	// that person's own rights.
+	Guard Guard
 
 	mu     sync.Mutex
 	cached *Capabilities
@@ -92,30 +100,116 @@ func exeName() string {
 	return "lancast-faces"
 }
 
+// Guard decides whether a folder, and a file in it, may be run by this
+// process: mediatools.ServiceGuard as the service. Declared here so this
+// package does not import the tools package for one interface.
+type Guard interface {
+	CheckDir(dir string) error
+	CheckFile(path string) error
+}
+
+// errNotInstalled is a worker that is simply not there, as opposed to one
+// that was found and refused.
+var errNotInstalled = errors.New("the face worker is not installed")
+
 /*
- * Path resolves the binary, or reports that it is absent.
- *
- * Beside the server first. A downloaded worker sits next to the executable that
- * downloaded it, and preferring PATH would let a different copy — an older one
- * a developer built, say — win silently over the one this install manages.
+ * Path resolves the binary, or reports that it is absent or refused. Every
+ * caller asks it immediately before starting the worker, so the guard runs
+ * before every start.
  */
 func (t *Tool) Path() (string, bool) {
+	p, err := t.resolve()
+	return p, err == nil
+}
+
+func (t *Tool) resolve() (string, error) {
+	if t.Guard != nil {
+		return t.guarded()
+	}
+	// A server a person started: the faces folder first, so a worker
+	// installed by hand beside its models is found; then beside the server,
+	// where the installer puts it; then PATH, for a developer's build.
 	if t.Dir != "" {
 		p := filepath.Join(t.Dir, exeName())
 		if fileExists(p) {
-			return p, true
+			return p, nil
 		}
 	}
 	if self, err := os.Executable(); err == nil {
 		p := filepath.Join(filepath.Dir(self), exeName())
 		if fileExists(p) {
-			return p, true
+			return p, nil
 		}
 	}
 	if p, err := exec.LookPath(exeName()); err == nil {
-		return p, true
+		return p, nil
 	}
-	return "", false
+	return "", errNotInstalled
+}
+
+/*
+ * guarded is the service's lookup.
+ *
+ * The service runs as LocalSystem, so the worker it starts runs as SYSTEM.
+ * It used to look in <data dir>\faces first, which inherited ProgramData's
+ * grant letting every local account add files: a planted lancast-faces.exe
+ * there was run as SYSTEM the next time anything asked the worker a question,
+ * and opening Settings › Photos does. PATH was the third place, which is
+ * R09-1's first case again.
+ *
+ * So only beside the server's own executable, where the installer puts it
+ * (Program Files; the download carries models and the runtime, never the
+ * worker). And the guard, every time, over the folder and the binary, and over
+ * the runtime's folder and the runtime: the worker loads onnxruntime.dll from
+ * the faces folder, and a DLL it loads runs as SYSTEM just the same.
+ */
+func (t *Tool) guarded() (string, error) {
+	self, err := os.Executable()
+	if err != nil {
+		return "", errNotInstalled
+	}
+	dir := filepath.Dir(self)
+	p := filepath.Join(dir, exeName())
+	if !fileExists(p) {
+		return "", errNotInstalled
+	}
+	if err := t.Guard.CheckDir(dir); err != nil {
+		return "", fmt.Errorf("the face worker's folder was refused: %w", err)
+	}
+	if err := t.Guard.CheckFile(p); err != nil {
+		return "", fmt.Errorf("the face worker was refused: %w", err)
+	}
+	// The runtime's folder whether or not the runtime is in it yet: a folder
+	// others can add to is where a missing DLL gets planted.
+	dirs := []string{t.ModelsDir}
+	if rd := runtimeDir(t.Runtime); rd != "" && filepath.Clean(rd) != filepath.Clean(t.ModelsDir) {
+		dirs = append(dirs, rd)
+	}
+	for _, d := range dirs {
+		if d != "" && dirExists(d) {
+			if err := t.Guard.CheckDir(d); err != nil {
+				return "", fmt.Errorf("the face models' folder was refused: %w", err)
+			}
+		}
+	}
+	if t.Runtime != "" && fileExists(t.Runtime) {
+		if err := t.Guard.CheckFile(t.Runtime); err != nil {
+			return "", fmt.Errorf("the ONNX runtime was refused: %w", err)
+		}
+	}
+	return p, nil
+}
+
+func runtimeDir(p string) string {
+	if p == "" {
+		return ""
+	}
+	return filepath.Dir(p)
+}
+
+func dirExists(p string) bool {
+	st, err := os.Stat(p)
+	return err == nil && st.IsDir()
 }
 
 func fileExists(p string) bool {
@@ -293,9 +387,11 @@ func (t *Tool) Forget() {
 }
 
 func (t *Tool) probe(ctx context.Context) Capabilities {
-	path, ok := t.Path()
-	if !ok {
-		return Capabilities{Reason: "the face worker is not installed"}
+	path, err := t.resolve()
+	if err != nil {
+		// A refusal says why, so Settings never shows "not installed" beside a
+		// worker the person can see in Program Files.
+		return Capabilities{Reason: err.Error()}
 	}
 	args := []string{"capabilities"}
 	if t.ModelsDir != "" {
