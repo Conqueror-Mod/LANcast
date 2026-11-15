@@ -8,6 +8,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"lancast/internal/store"
@@ -325,4 +326,53 @@ func TestDeletingAUserRemovesTheirSaves(t *testing.T) {
 	if list, _ := f.h.st.ROMSaves(context.Background(), m.id, f.cart); len(list) != 0 {
 		t.Errorf("a deleted user's save rows survived")
 	}
+}
+
+// A save RAM upload names the save it was based on, and one based on anything
+// but the current save is refused with 409 and changes nothing (R12-4).
+func TestSaveBasedOnAStaleSaveConflicts(t *testing.T) {
+	f := newROMFixture(t)
+	path := "/api/items/" + itoa(f.cart) + "/saves/sram"
+	resp := f.raw(t, "PUT", path+"?based_on=none", []byte("real save"), "")
+	var sv store.ROMSave
+	decode(t, resp, &sv)
+
+	// The ETag a GET gives is what a player sends back.
+	got := f.h.do(t, "GET", path, nil)
+	got.Body.Close()
+	if tag := got.Header.Get("ETag"); tag != `"`+sv.SHA256+`"` {
+		t.Fatalf("ETag = %q, want the save's SHA-256 %q", tag, sv.SHA256)
+	}
+
+	// A player that could not fetch the save, or loaded nothing, and one that
+	// loaded some other save.
+	for _, base := range []string{"none", strings.Repeat("0", 64)} {
+		resp := f.raw(t, "PUT", path+"?based_on="+base, []byte("blank"), "")
+		if resp.StatusCode != http.StatusConflict {
+			t.Errorf("based on %s: status %d, want 409", base, resp.StatusCode)
+		}
+		resp.Body.Close()
+	}
+	if b := body(t, f.h.do(t, "GET", path, nil)); b != "real save" {
+		t.Errorf("current = %q after refused uploads", b)
+	}
+	resp = f.h.do(t, "GET", path+"?previous=1", nil)
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusNotFound {
+		t.Errorf("a refused upload rotated the save to previous: %d", resp.StatusCode)
+	}
+
+	// Based on the current save, it is stored.
+	resp = f.raw(t, "PUT", path+"?based_on="+sv.SHA256, []byte("played on"), "")
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("based on the current save: %d %s", resp.StatusCode, body(t, resp))
+	} else {
+		resp.Body.Close()
+	}
+	// A based_on that is not a hash is a bad request, not a conflict.
+	resp = f.raw(t, "PUT", path+"?based_on=whatever", []byte("x"), "")
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Errorf("based_on=whatever: %d, want 400", resp.StatusCode)
+	}
+	resp.Body.Close()
 }

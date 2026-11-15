@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"lancast/internal/retro/libretro"
+	"lancast/internal/retro/saves"
 )
 
 // VideoSink shows a frame. Called on the core's thread with BGRA rows the
@@ -74,9 +75,12 @@ type SaveStore interface {
 	// LoadSRAM returns the saved game RAM, or nil with no error when there
 	// is none yet.
 	LoadSRAM() ([]byte, error)
+	// StoreSRAM may refuse with saves.ErrConflict when the save on the server
+	// is not the one this session loaded.
 	StoreSRAM(data []byte) error
 	StoreState(slot string, data []byte, core, version string) error
-	// LoadState returns a state and the core that wrote it.
+	// LoadState returns a state and the core that wrote it, or an error
+	// wrapping saves.ErrNoSave when the slot is empty.
 	LoadState(slot string) (data []byte, core, version string, err error)
 }
 
@@ -221,8 +225,19 @@ type Session struct {
 	stopping     bool
 	sramSum      uint32
 	sramAt       time.Time
-	hw           *libretro.HWRender // what the core asked for, if anything
-	glReady      bool
+	/*
+	 * Held saves (R12-4). sramHeld is set when the saved game could not be
+	 * fetched: the game then plays on blank save RAM, which many cartridges
+	 * write at boot, and sending it would replace the real save. sramRefused
+	 * is set from an upload's goroutine when the server answered that its
+	 * save is no longer the one this session loaded. autoHeld is set when the
+	 * Continue point could not be fetched, so closing does not write over it.
+	 */
+	sramHeld    bool
+	sramRefused atomic.Bool
+	autoHeld    bool
+	hw          *libretro.HWRender // what the core asked for, if anything
+	glReady     bool
 
 	pending sync.WaitGroup // uploads in flight
 
@@ -490,7 +505,16 @@ func (s *Session) run(ctx context.Context) (err error) {
 	s.hardcore = s.cfg.Hardcore && s.cfg.HardcoreAllowed && s.cfg.Achievements != nil
 	dropped := ""
 	if resumeSlot != "" {
-		if data, c, v, err := s.cfg.Saves.LoadState(resumeSlot); err == nil && len(data) > 0 && s.stateMismatch(c, v) == "" {
+		data, c, v, err := s.cfg.Saves.LoadState(resumeSlot)
+		if err != nil && !errors.Is(err, saves.ErrNoSave) {
+			// Could not be fetched, which is not the same as not there: the
+			// game starts from the beginning, and closing it must not write a
+			// new Continue point over the one the server still has.
+			s.autoHeld = true
+			s.cfg.Log.Warn("retro session: resume state could not be fetched", "slot", resumeSlot, "error", err)
+			s.cfg.OnEvent(Event{Kind: "error", Slot: resumeSlot, Err: err,
+				Text: "Where you stopped could not be fetched, so the game starts from the beginning. Closing it will not replace where you stopped."})
+		} else if err == nil && len(data) > 0 && s.stateMismatch(c, v) == "" {
 			if s.hardcore {
 				// RetroAchievements: a resumed session must drop to casual.
 				s.hardcore = false
@@ -825,7 +849,11 @@ func (s *Session) upload(store func() error, ok Event, failText string) {
 		defer s.pending.Done()
 		if err := store(); err != nil {
 			s.cfg.Log.Warn("retro session: save upload failed", "slot", ok.Slot, "error", err)
-			s.cfg.OnEvent(Event{Kind: "error", Slot: ok.Slot, Text: failText, Err: err})
+			text := failText
+			if errors.Is(err, saves.ErrConflict) {
+				text = "The save on the server changed since this game loaded it, so this one was not sent over it."
+			}
+			s.cfg.OnEvent(Event{Kind: "error", Slot: ok.Slot, Text: text, Err: err})
 			return
 		}
 		s.cfg.OnEvent(ok)
@@ -840,9 +868,16 @@ func (s *Session) loadSRAM() {
 	}
 	data, err := s.cfg.Saves.LoadSRAM()
 	if err != nil {
-		// Playing on is right: the game starts as if new, and the save on
-		// the server is untouched until this one is newer.
-		s.cfg.OnEvent(Event{Kind: "error", Slot: "sram", Text: "Your saved game could not be fetched.", Err: err})
+		/*
+		 * Playing on is still right, since a timeout or a restarting server
+		 * should not cost the evening, but this session never sends its save
+		 * RAM (R12-4). The game starts blank, many cartridges format blank
+		 * save RAM at boot, and the first upload would have rotated the real
+		 * save to the server's previous copy and the second would have lost it.
+		 */
+		s.sramHeld = true
+		s.cfg.OnEvent(Event{Kind: "error", Slot: "sram", Err: err,
+			Text: "Your saved game could not be fetched. You can play, but nothing this game saves will be sent to the server, so the save there stays as it was."})
 	} else if len(data) > 0 {
 		copy(mem, data)
 	}
@@ -859,6 +894,9 @@ func (s *Session) loadSRAM() {
  * the last few seconds of a save someone just made.
  */
 func (s *Session) maybeFlushSRAM(force bool) {
+	if s.sramHeld || s.sramRefused.Load() {
+		return
+	}
 	if !force && time.Since(s.sramAt) < s.cfg.FlushEvery {
 		return
 	}
@@ -873,14 +911,22 @@ func (s *Session) maybeFlushSRAM(force bool) {
 	}
 	s.sramSum = sum
 	data := bytes.Clone(mem)
-	s.upload(func() error { return s.cfg.Saves.StoreSRAM(data) },
+	s.upload(func() error {
+		err := s.cfg.Saves.StoreSRAM(data)
+		if errors.Is(err, saves.ErrConflict) {
+			// Every later upload would be refused the same way, so one
+			// message is the honest number.
+			s.sramRefused.Store(true)
+		}
+		return err
+	},
 		Event{Kind: "sram-saved", Slot: "sram"}, "Your game's save did not reach the server.")
 }
 
 // finish writes what closing must not lose, and waits for it to be sent.
 func (s *Session) finish() {
 	s.maybeFlushSRAM(true)
-	if s.cfg.SaveStateOnStop {
+	if s.cfg.SaveStateOnStop && !s.autoHeld {
 		if data, ok := s.serialize(); ok {
 			s.upload(func() error {
 				return s.cfg.Saves.StoreState("auto", data, s.info.LibraryName, s.info.LibraryVersion)

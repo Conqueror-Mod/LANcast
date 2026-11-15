@@ -115,3 +115,63 @@ func TestUsersAreApart(t *testing.T) {
 		t.Errorf("a user id escaped the save directory: %s", rel)
 	}
 }
+
+/*
+ * A write based on a save the slot no longer holds changes nothing (R12-4).
+ *
+ * The case it exists for: a player that could not fetch the save plays on with
+ * blank save RAM, and its first write would rotate the real save to .prev and
+ * its second would lose it.
+ */
+func TestWriteIfRefusesAStaleBase(t *testing.T) {
+	f := Files{Dir: t.TempDir()}
+	real, err := f.Write("u_1", 7, "sram", strings.NewReader("real save"))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// A writer that thinks the slot is empty, and one that loaded some other
+	// save: both refused, and both copies stay as they were.
+	for _, base := range []string{NoSave, strings.Repeat("0", 64)} {
+		if _, err := f.WriteIf("u_1", 7, "sram", base, strings.NewReader("blank")); !errors.Is(err, ErrConflict) {
+			t.Errorf("based on %q: err = %v, want ErrConflict", base, err)
+		}
+	}
+	if got := read(t, f, "sram", false); got != "real save" {
+		t.Errorf("current = %q after refused writes", got)
+	}
+	if _, err := f.Open("u_1", 7, "sram", true); !errors.Is(err, os.ErrNotExist) {
+		t.Errorf("a refused write rotated the save to .prev: %v", err)
+	}
+
+	// The writer that loaded the real save may replace it, and the next write
+	// must be based on what that one wrote.
+	next, err := f.WriteIf("u_1", 7, "sram", real.SHA256, strings.NewReader("played on"))
+	if err != nil {
+		t.Fatalf("based on the current save: %v", err)
+	}
+	if _, err := f.WriteIf("u_1", 7, "sram", real.SHA256, strings.NewReader("again")); !errors.Is(err, ErrConflict) {
+		t.Errorf("a base already replaced was accepted: %v", err)
+	}
+	if _, err := f.WriteIf("u_1", 7, "sram", next.SHA256, strings.NewReader("again")); err != nil {
+		t.Errorf("based on the latest write: %v", err)
+	}
+
+	// An empty slot accepts a writer that loaded it empty.
+	if _, err := f.WriteIf("u_1", 8, "sram", NoSave, strings.NewReader("first")); err != nil {
+		t.Errorf("first save into an empty slot: %v", err)
+	}
+}
+
+func TestValidBasedOn(t *testing.T) {
+	for _, ok := range []string{"", NoSave, strings.Repeat("ab", 32)} {
+		if !ValidBasedOn(ok) {
+			t.Errorf("%q refused", ok)
+		}
+	}
+	for _, bad := range []string{"None", strings.Repeat("AB", 32), strings.Repeat("a", 63), "../sram"} {
+		if ValidBasedOn(bad) {
+			t.Errorf("%q accepted", bad)
+		}
+	}
+}

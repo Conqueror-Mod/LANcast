@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"lancast/internal/retro/libretro"
+	"lancast/internal/retro/saves"
 )
 
 // fakeCore behaves like testdata/testcore.c in the libretro package: it
@@ -106,6 +107,8 @@ type fakeSaves struct {
 	states    map[string][]byte
 	stateCore map[string][2]string
 	failSRAM  error
+	failState error // LoadState fails this way, as a fetch that did not arrive
+	conflict  bool  // StoreSRAM is refused, as the server does with a stale base
 }
 
 func newFakeSaves() *fakeSaves {
@@ -119,8 +122,11 @@ func (f *fakeSaves) LoadSRAM() ([]byte, error) {
 func (f *fakeSaves) StoreSRAM(d []byte) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	f.sram = d
 	f.sramPuts++
+	if f.conflict {
+		return saves.ErrConflict
+	}
+	f.sram = d
 	return nil
 }
 func (f *fakeSaves) StoreState(slot string, d []byte, core, ver string) error {
@@ -133,9 +139,12 @@ func (f *fakeSaves) StoreState(slot string, d []byte, core, ver string) error {
 func (f *fakeSaves) LoadState(slot string) ([]byte, string, string, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	if f.failState != nil {
+		return nil, "", "", f.failState
+	}
 	d, ok := f.states[slot]
 	if !ok {
-		return nil, "", "", errors.New("no such state")
+		return nil, "", "", saves.ErrNoSave
 	}
 	cv := f.stateCore[slot]
 	return d, cv[0], cv[1], nil

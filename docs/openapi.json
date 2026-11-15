@@ -15340,7 +15340,7 @@
           "retro"
         ],
         "summary": "Store a save",
-        "description": "The body is the save's bytes, at most 64 MB. A save state must name the core that wrote it (`?core=&core_version=`); save RAM needs neither.\n\n**The newer write wins and the one it replaces is kept** as the previous copy, so a bad save costs one step back. That is the whole conflict policy, deliberately: two machines saving one slot at the same moment is not how one household plays.\n\nThe one write a stream ticket can make: a game's ticket may store the minting person's saves for that game and nothing else.",
+        "description": "The body is the save's bytes, at most 64 MB. A save state must name the core that wrote it (`?core=&core_version=`); save RAM needs neither.\n\n**The newer write wins and the one it replaces is kept** as the previous copy, so a bad save costs one step back. That is the whole conflict policy, deliberately: two machines saving one slot at the same moment is not how one household plays.\n\n**`?based_on=` makes the write conditional.** It names the save the writer loaded: its SHA-256 (the `ETag` a `GET` returns), or `none` for an empty slot. When the slot holds anything else the answer is `409` and nothing changes. A player that could not fetch the save, or that started from one another machine has since replaced, would otherwise send blank or stale save RAM over the real one. Many cartridges write theirs at boot, and a second write would rotate the real save out of the previous copy too. The players send it for `sram`. Without it a write is unconditional.\n\nThe one write a stream ticket can make: a game's ticket may store the minting person's saves for that game and nothing else.",
         "parameters": [
           {
             "name": "id",
@@ -15378,6 +15378,16 @@
               "type": "string",
               "maxLength": 64
             }
+          },
+          {
+            "name": "based_on",
+            "in": "query",
+            "required": false,
+            "description": "The SHA-256 of the save this write is based on, as the `ETag` gave it, or `none` for an empty slot. The write is refused with `409` when the slot holds anything else.",
+            "schema": {
+              "type": "string",
+              "pattern": "^(none|[0-9a-f]{64})$"
+            }
           }
         ],
         "requestBody": {
@@ -15403,7 +15413,7 @@
             }
           },
           "400": {
-            "description": "Not a slot, or a save state that does not name its core.",
+            "description": "Not a slot, a save state that does not name its core, or a `based_on` that is neither a SHA-256 nor `none`.",
             "content": {
               "application/json": {
                 "schema": {
@@ -15417,6 +15427,16 @@
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "description": "`based_on` named a save the slot no longer holds. Nothing was written.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
           },
           "413": {
             "description": "Larger than any core writes.",

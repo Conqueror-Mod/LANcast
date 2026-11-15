@@ -14,6 +14,7 @@ import {
   type Booted,
 } from "@/playback/retroWeb";
 import { retroSupported, slotLabel, STATE_SLOTS } from "@/playback/retro";
+import { fetchSave, listSaves, putSave, SRAMSync, type StoredSave } from "@/playback/retroSaves";
 import { platformLabel } from "@/lib/platforms";
 import { RetroPlay } from "./RetroPlay";
 import "./RetroWebPlay.css";
@@ -42,13 +43,6 @@ interface RomFile {
   present?: boolean;
 }
 
-/** One stored save, as the save list gives it. */
-interface StoredSave {
-  slot: string;
-  core?: string;
-  updated_at?: number;
-}
-
 /*
  * Playing a retro game in a browser (ADR 0077 part b).
  *
@@ -65,6 +59,9 @@ interface StoredSave {
  * Escape, or by any other navigation, reloads the destination. Anything less
  * leaves a game playing sound behind whatever page somebody went to.
  */
+const SAVES_UNFETCHED =
+  "Your saves could not be fetched, so the game was not started: playing on would save over them. Try again in a moment.";
+
 export function RetroWebPlay() {
   const { id } = useParams();
   const itemID = Number(id);
@@ -72,8 +69,8 @@ export function RetroWebPlay() {
   const { data: cores } = useWebCores();
   const [params] = useSearchParams();
   const resume = params.get("resume") === "1";
-  // The save last stored, so an unchanged one is not sent again.
-  const lastSRAM = useRef<Uint8Array | null>(null);
+  // The game's own save, sent only over the save it started from (R12-4).
+  const sram = useRef<SRAMSync | null>(null);
   const canvas = useRef<HTMLCanvasElement | null>(null);
   const booted = useRef<Booted | null>(null);
   const started = useRef(false);
@@ -106,11 +103,12 @@ export function RetroWebPlay() {
   // Stores the game's own save when it has changed since the last store.
   const storeSRAM = useCallback(async () => {
     const b = booted.current;
-    if (!b) return;
-    const now = b.readSRAM();
-    if (!now || now.length === 0 || sameBytes(now, lastSRAM.current)) return;
-    if (await putSave(itemID, "sram", now)) lastSRAM.current = now;
-  }, [itemID]);
+    const sync = sram.current;
+    if (!b || !sync) return;
+    if ((await sync.store(b.readSRAM())) === "conflict") {
+      setNotice("The save on the server changed since this game loaded it, so this game's save was not sent over it.");
+    }
+  }, []);
 
   const leaving = useRef(false);
   const leave = useCallback(async () => {
@@ -128,7 +126,7 @@ export function RetroWebPlay() {
       const work = (async () => {
         await storeSRAM();
         const state = await b.saveState();
-        if (state) await putSave(itemID, "auto", state, webStateCore(core), version);
+        if (state) await putSave(itemID, "auto", state, { core: webStateCore(core), version });
       })();
       await Promise.race([work, new Promise((r) => setTimeout(r, 6000))]);
     }
@@ -178,15 +176,28 @@ export function RetroWebPlay() {
         if (!res.ok) throw new Error("The server could not send the game's file.");
         const bytes = new Uint8Array(await res.arrayBuffer());
 
-        // The game's own save, from whichever player made it last, and a
-        // browser state to continue from when asked for one that is ours.
+        /*
+         * The game's own save, from whichever player made it last, and a
+         * browser state to continue from when asked for one that is ours.
+         *
+         * A save that could not be fetched stops the game here (R12-4).
+         * Played on, the game would start blank, write its blank save RAM,
+         * and send it over the real one; and leaving would write a new
+         * Continue point over the one that did not arrive.
+         */
         const saves = await listSaves(itemID);
+        if (!saves) throw new Error(SAVES_UNFETCHED);
         if (!cancelled) setStored(saves);
-        const sram = saves.some((s) => s.slot === "sram") ? await getSave(itemID, "sram") : null;
-        lastSRAM.current = sram;
         const auto = saves.find((s) => s.slot === "auto");
-        const state =
-          resume && auto && auto.core === webStateCore(core) ? await getSave(itemID, "auto") : null;
+        let loaded, state;
+        try {
+          loaded = saves.some((s) => s.slot === "sram") ? await fetchSave(itemID, "sram") : null;
+          state =
+            resume && auto && auto.core === webStateCore(core) ? ((await fetchSave(itemID, "auto"))?.bytes ?? null) : null;
+        } catch {
+          throw new Error(SAVES_UNFETCHED);
+        }
+        sram.current = new SRAMSync(itemID, loaded);
 
         setPhase({ kind: "loading", what: "Loading the emulator…" });
         if (cancelled || !canvas.current) return;
@@ -194,7 +205,7 @@ export function RetroWebPlay() {
           core,
           canvas: canvas.current,
           rom: { name: file.name, bytes },
-          sram,
+          sram: loaded?.bytes ?? null,
           resume: state,
           onExit: () => void leave(),
         });
@@ -250,9 +261,10 @@ export function RetroWebPlay() {
     const b = booted.current;
     if (!b || !core) return;
     const state = await b.saveState();
-    if (state && (await putSave(itemID, slot, state, webStateCore(core), version))) {
+    if (state && (await putSave(itemID, slot, state, { core: webStateCore(core), version })).ok) {
       setNotice(`Saved to ${slotLabel(slot)}.`);
-      setStored(await listSaves(itemID));
+      const list = await listSaves(itemID);
+      if (list) setStored(list);
     } else {
       setNotice(`${slotLabel(slot)} could not be saved.`);
     }
@@ -262,7 +274,9 @@ export function RetroWebPlay() {
     closeStates();
     const b = booted.current;
     if (!b) return;
-    const state = await getSave(itemID, slot);
+    const state = await fetchSave(itemID, slot)
+      .then((f) => f?.bytes ?? null)
+      .catch(() => null);
     setNotice(state && b.loadState(state) ? `Loaded ${slotLabel(slot)}.` : `${slotLabel(slot)} could not be loaded.`);
   };
 
@@ -412,48 +426,4 @@ export function StatesPanel({
       </div>
     </div>
   );
-}
-
-/** This person's saves for one game; empty when the server cannot say. */
-async function listSaves(itemID: number): Promise<StoredSave[]> {
-  return apiGet<{ saves: StoredSave[] }>(`/api/items/${itemID}/saves`)
-    .then((r) => r?.saves ?? [])
-    .catch(() => []);
-}
-
-/** One save's bytes, or null when the slot is empty or unreadable. */
-async function getSave(itemID: number, slot: string): Promise<Uint8Array | null> {
-  try {
-    const res = await fetch(`/api/items/${itemID}/saves/${slot}`, { credentials: "same-origin" });
-    if (!res.ok) return null;
-    return new Uint8Array(await res.arrayBuffer());
-  } catch {
-    return null;
-  }
-}
-
-/*
- * Stores one save. A state names the core and version that wrote it, as the
- * server requires (romsaves.go); the game's own save names neither, because
- * every player reads it.
- */
-async function putSave(itemID: number, slot: string, data: Uint8Array, core?: string, version?: string): Promise<boolean> {
-  const q = core ? `?core=${encodeURIComponent(core)}&core_version=${encodeURIComponent(version || "unknown")}` : "";
-  try {
-    const res = await fetch(`/api/items/${itemID}/saves/${slot}${q}`, {
-      method: "PUT",
-      credentials: "same-origin",
-      headers: { "Content-Type": "application/octet-stream" },
-      body: new Blob([data as BlobPart]),
-    });
-    return res.ok;
-  } catch {
-    return false;
-  }
-}
-
-function sameBytes(a: Uint8Array, b: Uint8Array | null): boolean {
-  if (!b || a.length !== b.length) return false;
-  for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false;
-  return true;
 }
