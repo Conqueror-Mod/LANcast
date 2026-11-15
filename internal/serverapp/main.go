@@ -551,6 +551,12 @@ func run(ctx context.Context, addr, dataDir string, log *slog.Logger) error {
 		ModelsDir: faceDir,
 		Runtime:   faceRuntime,
 	}
+	// As the service, Dir is not looked in at all: the worker only from beside
+	// LANcast.exe, and the #1096 guard over it and the runtime before every
+	// start (R10-5, R12-1).
+	if serviceManaged {
+		faceTool.Guard = mediatools.ServiceGuard()
+	}
 	// displayCopy is the upright JPEG the photo worker cached for the grid,
 	// which both face detection and search read when the file itself would be
 	// read wrongly or not at all — HEIC and BMP among them.
