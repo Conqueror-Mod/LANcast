@@ -58,8 +58,17 @@ func (s *Server) playback(w http.ResponseWriter, r *http.Request) {
 		 * and refused with it, and a live conversion started instead.
 		 */
 		other := audioIndex
-		if def := res.Audio(); res != nil && def != nil && def.Index == audioIndex {
-			other = -1
+		/*
+		 * res is nil while the original waits to be probed again — after
+		 * "Re-probe everything", or a rescan that saw the file change — and
+		 * a ready copy outlives both. Test it before asking it anything
+		 * (R06-4): calling Audio first was a panic and a 500 on every
+		 * optimized title for the whole re-probe.
+		 */
+		if res != nil {
+			if def := res.Audio(); def != nil && def.Index == audioIndex {
+				other = -1
+			}
 		}
 		if d, ok := optimize.Prefer(decision, copyRes, prof, other); ok {
 			decision, version = d, "optimized"
