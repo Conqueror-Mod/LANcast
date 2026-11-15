@@ -116,3 +116,12 @@ in the *same* window never shows a GPU swapchain beneath it, so a second window
 is the only shape that works. It keeps position, size, visibility and focus in
 step with the main window from inside this package's window procedure, which is
 the only place those messages arrive. Outside playback none of it runs.
+
+## Local change — a panicking binding rejects its promise (2026-11-15)
+
+`callbinding` recovers a panic in a bound Go function, logs it with its stack,
+and returns an error, so the page's promise is rejected. Upstream lets the
+panic through. Bindings run on the window's UI thread, so a panic in any one of
+them ended the whole desktop app. A malformed game icon did that every time the
+Games screen drew the game (review R12-3). The results of `v.Call` were renamed
+from `res` to `out`, because the function now has named results.

@@ -6,9 +6,11 @@ package webview2
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"image"
 	"log"
 	"reflect"
+	"runtime/debug"
 	"strconv"
 	"sync"
 	"unsafe"
@@ -227,7 +229,26 @@ func (w *webview) msgcb(msg string) {
 	}
 }
 
-func (w *webview) callbinding(d rpcMessage) (interface{}, error) {
+// errBindingPanicked is what the page's promise is rejected with when a
+// binding panics. The panic itself goes to the log with its stack; the page
+// gets no more than the binding's name.
+var errBindingPanicked = errors.New("the window's handler failed")
+
+func (w *webview) callbinding(d rpcMessage) (res interface{}, err error) {
+	/*
+	 * A binding runs on the window's UI thread, so a panic in one used to end
+	 * the whole desktop app: window, tray and player. One malformed game icon
+	 * did it every time the Games screen drew that game (review R12-3). The
+	 * fault is the binding's, and the page already handles a rejected promise,
+	 * so that is what a panic becomes. A local change to the vendored copy,
+	 * recorded in PROVENANCE.md.
+	 */
+	defer func() {
+		if r := recover(); r != nil {
+			log.Printf("window binding %q panicked: %v\n%s", d.Method, r, debug.Stack())
+			res, err = nil, fmt.Errorf("%s: %w", d.Method, errBindingPanicked)
+		}
+	}()
 	w.m.Lock()
 	f, ok := w.bindings[d.Method]
 	w.m.Unlock()
@@ -256,31 +277,31 @@ func (w *webview) callbinding(d rpcMessage) (interface{}, error) {
 	}
 
 	errorType := reflect.TypeOf((*error)(nil)).Elem()
-	res := v.Call(args)
-	switch len(res) {
+	out := v.Call(args)
+	switch len(out) {
 	case 0:
 		// No results from the function, just return nil
 		return nil, nil
 
 	case 1:
 		// One result may be a value, or an error
-		if res[0].Type().Implements(errorType) {
-			if res[0].Interface() != nil {
-				return nil, res[0].Interface().(error)
+		if out[0].Type().Implements(errorType) {
+			if out[0].Interface() != nil {
+				return nil, out[0].Interface().(error)
 			}
 			return nil, nil
 		}
-		return res[0].Interface(), nil
+		return out[0].Interface(), nil
 
 	case 2:
 		// Two results: first one is value, second is error
-		if !res[1].Type().Implements(errorType) {
+		if !out[1].Type().Implements(errorType) {
 			return nil, errors.New("second return value must be an error")
 		}
-		if res[1].Interface() == nil {
-			return res[0].Interface(), nil
+		if out[1].Interface() == nil {
+			return out[0].Interface(), nil
 		}
-		return res[0].Interface(), res[1].Interface().(error)
+		return out[0].Interface(), out[1].Interface().(error)
 
 	default:
 		return nil, errors.New("unexpected number of return values")

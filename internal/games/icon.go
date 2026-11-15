@@ -163,7 +163,9 @@ func icoBest(raw []byte) ([]byte, error) {
 		e := raw[off : off+16]
 		size := int(binary.LittleEndian.Uint32(e[8:12]))
 		at := int(binary.LittleEndian.Uint32(e[12:16]))
-		if size <= 0 || at < 0 || at+size > len(raw) {
+		// Summed wide: two uint32s near the top must not wrap under len(raw)
+		// where int is 32 bits.
+		if size <= 0 || at < 0 || uint64(at)+uint64(size) > uint64(len(raw)) {
 			continue
 		}
 		entries = append(entries, iconEntry{
@@ -189,10 +191,17 @@ func dim(b byte) int {
  * palette depths are old enough that a game with only those gets its letter.
  */
 func decodeDIB(d []byte) (image.Image, error) {
-	if len(d) < 40 || binary.LittleEndian.Uint32(d[0:4]) < 40 {
+	if len(d) < 40 {
 		return nil, errNoIcon
 	}
-	hdr := int(binary.LittleEndian.Uint32(d[0:4]))
+	// The header's size is the file's claim, and the pixels start after it. A
+	// claim past the end of the entry sliced out of range, and the panic took
+	// the desktop app down every time the Games screen drew the game (R12-3).
+	hdr64 := uint64(binary.LittleEndian.Uint32(d[0:4]))
+	if hdr64 < 40 || hdr64 > uint64(len(d)) {
+		return nil, errNoIcon
+	}
+	hdr := int(hdr64)
 	w := int(int32(binary.LittleEndian.Uint32(d[4:8])))
 	h := int(int32(binary.LittleEndian.Uint32(d[8:12]))) / 2
 	bpp := int(binary.LittleEndian.Uint16(d[14:16]))
@@ -265,7 +274,14 @@ func exeIcon(path string) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	r := resources{data: rsrc, base: sec.VirtualAddress}
+	return rsrcIcon(rsrc, sec.VirtualAddress)
+}
+
+// rsrcIcon reads the first icon group out of a resource section's bytes, base
+// being the section's virtual address. Split from exeIcon so the walk, which
+// reads offsets and sizes the executable wrote, can be fuzzed without a file.
+func rsrcIcon(rsrc []byte, base uint32) ([]byte, error) {
+	r := resources{data: rsrc, base: base}
 
 	groups := r.leaves(rtGroupIcon)
 	if len(groups) == 0 {
@@ -308,7 +324,7 @@ type resources struct {
 
 // dir returns the (id, offset, isDir) entries of the directory at off.
 func (r resources) dir(off int) [][3]uint32 {
-	if off+16 > len(r.data) {
+	if off < 0 || off+16 > len(r.data) {
 		return nil
 	}
 	n := int(binary.LittleEndian.Uint16(r.data[off+12:])) + int(binary.LittleEndian.Uint16(r.data[off+14:]))
@@ -344,11 +360,11 @@ func (r resources) leafData(off uint32) ([]byte, bool) {
 	if rva < r.base {
 		return nil, false
 	}
-	at := int(rva - r.base)
-	if at+int(size) > len(r.data) || size == 0 {
+	at := uint64(rva - r.base)
+	if size == 0 || at+uint64(size) > uint64(len(r.data)) {
 		return nil, false
 	}
-	return r.data[at : at+int(size)], true
+	return r.data[at : at+uint64(size)], true
 }
 
 // typeDir finds the directory of one resource type.
