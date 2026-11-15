@@ -345,6 +345,16 @@ sessions.
 **Browse lists directories only.** Never files, never contents, and hidden or
 system directories are omitted.
 
+**A restore runs only from files LANcast wrote.** A restore staged from Settings
+is a marker in `backups\` that the next start acts on before it opens the
+database. As the service, that start asks the tools guard (*Which binary runs*)
+about the marker and the backup it names. It refuses either one if it is owned
+by anyone but SYSTEM or Administrators, or if anyone else can write it. Before
+this (R10-2), any local account could stage its own database and sign in as an
+administrator after the next restart. A backup copied into the folder by hand
+from an unelevated account is refused for the same reason. Copy it from an
+elevated shell instead, so Administrators own it.
+
 ## Deployment guidance
 
 **Do not port-forward a server that only has its self-signed certificate.** A

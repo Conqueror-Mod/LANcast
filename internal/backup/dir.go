@@ -36,7 +36,28 @@ const (
 var ErrBadName = errors.New("not a backup name")
 
 // Dir is the folder backups are written to and read from.
-type Dir struct{ path string }
+type Dir struct {
+	path string
+	// guard, when set, is who may have written a staged restore and the
+	// backup it names (WithGuard).
+	guard FileGuard
+}
+
+// FileGuard decides whether a file may be trusted by this process: in
+// practice mediatools.ServiceGuard, the check #1096 built for the tools
+// folder, which refuses a file owned by anyone but SYSTEM or Administrators
+// (root or the service account, on Unix) or writable by anyone else.
+type FileGuard interface {
+	CheckFile(path string) error
+}
+
+// WithGuard makes ApplyPending refuse a marker or a backup the guard refuses
+// (R10-2). The service sets it; a server a person started runs as that
+// person, whose own files are theirs to restore.
+func (d *Dir) WithGuard(g FileGuard) *Dir {
+	d.guard = g
+	return d
+}
 
 // New returns the backup folder inside a data directory. Nothing is created
 // until something is written.
