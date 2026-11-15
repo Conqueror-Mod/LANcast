@@ -61,7 +61,13 @@ func (s *Store) SetBookDetails(ctx context.Context, bookID int64, d BookDetails)
 		cmp = append(cmp, v)
 	}
 	set("title", "title", d.Title)
-	set("sort_title", "sort_title", d.SortTitle)
+	// A lock on the title protects the sort title too (R05-2), as it does in
+	// UpsertItem, ApplyTrackTags, ApplyGuess and SetBookPart. The edit that
+	// renames a book writes both and locks only `title`, so without this the
+	// next book pass sorts it under its folder's name again.
+	if !slices.Contains(locked, "title") {
+		set("sort_title", "sort_title", d.SortTitle)
+	}
 	set("artist", "artist", nullIfEmpty(d.Author))
 	set("series", "series", nullIfEmpty(d.Series))
 	set("episode", "episode", nullIfZero(d.Number))
