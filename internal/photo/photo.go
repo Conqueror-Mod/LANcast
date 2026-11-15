@@ -15,6 +15,7 @@ import (
 	"errors"
 	"fmt"
 	"image"
+	"io"
 	"os"
 	"path/filepath"
 
@@ -28,8 +29,36 @@ import (
 	_ "golang.org/x/image/tiff"
 	_ "golang.org/x/image/webp"
 
+	"lancast/internal/imagecap"
 	"lancast/internal/media"
 )
+
+// MaxFileBytes is the largest picture file read. The whole file is held in
+// memory to hash it and read its EXIF, so a file of tens of gigabytes named
+// .jpg would otherwise be read whole. It is far past any real photograph: a
+// 150 MP camera RAW is a few hundred megabytes.
+const MaxFileBytes = 1 << 30
+
+// ErrFileTooLarge is a picture file past MaxFileBytes.
+var ErrFileTooLarge = errors.New("picture file too large to read")
+
+// readCapped is os.ReadFile, refusing a file past MaxFileBytes without
+// reading more than one byte beyond it.
+func readCapped(path string) ([]byte, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+	raw, err := io.ReadAll(io.LimitReader(f, MaxFileBytes+1))
+	if err != nil {
+		return nil, err
+	}
+	if len(raw) > MaxFileBytes {
+		return nil, fmt.Errorf("%s: %w (over %d MB)", filepath.Base(path), ErrFileTooLarge, MaxFileBytes>>20)
+	}
+	return raw, nil
+}
 
 // ErrUnsupported is returned for a file no decoder here can read. It is a
 // distinct error rather than a generic failure because the two are acted on
@@ -74,7 +103,7 @@ type FFmpegDecoder interface {
 // PNG is common enough (every "save as" dialog produces some), and trusting the
 // extension would fail a file that decodes perfectly well.
 func (d *Decoder) Read(ctx context.Context, path string) (image.Image, Meta, error) {
-	raw, err := os.ReadFile(path)
+	raw, err := readCapped(path)
 	if err != nil {
 		return nil, Meta{}, err
 	}
@@ -106,7 +135,14 @@ func (d *Decoder) Read(ctx context.Context, path string) (image.Image, Meta, err
 		return img, withDimensions(img, meta), nil
 	}
 
-	img, _, err := image.Decode(bytes.NewReader(raw))
+	// The header is read before the pixels (imagecap): a PNG of 204 bytes can
+	// declare 4 TB, and the runtime does not panic over that, it exits.
+	img, _, err := imagecap.Decode(raw)
+	if errors.Is(err, imagecap.ErrTooLarge) {
+		// Go read the header and it is past the limit. ffmpeg would be handed
+		// the same claim, and its output comes back here to be refused again.
+		return nil, meta, fmt.Errorf("%s: %w", filepath.Base(path), err)
+	}
 	if err != nil {
 		// ffmpeg is tried for anything the in-process decoders refuse, not for a
 		// list of extensions known to need it. The list was the obvious design
@@ -132,7 +168,7 @@ func (d *Decoder) Read(ctx context.Context, path string) (image.Image, Meta, err
 		if ferr != nil {
 			return nil, meta, fmt.Errorf("decode %s via ffmpeg: %w", filepath.Base(path), ferr)
 		}
-		img, _, err = image.Decode(bytes.NewReader(png))
+		img, _, err = imagecap.Decode(png)
 		if err != nil {
 			return nil, meta, fmt.Errorf("decode %s after conversion: %w", filepath.Base(path), err)
 		}

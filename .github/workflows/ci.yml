@@ -99,6 +99,7 @@ jobs:
           ./internal/milkdrop/eel FuzzCheck
           ./internal/comic/pdf FuzzIndex
           ./internal/picture FuzzMake
+          ./internal/imagecap FuzzDecode
           TARGETS
 
   # The native worker, proven on every pull request rather than during a

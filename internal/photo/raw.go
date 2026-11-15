@@ -6,6 +6,8 @@ import (
 	"image"
 	"image/jpeg"
 	"sort"
+
+	"lancast/internal/imagecap"
 )
 
 /*
@@ -49,7 +51,10 @@ func rawPreview(raw []byte) (image.Image, error) {
 			break
 		}
 		at := i + j
-		if cfg, err := jpeg.DecodeConfig(bytes.NewReader(raw[at:])); err == nil && cfg.Width > 0 && cfg.Height > 0 {
+		// A preview whose header claims more than imagecap allows is not a
+		// candidate: decoding it is how a small file kills the process.
+		if cfg, err := jpeg.DecodeConfig(bytes.NewReader(raw[at:])); err == nil && cfg.Width > 0 && cfg.Height > 0 &&
+			imagecap.Check(cfg) == nil {
 			cands = append(cands, previewCandidate{at: at, area: cfg.Width * cfg.Height})
 		}
 		i = at + len(soi)
