@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"testing"
 )
@@ -343,4 +344,107 @@ func TestPlaylistChildCountIsItsEntryCount(t *testing.T) {
 	if !found {
 		t.Fatal("the playlist did not appear in ?kind=playlist")
 	}
+}
+
+// R06-2: a member kept from one entry of a shared playlist is shown a shorter
+// list, and every position they send counts in that list. Removing what they
+// see must remove that, and a reorder of what they see must leave the hidden
+// entry where it was, for everyone else.
+func TestPlaylistEditsFromARestrictedAccountKeepTheHiddenEntries(t *testing.T) {
+	a := newAccessHarness(t)
+	ctx := context.Background()
+	open2 := a.addFile(t, "paddington2.mkv", []byte("y"))
+	open3 := a.addFile(t, "paddington3.mkv", []byte("z"))
+	it, err := a.st.GetItem(ctx, a.openFilm, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	pl, err := a.st.CreatePlaylist(ctx, it.LibraryID, "Family", "family")
+	if err != nil {
+		t.Fatal(err)
+	}
+	hidden := a.privateFilm
+	reset := func(ids ...int64) {
+		t.Helper()
+		if err := a.st.SetPlaylistEntries(ctx, pl, ids); err != nil {
+			t.Fatal(err)
+		}
+	}
+	stored := func() []int64 {
+		t.Helper()
+		items, err := a.st.PlaylistEntries(ctx, pl)
+		if err != nil {
+			t.Fatal(err)
+		}
+		ids := make([]int64, 0, len(items))
+		for _, it := range items {
+			ids = append(ids, it.ID)
+		}
+		return ids
+	}
+	want := func(what string, ids ...int64) {
+		t.Helper()
+		if got := stored(); fmt.Sprint(got) != fmt.Sprint(ids) {
+			t.Errorf("%s: stored %v, want %v", what, got, ids)
+		}
+	}
+	if code := status(t, a.hide(t, a.private)); code != http.StatusOK {
+		t.Fatalf("hide = %d", code)
+	}
+	path := fmt.Sprintf("/api/playlists/%d/entries", pl)
+
+	// Shown [open, open2]; remove row 1, which is open2.
+	reset(a.openFilm, hidden, open2)
+	if code := status(t, a.doAs(t, a.member, "DELETE", path+"/1", nil)); code != http.StatusNoContent {
+		t.Fatalf("remove = %d", code)
+	}
+	want("remove shown row 1", a.openFilm, hidden)
+
+	// A row past the end of what they are shown is not there, even though the
+	// stored list is longer.
+	if code := status(t, a.doAs(t, a.member, "DELETE", path+"/1", nil)); code != http.StatusNotFound {
+		t.Errorf("remove past the shown end = %d, want 404", code)
+	}
+	want("remove past the end", a.openFilm, hidden)
+
+	// Reorder what they see: the hidden entry keeps its slot.
+	reset(a.openFilm, hidden, open2)
+	if code := status(t, a.doAs(t, a.member, "PUT", path, map[string]any{"item_ids": []int64{open2, a.openFilm}})); code != http.StatusNoContent {
+		t.Fatalf("reorder = %d", code)
+	}
+	want("reorder", open2, hidden, a.openFilm)
+
+	// Insert one: it lands after the last slot they could see.
+	reset(a.openFilm, hidden, open2)
+	if code := status(t, a.doAs(t, a.member, "PUT", path, map[string]any{"item_ids": []int64{a.openFilm, open2, open3}})); code != http.StatusNoContent {
+		t.Fatalf("insert = %d", code)
+	}
+	want("insert", a.openFilm, hidden, open2, open3)
+
+	// Clear what they see: the hidden entry stays, because it was never theirs
+	// to decide.
+	reset(a.openFilm, hidden, open2)
+	if code := status(t, a.doAs(t, a.member, "PUT", path, map[string]any{"item_ids": []int64{}})); code != http.StatusNoContent {
+		t.Fatalf("clear = %d", code)
+	}
+	want("clear", hidden)
+
+	// The same track twice, keyed by position: removing the second copy that
+	// they see removes that copy, not the first and not the hidden one.
+	reset(open2, hidden, a.openFilm, open2)
+	if code := status(t, a.doAs(t, a.member, "DELETE", path+"/2", nil)); code != http.StatusNoContent {
+		t.Fatalf("remove repeat = %d", code)
+	}
+	want("remove the second copy", open2, hidden, a.openFilm)
+
+	// The admin sees everything, so their positions are stored ones as before.
+	reset(a.openFilm, hidden, open2)
+	if code := status(t, a.authed(t, "DELETE", path+"/1", nil)); code != http.StatusNoContent {
+		t.Fatalf("admin remove = %d", code)
+	}
+	want("admin remove row 1", a.openFilm, open2)
+	if code := status(t, a.authed(t, "PUT", path, map[string]any{"item_ids": []int64{open2}})); code != http.StatusNoContent {
+		t.Fatalf("admin replace = %d", code)
+	}
+	want("admin replace", open2)
 }
