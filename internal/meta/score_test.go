@@ -1,6 +1,10 @@
 package meta
 
-import "testing"
+import (
+	"testing"
+
+	"lancast/internal/media"
+)
 
 func cand(title string, year int, pop float64) Candidate {
 	return Candidate{Kind: KindMovie, Title: title, Year: year, Popularity: pop}
@@ -129,9 +133,40 @@ func TestNormalize(t *testing.T) {
 		{"A.I. Artificial Intelligence", "ai artificial intelligence"},
 	}
 	for _, tt := range tests {
-		if got := normalize(tt.in); got != tt.want {
-			t.Errorf("normalize(%q) = %q, want %q", tt.in, got, tt.want)
+		if got := media.MatchTitle(tt.in); got != tt.want {
+			t.Errorf("MatchTitle(%q) = %q, want %q", tt.in, got, tt.want)
 		}
+	}
+}
+
+// A title in any script matches itself exactly (R08-3). The normalizer used to
+// keep only a to z, so each of the first five scored 0 and could never be
+// applied on its own, and "Léon" lost its é and scored 0.925 against "Leon".
+func TestTitleInAnyScriptMatches(t *testing.T) {
+	tests := []struct{ file, provider string }{
+		{"七人の侍", "七人の侍"},
+		{"Брат", "Брат"},
+		{"Ταξίδι στα Κύθηρα", "Ταξίδι στα Κύθηρα"},
+		{"ΤΑΞΙΔΙ ΣΤΑ ΚΥΘΗΡΑ", "Ταξίδι στα Κύθηρα"},
+		{"الرسالة", "الرسالة"},
+		{"Léon", "Leon"},
+		{"Amelie", "Amélie"},
+	}
+	for _, tt := range tests {
+		if s := titleScore(tt.file, tt.provider); s != 1 {
+			t.Errorf("titleScore(%q, %q) = %.3f, want 1", tt.file, tt.provider, s)
+		}
+		q := Query{Kind: KindMovie, Title: tt.file, Year: 1990}
+		if s := Score(q, cand(tt.provider, 1990, 10)); s < ThresholdAuto {
+			t.Errorf("Score(%q vs %q) = %.3f, below auto threshold %.2f", tt.file, tt.provider, s, ThresholdAuto)
+		}
+	}
+	// Two different titles in one script are still told apart.
+	if s := titleScore("Брат", "Брат 2"); s >= 1 {
+		t.Errorf("Брат vs Брат 2 scored %.3f, want below 1", s)
+	}
+	if s := titleScore("七人の侍", "千と千尋の神隠し"); s > 0.5 {
+		t.Errorf("unrelated Japanese titles scored %.3f", s)
 	}
 }
 

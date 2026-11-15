@@ -70,7 +70,10 @@ Each candidate scores 0.0–1.0:
 
 - **Title similarity, ~0.6.** Jaro-Winkler over normalized titles. **Reuse
   `clean` and `SortTitle` from `internal/media/parse.go`** — a second normalizer
-  that disagrees with the first is a bug factory.
+  that disagrees with the first is a bug factory. The comparison form is
+  `media.MatchTitle`: `SortTitle`, then letters and digits in every script,
+  Latin and Greek accents folded (`Léon` = `Leon`), punctuation dropped. It is
+  separate from `SortTitle` so folding for matching never moves a sorted grid.
 - **Year proximity, ~0.3.** Exact scores full; ±1 year most of it; 2+ years is a
   heavy penalty. An absent parsed year is neutral, never penalized.
 - **Popularity, ~0.1.** Tiebreak only. It must never rescue a weak title match —
