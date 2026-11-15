@@ -8032,6 +8032,8 @@ export interface components {
             items_missing: number;
             /** @description Files something went wrong reading. */
             skipped: number;
+            /** @description Folders or files the walk could not list or stat — an ACL, an SMB hiccup, a folder renamed mid-walk. Each is also counted in `skipped` and named in `issues`. Every known file under such a folder is marked missing, so a scan with any of these **never empties the trash**, whatever `empty_trash_on_scan` says. */
+            unreadable: number;
             /** @description Media the library's own kind excludes: audio in a video library, video in a music library. **Kept apart from `skipped` because it is not a failure** — nothing went wrong reading these files — but it is the one number that explains an empty library, and silence here is what let a music library created as a movie library report "0 items · scanned" over 1,592 tracks. */
             skipped_kind: number;
             /**

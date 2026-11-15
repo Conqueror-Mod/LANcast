@@ -19,6 +19,11 @@ import "fmt"
  *   - A location that could not be read is *skipped*, and reconciliation is
  *     per-location, so nothing under it is marked missing at all.
  *
+ * That second guarantee covers a *location*, not a folder inside one. A
+ * sub-folder the walk could not list is skipped too, but its location is
+ * reconciled, so its files are marked missing; the scan counts those as
+ * Unreadable and the trash is left alone.
+ *
  * The third is the real one. A location that reads fine and is *empty* — a
  * share remounted at the wrong path, a drive that came back blank — walks
  * successfully, sees nothing, and marks the whole library missing. That is a
@@ -48,6 +53,18 @@ func MayEmptyTrash(p Progress) TrashVerdict {
 		return TrashVerdict{Reason: fmt.Sprintf(
 			"%d location(s) could not be read, so what is missing is not known",
 			len(p.RootsSkipped))}
+	}
+	/*
+	 * A folder inside a readable location that could not be listed is the same
+	 * failure one level down (R08-2). The location re-stats fine, so the scan
+	 * succeeds, and every known file under that folder is unseen and so marked
+	 * missing. Emptying the trash then would delete them — with their watch
+	 * history, positions and ratings — because of an ACL or one SMB hiccup.
+	 */
+	if p.Unreadable > 0 {
+		return TrashVerdict{Reason: fmt.Sprintf(
+			"%d folder(s) or file(s) could not be read, so what is missing is not known",
+			p.Unreadable)}
 	}
 	/*
 	 * Nothing seen is the case this exists for.

@@ -41,6 +41,15 @@ type Progress struct {
 	ItemsChanged int   `json:"items_changed"`
 	ItemsMissing int   `json:"items_missing"`
 	Skipped      int   `json:"skipped"`
+	/*
+	 * Unreadable counts entries the walk could not list or stat — a directory
+	 * refused by an ACL, an SMB share that hiccuped on one folder, a folder
+	 * renamed mid-walk. Each is also in Skipped and Issues; it has its own
+	 * number because it is what MayEmptyTrash must see. Every known file under
+	 * such a directory goes unseen and is marked missing, which is true of the
+	 * walk and false of the library (R08-2).
+	 */
+	Unreadable int `json:"unreadable"`
 	// Media the library's own kind excludes: audio in a video library, video in
 	// a music library. Kept apart from Skipped because it is not a failure —
 	// nothing went wrong reading these files — but it is the one number that
@@ -793,6 +802,9 @@ func (s *Scanner) walkRoot(ctx context.Context, lib store.Library, root store.Li
 			// A single unreadable directory shouldn't abort the whole scan.
 			s.log.Warn("skipping unreadable path", "path", path, "error", err)
 			s.recordIssue(p, root.Path, path, "unreadable")
+			s.mu.Lock()
+			p.Unreadable++
+			s.mu.Unlock()
 			if d != nil && d.IsDir() {
 				return fs.SkipDir
 			}
