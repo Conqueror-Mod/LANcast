@@ -737,6 +737,9 @@ func (s *Server) authLogin(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "bad_request", "malformed JSON body")
 		return
 	}
+	// The attempt is aimed at this name, so only a success for this name
+	// clears it from the address's count (R01-2).
+	s.throttle.Attribute(key, req.Username)
 
 	// Per account as well as per address, so many addresses cannot share out
 	// the guessing. Checked before the lookup and before bcrypt: the name is
@@ -793,7 +796,7 @@ func (s *Server) authLogin(w http.ResponseWriter, r *http.Request) {
 	} else if waiting {
 		return
 	}
-	s.throttle.Reset(key)
+	s.throttle.Reset(key, req.Username)
 	s.accountWait.Reset(req.Username)
 
 	if err := s.issueSession(w, r, u.ID); err != nil {
@@ -869,6 +872,7 @@ func (s *Server) authChangePassword(w http.ResponseWriter, r *http.Request) {
 		s.writeInternal(w, err, "load user")
 		return
 	}
+	s.throttle.Attribute(key, u.Name)
 	// The same per-account wait as login, for the reason the per-address
 	// counter is shared: a stolen session must not be a fresh budget for
 	// learning the password from many addresses.
@@ -888,8 +892,8 @@ func (s *Server) authChangePassword(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// Knowing the current password is the same proof a login gives, so it earns
-	// the same clean slate.
-	s.throttle.Reset(key)
+	// the same clean slate, for this account's attempts only.
+	s.throttle.Reset(key, u.Name)
 	s.accountWait.Reset(u.Name)
 
 	hash, err := auth.HashPassword(req.New)
