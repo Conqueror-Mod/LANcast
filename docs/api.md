@@ -2609,14 +2609,16 @@ codes are the way in**, which is what they are for.
 
 **Setting up** (signed in):
 
-1. `POST /api/profile/two-factor/setup` → `{key, url}`: the secret as a key to
-   type (base32, in groups of four) and an `otpauth://` link for a QR code.
-   Held in memory for ten minutes; nothing is stored yet. `503` when the
-   server could not prepare its sealing key.
+1. `POST /api/profile/two-factor/setup` with `{current_password}` →
+   `{key, url}`: the secret as a key to type (base32, in groups of four) and an
+   `otpauth://` link for a QR code. Held in memory for ten minutes; nothing is
+   stored yet. A wrong password is `403`; two-factor already on is `409` (turn
+   it off first to use a different app). `503` when the server could not
+   prepare its sealing key.
 2. `POST /api/profile/two-factor` with `{code}` from the app → `200`
    `{recovery_codes: [...]}`: ten codes like `k7m2-9qxd`, each good once.
    **Shown in this answer and never again.** A wrong code is `400`; no setup
-   in progress is `409`.
+   in progress, or two-factor already on, is `409`.
 
 **Managing:**
 
@@ -2627,8 +2629,11 @@ codes are the way in**, which is what they are for.
 | `DELETE /api/profile/two-factor` | `{current_password}` → `204`, off |
 | `DELETE /api/users/{id}/two-factor` | Administrators: take it off somebody else's account → `204` |
 
-The two that weaken the account or show fresh codes ask for the password, on
-the sign-in throttle; a wrong one is `403`. `GET /api/users` marks an account
+Setup, turning it off and new codes ask for the password, on the sign-in
+throttle; a wrong one is `403`. Every route here that changes two-factor wants
+a signed-in session: an **API key is refused** with `403`, as it is for
+managing keys, since a key that could set the second factor could lock its own
+owner out. `GET /api/users` marks an account
 using it with `two_factor: true`. Turning it on and off, new codes, a sign-in
 with a recovery code, and an administrator's removal are all audited.
 
