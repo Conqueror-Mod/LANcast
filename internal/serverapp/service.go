@@ -28,12 +28,30 @@ func recordFFmpegDir(dataDir, dir string) error {
 	return store.Set(cur)
 }
 
+/*
+ * serviceTools settles the ffmpeg folder to record for the service, while the
+ * installing user's PATH can still be seen (ADR 0016).
+ *
+ * What it finds is recorded only if the service would run it: a folder that
+ * Administrators and SYSTEM alone can change. A per-user install — winget's,
+ * under AppData — is copied into the protected tools folder in the data
+ * directory and that is recorded instead (R09-1). Run elevated, as install
+ * always is; the copy is the administrator's decision to trust that ffmpeg.
+ */
+func serviceTools(dataDir, explicit string) (string, error) {
+	found := explicit
+	if found == "" {
+		found = mediatools.Detect()
+	}
+	return mediatools.ForService(mediatools.ServiceGuard(), dataDir, found)
+}
+
 // runService handles `lancastd service <action> [flags]`. install/uninstall/
 // start/stop/status delegate to the platform Manager; `run` is the internal mode
 // the service host invokes (ADR 0016).
 func runService(args []string) error {
 	if len(args) == 0 {
-		return fmt.Errorf("usage: lancast service install|uninstall|start|stop|status [-data DIR] [-addr ADDR]")
+		return fmt.Errorf("usage: lancast service install|uninstall|start|stop|status|tools [-data DIR] [-addr ADDR]")
 	}
 	action := args[0]
 
@@ -71,9 +89,9 @@ func runService(args []string) error {
 		// Record where ffmpeg lives while we can still see it. Install runs with
 		// the installing user's PATH; the service will not have it, and without
 		// this the service silently probes nothing (ADR 0016).
-		tools := *ffmpegDir
-		if tools == "" {
-			tools = mediatools.Detect()
+		tools, terr := serviceTools(*data, *ffmpegDir)
+		if terr != nil {
+			fmt.Fprintf(os.Stderr, "warning: ffmpeg was found but could not be copied where the service may run it: %v\n", terr)
 		}
 		if tools != "" {
 			if err := recordFFmpegDir(*data, tools); err != nil {
@@ -91,6 +109,22 @@ func runService(args []string) error {
 		} else {
 			fmt.Printf("media tools: %s\n", tools)
 		}
+		return nil
+	case "tools":
+		// Copies a per-user ffmpeg into the protected tools folder and records
+		// it, for a service that refused the folder it had (R09-1). Elevated,
+		// like install; the service picks it up at its next start.
+		tools, err := serviceTools(*data, *ffmpegDir)
+		if err != nil {
+			return err
+		}
+		if tools == "" {
+			return fmt.Errorf("ffmpeg/ffprobe were not found; pass -ffmpeg-dir with the folder that holds them")
+		}
+		if err := recordFFmpegDir(*data, tools); err != nil {
+			return err
+		}
+		fmt.Printf("media tools: %s\nrestart the service to use them: LANcast.exe service restart\n", tools)
 		return nil
 	case "uninstall":
 		if err := mgr.Uninstall(); err != nil {

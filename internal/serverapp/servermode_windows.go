@@ -14,7 +14,6 @@ import (
 	"time"
 
 	"lancast/internal/desktop"
-	"lancast/internal/mediatools"
 	"lancast/internal/servermode"
 	"lancast/internal/service"
 	"lancast/internal/store"
@@ -177,7 +176,10 @@ func (s scmService) Install(addr string) error {
 	if err != nil {
 		return fmt.Errorf("determine executable path: %w", err)
 	}
-	tools := mediatools.Detect()
+	tools, err := serviceTools(s.dataDir, "")
+	if err != nil {
+		return fmt.Errorf("copy ffmpeg where the service may run it: %w", err)
+	}
 	if tools != "" {
 		if err := recordFFmpegDir(s.dataDir, tools); err != nil {
 			return fmt.Errorf("record the ffmpeg location: %w", err)

@@ -7717,6 +7717,8 @@ export interface components {
                 probe_available: boolean;
                 transcode_available: boolean;
                 directory: string;
+                /** @description Folders that held ffmpeg and were not used, with the reason (R09-1). As the service, tools run only from a folder that Administrators and SYSTEM alone can change, checked on every start; an empty list otherwise. */
+                refused?: components["schemas"]["MediaToolsRefusal"][];
             };
             encoder: {
                 /** @description `auto`, or a named encoder. */
@@ -8747,6 +8749,11 @@ export interface components {
             /** @description The version now staged, if any. */
             staged?: string;
         };
+        /** @description A folder holding ffprobe that the server would not run tools from, and why, in words a person reads in Settings (R09-1). */
+        MediaToolsRefusal: {
+            directory: string;
+            reason: string;
+        };
         /** @description A pinned build, as offered **before** it is downloaded. A download the user cannot identify is not consent, so this is shown rather than implied. */
         MediaToolsSource: {
             version: string;
@@ -8775,6 +8782,8 @@ export interface components {
             probe_available: boolean;
             transcode_available: boolean;
             directory?: string;
+            /** @description Folders that held ffmpeg and were not used, with the reason (R09-1). */
+            refused?: components["schemas"]["MediaToolsRefusal"][];
             /** @description Absent where there is no pinned build for this platform. */
             available_source?: components["schemas"]["MediaToolsSource"];
         };
