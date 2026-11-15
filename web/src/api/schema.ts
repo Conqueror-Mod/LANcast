@@ -3293,7 +3293,7 @@ export interface paths {
          *
          *     **The download is the slow half and the restart is the disruptive half, so they are separate calls**: a client can stage an update while people are watching and restart when nobody is.
          *
-         *     Calling it with no update available is a **no-op rather than an error** — the check may simply have gone stale.
+         *     **Starts the download and answers at once** (`202`, no body): a release is tens of megabytes and not something to hold a request open for. Follow it with `GET /api/update`, whose `downloading` carries the progress while it runs; afterwards `staged` names the version ready to apply, or `download_error` says why nothing was staged. Calling it with no newer release available is not refused — the check may simply have gone stale — and ends with `download_error` saying so.
          */
         post: operations["downloadUpdate"];
         delete?: never;
@@ -8791,10 +8791,6 @@ export interface components {
             /** Format: int64 */
             staged_at?: number;
         };
-        StagedUpdate: {
-            /** @description The version now staged, if any. */
-            staged?: string;
-        };
         /** @description A folder holding ffprobe that the server would not run tools from, and why, in words a person reads in Settings (R09-1). */
         MediaToolsRefusal: {
             directory: string;
@@ -9448,7 +9444,12 @@ export interface components {
             file_name?: string;
         };
         DownloadedSubtitle: {
+            /** @description The new track's key, `external-<id>`, as `GET /api/items/{id}/subtitles` lists it. */
             key: string;
+            /** @description The language it was saved under. */
+            language: string;
+            /** @description What a track menu shows for it. */
+            label: string;
         };
         /** @description A boundary detected on one item (ADR 0054). */
         Marker: {
@@ -16955,17 +16956,42 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description The staged version, if one was staged. */
-            200: {
+            /** @description The download has started. No body; read progress and the outcome from `GET /api/update`. */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            /** @description A download is already running. */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["StagedUpdate"];
+                    "application/json": components["schemas"]["ErrorEnvelope"];
                 };
             };
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
+            /** @description `unverifiable`: this build cannot verify a release signature, so it will not install one. */
+            412: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description This build has no updater. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
         };
     };
     restartForUpdate: {

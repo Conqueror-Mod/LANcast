@@ -3261,8 +3261,9 @@ Returns `503` without an API key, `429` when the daily quota is spent.
 ### `POST /api/items/{id}/subtitles/download`
 
 `{file_id, language, file_name}` → downloads and attaches the subtitle,
-returning its `key`. Files are written to the data directory, **never beside
-the media** — the same rule NFO writing follows.
+returning `{key, language, label}`: the new track's key, the language it was
+saved under, and what a track menu shows for it. Files are written to the data
+directory, **never beside the media** — the same rule NFO writing follows.
 
 `language` defaults to `en` and becomes part of the file's name, so it must be a
 language: a code or name the server recognises (`en`, `eng`, `English`) or a
@@ -4207,8 +4208,17 @@ Admin only. The download is the slow half and the restart is the disruptive
 half, so they are separate calls: a client can stage an update while people are
 watching and restart when nobody is.
 
-Returns the staged version. Calling it with no update available is a no-op
-rather than an error — the check may simply have gone stale.
+**Starts the download and answers `202` at once, with no body.** A release is
+tens of megabytes and not something to hold a request open for. Follow it with
+`GET /api/update`: `downloading` carries the progress while it runs, and
+afterwards `staged` names the version ready to apply, or `download_error` says
+why nothing was staged. Calling it with no newer release available is not
+refused — the check may simply have gone stale — and ends with
+`download_error` saying so.
+
+`409` while a download is already running, `412 unverifiable` on a build that
+cannot verify a release signature (it will not install one), and `503` on a
+build with no updater.
 
 ### `POST /api/update/restart`
 
