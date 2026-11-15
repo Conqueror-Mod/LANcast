@@ -1036,11 +1036,22 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
   // every list on screen.
   const finishedShown = useRef<number | null>(null);
   const saveProgress = useCallback(
-    (force = false) => {
+    (force = false, at?: number) => {
       const now = Date.now();
       if (!force && now - lastSaved.current < 5000) return;
       lastSaved.current = now;
-      const pos = transcoding.current ? offset.current + current : current;
+      /*
+       * `at` is a position the caller already knows better than the clock.
+       *
+       * A seek is the case: this callback is the one from the last render, so
+       * its `current` is the element's clock from *before* the seek. On a
+       * converted source the seek has already moved `offset` to the target, so
+       * the sum was the new offset plus the old clock — an hour into a 2 h
+       * film, going back 100 s wrote 7,100 s, past 0.92 of the runtime, as
+       * watched: a viewing logged, the count bumped, the film taken off the
+       * watchlist (R14-1, seekProgress.test.tsx).
+       */
+      const pos = at ?? (transcoding.current ? offset.current + current : current);
       /*
        * Nothing is written while the clock and the queue disagree about what
        * is playing.
@@ -2423,7 +2434,9 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
       } else {
         v.currentTime = t;
       }
-      saveProgress(true);
+      // The target, not the clock: in both branches the clock this callback
+      // can see is the one from before the seek (see saveProgress).
+      saveProgress(true, t);
     },
     [itemID, totalDuration, saveProgress, audioIndex],
   );
