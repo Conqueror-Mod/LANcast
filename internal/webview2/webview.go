@@ -144,6 +144,12 @@ type WebViewOptions struct {
 	// cannot be done from outside: WM_CLOSE is handled in this package's window
 	// procedure and there is no other hook.
 	OnClose func() bool
+
+	// LOCAL ADDITION (R11-3). OnCertificateError hears about a certificate
+	// the view has already refused -- never offered to the person to click
+	// through -- with the address that presented it. Runs on the window's
+	// thread.
+	OnCertificateError func(uri string)
 }
 
 // New creates a new webview in a new window.
@@ -165,6 +171,7 @@ func NewWithOptions(options WebViewOptions) WebView {
 
 	chromium := edge.NewChromium()
 	chromium.MessageCallback = w.msgcb
+	chromium.ServerCertificateErrorCallback = options.OnCertificateError
 	chromium.DataPath = options.DataPath
 	chromium.SetPermission(edge.CoreWebView2PermissionKindClipboardRead, edge.CoreWebView2PermissionStateAllow)
 

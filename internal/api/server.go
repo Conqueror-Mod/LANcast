@@ -715,6 +715,9 @@ func (s *Server) Handler() http.Handler {
 
 	// Who this server is (ADR 0044). Reports an identity; grants nothing.
 	mux.HandleFunc("GET /api/identity", s.identity)
+	// Proves it, over this connection, to a client that already knows who it
+	// is asking for (ADR 0124). No session: see identityproof.go.
+	mux.HandleFunc("GET /api/identity/proof", s.identityProof)
 
 	/*
 	 * Peers (ADR 0044). Admin, because pairing opens a network relationship for

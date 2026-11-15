@@ -81,7 +81,9 @@ guarantee at no cost.
 Every endpoint requires a session cookie except `GET /api/health`,
 `GET /api/auth/status`, `GET /api/auth/accounts`, `POST /api/auth/setup`, `POST /api/auth/login`,
 `POST /api/auth/login/two-factor`,
-`POST /api/auth/passkey/login/options`, `POST /api/auth/passkey/login`, and the
+`POST /api/auth/passkey/login/options`, `POST /api/auth/passkey/login`,
+`GET /api/identity/proof` (which answers only a caller who already names this
+server's fingerprint — see [Server identity](#server-identity)), and the
 web assets. Unauthenticated calls return `401 unauthorized`.
 
 While no account exists the API is open — but the server binds `127.0.0.1`
@@ -220,6 +222,7 @@ gates LAN binding ([ADR 0014](adr/0014-transport-security.md)).
 | Route | Purpose |
 |---|---|
 | `GET /api/identity` | `{fingerprint, fingerprint_display, name}` — who this server is |
+| `GET /api/identity/proof?fingerprint=&nonce=` | `{public_key, signature}` — **no session**; proves this server holds its identity key, over this connection |
 
 This server's own cryptographic identity
 ([ADR 0044](adr/0044-server-identity-and-peering.md)): an Ed25519 keypair
@@ -245,6 +248,37 @@ pairing and no access decision behind it. It is session-gated because the
 fingerprint travels to the people who need it *out of band*, in an invite — a
 route anybody could read would be a directory of one, which is exactly what
 ADR 0044 declines to build.
+
+#### `GET /api/identity/proof`
+
+The server proves it holds its identity key, bound to the TLS connection the
+request arrived on ([ADR 0124](adr/0124-a-server-proves-its-identity-over-the-connection.md)).
+The desktop client asks this when the certificate at an address it knows has
+changed, and accepts the new key only if the proof holds — so nobody has to
+compare fingerprints by eye.
+
+- `fingerprint` — the identity the caller expects. Case, spaces and dashes are
+  ignored.
+- `nonce` — 16 to 64 random bytes, base64url without padding. Otherwise `400`.
+
+The answer is `{public_key, signature}`, both standard base64: the raw 32-byte
+Ed25519 public key, and its signature over
+
+```
+"LANcast identity proof v1" || 0x00 || nonce || EKM
+```
+
+where `EKM` is 32 bytes of keying material exported from **this TLS session**
+(RFC 5705 / RFC 8446 §7.5), label `EXPORTER-LANcast-identity-proof`, no
+context. A verifier checks that SHA-256 of `public_key` is the fingerprint it
+holds, and that the signature verifies over its own nonce and its own export of
+the same connection. Somebody relaying the request runs a different session on
+each side, so a relayed proof fails.
+
+**No session, and still not a directory.** It answers only over TLS and only
+when `fingerprint` is this server's own. Every other request gets the same
+`404` as a route that does not exist, so a scanner learns nothing it did not
+bring. `Cache-Control: no-store`.
 
 ### Peers
 

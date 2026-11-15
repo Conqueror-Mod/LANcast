@@ -53,11 +53,14 @@ function GeneralSection() {
         reasonably expects it to grant access. Both values here grant nothing
         whatsoever. They are compared, never presented.
 
-        Identity first, because it is the durable one and the one somebody
-        checking a changed certificate is sent here to read. The certificate
-        fingerprint is still shown, because it is the only value both ends can
-        compare before anyone has signed in, which is exactly the first-contact
-        case.
+        Identity first, because it is the durable one. But it is *not* the
+        one to read out to somebody whose client says the certificate changed
+        (R11-1): their client already holds this server's identity, so an
+        impostor in this server's place would show them the same value and the
+        comparison would pass every time. Only the certificate fingerprint is a
+        fact about the connection they are being asked to trust, so that is the
+        value both the first-contact prompt and the changed-certificate prompt
+        send people here for.
 
         Neither is a secret. The identity's public half is what an invite
         carries; the certificate fingerprint is handed to anyone who opens a TLS
@@ -73,8 +76,9 @@ function GeneralSection() {
             <div className="set-row__sub">
               Who this server is. It does not change when the certificate is
               reissued, and it survives being restored from a backup onto
-              another machine &mdash; so this is the one to read out when somebody
-              is checking that this is still the same server.
+              another machine. It is what an invite to pair carries. To check
+              a connection to this server, read out the certificate
+              fingerprint below instead.
             </div>
           </div>
         </div>
@@ -87,10 +91,10 @@ function GeneralSection() {
               {groupFingerprint(settings.certificate_fingerprint)}
             </div>
             <div className="set-row__sub">
-              Read this out to somebody adding this
-              server on another computer for the first time, before they have
-              signed in. It is reissued for ordinary reasons, so a change in it
-              is not by itself a problem. Not a secret.
+              Read this out to somebody adding this server on another
+              computer, or whose LANcast says this server&rsquo;s certificate
+              has changed. It is reissued for ordinary reasons, so a change in
+              it is not by itself a problem. Not a secret.
             </div>
           </div>
         </div>

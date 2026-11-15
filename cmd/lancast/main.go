@@ -4,6 +4,7 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"flag"
 	"fmt"
@@ -370,8 +371,8 @@ func runWindow(l *launcher, d *desk) {
 	switch {
 	case l.askWhichServer:
 		pickerReason = "The server you were using is no longer one you have accepted."
-	case !l.target.local && !desktop.ServerRunning(l.addr):
-		pickerReason = "LANcast could not reach " + l.target.address + "."
+	case !l.target.local:
+		pickerReason = l.checkRemote()
 	}
 	page := ""
 	if pickerReason != "" {
@@ -432,6 +433,18 @@ func runWindow(l *launcher, d *desk) {
 		// ✕ hides into the tray, which lives in this process and so always
 		// exists while the window does (desk.closing). Exit closes.
 		OnClose: d.closing,
+		/*
+		 * A certificate the window refused (R11-3). The window has already
+		 * cancelled the request; this says why, on the picker, rather than
+		 * leaving an error page. Only for the server's own page: a refused
+		 * image from somewhere else is not a reason to leave the app.
+		 */
+		OnCertificateError: func(c clientwindow.Controller, uri string) {
+			slog.Warn("refused a certificate the window does not trust", "uri", uri)
+			if sameOrigin(uri, url, winURL) {
+				c.ShowHTML(pickerPage(certificateRefusedReason(l.target)))
+			}
+		},
 		OnReady: func(c clientwindow.Controller) {
 			win = c
 			d.attach(c)
@@ -935,3 +948,34 @@ func devToolsWanted() bool {
 	prefs, err := desktopprefs.Load(clientDataDir())
 	return err == nil && prefs.DevTools
 }
+
+/*
+ * checkRemote reads the key a remembered remote server is presenting now and
+ * checks it against the record, before the window is given any pin
+ * (R11-3). "" means open it; anything else is the picker's reason.
+ */
+func (l *launcher) checkRemote() string {
+	// Read again rather than passed down: it is the same file the picker
+	// reads, and an unreadable one leaves every server unknown, which is the
+	// safe direction (the picker).
+	known, _ := knownserver.Load(clientDataDir())
+	ctx, cancel := context.WithTimeout(context.Background(), probeTimeout)
+	defer cancel()
+	offered, err := knownserver.Fetch(ctx, l.target.address)
+	trust := knownserver.TrustUnknown
+	if err == nil {
+		trust = known.Check(l.target.address, offered.Pin)
+	}
+	reason := remoteLaunchReason(l.target.address, trust, err)
+	if reason == "" && !desktop.ServerRunning(l.addr) {
+		// The key is right and nothing answers behind it yet.
+		reason = remoteLaunchReason(l.target.address, trust, errNotAnswering)
+	}
+	if reason != "" {
+		slog.Info("not opening the remembered server directly",
+			"address", l.target.address, "trust", trust.String(), "error", err)
+	}
+	return reason
+}
+
+var errNotAnswering = errors.New("the server is not answering")
