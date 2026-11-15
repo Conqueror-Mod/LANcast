@@ -193,6 +193,7 @@ func (s *Server) authLoginTwoFactor(w http.ResponseWriter, r *http.Request) {
 		s.notFoundOr(w, err, "lookup user", "this sign-in has expired; enter your password again")
 		return
 	}
+	s.throttle.Attribute(key, u.Name)
 	inside := auth.InsideNetwork(r)
 	if !inside {
 		if ok, left := s.accountWait.Allow(u.Name); !ok {
@@ -218,7 +219,7 @@ func (s *Server) authLoginTwoFactor(w http.ResponseWriter, r *http.Request) {
 	}
 
 	s.tfBook.done(req.Challenge)
-	s.throttle.Reset(key)
+	s.throttle.Reset(key, u.Name)
 	s.accountWait.Reset(u.Name)
 	if err := s.issueSession(w, r, u.ID); err != nil {
 		return
@@ -464,11 +465,12 @@ func (s *Server) passwordConfirmed(w http.ResponseWriter, r *http.Request) (*sto
 	if s.notFoundOr(w, err, "lookup user", "no such user") {
 		return sess, false
 	}
+	s.throttle.Attribute(key, u.Name)
 	if !auth.CheckPassword(u.PasswordHash, req.Password) {
 		writeError(w, http.StatusForbidden, "forbidden", "that password is not right")
 		return sess, false
 	}
-	s.throttle.Reset(key)
+	s.throttle.Reset(key, u.Name)
 	return sess, true
 }
 

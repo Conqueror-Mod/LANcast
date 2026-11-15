@@ -154,9 +154,61 @@ func TestThrottle(t *testing.T) {
 		t.Error("a different client was blocked by another client's attempts")
 	}
 
-	th.Reset("1.2.3.4")
-	if !th.Allow("1.2.3.4") {
-		t.Error("Reset did not clear the counter")
+	th.Reset("1.2.3.4", "nobody")
+	if th.Allow("1.2.3.4") {
+		t.Error("a success for an account no attempt was aimed at cleared the counter")
+	}
+}
+
+/*
+ * A success clears only the attempts aimed at the account that succeeded
+ * (R01-2). One address is often a whole household, so clearing everything on
+ * any success let somebody guess at one account and sign in to their own
+ * between rounds, and the limit never tripped.
+ */
+func TestThrottleResetClearsOnlyItsOwnAccount(t *testing.T) {
+	th := NewThrottle()
+	th.Max = 4
+
+	// Three guesses at the admin, then a right password for the kid.
+	for i := 0; i < 3; i++ {
+		th.Allow("10.0.0.5")
+		th.Attribute("10.0.0.5", "admin")
+	}
+	th.Allow("10.0.0.5")
+	th.Attribute("10.0.0.5", " Kid ")
+	th.Reset("10.0.0.5", "kid") // folded like the user table: " Kid " is "kid"
+
+	if !th.Allow("10.0.0.5") {
+		t.Fatal("the kid's own sign-in was charged against the address")
+	}
+	if th.Allow("10.0.0.5") {
+		t.Fatal("the guesses at the admin were cleared by the kid's sign-in")
+	}
+
+	// The admin's own success does clear the admin's share.
+	th.Reset("10.0.0.5", "ADMIN")
+	if !th.Allow("10.0.0.5") {
+		t.Error("the admin's sign-in did not clear the admin's attempts")
+	}
+}
+
+// Attribute never claims more than Allow counted, so a handler that attributes
+// twice cannot later clear attempts it did not make.
+func TestThrottleAttributeIsBoundedByTheCount(t *testing.T) {
+	th := NewThrottle()
+	th.Max = 3
+	th.Allow("h")
+	th.Attribute("h", "a")
+	th.Attribute("h", "a") // nothing left to attribute
+	th.Allow("h")          // unattributed: a malformed body, say
+	th.Reset("h", "a")
+	th.Allow("h")
+	if !th.Allow("h") {
+		t.Fatal("the reset cleared less than its own attempt")
+	}
+	if th.Allow("h") {
+		t.Error("the reset cleared an attempt that was not its account's")
 	}
 }
 
