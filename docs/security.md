@@ -402,17 +402,19 @@ binary does with a hostile file.
 ### The pinned build
 
 The in-app download is pinned to an exact asset and checksum (ADR 0043):
-BtbN's `autobuild-2026-08-18-15-03`, ffmpeg **n8.1.2-44-g7c533d0f86**, win64
-GPL static. That is 44 commits past n8.1.2 on the 8.1 release branch. n8.1.2
-was tagged 2026-06-17 and the build was made 2026-08-18, so on 2026-11-14 it is
-about **three months old and one point release behind**: n8.1.3 was tagged
-2026-09-21.
+`FFmpeg-Builds/FFmpeg-Builds` `autobuild-2026-10-31-12-59`, ffmpeg
+**n8.1.3-27-g8dca1586f4**, win64 GPL static. That is 27 commits past n8.1.3
+on the 8.1 release branch. n8.1.3 was tagged 2026-09-21 and the build was made
+2026-10-31, so on 2026-11-14 it is **two weeks old and on the current point
+release**.
 
-The asset itself is **gone**. The repository moved to
-`FFmpeg-Builds/FFmpeg-Builds` and keeps daily autobuilds for about two weeks;
-only month-end builds (`autobuild-YYYY-MM-3x`) are kept long-term. The pinned
-URL answered 404 on 2026-11-14, so Download ffmpeg fails until it is re-pinned.
-Pin month-end builds only.
+v0.11.0 shipped pinned to an August build (n8.1.2-44, `autobuild-2026-08-18`).
+By 2026-11-14 that asset answered 404, so Download ffmpeg failed. The
+repository had moved from `BtbN/FFmpeg-Builds`, and it keeps daily autobuilds
+for only about two weeks. Only month-end builds (`autobuild-YYYY-MM-3x`) are
+kept long-term. The re-pin to a month-end build fixed it. **Pin month-end
+builds only.** A pin is only as durable as the release it points at, and
+nothing in CI checks that the pinned URL still answers.
 
 An update touches:
 
@@ -499,7 +501,7 @@ retired as the service on hardware this project does not have. **It is a 1.1
 item, not a 1.0 change.** Until then the exposure stays where *Threats
 explicitly out of scope* puts it: a malicious media file that exploits ffmpeg
 runs as SYSTEM, or as root under systemd. Keeping the pinned build current is
-the mitigation available now, and it has just been shown to rot: see above.
+the mitigation available now, and it rots quietly: see *The pinned build*.
 
 ## Threats explicitly out of scope
 
