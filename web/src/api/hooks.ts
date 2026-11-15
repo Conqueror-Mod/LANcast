@@ -3659,6 +3659,7 @@ export async function fetchShowEpisodes(showID: number): Promise<Item[]> {
  *   recently-added     — the hero is drawn from the same list
  *   search             — results carry ticks too
  *   profile, history-count — totals and history that count viewings
+ *   memories, year-in-review — Home's "On this day" and the year's totals
  *
  * Prefix invalidation refetches only what is mounted, so the breadth costs a
  * request per visible list and nothing for the rest.
@@ -3680,6 +3681,10 @@ export function invalidateWatchState(qc: QueryClient) {
     "to-rate",
     // A book's place and finish live on its own route (ADR 0116 step 2).
     "book",
+    // Home's "On this day" draws its watched cards from finished viewings,
+    // and holds them for fifteen minutes; the year in review counts them.
+    "memories",
+    "year-in-review",
   ]) {
     qc.invalidateQueries({ queryKey: [key] });
   }
@@ -4670,17 +4675,18 @@ export function useResetHistory() {
        * side of before, and the reason the grid's key is a *child* of the one
        * callers invalidate rather than a sibling like `["items-infinite"]`.
        */
-      for (const key of [
-        "history-count",
-        "profile",
-        "items",
-        "continue",
-        "recently-added",
-        "review",
-        "children",
-      ]) {
-        qc.invalidateQueries({ queryKey: [key] });
-      }
+      /*
+       * Clearing history is watch state changing for everything it touched at
+       * once, so it redraws everything invalidateWatchState does -- the
+       * detail page's tick, a collection's films, search results -- plus the
+       * review queue. The list used to be its own, and missed Home's "On this
+       * day": its watched cards are the very `viewing` rows this deletes, and
+       * ["memories"] keeps them for fifteen minutes (R13-2). For a control
+       * called "clear history", showing the history back is the worst kind of
+       * stale.
+       */
+      invalidateWatchState(qc);
+      qc.invalidateQueries({ queryKey: ["review"] });
     },
   });
 }
