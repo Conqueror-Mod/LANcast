@@ -9,7 +9,6 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"io"
 )
 
 // A .lcplugin bundle is a zip of three members: the manifest, the module, and an
@@ -177,11 +176,26 @@ func openBundle(data []byte) (manifest, wasm, sig []byte, err error) {
 	return manifest, wasm, sig, nil
 }
 
+/*
+ * maxBundleEntryBytes bounds one member of a bundle once uncompressed (R10-4).
+ *
+ * The upload is capped at 32 MiB, but that caps the compressed bytes: a member
+ * of a few KiB can inflate to gigabytes, and this ran before the signature was
+ * checked, so it was open to any bundle at all. The module is the largest
+ * member, and real ones are a few MiB.
+ */
+const maxBundleEntryBytes = 32 << 20
+
 func readZip(f *zip.File) ([]byte, error) {
+	// The header's own claim first, so an honest oversized member is refused
+	// without inflating any of it; the reader below holds a lying one.
+	if f.UncompressedSize64 > maxBundleEntryBytes {
+		return nil, fmt.Errorf("larger than %d bytes", maxBundleEntryBytes)
+	}
 	rc, err := f.Open()
 	if err != nil {
 		return nil, err
 	}
 	defer rc.Close()
-	return io.ReadAll(rc)
+	return readCapped(rc, maxBundleEntryBytes)
 }

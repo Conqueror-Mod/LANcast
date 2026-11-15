@@ -63,6 +63,23 @@ func WithHTTPGetter(g HTTPGetter) Option { return func(r *Runtime) { r.httpc = g
 // WithSecretResolver supplies the secret lookup (the host wires this to config).
 func WithSecretResolver(s SecretResolver) Option { return func(r *Runtime) { r.secret = s } }
 
+// The limits every plugin runs under and none can raise (R10-4).
+const (
+	// maxMemoryPages bounds one instance's linear memory: 1,024 pages of 64 KiB
+	// is 64 MiB. A metadata provider built with Go needs a few MiB for its
+	// runtime and its heap; the rest is room to decode a large response,
+	// which is itself capped at maxResponseBytes.
+	maxMemoryPages = 1024
+
+	// maxResponseBytes bounds one host fetch. A metadata response is tens of
+	// KiB; this is far above any real one and far below the instance's memory.
+	maxResponseBytes = 8 << 20
+)
+
+// callTimeout bounds one call into a plugin, its host fetches included. A var
+// so a test can prove the deadline without waiting the full span.
+var callTimeout = 30 * time.Second
+
 // pluginKey carries the calling plugin into host functions, so each call's
 // capability checks run against the right manifest without a shared registry.
 type pluginKey struct{}
@@ -81,7 +98,25 @@ func NewRuntime(ctx context.Context, log *slog.Logger, opts ...Option) (*Runtime
 		o(rt)
 	}
 
-	rt.wz = wazero.NewRuntime(ctx)
+	/*
+	 * Bounded, because "deny by default" has to cover CPU and memory as well
+	 * as authority (R10-4).
+	 *
+	 * wazero interrupts guest code on a cancelled context only when the runtime
+	 * is built to, and the default is not. Without it a provider whose search
+	 * loops on one title (a bug is enough) never returned: the enrichment
+	 * goroutine that called it hung for the life of the process, holding the
+	 * enrichment lock. With it, the deadline Call sets reaches the guest.
+	 *
+	 * The page limit replaces the default 65,536 pages (4 GiB) per instance,
+	 * and Call instantiates afresh each time. A module that declares more than
+	 * this fails to compile; one that grows past it sees memory.grow fail,
+	 * which a Go guest reports as out of memory rather than taking the host's.
+	 */
+	cfg := wazero.NewRuntimeConfig().
+		WithCloseOnContextDone(true).
+		WithMemoryLimitPages(maxMemoryPages)
+	rt.wz = wazero.NewRuntimeWithConfig(ctx, cfg)
 	if _, err := wasi_snapshot_preview1.Instantiate(ctx, rt.wz); err != nil {
 		return nil, fmt.Errorf("plugin runtime: wasi: %w", err)
 	}
@@ -168,7 +203,13 @@ func (rt *Runtime) LoadDir(ctx context.Context, dir string) (*Plugin, error) {
 // A fresh module instance is used per call — the simple, isolation-safe baseline;
 // pooling is a later optimisation. The calling plugin rides in the context so
 // the host functions can check its capabilities.
+//
+// Every call has a deadline, whatever the caller's context carries, and the
+// runtime closes the instance when it passes — so a guest that never returns
+// costs callTimeout and an error, not a goroutine for ever.
 func (p *Plugin) Call(ctx context.Context, fn string, input []byte) ([]byte, error) {
+	ctx, cancel := context.WithTimeout(ctx, callTimeout)
+	defer cancel()
 	ctx = context.WithValue(ctx, pluginKey{}, p)
 
 	// Anonymous name so the same compiled module can be instantiated repeatedly;
@@ -238,7 +279,22 @@ func defaultHTTPGet(ctx context.Context, url string) ([]byte, error) {
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("status %d", resp.StatusCode)
 	}
-	return io.ReadAll(resp.Body)
+	// Bounded before it is copied into guest memory (R10-4): a granted host
+	// that answers without end must not fill the server's memory first.
+	return readCapped(resp.Body, maxResponseBytes)
+}
+
+// readCapped reads all of r, or fails once it passes limit bytes, having read
+// at most one byte more than that.
+func readCapped(r io.Reader, limit int64) ([]byte, error) {
+	data, err := io.ReadAll(io.LimitReader(r, limit+1))
+	if err != nil {
+		return nil, err
+	}
+	if int64(len(data)) > limit {
+		return nil, fmt.Errorf("larger than %d bytes", limit)
+	}
+	return data, nil
 }
 
 func pluginFromCtx(ctx context.Context) *Plugin {
