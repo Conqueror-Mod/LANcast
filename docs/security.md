@@ -399,6 +399,13 @@ the same way. A per-user install is copied into the protected `tools` folder at
 install, not recorded where the user can replace it. What is left is what the
 binary does with a hostile file.
 
+The face worker is held to the same rule (R10-5, R12-1). As the service,
+`lancast-faces.exe` is run only from beside `LANcast.exe`, where the installer
+puts it, never from the data directory's `faces` folder or from PATH. Before
+every start, the guard checks the worker, its folder, the faces folder and the
+`onnxruntime.dll` the worker loads from it. A refusal is shown in Settings ›
+Photos with its reason.
+
 ### The pinned build
 
 The in-app download is pinned to an exact asset and checksum (ADR 0043):
