@@ -35,7 +35,7 @@ func decodeInto(t *testing.T, resp *http.Response, v any) {
 // secret (standing in for the phone) and the recovery codes.
 func turnOnTwoFactor(t *testing.T, h *harness) ([]byte, []string) {
 	t.Helper()
-	resp := h.authed(t, "POST", "/api/profile/two-factor/setup", nil)
+	resp := h.authed(t, "POST", "/api/profile/two-factor/setup", map[string]any{"current_password": tfPassword})
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("setup: %d", resp.StatusCode)
 	}
@@ -299,7 +299,7 @@ func TestWithoutASealingKeyItIsUnavailable(t *testing.T) {
 	if st.Available {
 		t.Fatal("available without a sealer")
 	}
-	resp := h.authed(t, "POST", "/api/profile/two-factor/setup", nil)
+	resp := h.authed(t, "POST", "/api/profile/two-factor/setup", map[string]any{"current_password": tfPassword})
 	resp.Body.Close()
 	if resp.StatusCode != http.StatusServiceUnavailable {
 		t.Fatalf("setup: %d", resp.StatusCode)
@@ -315,7 +315,7 @@ func TestEnablingNeedsACodeFromTheApp(t *testing.T) {
 	if resp.StatusCode != http.StatusConflict {
 		t.Fatalf("enable without setup: %d", resp.StatusCode)
 	}
-	h.authed(t, "POST", "/api/profile/two-factor/setup", nil).Body.Close()
+	h.authed(t, "POST", "/api/profile/two-factor/setup", map[string]any{"current_password": tfPassword}).Body.Close()
 	resp = h.authed(t, "POST", "/api/profile/two-factor", map[string]any{"code": "000000"})
 	resp.Body.Close()
 	if resp.StatusCode != http.StatusBadRequest {
@@ -324,5 +324,110 @@ func TestEnablingNeedsACodeFromTheApp(t *testing.T) {
 	a, _ := passwordStep(t, h, testUser, tfPassword)
 	if !a.Authenticated {
 		t.Fatal("a failed enrolment turned two-factor on")
+	}
+}
+
+/*
+ * Two-factor cannot be put on, or replaced, with a session alone (R01-3).
+ *
+ * Turning it off and making new recovery codes always asked for the password;
+ * turning it on asked for nothing and never checked whether it was already on.
+ * So a session left open was enough to swap the owner's app for the caller's
+ * and read ten fresh recovery codes.
+ */
+func TestSetupNeedsThePassword(t *testing.T) {
+	h := newHarness(t)
+	h.withSealer(t)
+	h.secure(t, tfPassword)
+
+	for _, body := range []any{nil, map[string]any{"current_password": "not it"}} {
+		resp := h.authed(t, "POST", "/api/profile/two-factor/setup", body)
+		resp.Body.Close()
+		if resp.StatusCode == http.StatusOK {
+			t.Fatalf("setup with body %v answered 200: a session alone can put a secret on the account", body)
+		}
+	}
+	// And nothing was left pending that enable could take.
+	resp := h.authed(t, "POST", "/api/profile/two-factor", map[string]any{"code": "123456"})
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusConflict {
+		t.Fatalf("enable after a refused setup: %d, want 409", resp.StatusCode)
+	}
+}
+
+func TestTwoFactorCannotBeReplacedWhileOn(t *testing.T) {
+	h := newHarness(t)
+	h.withSealer(t)
+	h.secure(t, tfPassword)
+	oldSecret, _ := turnOnTwoFactor(t, h)
+
+	// Even with the password: replacing it means turning it off first.
+	resp := h.authed(t, "POST", "/api/profile/two-factor/setup", map[string]any{"current_password": tfPassword})
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusConflict {
+		t.Fatalf("setup while on: %d, want 409", resp.StatusCode)
+	}
+	resp = h.authed(t, "POST", "/api/profile/two-factor", map[string]any{"code": "123456"})
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusConflict {
+		t.Fatalf("enable while on: %d, want 409", resp.StatusCode)
+	}
+
+	// The owner's app still signs them in.
+	a, _ := passwordStep(t, h, testUser, tfPassword)
+	r := h.do(t, "POST", "/api/auth/login/two-factor", map[string]any{
+		"challenge": a.Challenge, "code": auth.TOTPCode(oldSecret, time.Now()),
+	})
+	r.Body.Close()
+	if r.StatusCode != http.StatusOK {
+		t.Fatalf("the owner's own code was refused: %d", r.StatusCode)
+	}
+}
+
+// A setup started while off cannot be finished after two-factor was turned on
+// another way: enable checks again rather than overwriting.
+func TestAPendingSetupCannotOverwriteATwoFactorTurnedOnSince(t *testing.T) {
+	h := newHarness(t)
+	h.withSealer(t)
+	h.secure(t, tfPassword)
+
+	resp := h.authed(t, "POST", "/api/profile/two-factor/setup", map[string]any{"current_password": tfPassword})
+	var stale struct{ Key string }
+	decodeInto(t, resp, &stale)
+	staleSecret, err := base32.StdEncoding.WithPadding(base32.NoPadding).DecodeString(strings.ReplaceAll(stale.Key, " ", ""))
+	if err != nil {
+		t.Fatal(err)
+	}
+	turnOnTwoFactor(t, h) // a second setup replaces the pending one, then enables
+
+	resp = h.authed(t, "POST", "/api/profile/two-factor", map[string]any{
+		"code": auth.TOTPCode(staleSecret, time.Now()),
+	})
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusConflict {
+		t.Fatalf("enable over an enabled second factor: %d, want 409", resp.StatusCode)
+	}
+}
+
+// An API key cannot change how its owner signs in (R01-3).
+func TestAnAPIKeyCannotChangeTwoFactor(t *testing.T) {
+	h := newHarness(t)
+	h.withSealer(t)
+	h.secure(t, tfPassword)
+	key, _ := mint(t, h, "script")
+
+	for _, c := range []struct{ method, path string }{
+		{"POST", "/api/profile/two-factor/setup"},
+		{"POST", "/api/profile/two-factor"},
+		{"DELETE", "/api/profile/two-factor"},
+		{"POST", "/api/profile/two-factor/recovery-codes"},
+	} {
+		resp := h.doKey(t, c.method, c.path, key, map[string]any{
+			"current_password": tfPassword, "code": "123456",
+		})
+		resp.Body.Close()
+		if resp.StatusCode != http.StatusForbidden {
+			t.Errorf("%s %s with a key: %d, want 403", c.method, c.path, resp.StatusCode)
+		}
 	}
 }
