@@ -46,6 +46,18 @@ type Options struct {
 	 * server picker -- and runs on the window's thread.
 	 */
 	OnCertificateError func(c Controller, uri string)
+
+	/*
+	 * Origins are pages besides URL that this window may hold, such as the
+	 * server's own address when the window opens at its public name. Every
+	 * other http(s) origin is refused as a top-level navigation and cannot
+	 * call the bindings (R11-2); see origins.go.
+	 */
+	Origins []string
+	// OnBlockedNavigation is given an address the window refused to go to,
+	// so it can open in the system browser instead. Not on the window's
+	// thread.
+	OnBlockedNavigation func(uri string)
 	// Title is the window title.
 	Title string
 	// AppVersion is this app's version. The window tells the server it is

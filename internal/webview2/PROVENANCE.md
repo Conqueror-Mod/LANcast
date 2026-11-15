@@ -137,3 +137,29 @@ before the event is raised.
 written out (as an anonymous array); `edge/vtable14_test.go` pins the offset.
 A runtime older than 1.0.1245 has no `_14`; that is logged and the old
 behaviour stays.
+
+## Local addition — a window keeps to its own origins (2026-11-15)
+
+`edge/ICoreWebView2NavigationStarting.go` (the handler and its arguments), the
+`navigationStarting` field and `NavigationStartingCallback` on
+`edge.Chromium` with its registration, `MessageCallback` now taking the
+message's source document as well as the message, and
+`WebViewOptions.AllowMessage` / `AllowNavigation` with the check at the top of
+`msgcb`.
+
+Upstream injects every binding into every document and never asks which one
+is calling, and it lets a page navigate the main frame anywhere. Once the
+window could show a remote server's page (ADR 0070), any script there, or any
+site it navigated to, could call every native function (review finding
+R11-2). The policy itself lives in `internal/clientwindow/origins.go`; this
+package only provides the two hooks. `put_Cancel` takes a BOOL by value. A
+generated binding elsewhere passes a pointer, which is wrong.
+
+## Local change — a panicking binding rejects its promise (2026-11-15)
+
+`callbinding` recovers a panic in a bound Go function, logs it with its stack,
+and returns an error, so the page's promise is rejected. Upstream lets the
+panic through. Bindings run on the window's UI thread, so a panic in any one of
+them ended the whole desktop app. A malformed game icon did that every time the
+Games screen drew the game (review R12-3). The results of `v.Call` were renamed
+from `res` to `out`, because the function now has named results.

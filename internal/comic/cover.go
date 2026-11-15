@@ -1,9 +1,7 @@
 package comic
 
 import (
-	"bytes"
 	"context"
-	"image"
 	_ "image/gif"  // pages may be GIF
 	_ "image/jpeg" // or JPEG
 	_ "image/png"  // or PNG
@@ -12,6 +10,7 @@ import (
 
 	_ "golang.org/x/image/webp" // or WebP
 
+	"lancast/internal/imagecap"
 	"lancast/internal/photo"
 	"lancast/internal/store"
 )
@@ -126,7 +125,10 @@ func Cover(path string) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	img, _, err := image.Decode(bytes.NewReader(raw))
+	// The page's header is read before its pixels: a page of a few hundred
+	// bytes can declare a picture of terabytes, and decoding that is a fatal
+	// error no defer survives, so the row would never be stamped (R08-1).
+	img, _, err := imagecap.Decode(raw)
 	if err != nil {
 		return nil, err
 	}

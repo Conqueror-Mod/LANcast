@@ -7,6 +7,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"log/slog"
 	"os"
 
 	"golang.org/x/sys/windows"
@@ -83,6 +84,20 @@ func open(o Options) error {
 	 * the callback at construction, and the callback reads this when it runs.
 	 */
 	var ctrl *controller
+
+	// R11-2: see origins.go.
+	origins := newOriginPolicy(append([]string{o.URL}, o.Origins...)...)
+	opts.AllowMessage = origins.allows
+	opts.AllowNavigation = func(uri string) bool {
+		if origins.allows(uri) {
+			return true
+		}
+		slog.Warn("refused a navigation off the window's origins; opening it in the browser", "uri", uri)
+		if o.OnBlockedNavigation != nil {
+			go o.OnBlockedNavigation(uri)
+		}
+		return false
+	}
 	if o.OnCertificateError != nil {
 		opts.OnCertificateError = func(uri string) {
 			if ctrl != nil {
@@ -180,7 +195,7 @@ func open(o Options) error {
 	keys = installKeyHook(w, &fs)
 	defer keys.remove()
 
-	ctrl = &controller{w: w, placed: &placed}
+	ctrl = &controller{w: w, placed: &placed, origins: origins}
 	if o.OnReady != nil {
 		o.OnReady(ctrl)
 	}
@@ -306,6 +321,8 @@ type controller struct {
 	// placed is the same recorder open() reads after the loop ends, so a quit
 	// from the tray remembers where the window was rather than losing it.
 	placed *placement
+	// origins is the window's set of permitted origins (R11-2, origins.go).
+	origins *originPolicy
 }
 
 func (c *controller) Show() {
@@ -344,6 +361,11 @@ func (c *controller) ShowHTML(html string) {
 }
 
 func (c *controller) Navigate(url string) {
+	// This program sending the window somewhere is the one way a new origin
+	// is admitted (R11-2), so it is admitted before the navigation starts.
+	if c.origins != nil {
+		c.origins.add(url)
+	}
 	c.w.Dispatch(func() { c.w.Navigate(url) })
 }
 

@@ -6,9 +6,11 @@ package webview2
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"image"
 	"log"
 	"reflect"
+	"runtime/debug"
 	"strconv"
 	"sync"
 	"unsafe"
@@ -53,11 +55,13 @@ type webview struct {
 	browser    browser
 	autofocus  bool
 	onClose    func() bool
-	maxsz      w32.Point
-	minsz      w32.Point
-	m          sync.Mutex
-	bindings   map[string]interface{}
-	dispatchq  []func()
+	// allowMessage gates binding calls by their source document (LOCAL, R11-2).
+	allowMessage func(source string) bool
+	maxsz        w32.Point
+	minsz        w32.Point
+	m            sync.Mutex
+	bindings     map[string]interface{}
+	dispatchq    []func()
 	// Native video windows and layout (overlay.go).
 	overlay uintptr
 	video   uintptr
@@ -148,6 +152,12 @@ type WebViewOptions struct {
 	// through -- with the address that presented it. Runs on the window's
 	// thread.
 	OnCertificateError func(uri string)
+
+	// LOCAL ADDITION (R11-2). AllowMessage decides whether a binding call
+	// from the document at source is answered; AllowNavigation whether a
+	// top-level navigation may go ahead. Nil allows, as upstream.
+	AllowMessage    func(source string) bool
+	AllowNavigation func(uri string) bool
 }
 
 // New creates a new webview in a new window.
@@ -166,10 +176,12 @@ func NewWithOptions(options WebViewOptions) WebView {
 	w.bindings = map[string]interface{}{}
 	w.autofocus = options.AutoFocus
 	w.onClose = options.OnClose
+	w.allowMessage = options.AllowMessage
 
 	chromium := edge.NewChromium()
 	chromium.MessageCallback = w.msgcb
 	chromium.ServerCertificateErrorCallback = options.OnCertificateError
+	chromium.NavigationStartingCallback = options.AllowNavigation
 	chromium.DataPath = options.DataPath
 	chromium.SetPermission(edge.CoreWebView2PermissionKindClipboardRead, edge.CoreWebView2PermissionStateAllow)
 
@@ -211,7 +223,16 @@ type rpcMessage struct {
 
 func jsString(v interface{}) string { b, _ := json.Marshal(v); return string(b) }
 
-func (w *webview) msgcb(msg string) {
+func (w *webview) msgcb(source, msg string) {
+	/*
+	 * LOCAL CHANGE (R11-2). A binding call from a document the window should
+	 * not be holding is dropped unanswered: its promise never settles, which
+	 * tells a hostile page nothing about which bindings exist.
+	 */
+	if w.allowMessage != nil && !w.allowMessage(source) {
+		log.Printf("webview2: dropped a binding call from %q", source)
+		return
+	}
 	d := rpcMessage{}
 	if err := json.Unmarshal([]byte(msg), &d); err != nil {
 		log.Printf("invalid RPC message: %v", err)
@@ -234,7 +255,26 @@ func (w *webview) msgcb(msg string) {
 	}
 }
 
-func (w *webview) callbinding(d rpcMessage) (interface{}, error) {
+// errBindingPanicked is what the page's promise is rejected with when a
+// binding panics. The panic itself goes to the log with its stack; the page
+// gets no more than the binding's name.
+var errBindingPanicked = errors.New("the window's handler failed")
+
+func (w *webview) callbinding(d rpcMessage) (res interface{}, err error) {
+	/*
+	 * A binding runs on the window's UI thread, so a panic in one used to end
+	 * the whole desktop app: window, tray and player. One malformed game icon
+	 * did it every time the Games screen drew that game (review R12-3). The
+	 * fault is the binding's, and the page already handles a rejected promise,
+	 * so that is what a panic becomes. A local change to the vendored copy,
+	 * recorded in PROVENANCE.md.
+	 */
+	defer func() {
+		if r := recover(); r != nil {
+			log.Printf("window binding %q panicked: %v\n%s", d.Method, r, debug.Stack())
+			res, err = nil, fmt.Errorf("%s: %w", d.Method, errBindingPanicked)
+		}
+	}()
 	w.m.Lock()
 	f, ok := w.bindings[d.Method]
 	w.m.Unlock()
@@ -263,31 +303,31 @@ func (w *webview) callbinding(d rpcMessage) (interface{}, error) {
 	}
 
 	errorType := reflect.TypeOf((*error)(nil)).Elem()
-	res := v.Call(args)
-	switch len(res) {
+	out := v.Call(args)
+	switch len(out) {
 	case 0:
 		// No results from the function, just return nil
 		return nil, nil
 
 	case 1:
 		// One result may be a value, or an error
-		if res[0].Type().Implements(errorType) {
-			if res[0].Interface() != nil {
-				return nil, res[0].Interface().(error)
+		if out[0].Type().Implements(errorType) {
+			if out[0].Interface() != nil {
+				return nil, out[0].Interface().(error)
 			}
 			return nil, nil
 		}
-		return res[0].Interface(), nil
+		return out[0].Interface(), nil
 
 	case 2:
 		// Two results: first one is value, second is error
-		if !res[1].Type().Implements(errorType) {
+		if !out[1].Type().Implements(errorType) {
 			return nil, errors.New("second return value must be an error")
 		}
-		if res[1].Interface() == nil {
-			return res[0].Interface(), nil
+		if out[1].Interface() == nil {
+			return out[0].Interface(), nil
 		}
-		return res[0].Interface(), res[1].Interface().(error)
+		return out[0].Interface(), out[1].Interface().(error)
 
 	default:
 		return nil, errors.New("unexpected number of return values")

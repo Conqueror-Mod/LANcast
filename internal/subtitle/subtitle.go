@@ -8,6 +8,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 
 	"lancast/internal/media"
@@ -319,6 +320,26 @@ func isLanguageCode(s string) bool {
 // NormalizeLanguage maps any recognized spelling to an ISO 639-1 code.
 func NormalizeLanguage(s string) string {
 	return normalizeLanguage(strings.ToLower(strings.TrimSpace(s)))
+}
+
+// languageTag is what an unrecognized language may look like and still be
+// taken: an ISO 639 code with at most one subtag ("pt-br", "zh-hant"). Nothing
+// that can name a folder — no dot, no slash, no backslash, no colon.
+var languageTag = regexp.MustCompile(`^[a-z]{2,3}(-[a-z0-9]{1,8})?$`)
+
+// LanguageCode is NormalizeLanguage for a value that will become part of a
+// file name. It answers false for anything that is neither a spelling the table
+// knows nor shaped like a language tag, because NormalizeLanguage returns what
+// it does not recognize unchanged, and "x/../../escaped" is not a language.
+func LanguageCode(s string) (string, bool) {
+	code := NormalizeLanguage(s)
+	if _, known := languageNames[strings.ToLower(strings.TrimSpace(s))]; known {
+		return code, true
+	}
+	if languageTag.MatchString(code) {
+		return code, true
+	}
+	return "", false
 }
 
 func normalizeLanguage(s string) string {

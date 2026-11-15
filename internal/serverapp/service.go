@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"lancast/internal/config"
+	"lancast/internal/dataperm"
 	"lancast/internal/mediatools"
 	"lancast/internal/service"
 )
@@ -85,6 +86,14 @@ func runService(args []string) error {
 		exe, err := os.Executable()
 		if err != nil {
 			return fmt.Errorf("determine executable path: %w", err)
+		}
+		// The data directory first, so everything install and the service put
+		// in it inherits SYSTEM and Administrators only (R10-2, R10-3). A
+		// failure is a warning: the service re-asserts it at every start.
+		if r, err := dataperm.Protect(*data); err != nil {
+			fmt.Fprintf(os.Stderr, "warning: could not protect the data directory %s: %v\n", *data, err)
+		} else if r.Applied {
+			fmt.Printf("protected the data directory %s (SYSTEM and Administrators only)\n", *data)
 		}
 		// Record where ffmpeg lives while we can still see it. Install runs with
 		// the installing user's PATH; the service will not have it, and without

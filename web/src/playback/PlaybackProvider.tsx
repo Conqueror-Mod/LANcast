@@ -25,6 +25,7 @@ import {
   capabilities,
   capabilitiesNeededBy,
   deny,
+  failureIsAboutCodec,
   resetCapabilities,
 } from "./capabilities";
 import {
@@ -1036,11 +1037,22 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
   // every list on screen.
   const finishedShown = useRef<number | null>(null);
   const saveProgress = useCallback(
-    (force = false) => {
+    (force = false, at?: number) => {
       const now = Date.now();
       if (!force && now - lastSaved.current < 5000) return;
       lastSaved.current = now;
-      const pos = transcoding.current ? offset.current + current : current;
+      /*
+       * `at` is a position the caller already knows better than the clock.
+       *
+       * A seek is the case: this callback is the one from the last render, so
+       * its `current` is the element's clock from *before* the seek. On a
+       * converted source the seek has already moved `offset` to the target, so
+       * the sum was the new offset plus the old clock — an hour into a 2 h
+       * film, going back 100 s wrote 7,100 s, past 0.92 of the runtime, as
+       * watched: a viewing logged, the count bumped, the film taken off the
+       * watchlist (R14-1, seekProgress.test.tsx).
+       */
+      const pos = at ?? (transcoding.current ? offset.current + current : current);
       /*
        * Nothing is written while the clock and the queue disagree about what
        * is playing.
@@ -2171,11 +2183,26 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
    * Only for a *direct* source. A transcode that fails is a server-side problem
    * and retrying it under a narrower profile would be the same request again,
    * which is how a failing file becomes an infinite loop rather than an error.
+   *
+   * **And only for a failure that is about the codec** (R14-2). Every error on
+   * a direct source used to land here and withdraw claims for a fortnight,
+   * whatever it was: a network drop mid-film — the server restarting for an
+   * update, Wi-Fi going, a session expiring — withdrew `hevc` and re-encoded
+   * every HEVC title on the device. So did an optimized copy that was missing
+   * (R03-2), which withdrew the *original's* claims for a failure of a
+   * different file. Both still convert, because the film in front of somebody
+   * still needs rescuing; neither withdraws anything, and a drop picks up
+   * where the picture was rather than where it started.
    */
-  const retryWithoutClaims = useCallback(() => {
+  const retryWithoutClaims = useCallback((error: MediaError | null) => {
     if (transcoding.current) return;
 
-    const claimed = capabilities();
+    const fromCopy = !!item && optimizedCopies.has(item.id);
+    // The copy failed, not the original: stop asking for it this session.
+    if (item && fromCopy) optimizedCopies.delete(item.id);
+    const aboutCodec = !fromCopy && failureIsAboutCodec(error);
+
+    const claimed = aboutCodec ? capabilities() : "";
     if (claimed) {
       const atRisk = capabilitiesNeededBy(item?.streams, item?.container);
       const claims = claimed.split(",");
@@ -2187,23 +2214,54 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
       if (news) resetCapabilities();
     }
 
-    setNote("That file would not play directly — converting instead");
+    setNote(
+      fromCopy
+        ? "The optimized copy would not play — converting the original instead"
+        : aboutCodec
+          ? "That file would not play directly — converting instead"
+          : "The file stopped arriving — converting instead",
+    );
     if (item) {
       clientNote(
         "warn",
         "playback",
-        `"${item.title}" (item ${item.id}, ${item.container ?? "unknown container"}) would not play directly; converting instead`,
+        `"${item.title}" (item ${item.id}, ${item.container ?? "unknown container"}) would not play directly (media error ${error?.code ?? "none"}${fromCopy ? ", optimized copy" : ""}); converting instead`,
       );
     }
     const v = videoRef.current;
     if (!v || !item) return;
+    /*
+     * A track that failed on the music deck is converted on the element, so
+     * the deck has to let go of it — the same switch the source effect makes.
+     *
+     * Without this the conversion played on the element while `media()` still
+     * answered the deck: Pause, seek, volume and mute all reached a dead deck,
+     * and Stop or the next track paused the deck and left the converted track
+     * sounding underneath with nothing able to reach it (R14-3).
+     */
+    if (deckRef.current) {
+      const deck = musicDeck();
+      deck.queue(null);
+      deck.pause();
+      deck.removeAttribute("src");
+      deck.load();
+      deckRef.current = false;
+      clientNote("info", "playback", "music on element (converted)");
+      setMusicPath("element");
+    }
+    // A codec failure happens at the start, where the start is right. Anything
+    // else can happen an hour in, and the live position is where to pick up.
+    const at = aboutCodec
+      ? startedFrom.current
+      : resumePointAfterFailure(livePos.current, sourceItem.current, startedFrom.current);
     decision.current = {
       method: "transcode",
       reason: "direct playback failed",
     };
     transcoding.current = true;
-    offset.current = startedFrom.current;
-    setSubOffset(startedFrom.current);
+    offset.current = at;
+    setSubOffset(at);
+    setCurrent(0);
     setLoading(true);
     // Same reason as the seek below: the retry is about whichever track is
     // playing, not the file's default.
@@ -2214,7 +2272,7 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
     v.src = sourceURL(
       item.id,
       "transcode",
-      startedFrom.current,
+      at,
       audioIndex,
       qualityRef.current,
       chosenPath.current,
@@ -2423,7 +2481,9 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
       } else {
         v.currentTime = t;
       }
-      saveProgress(true);
+      // The target, not the clock: in both branches the clock this callback
+      // can see is the one from before the seek (see saveProgress).
+      saveProgress(true, t);
     },
     [itemID, totalDuration, saveProgress, audioIndex],
   );
@@ -3283,7 +3343,7 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
       // fails is a claim to withdraw; a transcode that fails is the
       // server saying no, and only one of them is worth retrying.
       if (transcoding.current) transcodeFailed();
-      else retryWithoutClaims();
+      else retryWithoutClaims(media.error);
     },
     durationchange: (media: MediaBackend) => {
       if (clockItem.current !== sourceItem.current) return;
