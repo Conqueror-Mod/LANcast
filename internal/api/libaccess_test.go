@@ -227,7 +227,10 @@ func TestAHiddenLibraryLeavesTheMembersOwnLists(t *testing.T) {
 	put(fmt.Sprintf("/api/items/%d/progress", finished), map[string]any{"position_ms": 0, "watched": true})
 	put(fmt.Sprintf("/api/items/%d/rating", a.privateFilm), map[string]any{"score": 8})
 
-	type counts struct{ continuing, viewings, ratings, yearTitles int }
+	type counts struct {
+		continuing, viewings, ratings, yearTitles int
+		profileHistory, profileStarted            int
+	}
 	read := func() (counts, string) {
 		var c counts
 		var cont struct {
@@ -256,12 +259,30 @@ func TestAHiddenLibraryLeavesTheMembersOwnLists(t *testing.T) {
 		}
 		decode(t, as("GET", "/api/profile/year", nil), &yr)
 		c.yearTitles = yr.Titles
+		// The profile page (R05-1): its history and its totals.
+		var pr struct {
+			History []struct {
+				Item struct {
+					Title string `json:"title"`
+				} `json:"item"`
+			} `json:"history"`
+			Stats struct {
+				Started int `json:"started"`
+			} `json:"stats"`
+		}
+		decode(t, as("GET", "/api/profile", nil), &pr)
+		c.profileHistory = len(pr.History)
+		c.profileStarted = pr.Stats.Started
+		for _, e := range pr.History {
+			names = append(names, "profile:"+e.Item.Title)
+		}
 		return c, strings.Join(names, ",")
 	}
 
 	// The control: before hiding, every list holds the private library.
 	before, names := read()
-	if before.continuing != 2 || before.viewings != 1 || before.ratings != 1 || before.yearTitles < 3 {
+	if before.continuing != 2 || before.viewings != 1 || before.ratings != 1 || before.yearTitles < 3 ||
+		before.profileHistory != 3 || before.profileStarted != 3 {
 		t.Fatalf("before hiding = %+v (continue: %s); the fixture did not build the history", before, names)
 	}
 
@@ -280,6 +301,10 @@ func TestAHiddenLibraryLeavesTheMembersOwnLists(t *testing.T) {
 	}
 	if after.yearTitles != before.yearTitles-2 {
 		t.Errorf("year in review titles = %d, want %d", after.yearTitles, before.yearTitles-2)
+	}
+	if after.profileHistory != 1 || after.profileStarted != 1 || strings.Contains(names, "profile:Home Video") {
+		t.Errorf("profile after hiding: %d history rows, %d started (%s); want 1 and 1",
+			after.profileHistory, after.profileStarted, names)
 	}
 
 	// Kept, not deleted: lifting the restriction gives the history back.
