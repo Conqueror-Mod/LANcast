@@ -2529,6 +2529,12 @@ What one person has published — **finished titles only**, newest first.
 private and so is how much of it there is. From outside, "has not shared" and
 "has watched nothing" are the same answer, deliberately.
 
+**Filtered by the caller's limits, not the sharer's.** A title in a library
+kept from the caller, or above their content-rating ceiling
+([ADR 0084](adr/0084-a-library-can-be-kept-from-an-account.md)), is left out, and
+`limit` counts only what remains. Sharing publishes what somebody watched; it
+does not lift what the household keeps from the person reading it.
+
 Governed by [ADR 0035](adr/0035-who-may-see-whose-viewing.md): viewing is
 private by default and shared only by an explicit per-account opt-in. Resume
 positions are never shared — where somebody stopped is a different and more

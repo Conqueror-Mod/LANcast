@@ -51,7 +51,8 @@ func (s *Server) personActivity(w http.ResponseWriter, r *http.Request) {
 		limit = v
 	}
 
-	entries, err := s.st.SharedActivity(r.Context(), id, limit)
+	// What the sharer watched, as far as the caller may see it (R06-1).
+	entries, err := s.st.SharedActivity(r.Context(), id, s.userID(r), limit)
 	if err != nil {
 		s.writeInternal(w, err, "shared activity")
 		return

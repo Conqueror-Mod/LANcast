@@ -66,7 +66,7 @@ func TestActivityIsNotReadableWithoutConsent(t *testing.T) {
 	ctx := context.Background()
 
 	u, _ := seedWatcher(t, st, "quiet", false)
-	got, err := st.SharedActivity(ctx, u.ID, 20)
+	got, err := st.SharedActivity(ctx, u.ID, "", 20)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -80,7 +80,7 @@ func TestActivityIsReadableAfterOptingIn(t *testing.T) {
 	ctx := context.Background()
 
 	u, _ := seedWatcher(t, st, "sharer", true)
-	got, err := st.SharedActivity(ctx, u.ID, 20)
+	got, err := st.SharedActivity(ctx, u.ID, "", 20)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -107,14 +107,14 @@ func TestOptingOutHidesPastActivity(t *testing.T) {
 	ctx := context.Background()
 
 	u, _ := seedWatcher(t, st, "changed-mind", true)
-	if got, _ := st.SharedActivity(ctx, u.ID, 20); len(got) != 1 {
+	if got, _ := st.SharedActivity(ctx, u.ID, "", 20); len(got) != 1 {
 		t.Fatalf("setup: expected shared activity, got %d entries", len(got))
 	}
 
 	if err := st.SetShareActivity(ctx, u.ID, false); err != nil {
 		t.Fatal(err)
 	}
-	got, err := st.SharedActivity(ctx, u.ID, 20)
+	got, err := st.SharedActivity(ctx, u.ID, "", 20)
 	if err != nil {
 		t.Fatal(err)
 	}
