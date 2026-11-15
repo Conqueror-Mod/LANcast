@@ -295,6 +295,14 @@
       };
       const text = (el, s) => { el.textContent = s; };
 
+      /*
+        The proof that a call comes from this page (R11-2). The bindings that
+        decide which servers this computer trusts answer only a caller that
+        has it, and only this page does: it is written in by the program that
+        shows the page, and a server's page cannot read another document.
+      */
+      const PICKER = "__PICKER_TOKEN__";
+
       let probed = null;
 
       function row(opts) {
@@ -327,7 +335,7 @@
       }
 
       async function draw() {
-        const state = await window.lancastServers();
+        const state = await window.lancastServers(PICKER);
         setError("list-error", state.error || "");
 
         const local = $("local");
@@ -374,7 +382,7 @@
         setError("list-error", "");
         busy("look", true, "Looking…");
         try {
-          const result = await window.lancastServerProbe(raw);
+          const result = await window.lancastServerProbe(PICKER, raw);
           if (result.error) { setError("list-error", result.error); return; }
           probed = result;
           if (result.trust === "match") { await connect(result.address); return; }
@@ -432,12 +440,12 @@
 
       async function connect(address) {
         setError("list-error", "");
-        const result = await window.lancastServerConnect(address);
+        const result = await window.lancastServerConnect(PICKER, address);
         if (result.rotation) {
           // Found on connecting rather than on probing: the same question, so
           // the same screen. Probe again so the fingerprints shown are the
           // ones this decision is about.
-          const fresh = await window.lancastServerProbe(address);
+          const fresh = await window.lancastServerProbe(PICKER, address);
           // Accepting acts on `probed`, which a connect from the list never
           // set: without this, the button acted on whatever was last looked
           // at, or on nothing.
@@ -451,12 +459,12 @@
       }
 
       async function connectLocal() {
-        const result = await window.lancastServerConnectLocal();
+        const result = await window.lancastServerConnectLocal(PICKER);
         if (result.error) setError("list-error", result.error);
       }
 
       async function forget(address) {
-        const result = await window.lancastServerForget(address);
+        const result = await window.lancastServerForget(PICKER, address);
         if (result.error) { setError("list-error", result.error); return; }
         await draw();
       }
@@ -471,7 +479,7 @@
         busy("trust-accept", true, "Connecting…");
         setError("trust-error", "");
         try {
-          const result = await window.lancastServerAccept(
+          const result = await window.lancastServerAccept(PICKER,
             probed.address, $("trust-name").value.trim());
           if (result.error) setError("trust-error", result.error);
         } finally {
@@ -485,7 +493,7 @@
         busy("rotate-accept", true, "Connecting\u2026");
         setError("rotate-error", "");
         try {
-          const result = await window.lancastServerAcceptRotation(
+          const result = await window.lancastServerAcceptRotation(PICKER,
             probed.address, rotationShown);
           if (result.error) setError("rotate-error", result.error);
         } finally {
