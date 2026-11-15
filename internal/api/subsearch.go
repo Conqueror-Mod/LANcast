@@ -116,6 +116,15 @@ func (s *Server) downloadSubtitle(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "bad_request", "file_id is required")
 		return
 	}
+	// The language becomes part of a file name, so it is checked before
+	// anything is fetched: a known spelling or a plain language tag, nothing
+	// else. NormalizeLanguage alone passes unknown text through, and that once
+	// let "x/../../escaped" write wherever the server could (R07-1).
+	lang, ok := subtitle.LanguageCode(firstNonEmptyStr(req.Language, "en"))
+	if !ok {
+		writeError(w, http.StatusBadRequest, "bad_request", "language is not a language code")
+		return
+	}
 
 	// The download is what spends the allowance, so it is the one call that
 	// carries the account's login when there is one.
@@ -141,13 +150,21 @@ func (s *Server) downloadSubtitle(w http.ResponseWriter, r *http.Request) {
 
 	// Downloads live in the data directory, never beside the media. Writing
 	// into someone's library unasked is the same rule NFO writing follows.
-	lang := subtitle.NormalizeLanguage(firstNonEmptyStr(req.Language, "en"))
-	dir := filepath.Join(s.dataDir, "subtitles", "downloaded", itoa64(id))
-	if err := os.MkdirAll(dir, 0o755); err != nil {
+	//
+	// The destination is contained under <data>/subtitles before anything is
+	// created, whatever the name was built from, so the next field added to it
+	// cannot reopen R07-1. Delete and serve already re-check this same root.
+	dest, err := containedPath(filepath.Join(s.dataDir, "subtitles"),
+		filepath.Join(s.dataDir, "subtitles", "downloaded", itoa64(id),
+			fmt.Sprintf("%d.%s.srt", req.FileID, lang)))
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "bad_request", "invalid subtitle name")
+		return
+	}
+	if err := os.MkdirAll(filepath.Dir(dest), 0o755); err != nil {
 		s.writeInternal(w, err, "create subtitle dir")
 		return
 	}
-	dest := filepath.Join(dir, fmt.Sprintf("%d.%s.srt", req.FileID, lang))
 	if err := os.WriteFile(dest, body, 0o644); err != nil {
 		s.writeInternal(w, err, "save subtitle")
 		return

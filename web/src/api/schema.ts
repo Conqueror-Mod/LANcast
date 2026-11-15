@@ -9437,6 +9437,7 @@ export interface components {
         DownloadSubtitleRequest: {
             /** Format: int64 */
             file_id: number;
+            /** @description Defaults to `en`. A code or name the server recognises, or a tag of two or three letters with at most one subtag (`pt-br`); anything else is 400. */
             language?: string;
             file_name?: string;
         };
