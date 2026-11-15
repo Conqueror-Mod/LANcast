@@ -382,6 +382,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/identity/proof": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Prove this server holds its identity key, over this connection
+         * @description **Public**, narrowly (ADR 0124). The desktop client asks this when the TLS certificate at an address it knows has changed, before it will send anything to the new key. The server signs `"LANcast identity proof v1" || 0x00 || nonce || EKM` with its Ed25519 identity key, where `EKM` is 32 bytes exported from **this TLS session** (RFC 5705 / RFC 8446 §7.5) with the label `EXPORTER-LANcast-identity-proof` and no context. Somebody in the middle runs a different session each way, so cannot relay a valid proof.
+         *
+         *     Answers only over TLS and only when `fingerprint` is this server's own: anything else is the same `404` as a route that does not exist, so a caller learns nothing it did not already know. That is how this keeps the reason `GET /api/identity` is session-gated (ADR 0044 §7).
+         *
+         *     The client checks that SHA-256 of `public_key` is the identity it has on record and that the signature verifies over its own nonce and its own export of the same connection.
+         */
+        get: operations["getIdentityProof"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/items/{id}/previews": {
         parameters: {
             query?: never;
@@ -7084,6 +7108,12 @@ export interface components {
             fingerprint_display: string;
             name: string;
         };
+        IdentityProof: {
+            /** @description The raw 32-byte Ed25519 identity public key, base64 (standard, padded). */
+            public_key: string;
+            /** @description The 64-byte Ed25519 signature, base64 (standard, padded). */
+            signature: string;
+        };
         /** @description The last scan's verdict, when it had one. Carried on the library rather than only in live scan progress — which dies with the server process, and a warning about a kind that cannot be changed needs to outlive a restart. */
         ShapeWarning: {
             code: string;
@@ -11554,6 +11584,41 @@ export interface operations {
                 };
             };
             401: components["responses"]["Unauthorized"];
+        };
+    };
+    getIdentityProof: {
+        parameters: {
+            query: {
+                /** @description The identity fingerprint the caller expects (ADR 0044 §2). Case, spaces and dashes are ignored. */
+                fingerprint: string;
+                /** @description 16 to 64 random bytes, base64url without padding. */
+                nonce: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The proof. Not cacheable: it is bound to one connection and one nonce. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IdentityProof"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            /** @description Not over TLS, not this server's fingerprint, or no keying material to export. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
         };
     };
     getItemPreviews: {

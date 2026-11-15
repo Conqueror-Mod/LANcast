@@ -49,7 +49,11 @@ func isPublicPath(p string) bool {
 		// Joining with an invite (ADR 0104): whoever holds the link has no
 		// account yet. The secret is checked, and failures throttled, in the
 		// handler.
-		"/api/invites/check", "/api/invites/redeem":
+		"/api/invites/check", "/api/invites/redeem",
+		// A server proving its identity to a desktop client that is deciding
+		// whether to trust a new certificate (ADR 0124). Answers only a
+		// caller who already names this server's fingerprint.
+		"/api/identity/proof":
 		return true
 	}
 	if isFederationPath(p) {

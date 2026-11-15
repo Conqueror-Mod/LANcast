@@ -33,6 +33,19 @@ type Options struct {
 	 * that decides nothing and asks for everything.
 	 */
 	HTML string
+
+	/*
+	 * OnCertificateError is told about a certificate the window refused
+	 * (review finding R11-3).
+	 *
+	 * Refused, not warned about: the window cancels every certificate error
+	 * itself, so no person is offered a way through to a key that is neither
+	 * validly issued nor the one pinned. Chromium's own interstitial offered
+	 * exactly that, and proceeding sent the session cookie to whichever key
+	 * answered. This is for saying what happened -- the caller shows the
+	 * server picker -- and runs on the window's thread.
+	 */
+	OnCertificateError func(c Controller, uri string)
 	// Title is the window title.
 	Title string
 	// AppVersion is this app's version. The window tells the server it is

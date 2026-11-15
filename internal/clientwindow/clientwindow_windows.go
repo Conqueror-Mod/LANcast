@@ -78,6 +78,19 @@ func open(o Options) error {
 	opts := viewOptions(o)
 	opts.OnClose = onClose
 	/*
+	 * The controller the certificate handler reports with, made before the
+	 * view for the same reason as the close handler above: the view takes
+	 * the callback at construction, and the callback reads this when it runs.
+	 */
+	var ctrl *controller
+	if o.OnCertificateError != nil {
+		opts.OnCertificateError = func(uri string) {
+			if ctrl != nil {
+				o.OnCertificateError(ctrl, uri)
+			}
+		}
+	}
+	/*
 	 * Created where it was last time, not centred on the primary display
 	 * and then moved: that showed a small white window on the wrong screen
 	 * at every start. Resolve refuses a placement it cannot honour, and then
@@ -167,8 +180,9 @@ func open(o Options) error {
 	keys = installKeyHook(w, &fs)
 	defer keys.remove()
 
+	ctrl = &controller{w: w, placed: &placed}
 	if o.OnReady != nil {
-		o.OnReady(&controller{w: w, placed: &placed})
+		o.OnReady(ctrl)
 	}
 
 	if o.HTML != "" {
