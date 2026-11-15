@@ -5,7 +5,11 @@ import {
   useTogether,
   useHostReporting,
   expectedPosition,
-  shouldResync,
+  followerShouldSeek,
+  followerSeekTarget,
+  followerShouldCorrect,
+  nextLead,
+  CONVERTING_DEFAULT_LEAD_MS,
   type TogetherControls,
 } from "./together";
 
@@ -78,14 +82,81 @@ export function TogetherProvider({ children }: { children: ReactNode }) {
    * Only when out of step by more than the tolerance: a video element seeking
    * is a visible stutter, and stuttering every two seconds to correct a quarter
    * of a second nobody can perceive is worse than the drift.
+   *
+   * The rules are the ones a follower on another server uses (together.ts,
+   * PeerPlayer), because a converted stream here has the same shape as one
+   * there. A seek on it restarts the conversion, and until the first frame
+   * arrives displayTime reads the seek target while the room moves on. Judged
+   * by the bare 1.5 s rule on every poll, a conversion slower than that to
+   * start was thrown away and restarted every two seconds, and the film never
+   * began (R14-4). So: wait for the picture after a seek, use the wider
+   * tolerance while converting, aim ahead by the start-up last measured, and
+   * close a landing gap with at most two short corrections.
+   *
+   * Position is always displayTime — the converted stream's offset plus the
+   * element's clock — never the element's clock alone, which restarts at zero
+   * with every converted seek.
    */
+  const lastSeek = useRef(0);
+  const startedSinceSeek = useRef(true);
+  const leadMS = useRef(CONVERTING_DEFAULT_LEAD_MS);
+  const leadUsed = useRef(0);
+  const playingSince = useRef(0);
+  const corrections = useRef(0);
+  useEffect(() => {
+    lastSeek.current = 0;
+    startedSinceSeek.current = true;
+    leadMS.current = CONVERTING_DEFAULT_LEAD_MS;
+    leadUsed.current = 0;
+    playingSince.current = 0;
+    corrections.current = 0;
+  }, [sessionID]);
+  // The picture arriving after a seek: loading, which a converted seek puts
+  // up, has come down again. (Keyed on loading, so this runs only when it
+  // changes; the seek effect below is declared after it and runs after it in
+  // a shared commit, so a seek is never judged landed by the render it began.) Where it landed against the room teaches the next lead.
+  const sessionRef = useRef({ session: t.session, receivedAt: t.receivedAt });
+  sessionRef.current = { session: t.session, receivedAt: t.receivedAt };
+  const posRef = useRef(pb.displayTime);
+  posRef.current = pb.displayTime;
+  useEffect(() => {
+    if (startedSinceSeek.current) return;
+    if (pb.loading) return;
+    startedSinceSeek.current = true;
+    playingSince.current = Date.now();
+    const { session, receivedAt } = sessionRef.current;
+    if (pb.converting && session && lastSeek.current > 0) {
+      const gap = expectedPosition(session, receivedAt, Date.now()) - posRef.current * 1000;
+      leadMS.current = nextLead(leadUsed.current, gap);
+    }
+  }, [pb.loading, pb.converting]);
+
   useEffect(() => {
     if (!t.session || t.isHost) return;
     // Never steer a different film to this room's position.
     if (pb.itemID !== t.session.item_id) return;
-    const target = expectedPosition(t.session, t.receivedAt, Date.now());
-    if (shouldResync(pb.displayTime * 1000, target)) {
-      pb.seekTo(target / 1000);
+    const now = Date.now();
+    const converting = !!pb.converting;
+    const local = pb.displayTime * 1000;
+    const expected = expectedPosition(t.session, t.receivedAt, now);
+    const far = followerShouldSeek(
+      local,
+      expected,
+      converting,
+      now - lastSeek.current,
+      startedSinceSeek.current,
+    );
+    const close =
+      !far &&
+      startedSinceSeek.current &&
+      followerShouldCorrect(local, expected, converting, now - playingSince.current, corrections.current);
+    if (far || close) {
+      if (close) corrections.current++;
+      lastSeek.current = now;
+      // A direct-play seek lands at once; only a conversion is waited on.
+      startedSinceSeek.current = !converting;
+      leadUsed.current = converting ? leadMS.current : 0;
+      pb.seekTo(followerSeekTarget(expected, converting, leadUsed.current) / 1000);
     }
     // Play state follows too, or a follower who was paused when they joined
     // stays paused while everybody else watches.
