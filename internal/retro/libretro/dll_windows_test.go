@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"sync"
 	"testing"
 	"unsafe"
@@ -210,5 +211,23 @@ func TestOpenRefusesWhatIsNotACore(t *testing.T) {
 	}
 	if _, err := Open(`C:\Windows\System32\kernel32.dll`); err == nil {
 		t.Error("kernel32 opened as a core")
+	}
+}
+
+// A core on another machine is refused before LoadLibrary sees it, because
+// loading is what runs its code (R12-2).
+func TestOpenRefusesARemotePath(t *testing.T) {
+	for _, p := range []string{
+		`\127.0.0.1\share\core_libretro.dll`,
+		`\host@SSL\share\core_libretro.dll`,
+		`\?\UNC\host\share\core_libretro.dll`,
+		`\.\C:\core_libretro.dll`,
+		`//host/share/core_libretro.dll`,
+		`core_libretro.dll`,
+	} {
+		_, err := Open(p)
+		if err == nil || !strings.Contains(err.Error(), "not a core on this machine") {
+			t.Errorf("Open(%s) = %v, want a refusal before loading", p, err)
+		}
 	}
 }
