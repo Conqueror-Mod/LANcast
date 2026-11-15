@@ -3064,7 +3064,7 @@
           "profile"
         ],
         "summary": "Turn two-factor sign-in on",
-        "description": "With a code from the app the setup's secret was added to, which proves it was. **The recovery codes are in this answer and never again.** Audited as `profile.two_factor_on`.",
+        "description": "With a code from the app the setup's secret was added to, which proves it was. The password was asked for at setup, the only way a secret gets here. Never replaces a second factor already on, and a session only: an API key is refused. **The recovery codes are in this answer and never again.** Audited as `profile.two_factor_on`.",
         "requestBody": {
           "required": true,
           "content": {
@@ -3099,8 +3099,18 @@
           "401": {
             "$ref": "#/components/responses/Unauthorized"
           },
+          "403": {
+            "description": "The caller is using an API key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
           "409": {
-            "description": "No setup in progress, or it has expired (ten minutes): start again.",
+            "description": "No setup in progress, or it has expired (ten minutes): start again. Or two-factor sign-in is already on.",
             "content": {
               "application/json": {
                 "schema": {
@@ -3127,7 +3137,7 @@
           "profile"
         ],
         "summary": "Turn two-factor sign-in off",
-        "description": "**The password is asked for**: a session left open on somebody else's screen is not enough to weaken the account. Throttled like sign-in. Audited as `profile.two_factor_off`.",
+        "description": "**The password is asked for**: a session left open on somebody else's screen is not enough to weaken the account. Throttled like sign-in. Audited as `profile.two_factor_off`. A session only; an API key is refused.",
         "requestBody": {
           "required": true,
           "content": {
@@ -3149,7 +3159,7 @@
             "$ref": "#/components/responses/Unauthorized"
           },
           "403": {
-            "description": "`current_password` is not right.",
+            "description": "`current_password` is not right, or the caller is using an API key.",
             "content": {
               "application/json": {
                 "schema": {
@@ -3178,7 +3188,7 @@
           "profile"
         ],
         "summary": "Replace your recovery codes",
-        "description": "Ten new codes; every old one stops working. The password is asked for. Audited as `profile.two_factor_codes`.",
+        "description": "Ten new codes; every old one stops working. The password is asked for. Audited as `profile.two_factor_codes`. A session only; an API key is refused.",
         "requestBody": {
           "required": true,
           "content": {
@@ -3207,7 +3217,7 @@
             "$ref": "#/components/responses/Unauthorized"
           },
           "403": {
-            "description": "`current_password` is not right.",
+            "description": "`current_password` is not right, or the caller is using an API key.",
             "content": {
               "application/json": {
                 "schema": {
@@ -3246,7 +3256,17 @@
           "profile"
         ],
         "summary": "Start adding an authenticator app",
-        "description": "A fresh secret, as a key to type and an `otpauth://` link to scan. Nothing is stored until `POST /api/profile/two-factor` returns a code from it; the secret is held in memory for ten minutes.",
+        "description": "A fresh secret, as a key to type and an `otpauth://` link to scan. Nothing is stored until `POST /api/profile/two-factor` returns a code from it; the secret is held in memory for ten minutes.\n\n**The password is asked for**, on the sign-in throttle: a session left open on somebody else's screen is not enough to put another app on the account. Refused while two-factor is already on, so replacing the app means turning it off first. A session only; an API key is refused.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CurrentPassword"
+              }
+            }
+          }
+        },
         "responses": {
           "200": {
             "description": "The secret, for the app.",
@@ -3258,8 +3278,41 @@
               }
             }
           },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "description": "`current_password` is not right, or the caller is using an API key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Two-factor sign-in is already on; turn it off first.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too many attempts from this client, or at this account from outside; wait a few minutes.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
           },
           "503": {
             "description": "The server could not prepare the key two-factor secrets are sealed under.",

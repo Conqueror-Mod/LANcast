@@ -169,3 +169,110 @@ func TestTheOptimizedFolderMayNotBeInsideALibrary(t *testing.T) {
 		t.Errorf("copy path = %s", got)
 	}
 }
+
+/*
+ * Only a copy that can be served is offered (R03-2).
+ *
+ * The playback answer read the row and never the file, so moving the folder
+ * left every device sent to ?version=optimized, which answered 503 from the
+ * new folder, and the live conversion that would have worked was never
+ * offered. Changing the folder now re-queues each ready copy it does not
+ * hold; a copy moved there by hand is found and kept; and a file deleted by
+ * hand is caught the next time it would have been offered.
+ */
+func TestMovingTheOptimizedFolderOffersNothingItCannotServe(t *testing.T) {
+	h := langHarness(t)
+	ctx := context.Background()
+	moved := h.addFile(t, "uhd.mkv", []byte("original"))
+	h.probeAsHEVCWithTwoAudioTracks(t, moved)
+	kept := h.addFile(t, "uhd2.mkv", []byte("original two"))
+	h.probeAsHEVCWithTwoAudioTracks(t, kept)
+	readyCopy(t, h, moved, "the copy")
+	keptOld := readyCopy(t, h, kept, "the other copy")
+
+	type answer struct {
+		Version  string         `json:"version"`
+		Decision probe.Decision `json:"decision"`
+	}
+	ask := func(id int64) answer {
+		var a answer
+		decode(t, h.authed(t, "GET", fmt.Sprintf("/api/items/%d/playback", id), nil), &a)
+		return a
+	}
+	if a := ask(moved); a.Version != "optimized" {
+		t.Fatalf("before the move = %+v, want the copy (the control)", a)
+	}
+
+	// Somebody carries one copy across by hand before changing the setting.
+	newDir := filepath.Join(t.TempDir(), "optimized")
+	if err := os.MkdirAll(newDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Rename(keptOld, filepath.Join(newDir, optimize.FileName(kept))); err != nil {
+		t.Fatal(err)
+	}
+	if code := status(t, h.authed(t, "PUT", "/api/settings", map[string]any{"optimized_dir": newDir})); code != http.StatusOK {
+		t.Fatalf("change the folder = %d", code)
+	}
+
+	// The copy left behind is no longer offered; whatever version playback
+	// names must be one the stream route serves.
+	a := ask(moved)
+	if a.Version == "optimized" {
+		t.Errorf("after the move playback still offers the copy: %+v", a)
+	}
+	if a.Decision.Method == probe.DirectPlay {
+		t.Errorf("after the move playback offers direct play of the 4K original: %+v", a)
+	}
+	for _, id := range []int64{moved, kept} {
+		if ask(id).Version != "optimized" {
+			continue
+		}
+		resp := h.authed(t, "GET", fmt.Sprintf("/api/stream/%d?version=optimized", id), nil)
+		resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			t.Errorf("item %d: playback offers the copy and its stream answers %d", id, resp.StatusCode)
+		}
+	}
+	// The copy moved by hand is still offered, and served.
+	if a := ask(kept); a.Version != "optimized" {
+		t.Errorf("a copy moved into the new folder = %+v, want it kept", a)
+	}
+
+	// The one left behind is queued to be rebuilt, and no longer counted.
+	if _, err := h.st.ReadyOptimized(ctx, moved); err == nil {
+		t.Error("the copy left in the old folder is still marked ready")
+	}
+	all, err := h.st.ListOptimized(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, v := range all {
+		if v.ItemID == moved && v.State != store.OptimizedQueued {
+			t.Errorf("the copy left behind is %q, want queued to be rebuilt", v.State)
+		}
+	}
+	if n, _ := h.st.OptimizedBytes(ctx); n != int64(len("the other copy")) {
+		t.Errorf("space used = %d, want only the copy that is there", n)
+	}
+}
+
+func TestACopyDeletedByHandIsNotOffered(t *testing.T) {
+	h := langHarness(t)
+	id := h.addFile(t, "uhd.mkv", []byte("original"))
+	h.probeAsHEVCWithTwoAudioTracks(t, id)
+	path := readyCopy(t, h, id, "the copy")
+	if err := os.Remove(path); err != nil {
+		t.Fatal(err)
+	}
+	var a struct {
+		Version string `json:"version"`
+	}
+	decode(t, h.authed(t, "GET", fmt.Sprintf("/api/items/%d/playback", id), nil), &a)
+	if a.Version == "optimized" {
+		t.Error("playback offers a copy whose file is gone")
+	}
+	if _, err := h.st.ReadyOptimized(context.Background(), id); err == nil {
+		t.Error("a copy whose file is gone is still marked ready, not queued to be rebuilt")
+	}
+}

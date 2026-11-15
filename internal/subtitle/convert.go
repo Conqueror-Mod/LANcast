@@ -261,6 +261,12 @@ func stripBOM(s string) string {
 
 // LooksLikeText reports whether a file's opening bytes are plausible UTF-8
 // text, so a mislabelled binary is refused before it reaches a player.
+//
+// head is usually a fixed-size window cut from a longer file, so the cut can
+// land inside a multi-byte character. That last, unfinished character is not
+// evidence of anything and is left out before validating (R09-6); otherwise a
+// Cyrillic or CJK subtitle with no byte-order mark was refused about half the
+// time, depending only on where the window ended.
 func LooksLikeText(head []byte) bool {
 	if len(head) == 0 {
 		return false
@@ -268,5 +274,28 @@ func LooksLikeText(head []byte) bool {
 	if bytes.IndexByte(head, 0) >= 0 {
 		return false
 	}
-	return utf8.Valid(head) || bytes.HasPrefix(head, []byte{0xEF, 0xBB, 0xBF})
+	if bytes.HasPrefix(head, []byte{0xEF, 0xBB, 0xBF}) {
+		return true
+	}
+	head = trimPartialRune(head)
+	return len(head) > 0 && utf8.Valid(head)
+}
+
+// trimPartialRune drops a trailing sequence that is the valid start of a
+// UTF-8 character with its continuation bytes missing. Anything else at the
+// end, including bytes that could never begin a character, is left for
+// utf8.Valid to judge.
+func trimPartialRune(b []byte) []byte {
+	for i := len(b) - 1; i >= 0 && i > len(b)-utf8.UTFMax; i-- {
+		if !utf8.RuneStart(b[i]) {
+			continue
+		}
+		// FullRune is false only for a well-formed but incomplete prefix;
+		// an invalid lead byte counts as a full (error) rune.
+		if !utf8.FullRune(b[i:]) {
+			return b[:i]
+		}
+		return b
+	}
+	return b
 }

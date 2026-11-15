@@ -532,6 +532,13 @@ func (s *Server) putSettings(w http.ResponseWriter, r *http.Request) {
 	if encoderChanged {
 		s.trans.DetectHardware(r.Context(), next.HardwareEncoder)
 	}
+	// A new optimized folder holds none of the copies the old one did, unless
+	// somebody moved them there. Every ready copy not found in it goes back in
+	// the queue now, so nothing unservable is offered and the space limit
+	// stops counting it (R03-2).
+	if prev.OptimizedDir != next.OptimizedDir {
+		s.requeueMissingOptimized(r.Context())
+	}
 
 	/*
 	 * Turning marker detection on starts it, rather than waiting.

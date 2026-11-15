@@ -437,3 +437,56 @@ func TestSharedReaderCostsOneReadPerDirectory(t *testing.T) {
 		t.Errorf("read the directory %d times for 20 videos, want 1", reads)
 	}
 }
+
+// R09-6: a sniff window that ends inside a multi-byte character is still text.
+func TestLooksLikeTextWindowCutInsideACharacter(t *testing.T) {
+	cases := []struct {
+		name string
+		char string
+	}{
+		{"2-byte Cyrillic", "Ж"},
+		{"3-byte CJK", "字"},
+		{"4-byte emoji", "😀"},
+	}
+	for _, c := range cases {
+		if got := len(c.char); got < 2 {
+			t.Fatalf("%s: test character is %d bytes", c.name, got)
+		}
+		// Every cut that falls strictly inside the character, at the end of
+		// a 512-byte window.
+		for keep := 1; keep < len(c.char); keep++ {
+			prefix := strings.Repeat("a", 512-keep)
+			window := []byte(prefix + c.char)[:512]
+			if LooksLikeText(window) {
+				continue
+			}
+			t.Errorf("%s cut after %d of %d bytes refused as not text", c.name, keep, len(c.char))
+		}
+	}
+
+	// The finding's own case: Cyrillic subtitles behind headers of every
+	// length, cut at 512 bytes, are all text.
+	for header := range 13 {
+		body := strings.Repeat("h", header) + strings.Repeat("Привет ", 100)
+		if !LooksLikeText([]byte(body)[:512]) {
+			t.Errorf("Cyrillic subtitle with a %d-byte header refused", header)
+		}
+	}
+}
+
+func TestLooksLikeTextStillRefusesBinary(t *testing.T) {
+	refuse := map[string][]byte{
+		"invalid byte mid-window":       append([]byte(strings.Repeat("a", 100)), 0xFF, 'b', 'c'),
+		"stray continuation byte":       append([]byte("abc"), 0x80, 'd'),
+		"invalid lead at the end":       append([]byte("abc"), 0xFF),
+		"overlong lead at the end":      append([]byte("abc"), 0xC0),
+		"broken character mid-window":   append([]byte("abc"), 0xE5, 'x', 'y', 'z'),
+		"only a partial character":      {0xE5, 0xAD},
+		"PNG signature, no NUL in head": {0x89, 'P', 'N', 'G', '\r', '\n', 0x1A, '\n'},
+	}
+	for name, b := range refuse {
+		if LooksLikeText(b) {
+			t.Errorf("%s: accepted as text", name)
+		}
+	}
+}

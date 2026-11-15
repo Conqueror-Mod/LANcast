@@ -277,7 +277,10 @@ export function useTwoFactor() {
 
 export function useStartTwoFactor() {
   return useMutation({
-    mutationFn: () => apiPost<TwoFactorSetup>("/api/profile/two-factor/setup", {}),
+    mutationFn: (currentPassword: string) =>
+      apiPost<TwoFactorSetup>("/api/profile/two-factor/setup", {
+        current_password: currentPassword,
+      }),
   });
 }
 

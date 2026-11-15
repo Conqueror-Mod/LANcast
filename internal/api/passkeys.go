@@ -210,7 +210,10 @@ func (s *Server) passkeyLogin(w http.ResponseWriter, r *http.Request) {
 		s.writeInternal(w, err, "load user")
 		return
 	}
-	s.throttle.Reset(key)
+	// A refused passkey names no account, so it stays on the address; this
+	// one did, and only its own attempt is cleared (R01-2).
+	s.throttle.Attribute(key, u.Name)
+	s.throttle.Reset(key, u.Name)
 	if err := s.issueSession(w, r, u.ID); err != nil {
 		return
 	}
@@ -255,6 +258,7 @@ func (s *Server) passkeyRegisterOptions(w http.ResponseWriter, r *http.Request) 
 		s.writeInternal(w, err, "load user")
 		return
 	}
+	s.throttle.Attribute(key, u.Name)
 	inside := auth.InsideNetwork(r)
 	if !inside {
 		if ok, _ := s.accountWait.Allow(u.Name); !ok {
@@ -269,7 +273,7 @@ func (s *Server) passkeyRegisterOptions(w http.ResponseWriter, r *http.Request) 
 		writeError(w, http.StatusUnauthorized, "unauthorized", "current password is incorrect")
 		return
 	}
-	s.throttle.Reset(key)
+	s.throttle.Reset(key, u.Name)
 	s.accountWait.Reset(u.Name)
 
 	existing, err := s.st.PasskeysByUser(r.Context(), u.ID)

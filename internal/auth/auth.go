@@ -126,6 +126,12 @@ func ClearCookie() *http.Cookie {
 // against it is the whole attack. This is deliberately simple: no distributed
 // state, no lockout that an attacker could trigger against the owner —
 // failures decay on their own.
+//
+// Each counted attempt can be tied to the account it was aimed at (Attribute),
+// and a success clears only that account's share (Reset). The count is per
+// address, and an address is often a whole household: clearing all of it on
+// any success let somebody guess at one account and sign in to their own every
+// nine tries, so the limit never tripped (R01-2).
 type Throttle struct {
 	mu       sync.Mutex
 	attempts map[string]*window
@@ -136,6 +142,10 @@ type Throttle struct {
 type window struct {
 	count int
 	reset time.Time
+	// byAccount is how much of count was aimed at each account, by folded
+	// name. Bounded: only an attempt Allow let through is attributed, so it
+	// holds at most Max names.
+	byAccount map[string]int
 }
 
 func NewThrottle() *Throttle {
@@ -146,7 +156,7 @@ func NewThrottle() *Throttle {
 	}
 }
 
-// Allow reports whether another attempt from key is permitted.
+// Allow reports whether another attempt from key is permitted, and counts it.
 func (t *Throttle) Allow(key string) bool {
 	t.mu.Lock()
 	defer t.mu.Unlock()
@@ -164,11 +174,47 @@ func (t *Throttle) Allow(key string) bool {
 	return true
 }
 
-// Reset clears the counter after a successful login.
-func (t *Throttle) Reset(key string) {
+// Attribute ties the attempt Allow just counted from key to account, once the
+// handler knows which account it was aimed at. An attempt never attributed —
+// a malformed body, a passkey that matched nobody — stays on the address until
+// the window decays.
+func (t *Throttle) Attribute(key, account string) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	delete(t.attempts, key)
+
+	w, ok := t.attempts[key]
+	if !ok || time.Now().After(w.reset) {
+		return
+	}
+	total := 0
+	for _, n := range w.byAccount {
+		total += n
+	}
+	if total >= w.count {
+		return
+	}
+	if w.byAccount == nil {
+		w.byAccount = map[string]int{}
+	}
+	w.byAccount[accountKey(account)]++
+}
+
+// Reset clears, after a successful sign-in to account, the attempts from key
+// that were aimed at that account. Attempts at any other account still count.
+func (t *Throttle) Reset(key, account string) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
+	w, ok := t.attempts[key]
+	if !ok {
+		return
+	}
+	a := accountKey(account)
+	w.count -= w.byAccount[a]
+	delete(w.byAccount, a)
+	if w.count <= 0 {
+		delete(t.attempts, key)
+	}
 }
 
 // ClientKey identifies a caller for throttling. It is the remote address only:
