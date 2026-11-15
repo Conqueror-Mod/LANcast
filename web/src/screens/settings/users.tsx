@@ -1,5 +1,5 @@
 import { AuthorizedDevices } from "@/components/AuthorizedDevices";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { InviteFriend } from "@/components/InviteFriend";
 import {
   useLibraries,
@@ -20,12 +20,75 @@ import { PersonPicture } from "@/components/Avatar";
 import { errorMessage } from "@/lib/errors";
 import type { AuthUser, ManagedUser } from "@/api/types";
 import { RATING_CEILINGS } from "./shared";
+import { useBackHandler } from "@/focus/FocusController";
+
+/*
+ * Removing an account asks first, in the page (R15-1).
+ *
+ * It was one press of a button drawn just after "Remove picture", and it took
+ * the whole person: their sign-ins, history, places, watchlist, saves and
+ * passkeys, with nothing to restore short of a backup. Every other
+ * destructive control in this pane asks, so this one does too, naming the
+ * account and what goes with it. In the page and never confirm(): a native
+ * dialog in the frameless desktop window strands keyboard focus when it
+ * closes (CLAUDE.md). Keep is focused first, so OK on a remote by habit
+ * keeps the account; Back keeps it too.
+ */
+function RemoveAccountConfirm({
+  name,
+  busy,
+  onRemove,
+  onKeep,
+}: {
+  name: string;
+  busy: boolean;
+  onRemove: () => void;
+  onKeep: () => void;
+}) {
+  const keep = useRef<HTMLButtonElement>(null);
+  useBackHandler(onKeep);
+  useEffect(() => keep.current?.focus(), []);
+  return (
+    <div className="set-row" role="alertdialog" aria-label={`Remove ${name}`}>
+      <div className="set-row__main">
+        <div className="set-row__title">Remove {name}?</div>
+        <div className="set-row__sub">
+          Their account goes, and with it what they have watched and where they
+          are in everything, their watchlist, pinned shelves, game saves,
+          passkeys and picture. They are signed out everywhere. This cannot be
+          undone except by restoring a backup. Nothing in your libraries is
+          touched.
+        </div>
+        <div className="set-row">
+          <button ref={keep} className="set-btn" type="button" onClick={onKeep}>
+            Keep {name}
+          </button>
+          <button
+            className="set-btn set-btn--danger"
+            type="button"
+            disabled={busy}
+            onClick={onRemove}
+          >
+            Remove {name}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 function UserRow({ user, isSelf }: { user: ManagedUser; isSelf: boolean }) {
   const del = useDeleteUser();
   const removeTwoFactor = useRemoveUserTwoFactor();
   const clearPicture = useClearUserPicture();
   const [removingTwoFactor, setRemovingTwoFactor] = useState(false);
+  const [removingAccount, setRemovingAccount] = useState(false);
+  const removeButton = useRef<HTMLButtonElement>(null);
+  const keepAccount = () => {
+    setRemovingAccount(false);
+    // Back where the question was asked, rather than nowhere.
+    requestAnimationFrame(() => removeButton.current?.focus());
+  };
   const reset = useResetUserPassword();
   const update = useUpdateUser();
   const [resetting, setResetting] = useState(false);
@@ -242,17 +305,26 @@ function UserRow({ user, isSelf }: { user: ManagedUser; isSelf: boolean }) {
               )}
               {!isSelf && (
                 <button
+                  ref={removeButton}
                   className="set-btn set-btn--danger"
-                  disabled={del.isPending}
-                  onClick={() => del.mutate(user.id)}
+                  disabled={del.isPending || removingAccount}
+                  onClick={() => setRemovingAccount(true)}
                 >
-                  Remove
+                  Remove account…
                 </button>
               )}
             </>
           )}
         </div>
       </div>
+      {removingAccount && !isSelf && (
+        <RemoveAccountConfirm
+          name={user.name}
+          busy={del.isPending}
+          onKeep={keepAccount}
+          onRemove={() => del.mutate(user.id, { onSettled: () => setRemovingAccount(false) })}
+        />
+      )}
       {(del.isError || reset.isError || removeTwoFactor.isError || clearPicture.isError) && (
         <span className="set-error">
           {errorMessage(del.error ?? reset.error ?? removeTwoFactor.error ?? clearPicture.error)}
