@@ -10,6 +10,8 @@ package remote
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -20,9 +22,11 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"lancast/internal/certpin"
+	"lancast/internal/retro/saves"
 )
 
 // Game is one game on one server, reached with one ticket.
@@ -31,6 +35,17 @@ type Game struct {
 	client *http.Client
 	itemID int64
 	ticket string
+
+	/*
+	 * sramBase is the save RAM this game last loaded or stored: its SHA-256,
+	 * or saves.NoSave for an empty slot, and "" until LoadSRAM has succeeded.
+	 * Every store names it as based_on, so the server refuses one that does
+	 * not follow from what is there (R12-4). Guarded by sramMu, which is held
+	 * for the whole store: two uploads in flight must go one after the other,
+	 * the second based on the first.
+	 */
+	sramMu   sync.Mutex
+	sramBase string
 }
 
 // New prepares a client for one game. pin is required for https and refused
@@ -259,7 +274,12 @@ func (g *Game) fetch(ctx context.Context, name, dst string, progress func(int64)
 
 // ---- host.SaveStore ----
 
-var errNoSave = errors.New("no save in this slot")
+var errNoSave = saves.ErrNoSave
+
+// ErrSRAMNotLoaded is StoreSRAM's answer when the saved game was never fetched:
+// whatever the game holds now did not start from the save on the server, so it
+// is not sent over it.
+var ErrSRAMNotLoaded = errors.New("the saved game was never fetched, so this one is not sent over it")
 
 func (g *Game) savePath(slot string) string { return "/api/items/" + g.id() + "/saves/" + slot }
 
@@ -293,22 +313,51 @@ func (g *Game) put(slot string, data []byte, q url.Values) error {
 		return err
 	}
 	defer resp.Body.Close()
+	if resp.StatusCode == http.StatusConflict {
+		return fmt.Errorf("%w: %v", saves.ErrConflict, statusError(resp))
+	}
 	if resp.StatusCode != http.StatusOK {
 		return statusError(resp)
 	}
 	return nil
 }
 
+func sha256Hex(b []byte) string {
+	sum := sha256.Sum256(b)
+	return hex.EncodeToString(sum[:])
+}
+
 // LoadSRAM returns the saved game, or nil when there is none yet.
 func (g *Game) LoadSRAM() ([]byte, error) {
 	b, _, err := g.get("sram")
+	g.sramMu.Lock()
+	defer g.sramMu.Unlock()
 	if errors.Is(err, errNoSave) {
+		g.sramBase = saves.NoSave
 		return nil, nil
 	}
-	return b, err
+	if err != nil {
+		return nil, err
+	}
+	g.sramBase = sha256Hex(b)
+	return b, nil
 }
 
-func (g *Game) StoreSRAM(data []byte) error { return g.put("sram", data, nil) }
+// StoreSRAM sends the game's save RAM, based on the one LoadSRAM fetched or
+// the last one stored. It refuses when nothing was ever fetched, and the
+// server refuses (saves.ErrConflict) when the save there is not that one.
+func (g *Game) StoreSRAM(data []byte) error {
+	g.sramMu.Lock()
+	defer g.sramMu.Unlock()
+	if g.sramBase == "" {
+		return ErrSRAMNotLoaded
+	}
+	if err := g.put("sram", data, url.Values{"based_on": {g.sramBase}}); err != nil {
+		return err
+	}
+	g.sramBase = sha256Hex(data)
+	return nil
+}
 
 func (g *Game) StoreState(slot string, data []byte, core, version string) error {
 	return g.put(slot, data, url.Values{"core": {core}, "core_version": {version}})

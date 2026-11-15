@@ -6683,6 +6683,8 @@ export interface paths {
          *
          *     **The newer write wins and the one it replaces is kept** as the previous copy, so a bad save costs one step back. That is the whole conflict policy, deliberately: two machines saving one slot at the same moment is not how one household plays.
          *
+         *     **`?based_on=` makes the write conditional.** It names the save the writer loaded: its SHA-256 (the `ETag` a `GET` returns), or `none` for an empty slot. When the slot holds anything else the answer is `409` and nothing changes. A player that could not fetch the save, or that started from one another machine has since replaced, would otherwise send blank or stale save RAM over the real one. Many cartridges write theirs at boot, and a second write would rotate the real save out of the previous copy too. The players send it for `sram`. Without it a write is unconditional.
+         *
          *     The one write a stream ticket can make: a game's ticket may store the minting person's saves for that game and nothing else.
          */
         put: operations["putGameSave"];
@@ -21854,6 +21856,8 @@ export interface operations {
             query?: {
                 core?: string;
                 core_version?: string;
+                /** @description The SHA-256 of the save this write is based on, as the `ETag` gave it, or `none` for an empty slot. The write is refused with `409` when the slot holds anything else. */
+                based_on?: string;
             };
             header?: never;
             path: {
@@ -21878,7 +21882,7 @@ export interface operations {
                     "application/json": components["schemas"]["ROMSave"];
                 };
             };
-            /** @description Not a slot, or a save state that does not name its core. */
+            /** @description Not a slot, a save state that does not name its core, or a `based_on` that is neither a SHA-256 nor `none`. */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -21889,6 +21893,15 @@ export interface operations {
             };
             401: components["responses"]["Unauthorized"];
             404: components["responses"]["NotFound"];
+            /** @description `based_on` named a save the slot no longer holds. Nothing was written. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
             /** @description Larger than any core writes. */
             413: {
                 headers: {

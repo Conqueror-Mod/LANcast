@@ -219,6 +219,15 @@ func (s *Server) getSave(w http.ResponseWriter, r *http.Request) {
  * and the one it replaces is kept — the ADR's whole conflict policy, and
  * deliberately no more, since two machines saving one slot at the same moment
  * is not how one household plays.
+ *
+ * With one exception, which is about a player rather than a household
+ * (R12-4). `?based_on=` names the save the writer loaded: its SHA-256 (the
+ * ETag a GET gave), or `none` for an empty slot. When the slot holds anything
+ * else, the answer is 409 and nothing changes. A player that could not fetch
+ * the save, or that started from one another machine has since replaced, would
+ * otherwise send blank or stale save RAM over the real one — many cartridges
+ * write theirs at boot — and a second write would rotate the real one out of
+ * `.prev` as well. Without the parameter a write is unconditional, as before.
  */
 func (s *Server) putSave(w http.ResponseWriter, r *http.Request) {
 	it := s.romFor(w, r)
@@ -241,8 +250,19 @@ func (s *Server) putSave(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "bad_request", "core names are short")
 		return
 	}
+	basedOn := r.URL.Query().Get("based_on")
+	if !saves.ValidBasedOn(basedOn) {
+		writeError(w, http.StatusBadRequest, "bad_request",
+			"based_on is the SHA-256 of the save that was loaded, or none")
+		return
+	}
 	user := s.userID(r)
-	written, err := s.saveFiles().Write(user, it.ID, slot, http.MaxBytesReader(w, r.Body, saves.MaxBytes+1))
+	written, err := s.saveFiles().WriteIf(user, it.ID, slot, basedOn, http.MaxBytesReader(w, r.Body, saves.MaxBytes+1))
+	if errors.Is(err, saves.ErrConflict) {
+		writeError(w, http.StatusConflict, "conflict",
+			"the save on the server changed since this one was loaded")
+		return
+	}
 	if errors.Is(err, saves.ErrTooLarge) {
 		writeError(w, http.StatusRequestEntityTooLarge, "too_large", "a save is never this large")
 		return

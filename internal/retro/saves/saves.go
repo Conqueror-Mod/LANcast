@@ -20,10 +20,54 @@ import (
 	"path/filepath"
 	"regexp"
 	"strconv"
+	"sync"
 )
 
 // ErrTooLarge is returned when a save exceeds MaxBytes.
 var ErrTooLarge = errors.New("save is larger than any core writes")
+
+/*
+ * ErrConflict is returned by WriteIf when the slot no longer holds the save
+ * the writer started from (R12-4).
+ *
+ * A player that could not fetch the save, or that loaded one before another
+ * machine replaced it, holds save RAM that is not a continuation of what is on
+ * the server. Many cartridges write save RAM at boot, so "the newer write wins"
+ * let a blank game replace a real save within seconds of starting, and a second
+ * write rotated the real one out of `.prev` too.
+ */
+var ErrConflict = errors.New("the save changed since it was loaded")
+
+// ErrNoSave is what a client reports for an empty slot, so a caller can tell
+// "there is no save" from "the save could not be fetched": the first is safe to
+// write over, the second is not.
+var ErrNoSave = errors.New("no save in this slot")
+
+// NoSave is the based-on value of a writer that loaded an empty slot. It is
+// not a hash, so it can never match a save that exists.
+const NoSave = "none"
+
+// ValidBasedOn reports whether s can be a WriteIf precondition: empty (none),
+// NoSave, or a lower-case hex SHA-256 as Written and the ETag give it.
+func ValidBasedOn(s string) bool {
+	if s == "" || s == NoSave {
+		return true
+	}
+	if len(s) != 64 {
+		return false
+	}
+	for _, c := range s {
+		if !(c >= '0' && c <= '9' || c >= 'a' && c <= 'f') {
+			return false
+		}
+	}
+	return true
+}
+
+// swap serialises the compare and the renames, so two writers based on the
+// same save cannot both pass the check. Held for a hash and two renames, never
+// across a request body.
+var swap sync.Mutex
 
 // MaxBytes bounds one save. An N64 save state with the expansion pak is about
 // 16MB and a PlayStation one about 4MB; this leaves room for a core that
@@ -90,6 +134,19 @@ type Written struct {
  * is too large leaves both copies exactly as they were.
  */
 func (f Files) Write(userID string, itemID int64, slot string, r io.Reader) (Written, error) {
+	return f.WriteIf(userID, itemID, slot, "", r)
+}
+
+/*
+ * WriteIf is Write with a precondition: basedOn is the SHA-256 of the save the
+ * writer loaded, or NoSave when it loaded an empty slot. When the slot holds
+ * anything else by the time the new bytes are ready, nothing changes and the
+ * error is ErrConflict. An empty basedOn is no precondition, as Write.
+ *
+ * Compared with the file rather than the database's record of it, because the
+ * file is what the write would rotate away.
+ */
+func (f Files) WriteIf(userID string, itemID int64, slot, basedOn string, r io.Reader) (Written, error) {
 	if !ValidSlot(slot) {
 		return Written{}, fmt.Errorf("invalid slot %q", slot)
 	}
@@ -125,6 +182,18 @@ func (f Files) Write(userID string, itemID int64, slot string, r io.Reader) (Wri
 		return Written{}, err
 	}
 
+	swap.Lock()
+	defer swap.Unlock()
+	if basedOn != "" {
+		now, err := fileSHA256(cur)
+		if err != nil {
+			return Written{}, err
+		}
+		if now != basedOn {
+			return Written{}, ErrConflict
+		}
+	}
+
 	prev := f.path(userID, itemID, slot, true)
 	if _, err := os.Stat(cur); err == nil {
 		if err := os.Rename(cur, prev); err != nil {
@@ -138,6 +207,23 @@ func (f Files) Write(userID string, itemID int64, slot string, r io.Reader) (Wri
 	}
 	ok = true
 	return Written{Size: n, SHA256: hex.EncodeToString(h.Sum(nil))}, nil
+}
+
+// fileSHA256 is the hex SHA-256 of the file at p, or NoSave when there is none.
+func fileSHA256(p string) (string, error) {
+	fh, err := os.Open(p)
+	if errors.Is(err, os.ErrNotExist) {
+		return NoSave, nil
+	}
+	if err != nil {
+		return "", err
+	}
+	defer fh.Close()
+	h := sha256.New()
+	if _, err := io.Copy(h, fh); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(h.Sum(nil)), nil
 }
 
 // Open opens a save, or its previous copy. A missing save is os.ErrNotExist.

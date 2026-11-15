@@ -6988,6 +6988,21 @@ loading it into another is a crash rather than an error.
 it, and the listing describes both. That is the whole conflict policy, on
 purpose.
 
+**Except that a write can say what it was based on.** `?based_on=` names the save
+the writer loaded: its SHA-256, which is the `ETag` a `GET` returns, or `none` for
+an empty slot. When the slot holds anything else, the answer is **`409`** and
+nothing changes. Any other value is a `400`. Without the parameter a write is
+unconditional, as before.
+
+It exists for save RAM, and both players send it for `sram`. A player that could
+not fetch the save would otherwise start the game blank. Many cartridges write
+their save RAM at boot, so the first upload would rotate the real save to the
+previous copy and the second would lose it. The same applies to a player that
+loaded a save another machine has since replaced. So a desktop player that could
+not fetch the save plays on but sends nothing, and the browser does not start
+the game. After a `409`, either one stops sending the game's save for that
+session.
+
 ```json
 { "saves": [ { "slot": "sram", "size_bytes": 32768, "sha256": "…", "updated_at": 1791432000,
                "previous": { "size_bytes": 32768, "sha256": "…", "updated_at": 1791431000 } } ] }

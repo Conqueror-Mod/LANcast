@@ -2,7 +2,10 @@ package remote
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -11,6 +14,8 @@ import (
 	"strings"
 	"sync"
 	"testing"
+
+	"lancast/internal/retro/saves"
 )
 
 // fakeServer answers the four routes the player uses, and records whether
@@ -23,6 +28,8 @@ type fakeServer struct {
 	fetches map[string]int
 	badAuth int
 	inURL   int
+	// failGets makes every save GET a 500, as a server mid-restart answers.
+	failGets bool
 }
 
 func newFake() *fakeServer {
@@ -62,6 +69,10 @@ func (f *fakeServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		slot := strings.TrimPrefix(r.URL.Path, "/api/items/7/saves/")
 		switch r.Method {
 		case http.MethodGet:
+			if f.failGets {
+				http.Error(w, "restarting", http.StatusInternalServerError)
+				return
+			}
 			b, ok := f.saves[slot]
 			if !ok {
 				w.WriteHeader(http.StatusNotFound)
@@ -75,6 +86,19 @@ func (f *fakeServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			w.Write(b)
 		case http.MethodPut:
 			b, _ := io.ReadAll(r.Body)
+			// based_on, as putSave honours it.
+			if base := r.URL.Query().Get("based_on"); base != "" {
+				now := saves.NoSave
+				if cur, ok := f.saves[slot]; ok {
+					sum := sha256.Sum256(cur)
+					now = hex.EncodeToString(sum[:])
+				}
+				if now != base {
+					w.WriteHeader(http.StatusConflict)
+					io.WriteString(w, `{"error":{"code":"conflict","message":"the save on the server changed since this one was loaded"}}`)
+					return
+				}
+			}
 			f.saves[slot] = b
 			if c := r.URL.Query().Get("core"); c != "" {
 				f.cores[slot] = [2]string{c, r.URL.Query().Get("core_version")}
@@ -171,5 +195,72 @@ func TestNewRefusesMixedTLS(t *testing.T) {
 	}
 	if _, err := New("http://127.0.0.1:8080", "", 0, "t"); err == nil {
 		t.Error("no game was accepted")
+	}
+}
+
+/*
+ * Save RAM is only ever sent over the save it started from (R12-4).
+ *
+ * A player that could not fetch the save, or that loaded one another machine
+ * has since replaced, would otherwise send its RAM over the real one.
+ */
+func TestStoreSRAMFollowsWhatWasLoaded(t *testing.T) {
+	f := newFake()
+	f.saves["sram"] = []byte("real save")
+
+	// Never fetched: refused here, before the server is asked.
+	g := newGame(t, f)
+	if err := g.StoreSRAM([]byte("blank")); !errors.Is(err, ErrSRAMNotLoaded) {
+		t.Errorf("store with nothing loaded: %v", err)
+	}
+	// A fetch that failed is the same as none.
+	f.mu.Lock()
+	f.failGets = true
+	f.mu.Unlock()
+	if _, err := g.LoadSRAM(); err == nil {
+		t.Fatal("a failing server returned a save")
+	}
+	if err := g.StoreSRAM([]byte("blank")); !errors.Is(err, ErrSRAMNotLoaded) {
+		t.Errorf("store after a failed fetch: %v", err)
+	}
+	f.mu.Lock()
+	f.failGets = false
+	f.mu.Unlock()
+
+	// Loaded, then replaced by another machine: the server refuses.
+	if b, err := g.LoadSRAM(); err != nil || string(b) != "real save" {
+		t.Fatalf("load: %q %v", b, err)
+	}
+	f.mu.Lock()
+	f.saves["sram"] = []byte("saved on the laptop")
+	f.mu.Unlock()
+	if err := g.StoreSRAM([]byte("stale")); !errors.Is(err, saves.ErrConflict) {
+		t.Errorf("store over a save that changed: %v", err)
+	}
+	f.mu.Lock()
+	got := string(f.saves["sram"])
+	f.mu.Unlock()
+	if got != "saved on the laptop" {
+		t.Errorf("server holds %q, want the laptop's save untouched", got)
+	}
+
+	// Loaded and stored in turn: each store is based on the one before.
+	g2 := newGame(t, f)
+	if _, err := g2.LoadSRAM(); err != nil {
+		t.Fatal(err)
+	}
+	for _, b := range []string{"one", "two", "three"} {
+		if err := g2.StoreSRAM([]byte(b)); err != nil {
+			t.Fatalf("store %q: %v", b, err)
+		}
+	}
+	// And an empty slot loaded as empty accepts the first save.
+	delete(f.saves, "sram")
+	g3 := newGame(t, f)
+	if b, err := g3.LoadSRAM(); b != nil || err != nil {
+		t.Fatalf("empty slot: %q %v", b, err)
+	}
+	if err := g3.StoreSRAM([]byte("first")); err != nil {
+		t.Errorf("first save into an empty slot: %v", err)
 	}
 }

@@ -117,6 +117,11 @@ func TestRetroEndToEnd(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// Loaded first, as a player does: a store is based on the save it
+	// started from, and a client that fetched nothing sends nothing (R12-4).
+	if _, err := game.LoadSRAM(); err != nil {
+		t.Fatal(err)
+	}
 	marked := append([]byte(nil), first...)
 	marked[1] = 1
 	if err := game.StoreSRAM(marked); err != nil {
