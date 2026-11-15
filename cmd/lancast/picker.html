@@ -244,7 +244,7 @@
         <p class="caution" id="rotate-message"></p>
         <h2>Certificate fingerprint now</h2>
         <div class="fingerprint" id="rotate-new"></div>
-        <p class="note">
+        <p class="note" id="rotate-ask">
           Ask whoever runs this server to read out the <strong>TLS certificate
           fingerprint</strong> on their Settings &rsaquo; General screen &mdash; by phone or
           in person, not over this connection. Connect only if it is exactly this.
@@ -408,6 +408,14 @@
         // What the person compared. Accepting passes it back, so the process
         // refuses if the key changed again between reading and pressing.
         rotationShown = result.fingerprint || "";
+        // Proven (ADR 0124): the server signed for itself, so the person is
+        // not asked to read anything out and the button just connects.
+        const proven = result.proof === "proven";
+        $("rotate-ask").classList.toggle("hidden", proven);
+        $("rotate-accept").dataset.label = proven
+          ? "Connect"
+          : "The certificate matches \u2014 connect";
+        text($("rotate-accept"), $("rotate-accept").dataset.label);
         // No fingerprint shown means nothing was compared: nothing to accept.
         $("rotate-accept").disabled = !rotationShown;
         setError("rotate-error", "");
@@ -434,6 +442,8 @@
           // set: without this, the button acted on whatever was last looked
           // at, or on nothing.
           if (!fresh.error) probed = fresh;
+          // The server was asked to prove itself and could not (ADR 0124).
+          if (fresh.trust === "mismatch") { showRefusal(fresh); return; }
           showRotation(fresh.error ? { rotation: result.rotation } : fresh);
           return;
         }
