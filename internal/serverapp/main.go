@@ -28,9 +28,11 @@ import (
 	"lancast/internal/api"
 	"lancast/internal/artwork"
 	"lancast/internal/backup"
+	"lancast/internal/certpin"
 	"lancast/internal/comic"
 	"lancast/internal/config"
 	"lancast/internal/coverart"
+	"lancast/internal/dataperm"
 	"lancast/internal/enrich"
 	"lancast/internal/faces"
 	"lancast/internal/identity"
@@ -1171,6 +1173,16 @@ func run(ctx context.Context, addr, dataDir string, log *slog.Logger) error {
 		cert, err := generatedCert(cfg)
 		if err != nil {
 			return err
+		}
+		// The window pins this certificate by reading it off disk, as the
+		// person rather than as the service, and the data directory gives
+		// Users nothing inside it any more: this one file is let through
+		// (R10-3). Every start, because a certificate made anew is a new file.
+		if serviceManaged {
+			if err := dataperm.ShareCert(certpin.CertPath(cfg.DataDir)); err != nil {
+				log.Warn("the desktop window may not be able to read the server certificate it pins",
+					"error", err, "hint", "the window then fails to load at a LAN or public address; localhost is unaffected")
+			}
 		}
 		/*
 		 * The operator's own certificate, when there is one (ADR 0088).

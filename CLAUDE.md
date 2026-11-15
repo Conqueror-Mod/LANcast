@@ -16,6 +16,7 @@ out in [README.md](README.md) and are not negotiable without an ADR.
 cmd/lancastd/      entrypoint only; the server program (subcommands, flags,
                    wiring, shutdown) is internal/serverapp (ADR 0080)
 internal/config/   data dir, listen address, settings
+internal/dataperm/ the service's data dir: SYSTEM and Administrators only (R10-3)
 internal/store/    SQLite access; owns schema.sql
 internal/media/    filename → metadata heuristics (guessing lives ONLY here)
 internal/scan/     filesystem walk and library reconciliation

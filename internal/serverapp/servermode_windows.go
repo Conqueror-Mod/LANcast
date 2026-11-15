@@ -13,6 +13,7 @@ import (
 	"sync"
 	"time"
 
+	"lancast/internal/dataperm"
 	"lancast/internal/desktop"
 	"lancast/internal/servermode"
 	"lancast/internal/service"
@@ -62,6 +63,10 @@ func runServerMode(args []string) error {
 		},
 		FreeBytes: servermode.FreeBytes,
 		Report:    rep.progress,
+		ProtectServiceDir: func(dir string) error {
+			_, err := dataperm.Protect(dir)
+			return err
+		},
 	}
 	if *sid != "" {
 		s := *sid
