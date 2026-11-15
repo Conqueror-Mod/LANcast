@@ -2230,6 +2230,25 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
     }
     const v = videoRef.current;
     if (!v || !item) return;
+    /*
+     * A track that failed on the music deck is converted on the element, so
+     * the deck has to let go of it — the same switch the source effect makes.
+     *
+     * Without this the conversion played on the element while `media()` still
+     * answered the deck: Pause, seek, volume and mute all reached a dead deck,
+     * and Stop or the next track paused the deck and left the converted track
+     * sounding underneath with nothing able to reach it (R14-3).
+     */
+    if (deckRef.current) {
+      const deck = musicDeck();
+      deck.queue(null);
+      deck.pause();
+      deck.removeAttribute("src");
+      deck.load();
+      deckRef.current = false;
+      clientNote("info", "playback", "music on element (converted)");
+      setMusicPath("element");
+    }
     // A codec failure happens at the start, where the start is right. Anything
     // else can happen an hour in, and the live position is where to pick up.
     const at = aboutCodec
