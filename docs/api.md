@@ -4110,6 +4110,7 @@ library, and a server with films and music has no defensible default.
 ```
 
 Responds `200` with the new item, in the shape `GET /api/items/{id}` returns.
+`400` without a title, `404` if `library_id` names no library.
 
 #### `DELETE /api/playlists/{id}`
 

@@ -12242,18 +12242,26 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Deleted. */
-            200: {
+            /** @description Deleted. No body. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            /** @description A scan is running for this library; wait for it to finish. */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Acknowledged"];
+                    "application/json": components["schemas"]["ErrorEnvelope"];
                 };
             };
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
-            404: components["responses"]["NotFound"];
         };
     };
     patchLibrary: {
@@ -12366,18 +12374,26 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Removed. */
-            200: {
+            /** @description Removed, with every item scanned under it. No body. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            /** @description This is the library's last location; delete the library instead. */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Acknowledged"];
+                    "application/json": components["schemas"]["ErrorEnvelope"];
                 };
             };
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
-            404: components["responses"]["NotFound"];
         };
     };
     patchLibraryRoot: {
@@ -12497,7 +12513,7 @@ export interface operations {
                 /** @description `unrated=1` restricts to what every content-rating ceiling hides for want of a rating: kinds a certificate could describe whose effective rating (their own, else their parent's or grandparent's) is missing or is not a label the ladder places. The list an administrator rates from by hand; kinds no certificate describes never appear in it. Any other value is ignored. */
                 unrated?: "1";
                 /**
-                 * @description `title` (default), `year`, `added`, `rating` (highest first, unrated last), `longest` / `shortest` (by running time), `track` (disc then track number), or `random` — a shuffle fixed by `seed`.
+                 * @description `title` (default), `year`, `added`, `rating` (highest first, unrated last), `longest` / `shortest` (by running time), `track` (disc then track number), `taken` (when a photograph was taken, newest first, falling back to when the file arrived), or `random` — a shuffle fixed by `seed`.
                  *
                  *     `longest` and `shortest` both sink anything with no running time to the bottom — NULL and zero alike, because zero is what a probe writes when it could not read a length, and a film of no minutes is not the shortest film. Containers carry no duration at all, so this is a film-library sort: elsewhere every row would tie and the answer would be the alphabet.
                  *
@@ -12514,6 +12530,10 @@ export interface operations {
                 tag?: number[];
                 /** @description `1` restricts to the calling account's favourites. Without `library_id` it reaches every level of every library, so a favourited album, episode or song is listed too; inside one library it filters the top-level grid like any other facet. */
                 favourite?: "1";
+                /** @description Open one photo timeline bucket: the photographs taken in this month, as `GET /api/libraries/{id}/timeline` names it (`2019-07`). Use with `sort=taken`. **Also excludes marked folders**, so the listing agrees with the bucket's count; that exclusion is derived here and is not itself a parameter. */
+                taken_month?: string;
+                /** @description `1` opens the timeline's undated bucket: photographs carrying no capture time at all. Excludes marked folders, as `taken_month` does. */
+                taken_undated?: "1";
             };
             header?: never;
             path?: never;
@@ -17103,6 +17123,7 @@ export interface operations {
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
         };
     };
     deletePlaylist: {

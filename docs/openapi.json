@@ -1661,15 +1661,11 @@
         "summary": "Delete a library and its rows",
         "description": "Administrators only. Removes the library's **records**. It does not touch the media on disk — the server never owns the files.",
         "responses": {
-          "200": {
-            "description": "Deleted.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Acknowledged"
-                }
-              }
-            }
+          "204": {
+            "description": "Deleted. No body."
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
           },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
@@ -1679,6 +1675,16 @@
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "description": "A scan is running for this library; wait for it to finish.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
           }
         }
       }
@@ -1826,15 +1832,11 @@
         "summary": "Remove a location from this library",
         "description": "Administrators only. Removes the rows that came from that location; the files are untouched.",
         "responses": {
-          "200": {
-            "description": "Removed.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Acknowledged"
-                }
-              }
-            }
+          "204": {
+            "description": "Removed, with every item scanned under it. No body."
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
           },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
@@ -1844,6 +1846,16 @@
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "description": "This is the library's last location; delete the library instead.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
           }
         }
       }
@@ -2153,7 +2165,7 @@
             "name": "sort",
             "in": "query",
             "required": false,
-            "description": "`title` (default), `year`, `added`, `rating` (highest first, unrated last), `longest` / `shortest` (by running time), `track` (disc then track number), or `random` — a shuffle fixed by `seed`.\n\n`longest` and `shortest` both sink anything with no running time to the bottom — NULL and zero alike, because zero is what a probe writes when it could not read a length, and a film of no minutes is not the shortest film. Containers carry no duration at all, so this is a film-library sort: elsewhere every row would tie and the answer would be the alphabet.\n\n**A container's children are not automatically in hierarchy order.** Episodes come back in season order only because they share their series' sort title and therefore tie, letting the order fall through. Tracks keep their own titles, so an album asked for without a sort comes back alphabetically — use `sort=track`.",
+            "description": "`title` (default), `year`, `added`, `rating` (highest first, unrated last), `longest` / `shortest` (by running time), `track` (disc then track number), `taken` (when a photograph was taken, newest first, falling back to when the file arrived), or `random` — a shuffle fixed by `seed`.\n\n`longest` and `shortest` both sink anything with no running time to the bottom — NULL and zero alike, because zero is what a probe writes when it could not read a length, and a film of no minutes is not the shortest film. Containers carry no duration at all, so this is a film-library sort: elsewhere every row would tie and the answer would be the alphabet.\n\n**A container's children are not automatically in hierarchy order.** Episodes come back in season order only because they share their series' sort title and therefore tie, letting the order fall through. Tracks keep their own titles, so an album asked for without a sort comes back alphabetically — use `sort=track`.",
             "schema": {
               "type": "string",
               "default": "title"
@@ -2213,6 +2225,28 @@
               ]
             },
             "description": "`1` restricts to the calling account's favourites. Without `library_id` it reaches every level of every library, so a favourited album, episode or song is listed too; inside one library it filters the top-level grid like any other facet."
+          },
+          {
+            "name": "taken_month",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "pattern": "^[0-9]{4}-[0-9]{2}$"
+            },
+            "description": "Open one photo timeline bucket: the photographs taken in this month, as `GET /api/libraries/{id}/timeline` names it (`2019-07`). Use with `sort=taken`. **Also excludes marked folders**, so the listing agrees with the bucket's count; that exclusion is derived here and is not itself a parameter."
+          },
+          {
+            "name": "taken_undated",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "1"
+              ]
+            },
+            "description": "`1` opens the timeline's undated bucket: photographs carrying no capture time at all. Excludes marked folders, as `taken_month` does."
           }
         ],
         "responses": {
@@ -8241,6 +8275,9 @@
           },
           "403": {
             "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
           }
         }
       }
