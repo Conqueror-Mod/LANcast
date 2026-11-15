@@ -586,11 +586,30 @@ export function useSetSensitive() {
       apiSend(`/api/items/${id}/sensitive`, "PUT", { sensitive }),
     onSuccess: (_data, { id }) => {
       qc.invalidateQueries({ queryKey: ["item", id] });
-      qc.invalidateQueries({ queryKey: ["items"] });
-      qc.invalidateQueries({ queryKey: ["items-infinite"] });
-      qc.invalidateQueries({ queryKey: ["children"] });
-      qc.invalidateQueries({ queryKey: ["recently-added"] });
-      qc.invalidateQueries({ queryKey: ["search"] });
+      /*
+       * Home's photo shelves were missing (R13-3): "On this day" reads
+       * ["memories"] and keeps it fifteen minutes, New this week's photo row
+       * reads ["recent-photos"], and both are siblings of ["items"], not
+       * children of it. So a photo just marked sensitive was drawn unblurred
+       * on Home, which is the moment ADR 0051 exists for. A collection, a
+       * playlist, the duplicates report and a photo search draw thumbnails
+       * from their own keys too. (`["items-infinite"]` used to be named here
+       * and matched nothing: the grid's key is ["items", "infinite", …].)
+       */
+      for (const key of [
+        "items",
+        "children",
+        "recently-added",
+        "search",
+        "recent-photos",
+        "memories",
+        "collection-members",
+        "playlist-entries",
+        "duplicates",
+        "photo-search",
+      ]) {
+        qc.invalidateQueries({ queryKey: [key] });
+      }
     },
   });
 }
@@ -1420,6 +1439,14 @@ export function useDeleteItem(id: number) {
         // counted there until something else refreshed it.
         "duplicates",
         "timeline",
+        // Home's photo shelves, which are siblings of ["items"] and kept a
+        // removed photo for up to fifteen minutes (R13-3); and the other
+        // lists with keys of their own that can show the removed title.
+        "recent-photos",
+        "memories",
+        "search",
+        "playlist-entries",
+        "photo-search",
       ]) {
         qc.invalidateQueries({ queryKey: [key] });
       }
