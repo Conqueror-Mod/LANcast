@@ -4136,6 +4136,13 @@ holds a track twice, not an error.
 
 `400` naming the id if any item does not exist, and nothing is written.
 
+The list is the one **the caller was shown**. An account kept from some entries
+(a hidden library, a rating above its ceiling) sees a shorter playlist than the
+one stored, and does not get to decide the entries it cannot see: each keeps
+its place, the caller's list fills the places it can see in order, anything
+left over goes on the end, and places left over are dropped. For an account
+that sees every entry this is exactly the list sent.
+
 #### `POST /api/playlists/{id}/entries`
 
 Appends to the end, in the order given. Same body, `204`. The one edit whose
@@ -4148,7 +4155,10 @@ Removes one entry. `204`, or `404` if there is no entry there.
 **By position, not by item id.** An id does not identify an entry in the one
 listing that may hold the same id twice. Positions are 0-based and stay dense,
 so a position is the index the client rendered; after a removal, everything
-below it has shifted up by one.
+below it has shifted up by one. It counts the entries **the caller was shown**:
+for an account kept from some of them, row 1 is the second entry it can see,
+whatever is stored between, and a row past the end of what it can see is a
+`404`.
 
 #### What playlist writes require
 

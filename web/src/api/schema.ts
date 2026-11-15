@@ -3478,6 +3478,8 @@ export interface paths {
          *
          *     `400` naming the id if any item does not exist, and **nothing is written**.
          *
+         *     The list is the one **the caller was shown**. Entries kept from the caller (a hidden library, a rating above its ceiling) keep their places; the list sent fills the places the caller can see, in order, anything left over goes on the end, and places left over are dropped. For an account that sees every entry this is exactly the list sent.
+         *
          *     **A session, and no particular role.** The admin gate exists for filesystem access and account control; a playlist edit is neither, and the audit log records who made it. Playlists are server-wide (ADR 0030 leaves per-user ownership undecided), so any member may edit any playlist.
          *
          *     Every playlist write **locks `members`**, which is what stops the next scan re-importing the `.m3u` over the edit.
@@ -3505,7 +3507,7 @@ export interface paths {
             path: {
                 /** @description The playlist's item id. */
                 id: components["parameters"]["PlaylistId"];
-                /** @description **By position, not by item id.** An id does not identify an entry in the one listing that may hold the same id twice. Positions are 0-based and stay dense, so a position is the index the client rendered; after a removal everything below it has shifted up by one. */
+                /** @description **By position, not by item id.** An id does not identify an entry in the one listing that may hold the same id twice. Positions are 0-based and stay dense, so a position is the index the client rendered; after a removal everything below it has shifted up by one. It counts the entries **the caller was shown**: for an account kept from some of them, row 1 is the second entry it can see, and a row past the end of what it can see is a `404`. */
                 pos: number;
             };
             cookie?: never;
@@ -17206,7 +17208,7 @@ export interface operations {
             path: {
                 /** @description The playlist's item id. */
                 id: components["parameters"]["PlaylistId"];
-                /** @description **By position, not by item id.** An id does not identify an entry in the one listing that may hold the same id twice. Positions are 0-based and stay dense, so a position is the index the client rendered; after a removal everything below it has shifted up by one. */
+                /** @description **By position, not by item id.** An id does not identify an entry in the one listing that may hold the same id twice. Positions are 0-based and stay dense, so a position is the index the client rendered; after a removal everything below it has shifted up by one. It counts the entries **the caller was shown**: for an account kept from some of them, row 1 is the second entry it can see, and a row past the end of what it can see is a `404`. */
                 pos: number;
             };
             cookie?: never;

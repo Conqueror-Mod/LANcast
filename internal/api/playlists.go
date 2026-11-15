@@ -89,6 +89,77 @@ func (s *Server) decodeItemIDs(w http.ResponseWriter, r *http.Request) ([]int64,
 	return req.ItemIDs, true
 }
 
+// playlistView is a playlist as the caller is shown it, laid over the stored
+// list: which stored positions the caller can see, in order.
+//
+// WHY THIS EXISTS (R06-2)
+//
+// A playlist is server-wide, but its listing is not: GET /api/items?playlist_id=
+// drops every entry kept from the caller (a hidden library, a rating above
+// their ceiling), so a restricted account is shown a shorter list than the one
+// stored. Every position it sends back is a position in *that* list. Taken as a
+// stored position, "remove row 1" of [A, C] removed B — the entry the caller
+// could not see — and a reorder of [A, C] replaced [A, B, C] and dropped B for
+// everyone, under a members lock no rescan undoes.
+//
+// So positions are translated here, at the one boundary where a shown list
+// turns into a stored one. Positions, never ids: the same track may sit in a
+// playlist twice, and an id cannot say which of the two was meant.
+type playlistView struct {
+	stored  []store.Item
+	visible []int // stored positions the caller can see, in playing order
+}
+
+// viewPlaylist reads the stored list and marks what the caller is shown,
+// with the same predicate the listing uses (PermittedItems).
+func (s *Server) viewPlaylist(r *http.Request, playlistID int64) (playlistView, error) {
+	stored, err := s.st.PlaylistEntries(r.Context(), playlistID)
+	if err != nil {
+		return playlistView{}, err
+	}
+	permitted, err := s.st.PermittedItems(r.Context(), s.userID(r), stored)
+	if err != nil {
+		return playlistView{}, err
+	}
+	allowed := make(map[int64]bool, len(permitted))
+	for _, it := range permitted {
+		allowed[it.ID] = true
+	}
+	v := playlistView{stored: stored}
+	for i, it := range stored {
+		if allowed[it.ID] {
+			v.visible = append(v.visible, i)
+		}
+	}
+	return v, nil
+}
+
+// hidesNothing reports whether the caller is shown the whole stored list, in
+// which case a shown position already is a stored one.
+func (v playlistView) hidesNothing() bool { return len(v.visible) == len(v.stored) }
+
+// merge lays the caller's new order over the stored list. Each entry the
+// caller cannot see keeps its slot; the slots the caller can see are filled
+// with ids in order; any ids left over (an insert) go on the end, and slots
+// left over (a removal) are dropped. For a caller who sees everything this is
+// exactly ids, so the route behaves as it always did.
+func (v playlistView) merge(ids []int64) []int64 {
+	out := make([]int64, 0, len(ids)+len(v.stored)-len(v.visible))
+	next, vi := 0, 0
+	for i, it := range v.stored {
+		if vi < len(v.visible) && v.visible[vi] == i {
+			vi++
+			if next < len(ids) {
+				out = append(out, ids[next])
+				next++
+			}
+			continue
+		}
+		out = append(out, it.ID)
+	}
+	return append(out, ids[next:]...)
+}
+
 // createPlaylist makes an empty playlist in a library.
 //
 // A library is required rather than guessed. Every media_item belongs to one,
@@ -149,16 +220,24 @@ func (s *Server) setPlaylistEntries(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	// The caller decided the list they were shown, which may not be the
+	// whole list (R06-2): entries kept from them stay where they are.
+	view, err := s.viewPlaylist(r, pl.ID)
+	if err != nil {
+		s.writeInternal(w, err, "playlist entries")
+		return
+	}
+	stored := view.merge(ids)
 	if err := s.st.LockField(r.Context(), pl.ID, membersLock); err != nil {
 		s.writeInternal(w, err, "lock members")
 		return
 	}
-	if err := s.st.SetPlaylistEntries(r.Context(), pl.ID, ids); err != nil {
+	if err := s.st.SetPlaylistEntries(r.Context(), pl.ID, stored); err != nil {
 		s.writeInternal(w, err, "set playlist entries")
 		return
 	}
 	s.audit(r, "playlist.edit", "item", auditID(pl.ID),
-		"set "+strconv.Itoa(len(ids))+" entries in "+pl.Title, map[string]any{"item_ids": ids})
+		"set "+strconv.Itoa(len(stored))+" entries in "+pl.Title, map[string]any{"item_ids": stored})
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -193,8 +272,10 @@ func (s *Server) addPlaylistEntries(w http.ResponseWriter, r *http.Request) {
 //
 // By position, not by item id: an id does not identify an entry when the same
 // track may appear twice, and "remove the one I am looking at" is the only
-// request a client can actually make. Positions are 0-based and dense, so the
-// position is the index the client rendered.
+// request a client can actually make. Positions are 0-based and dense, and
+// they count what the caller was shown: the index the client rendered. For an
+// account kept from some entries that is not the stored position, so it is
+// translated before anything is deleted (R06-2).
 func (s *Server) removePlaylistEntry(w http.ResponseWriter, r *http.Request) {
 	pl, ok := s.playlistByID(w, r)
 	if !ok {
@@ -205,6 +286,18 @@ func (s *Server) removePlaylistEntry(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "bad_request",
 			"position must be a whole number, counting from 0")
 		return
+	}
+	view, err := s.viewPlaylist(r, pl.ID)
+	if err != nil {
+		s.writeInternal(w, err, "playlist entries")
+		return
+	}
+	if !view.hidesNothing() {
+		if pos >= len(view.visible) {
+			writeError(w, http.StatusNotFound, "not_found", "no entry at that position")
+			return
+		}
+		pos = view.visible[pos]
 	}
 	if err := s.st.LockField(r.Context(), pl.ID, membersLock); err != nil {
 		s.writeInternal(w, err, "lock members")
