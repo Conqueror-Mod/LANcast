@@ -9,8 +9,6 @@ import (
 	"io"
 	"net/http"
 	"path"
-	"runtime"
-	"strings"
 	"sync/atomic"
 	"time"
 
@@ -23,24 +21,10 @@ import (
 // a redirect to something enormous cannot exhaust the machine.
 const maxArtifact = 256 << 20
 
-// installFiles are the names taken out of the archive and staged. Named rather
-// than "everything in the zip": the archive also carries a README and a licence,
-// and an updater that overwrites files nobody asked it to touch is an updater
-// nobody trusts.
-var installFiles = map[string]bool{
-	// One program since ADR 0080. The two old names are gone from this list
-	// on purpose: an archive is only ever unpacked into the install it was
-	// built for, and staging a LANcast-Server.exe now would bring back a file
-	// nothing runs.
-	"LANcast.exe":        true,
-	"WebView2Loader.dll": true,
-	// The desktop player (ADR 0067/0069). Absent from an older archive, which
-	// is fine: the map filters what the zip holds rather than demanding it.
-	"libmpv-2.dll": true,
-	// Achievements in the desktop player (ADR 0112); absent from older archives.
-	"lancast-cheevos.dll": true,
-	"lancast":             true,
-}
+// installFiles are the names taken out of the archive and staged. The list
+// lives in selfupdate, because Apply refuses any other name and the two must
+// never disagree.
+var installFiles = selfupdate.InstallFiles
 
 // Progress is what the activity panel renders while a download runs.
 type Progress struct {
@@ -166,29 +150,15 @@ func (c *Checker) downloadFrom(ctx context.Context, dataDir, endpoint string) er
 	if len(files) == 0 {
 		return fmt.Errorf("release %s contained none of the files this install uses", rel.TagName)
 	}
-	return selfupdate.Stage(dataDir, rel.TagName, files, time.Now().Unix())
+	// The proof goes into staging with the files, so Apply can check it all
+	// again at the moment it moves them (R10-1).
+	proof := selfupdate.Proof{Checksums: checksums, Signature: sig, Archive: body}
+	return selfupdate.Stage(dataDir, rel.TagName, proof, files, time.Now().Unix())
 }
 
-/*
- * archiveName is the asset this platform installs from: goreleaser's
- * LANcast_<version>_<os>_<arch>, with the leading v stripped from the tag.
- *
- * Renamed from lancast_… with the single executable (ADR 0080 §5, amended),
- * and the rename is the point. Updaters from before it look for the old name
- * and keep only the files they know by name; an archive holding LANcast.exe
- * plus the two DLLs would have had them stage the DLLs alone, restart on the
- * old programs, and offer the same update for ever. Under a name they do not
- * look for, they stop with "release vX has no lancast_…zip" instead, and the
- * release notes say to run the installer — which that one release needs
- * anyway, to re-register the service under the new name.
- */
-func archiveName(tag string) string {
-	v := strings.TrimPrefix(tag, "v")
-	if runtime.GOOS == "windows" {
-		return fmt.Sprintf("LANcast_%s_windows_%s.zip", v, runtime.GOARCH)
-	}
-	return fmt.Sprintf("LANcast_%s_%s_%s.tar.gz", v, runtime.GOOS, runtime.GOARCH)
-}
+// archiveName is the asset this platform installs from. selfupdate owns it,
+// because Apply derives it from the staged version to bind the two.
+func archiveName(tag string) string { return selfupdate.ArchiveName(tag) }
 
 // extract pulls the install files out of a zip.
 //
@@ -204,7 +174,7 @@ func extract(body []byte) (map[string][]byte, error) {
 	out := map[string][]byte{}
 	for _, f := range zr.File {
 		name := f.Name
-		if name != path.Base(name) || !installFiles[name] {
+		if !selfupdate.TakenFromArchive(name) {
 			continue
 		}
 		rc, err := f.Open()
