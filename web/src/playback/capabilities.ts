@@ -193,6 +193,22 @@ function denied(): Set<string> {
 }
 
 /**
+ * failureIsAboutCodec says whether a failed direct play is evidence against
+ * the claims that produced it.
+ *
+ * Only two of the element's codes are: `MEDIA_ERR_DECODE` (3), the bytes
+ * arrived and could not be decoded, and `MEDIA_ERR_SRC_NOT_SUPPORTED` (4), the
+ * engine refused the format. `MEDIA_ERR_NETWORK` (2) is a server restarting
+ * for an update, a laptop leaving Wi-Fi or a session expiring mid-film, and
+ * withdrawing `hevc` for a fortnight over one of those re-encoded every HEVC
+ * title on the device for nothing (R14-2). An error with no code says nothing
+ * either way, and nothing is the safe thing to conclude from it.
+ */
+export function failureIsAboutCodec(err: { code: number } | null | undefined): boolean {
+  return !!err && (err.code === 3 || err.code === 4);
+}
+
+/**
  * deny records that a capability did not work here, so it stops being claimed.
  * Returns true when this is news — the caller retries only on news, which is
  * what stops a retry loop.
