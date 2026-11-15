@@ -53,19 +53,29 @@ func (s *Store) ReplaceSidecarSubtitles(ctx context.Context, itemID int64, subs 
 	return tx.Commit()
 }
 
-// AddSubtitle records a subtitle that was downloaded rather than found.
+// AddSubtitle records a subtitle that was downloaded rather than found, and
+// returns its row's id — the row inserted, or the row updated when this item
+// already had this path.
+//
+// The id comes from RETURNING, not LastInsertId. An upsert that takes its
+// UPDATE branch leaves last_insert_rowid() as it was, so LastInsertId answered
+// with whatever the pooled connection last inserted: another film's subtitle,
+// or a row in another table. Downloading the same subtitle twice then handed
+// the client a key that 404s for this item (R07-4).
 func (s *Store) AddSubtitle(ctx context.Context, sub ExternalSubtitle) (int64, error) {
-	res, err := s.db.ExecContext(ctx, `
+	var id int64
+	err := s.db.QueryRowContext(ctx, `
 		INSERT INTO external_subtitle (item_id, path, language, title, forced, format, source, added_at)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(item_id, path) DO UPDATE SET
-			language = excluded.language, title = excluded.title, forced = excluded.forced`,
+			language = excluded.language, title = excluded.title, forced = excluded.forced
+		RETURNING id`,
 		sub.ItemID, sub.Path, nullEmpty(sub.Language), nullEmpty(sub.Title),
-		boolInt(sub.Forced), sub.Format, sub.Source, time.Now().Unix())
+		boolInt(sub.Forced), sub.Format, sub.Source, time.Now().Unix()).Scan(&id)
 	if err != nil {
 		return 0, fmt.Errorf("add subtitle: %w", err)
 	}
-	return res.LastInsertId()
+	return id, nil
 }
 
 // DeleteExternalSubtitle removes one external subtitle row, scoped to its item
