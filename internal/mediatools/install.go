@@ -78,13 +78,21 @@ type Source struct {
  * LANcast fetches this rather than redistributing it, so its own installer
  * carries no GPL obligation; the licence is named in the UI before the download
  * begins.
+ *
+ * **Pin a month-end build, never a mid-month one.** Upstream deletes its daily
+ * autobuilds after about two weeks and keeps only the last build of each
+ * month. v0.11.0 shipped pinned to 2026-08-18, which was deleted, so every
+ * "Download ffmpeg" press returned 404. The project has also moved from
+ * BtbN/FFmpeg-Builds to FFmpeg-Builds/FFmpeg-Builds; the old address
+ * redirects, but the pin names the new one.
+ * TestPinnedBuildIsAMonthEndBuild holds the rule.
  */
 var windowsAMD64 = Source{
-	URL: "https://github.com/BtbN/FFmpeg-Builds/releases/download/" +
-		"autobuild-2026-08-18-15-03/ffmpeg-n8.1.2-44-g7c533d0f86-win64-gpl-8.1.zip",
-	SHA256:     "66e3797adad33063ae3f55c7eacb9f1bff604322a4e50225039626230fd0c0d1",
-	SizeBytes:  168274317,
-	Version:    "8.1.2 (n8.1.2-44-g7c533d0f86, win64 gpl static)",
+	URL: "https://github.com/FFmpeg-Builds/FFmpeg-Builds/releases/download/" +
+		"autobuild-2026-10-31-12-59/ffmpeg-n8.1.3-27-g8dca1586f4-win64-gpl-8.1.zip",
+	SHA256:     "401dffcf14c301082e1fc03b0bc876b92ea676bfc521fc56e80a1537d137034f",
+	SizeBytes:  194182300,
+	Version:    "8.1.3 (n8.1.3-27-g8dca1586f4, win64 gpl static)",
 	Licence:    "GPL v3",
 	LicenceURL: "https://www.gnu.org/licenses/gpl-3.0.html",
 }
