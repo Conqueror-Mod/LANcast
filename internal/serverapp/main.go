@@ -351,7 +351,14 @@ func run(ctx context.Context, addr, dataDir string, log *slog.Logger) error {
 
 	// A restore staged from Settings, applied before anything opens the
 	// database it replaces. Once: the marker is gone whatever happens.
-	if out := backup.New(cfg.DataDir).ApplyPending(ctx, cfg.DBPath(), time.Now()); out != nil {
+	//
+	// As the service, only a marker and a backup that SYSTEM or Administrators
+	// own and nobody else can change (R10-2): the #1096 guard, on the files.
+	backups := backup.New(cfg.DataDir)
+	if serviceManaged {
+		backups.WithGuard(mediatools.ServiceGuard())
+	}
+	if out := backups.ApplyPending(ctx, cfg.DBPath(), time.Now()); out != nil {
 		if out.OK {
 			log.Info("backup restored", "name", out.Name, "requested_by", out.RequestedBy,
 				"schema_from", out.SchemaFrom, "schema_to", out.SchemaTo, "kept_first", out.SafetyBackup)

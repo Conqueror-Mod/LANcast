@@ -186,3 +186,84 @@ func TestTheMarkerIsNotListedAsABackup(t *testing.T) {
 		t.Fatalf("listed %+v", files)
 	}
 }
+
+// refuseGuard refuses the paths it is given, and records what it was asked.
+type refuseGuard struct {
+	refuse map[string]bool
+	asked  []string
+}
+
+func (g *refuseGuard) CheckFile(p string) error {
+	g.asked = append(g.asked, filepath.Base(p))
+	if g.refuse[filepath.Base(p)] {
+		return errors.New("owned by a guest account, not by Administrators or SYSTEM")
+	}
+	return nil
+}
+
+// stagedRestore is a database whose only library is "Live", and a staged
+// restore of a backup whose only library is "Planted".
+func stagedRestore(t *testing.T) (d *Dir, db, name string) {
+	t.Helper()
+	dataDir := t.TempDir()
+	d = New(dataDir)
+	db = liveWith(t, dataDir, "Planted")
+	name = NewName(time.Now().Add(-time.Hour))
+	snapshotOf(t, d, db, name)
+	if err := os.Remove(db); err != nil {
+		t.Fatal(err)
+	}
+	liveWith(t, dataDir, "Live")
+	if err := d.Stage(Pending{Name: name, RequestedBy: "someone"}); err != nil {
+		t.Fatal(err)
+	}
+	return d, db, name
+}
+
+func assertNotRestored(t *testing.T, d *Dir, db string, out *Outcome) {
+	t.Helper()
+	if out == nil || out.OK || out.Error == "" {
+		t.Fatalf("outcome = %+v, want a refusal with a reason", out)
+	}
+	if got := libraryNames(t, db); len(got) != 1 || got[0] != "Live" {
+		t.Fatalf("the database was replaced: it holds %v", got)
+	}
+	if d.Staged() != nil {
+		t.Error("the refused marker survived, so every start would read it again")
+	}
+	if last := d.LastRestore(); last == nil || last.OK {
+		t.Errorf("last restore = %+v, want the refusal recorded for Settings", last)
+	}
+}
+
+// R10-2: a marker the server did not write is ignored, whatever it names.
+func TestAMarkerTheGuardRefusesIsIgnored(t *testing.T) {
+	d, db, _ := stagedRestore(t)
+	g := &refuseGuard{refuse: map[string]bool{pendingFile: true}}
+	out := d.WithGuard(g).ApplyPending(context.Background(), db, time.Now())
+	assertNotRestored(t, d, db, out)
+	t.Logf("refused: %s", out.Error)
+}
+
+// And a genuine-looking marker naming a backup the server did not write.
+func TestABackupTheGuardRefusesIsNotRestored(t *testing.T) {
+	d, db, name := stagedRestore(t)
+	g := &refuseGuard{refuse: map[string]bool{name: true}}
+	out := d.WithGuard(g).ApplyPending(context.Background(), db, time.Now())
+	assertNotRestored(t, d, db, out)
+	if len(g.asked) != 2 {
+		t.Errorf("guard asked about %v, want the marker and the backup", g.asked)
+	}
+}
+
+// Both accepted: the restore goes ahead exactly as before.
+func TestARestoreTheGuardAcceptsIsApplied(t *testing.T) {
+	d, db, _ := stagedRestore(t)
+	out := d.WithGuard(&refuseGuard{}).ApplyPending(context.Background(), db, time.Now())
+	if out == nil || !out.OK {
+		t.Fatalf("outcome = %+v", out)
+	}
+	if got := libraryNames(t, db); len(got) != 1 || got[0] != "Planted" {
+		t.Fatalf("after restore the database holds %v", got)
+	}
+}

@@ -124,6 +124,23 @@ func (d *Dir) ApplyPending(ctx context.Context, dbPath string, now time.Time) *O
 	if errors.Is(err, os.ErrNotExist) {
 		return nil
 	}
+	/*
+	 * Who wrote the marker, read before it is removed (R10-2).
+	 *
+	 * As a Windows service the backups folder used to let every local account
+	 * add files. A marker and a database of anybody's making then replaced
+	 * the library at the next start, and their author signed in as an
+	 * administrator. The folder is closed now (internal/dataperm); this does
+	 * not depend on it. A file keeps its creator as owner, so a planted
+	 * marker or backup is told apart from one the server wrote by asking the
+	 * guard who owns it.
+	 */
+	var refused error
+	if d.guard != nil {
+		if gerr := d.guard.CheckFile(d.pendingPath()); gerr != nil {
+			refused = fmt.Errorf("the staged restore was not written by LANcast, so it was ignored: %w", gerr)
+		}
+	}
 	// Gone before anything else happens: one attempt, never a loop.
 	os.Remove(d.pendingPath())
 
@@ -133,8 +150,13 @@ func (d *Dir) ApplyPending(ctx context.Context, dbPath string, now time.Time) *O
 		d.writeResult(out)
 		return out
 	}
-	if err := json.Unmarshal(b, &out.Pending); err != nil {
+	if err := json.Unmarshal(b, &out.Pending); err != nil && refused == nil {
 		out.Error = "the staged restore could not be read: " + err.Error()
+		d.writeResult(out)
+		return out
+	}
+	if refused != nil {
+		out.Error = refused.Error()
 		d.writeResult(out)
 		return out
 	}
@@ -144,6 +166,13 @@ func (d *Dir) ApplyPending(ctx context.Context, dbPath string, now time.Time) *O
 		out.Error = err.Error()
 		d.writeResult(out)
 		return out
+	}
+	if d.guard != nil {
+		if gerr := d.guard.CheckFile(path); gerr != nil {
+			out.Error = fmt.Sprintf("%s was not written by LANcast or an administrator, so it was not restored: %v", out.Name, gerr)
+			d.writeResult(out)
+			return out
+		}
 	}
 	res, err := store.RestoreSnapshot(ctx, dbPath, path)
 	if err != nil {
