@@ -231,3 +231,23 @@ func TestAcceptingARotationNeedsTheKeyThatWasShown(t *testing.T) {
 		t.Error("nothing shown and nothing offered counted as a match")
 	}
 }
+
+// ADR 0124. A proven rotation asks nobody to compare anything; a failed proof
+// is a refusal, not a reissued certificate.
+func TestProofMessagesSayWhatHappened(t *testing.T) {
+	proven := strings.ToLower(provenRotationMessage("192.168.1.21:8080"))
+	for _, want := range []string{"proved", "identity key", "nothing to compare"} {
+		if !strings.Contains(proven, want) {
+			t.Errorf("the proven message does not mention %q:\n%s", want, proven)
+		}
+	}
+	failed := strings.ToLower(proofFailedMessage("192.168.1.21:8080"))
+	for _, want := range []string{"not the one you accepted", "could not", "do not connect"} {
+		if !strings.Contains(failed, want) {
+			t.Errorf("the failed-proof refusal does not mention %q:\n%s", want, failed)
+		}
+	}
+	if !strings.Contains(pickerPage(""), `id="rotate-ask"`) {
+		t.Error("the picker cannot hide the read-it-out instruction for a proven rotation")
+	}
+}

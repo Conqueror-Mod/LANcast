@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -111,7 +112,25 @@ func (l *launcher) serverBindings(win func() clientwindow.Controller) map[string
 				// it is met.
 				out["refusal"] = mismatchMessage(addr)
 			case knownserver.TrustRotated:
-				out["rotation"] = rotationMessage(addr)
+				/*
+				 * Ask the server to prove it is the one on record (ADR 0124)
+				 * before asking a person anything. A proof that fails is the
+				 * strongest refusal there is; no proof at all (an older
+				 * server, a TLS-terminating proxy, an impostor declining)
+				 * falls back to the person comparing the certificate.
+				 */
+				prev, _ := known.Find(addr)
+				switch proof := proveRotation(ctx, addr, offered.Pin, prev.Identity); proof {
+				case proofFailed:
+					out["trust"] = knownserver.TrustMismatch.String()
+					out["refusal"] = proofFailedMessage(addr)
+				default:
+					out["proof"] = proof
+					out["rotation"] = rotationMessage(addr)
+					if proof == proofProven {
+						out["rotation"] = provenRotationMessage(addr)
+					}
+				}
 			}
 			if prev, ok := known.Find(addr); ok {
 				out["known_name"] = prev.Name
@@ -298,6 +317,16 @@ func (l *launcher) serverBindings(win func() clientwindow.Controller) map[string
 			if !sameFingerprint(shown, offered.Pin) {
 				return map[string]any{"error": rotationMovedMessage}
 			}
+			/*
+			 * Asked again rather than remembered from the probe: the
+			 * decision belongs to the key being stored now. A proof that
+			 * fails is refused whatever the person compared; with no proof,
+			 * the person's comparison of the certificate is what decides.
+			 */
+			prev, _ := known.Find(addr)
+			if proveRotation(ctx, addr, offered.Pin, prev.Identity) == proofFailed {
+				return map[string]any{"error": proofFailedMessage(addr)}
+			}
 			if err := knownserver.Save(dir, known.AcceptRotation(addr, offered.Pin)); err != nil {
 				return map[string]any{"error": err.Error()}
 			}
@@ -401,6 +430,59 @@ func rotationMessage(addr string) string {
 			"the one shown here.\n\n"+
 			"If they match, this is the same server and you can carry on. If they "+
 			"do not, do not connect.", addr)
+}
+
+/*
+ * The three answers to "did the server prove it is the one on record"
+ * (ADR 0124), as the strings the picker reads.
+ */
+const (
+	proofProven = "proven"
+	proofNone   = "none"
+	proofFailed = "failed"
+)
+
+// proveRotation asks the server at addr to prove the identity on record over
+// a connection presenting pin.
+func proveRotation(ctx context.Context, addr, pin, identity string) string {
+	err := knownserver.Prove(ctx, addr, pin, identity)
+	switch {
+	case err == nil:
+		return proofProven
+	case errors.Is(err, knownserver.ErrProofFailed):
+		slog.Warn("server failed to prove its identity", "address", addr, "error", err)
+		return proofFailed
+	default:
+		slog.Info("server offered no identity proof", "address", addr, "error", err)
+		return proofNone
+	}
+}
+
+// provenRotationMessage is the rotation the server has proved: nobody needs
+// to read anything out.
+func provenRotationMessage(addr string) string {
+	return fmt.Sprintf(
+		"The TLS certificate at %s has changed, and the server has proved it "+
+			"is the same server you accepted.\n\n"+
+			"It signed a challenge from this computer with its identity key, "+
+			"over the connection that presented the new certificate. Nothing "+
+			"else at this address could have done that, so there is nothing to "+
+			"compare.", addr)
+}
+
+/*
+ * proofFailedMessage is a server that answered for the identity on record and
+ * could not prove it. Not a reissued certificate: something at this address
+ * claims to be the server you accepted and is not.
+ */
+func proofFailedMessage(addr string) string {
+	return fmt.Sprintf(
+		"The server at %s is not the one you accepted.\n\n"+
+			"Its certificate has changed, and when asked to prove it is still the "+
+			"same server, it could not. A reissued certificate never causes this: "+
+			"the server's identity key signs the proof, and that key does not "+
+			"change.\n\n"+
+			"Do not connect. Check with whoever runs it.", addr)
 }
 
 // rotationMovedMessage is for a key that changed again between being shown
