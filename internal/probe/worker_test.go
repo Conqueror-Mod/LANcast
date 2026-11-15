@@ -181,6 +181,33 @@ func TestStoredProbeDrivesDecision(t *testing.T) {
 	}
 }
 
+// The stored size has to reach the decision, or the bit-rate ceiling has
+// nothing to estimate from on the path every real playback takes (R09-4).
+func TestStoredSizeHoldsTheBitrateCeiling(t *testing.T) {
+	probed := int64(1)
+	dur := int64(60_000)
+	size := int64(150_000_000) // 20 Mbps over a minute
+	container, vcodec, acodec := "mkv", "h264", "aac"
+	w, h, ch := 1920, 1080, 2
+	it := &store.Item{
+		ProbedAt: &probed, DurationMS: &dur, SizeBytes: &size, Container: &container,
+		VideoCodec: &vcodec, Width: &w, Height: &h,
+		AudioCodec: &acodec, AudioChannels: &ch,
+	}
+	streams := []store.MediaStream{
+		{Index: 0, Kind: "video", Codec: "h264", Width: w, Height: h, Default: true},
+		{Index: 1, Kind: "audio", Codec: "aac", Channels: 2, Default: true},
+	}
+	p := BrowserProfile()
+	p.MaxVideoBitRate = 10_000_000
+
+	d := Decide(ResultWithStreams(it, streams), p)
+	if d.VideoAction != "encode" || d.TargetVideoBitRate != 10_000_000 {
+		t.Errorf("decision = %s/%s target %d (%s), want an encode capped at the ceiling",
+			d.Method, d.VideoAction, d.TargetVideoBitRate, d.Reason)
+	}
+}
+
 func TestContainerFromExtension(t *testing.T) {
 	tests := map[string]string{
 		"mkv": "matroska", "mp4": "mov", "m4v": "mov", "mov": "mov",

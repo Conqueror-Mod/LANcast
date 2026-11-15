@@ -264,7 +264,9 @@ func ResultFromItem(it *store.Item) *Result {
 	if it == nil || it.ProbedAt == nil {
 		return nil
 	}
-	r := &Result{DurationMS: derefInt64(it.DurationMS)}
+	// The size is what a bit-rate ceiling falls back on when the probe could
+	// not measure the video's own rate, which is most Matroska (R09-4).
+	r := &Result{DurationMS: derefInt64(it.DurationMS), SizeBytes: derefInt64(it.SizeBytes)}
 	if it.Container != nil {
 		r.Container = containerFromExtension(*it.Container)
 	}
