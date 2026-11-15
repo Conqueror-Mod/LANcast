@@ -86,16 +86,24 @@ func (s *Store) SetBookDetails(ctx context.Context, bookID int64, d BookDetails)
 }
 
 // SetBookPart hangs a part under its book with its place and name. The title
-// is left alone when somebody locked it.
+// is left alone when somebody locked it, and so is the place: a part's place
+// is its `episode`, which an edit locks like any other field, and a part
+// somebody moved must not go back to the folder's order on the next pass.
 func (s *Store) SetBookPart(ctx context.Context, partID, bookID int64, number int, title, sortTitle string) error {
 	locked, err := s.LockedFields(ctx, partID)
 	if err != nil {
 		return err
 	}
-	q := `UPDATE media_item SET parent_id = ?, episode = ?, updated_at = ?`
-	args := []any{bookID, number, time.Now().Unix()}
-	differs := `parent_id IS NOT ? OR episode IS NOT ?`
-	cmp := []any{bookID, number}
+	q := `UPDATE media_item SET parent_id = ?, updated_at = ?`
+	args := []any{bookID, time.Now().Unix()}
+	differs := `parent_id IS NOT ?`
+	cmp := []any{bookID}
+	if !slices.Contains(locked, "episode") {
+		q += `, episode = ?`
+		args = append(args, number)
+		differs += ` OR episode IS NOT ?`
+		cmp = append(cmp, number)
+	}
 	if !slices.Contains(locked, "title") {
 		q += `, title = ?, sort_title = ?`
 		args = append(args, title, sortTitle)
