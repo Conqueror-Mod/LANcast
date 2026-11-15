@@ -2297,7 +2297,10 @@ with a direct-play decision when the device would otherwise have had the
 original converted and the copy plays directly for it. The client then asks
 `GET /api/stream/{id}?version=optimized`. A device that plays the original
 directly keeps the original, and so does a request for a particular audio
-track (`?audio=`), because the copy has one.
+track (`?audio=`), because the copy has one. The copy is offered only when its
+file is in the current `optimized_dir`; one whose file is missing (the folder
+was moved, or the file deleted by hand) is not offered and goes back in the
+queue to be rebuilt.
 
 ### The watchlist: `GET /api/watchlist`, `PUT` and `DELETE /api/items/{id}/watchlist`
 
@@ -6136,7 +6139,7 @@ to "have I watched this".
 | `dlna_enabled` | `false` | — | DLNA, so TVs, consoles and VLC can find and play the library with no LANcast app ([ADR 0086](adr/0086-a-tv-browses-as-somebody.md)). **Off by default.** Runs only when `dlna_account` is set and the server is bound to the LAN; never widens the loopback rule. Serves plain HTTP on **8200** and discovery on UDP **1900**, to LAN clients only. Takes effect within seconds, no restart. Audited |
 | `dlna_account` | `""` | an account id | The account a TV browses **as**: it sees exactly what that account sees, rating limit and hidden libraries included. An id that is not an account is `400`. Audited |
 | `dlna_name` | `""` | up to 64 characters | The name TVs list. Empty means "LANcast". Audited |
-| `optimized_dir` | `""` | a full path | Where optimized copies live ([ADR 0087](adr/0087-an-optimized-copy-is-converted-once.md)). Empty is `optimized` in the data folder. **Refused (`400`) inside any library location**, or a scan would take the copies for new films. Created if it does not exist. Audited |
+| `optimized_dir` | `""` | a full path | Where optimized copies live ([ADR 0087](adr/0087-an-optimized-copy-is-converted-once.md)). Empty is `optimized` in the data folder. **Refused (`400`) inside any library location**, or a scan would take the copies for new films. Created if it does not exist. Changing it does not move the files: every finished copy not found in the new folder is queued to be rebuilt there, and the old folder is left as it is. Audited |
 | `optimized_limit_gb` | `200` | 1–100000 | The size limit for optimized copies. At the limit new requests wait and say so; **nothing is deleted to make room**. Audited |
 
 Out-of-range values are **rejected with 400**, not clamped — a client sending
