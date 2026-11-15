@@ -231,25 +231,30 @@
       </section>
 
       <!--
-        A reissued certificate. Not a refusal: it asks, and it sends the person
-        to the identity, which is the value that does not rotate.
+        A reissued certificate. Not a refusal: it asks. It sends the person to
+        the certificate fingerprint on the server's own screen, because that is
+        the only value here that says anything about the connection being
+        trusted (R11-1). The identity this client recorded is deliberately not
+        shown: an impostor in the server's place would be shown the same
+        recorded value, the operator would read out the same value, and the
+        comparison would pass every time.
       -->
       <section id="rotate-view" class="hidden">
         <h1>This server has a new TLS certificate</h1>
         <p class="caution" id="rotate-message"></p>
         <h2>Certificate fingerprint now</h2>
-        <div class="fingerprint fingerprint--stale" id="rotate-new"></div>
-        <h2>Identity you accepted</h2>
-        <div class="fingerprint" id="rotate-identity"></div>
+        <div class="fingerprint" id="rotate-new"></div>
         <p class="note">
-          Ask whoever runs this server to read out the identity fingerprint on their
-          Settings &rsaquo; General screen. It is the one value a reissued certificate
-          does not change.
+          Ask whoever runs this server to read out the <strong>TLS certificate
+          fingerprint</strong> on their Settings &rsaquo; General screen &mdash; by phone or
+          in person, not over this connection. Connect only if it is exactly this.
         </p>
+        <h2>Certificate fingerprint you accepted before</h2>
+        <div class="fingerprint fingerprint--stale" id="rotate-old"></div>
         <div class="spacer"></div>
         <div class="row__actions">
           <button id="rotate-back">Back</button>
-          <button id="rotate-accept">The identity matches &mdash; connect</button>
+          <button id="rotate-accept">The certificate matches &mdash; connect</button>
         </div>
         <p class="error hidden" id="rotate-error"></p>
       </section>
@@ -394,10 +399,17 @@
         $("trust-name").focus();
       }
 
+      let rotationShown = "";
+
       function showRotation(result) {
         text($("rotate-message"), result.rotation || "");
         text($("rotate-new"), result.fingerprint || "");
-        text($("rotate-identity"), result.identity_display || "(not recorded)");
+        text($("rotate-old"), result.known_fingerprint || "(not recorded)");
+        // What the person compared. Accepting passes it back, so the process
+        // refuses if the key changed again between reading and pressing.
+        rotationShown = result.fingerprint || "";
+        // No fingerprint shown means nothing was compared: nothing to accept.
+        $("rotate-accept").disabled = !rotationShown;
         setError("rotate-error", "");
         show("rotate-view");
       }
@@ -418,6 +430,10 @@
           // the same screen. Probe again so the fingerprints shown are the
           // ones this decision is about.
           const fresh = await window.lancastServerProbe(address);
+          // Accepting acts on `probed`, which a connect from the list never
+          // set: without this, the button acted on whatever was last looked
+          // at, or on nothing.
+          if (!fresh.error) probed = fresh;
           showRotation(fresh.error ? { rotation: result.rotation } : fresh);
           return;
         }
@@ -454,12 +470,13 @@
       });
 
       $("rotate-back").addEventListener("click", () => { show("list-view"); });
-      $("rotate-accept").dataset.label = "The identity matches \u2014 connect";
+      $("rotate-accept").dataset.label = "The certificate matches \u2014 connect";
       $("rotate-accept").addEventListener("click", async () => {
         busy("rotate-accept", true, "Connecting\u2026");
         setError("rotate-error", "");
         try {
-          const result = await window.lancastServerAcceptRotation(probed.address);
+          const result = await window.lancastServerAcceptRotation(
+            probed.address, rotationShown);
           if (result.error) setError("rotate-error", result.error);
         } finally {
           busy("rotate-accept", false);

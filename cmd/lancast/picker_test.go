@@ -129,12 +129,20 @@ func TestARotationAsksRatherThanAccuses(t *testing.T) {
 	for _, want := range []string{
 		"192.168.1.21:8080",
 		"reissued",
-		"identity fingerprint", // where the value that does not change lives
+		"certificate fingerprint", // a fact about the new connection (R11-1)
 		"reinstalled",
 	} {
 		if !strings.Contains(lower, strings.ToLower(want)) {
 			t.Errorf("the rotation message does not mention %q:\n%s", want, msg)
 		}
+	}
+	/*
+	 * R11-1. The identity is what the client already holds, so an impostor
+	 * is shown the same one the operator reads out and the comparison passes
+	 * every time. The message must not send anybody to it.
+	 */
+	if strings.Contains(lower, "identity fingerprint") {
+		t.Errorf("the rotation message sends the person to the identity, which cannot tell an impostor apart:\n%s", msg)
 	}
 	// It must not be the impostor sentence. Spending that warning on a
 	// reissued certificate is what the amendment to ADR 0070 exists to stop.
@@ -177,5 +185,49 @@ func TestAChangedIdentityIsTheStrongestRefusal(t *testing.T) {
 		if !strings.Contains(strings.ToLower(msg), strings.ToLower(want)) {
 			t.Errorf("the identity refusal does not mention %q:\n%s", want, msg)
 		}
+	}
+}
+
+/*
+ * R11-1, on the screen itself. The rotation view used to show "Identity you
+ * accepted" -- the value from this client's own record -- and its button
+ * said the identity matched. Both pointed the person at a comparison an
+ * impostor passes every time.
+ */
+func TestTheRotationScreenComparesTheCertificateNotTheRecord(t *testing.T) {
+	page := pickerPage("")
+	for _, gone := range []string{"identity_display", "rotate-identity", "identity matches"} {
+		if strings.Contains(page, gone) {
+			t.Errorf("the picker still carries %q", gone)
+		}
+	}
+	for _, want := range []string{
+		"The certificate matches",
+		"lancastServerAcceptRotation(\n            probed.address, rotationShown)",
+	} {
+		if !strings.Contains(page, want) {
+			t.Errorf("the picker does not carry %q", want)
+		}
+	}
+}
+
+// What was compared must be what is stored: a rotation is accepted only if
+// the fingerprint the person read is the key at the address now.
+func TestAcceptingARotationNeedsTheKeyThatWasShown(t *testing.T) {
+	const pin = "AbCdEfGh1234IjKlMnOp5678QrStUvWx9012YzAbCdE="
+	if !sameFingerprint(knownserver.Fingerprint(pin), pin) {
+		t.Error("the grouped form of a pin does not match the pin")
+	}
+	for _, other := range []string{
+		"",
+		"abcdefgh 1234IjKl MnOp5678 QrStUvWx 9012YzAb CdE=",
+		"AbCdEfGh",
+	} {
+		if sameFingerprint(other, pin) {
+			t.Errorf("%q was taken for %q", other, pin)
+		}
+	}
+	if sameFingerprint("", "") {
+		t.Error("nothing shown and nothing offered counted as a match")
 	}
 }
