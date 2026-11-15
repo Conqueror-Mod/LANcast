@@ -8054,23 +8054,46 @@
           "operations"
         ],
         "summary": "Stage the release the last check found, without applying it",
-        "description": "Administrators only.\n\n**The download is the slow half and the restart is the disruptive half, so they are separate calls**: a client can stage an update while people are watching and restart when nobody is.\n\nCalling it with no update available is a **no-op rather than an error** — the check may simply have gone stale.",
+        "description": "Administrators only.\n\n**The download is the slow half and the restart is the disruptive half, so they are separate calls**: a client can stage an update while people are watching and restart when nobody is.\n\n**Starts the download and answers at once** (`202`, no body): a release is tens of megabytes and not something to hold a request open for. Follow it with `GET /api/update`, whose `downloading` carries the progress while it runs; afterwards `staged` names the version ready to apply, or `download_error` says why nothing was staged. Calling it with no newer release available is not refused — the check may simply have gone stale — and ends with `download_error` saying so.",
         "responses": {
-          "200": {
-            "description": "The staged version, if one was staged.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/StagedUpdate"
-                }
-              }
-            }
+          "202": {
+            "description": "The download has started. No body; read progress and the outcome from `GET /api/update`."
           },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
           },
           "403": {
             "$ref": "#/components/responses/Forbidden"
+          },
+          "409": {
+            "description": "A download is already running.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "412": {
+            "description": "`unverifiable`: this build cannot verify a release signature, so it will not install one.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "This build has no updater.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
           }
         }
       }
@@ -20633,15 +20656,6 @@
           }
         }
       },
-      "StagedUpdate": {
-        "type": "object",
-        "properties": {
-          "staged": {
-            "type": "string",
-            "description": "The version now staged, if any."
-          }
-        }
-      },
       "MediaToolsRefusal": {
         "type": "object",
         "description": "A folder holding ffprobe that the server would not run tools from, and why, in words a person reads in Settings (R09-1).",
@@ -22498,11 +22512,22 @@
       "DownloadedSubtitle": {
         "type": "object",
         "required": [
-          "key"
+          "key",
+          "language",
+          "label"
         ],
         "properties": {
           "key": {
-            "type": "string"
+            "type": "string",
+            "description": "The new track's key, `external-<id>`, as `GET /api/items/{id}/subtitles` lists it."
+          },
+          "language": {
+            "type": "string",
+            "description": "The language it was saved under."
+          },
+          "label": {
+            "type": "string",
+            "description": "What a track menu shows for it."
           }
         }
       },
