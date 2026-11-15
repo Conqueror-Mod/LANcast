@@ -439,6 +439,18 @@ func runWindow(l *launcher, d *desk) {
 		 * leaving an error page. Only for the server's own page: a refused
 		 * image from somewhere else is not a reason to leave the app.
 		 */
+		/*
+		 * The pages this window may hold, besides winURL (R11-2): the
+		 * server's own address, when the window opened at its public name.
+		 * Any other https site a page tries to send the window to opens in
+		 * the system browser instead, where it gets none of the bindings.
+		 */
+		Origins: []string{url},
+		OnBlockedNavigation: func(uri string) {
+			if err := desktop.OpenBrowser(uri); err != nil {
+				slog.Warn("could not open a refused address in the browser", "uri", uri, "error", err)
+			}
+		},
 		OnCertificateError: func(c clientwindow.Controller, uri string) {
 			slog.Warn("refused a certificate the window does not trust", "uri", uri)
 			if sameOrigin(uri, url, winURL) {

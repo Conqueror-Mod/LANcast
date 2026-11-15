@@ -203,7 +203,7 @@ func TestTheRotationScreenComparesTheCertificateNotTheRecord(t *testing.T) {
 	}
 	for _, want := range []string{
 		"The certificate matches",
-		"lancastServerAcceptRotation(\n            probed.address, rotationShown)",
+		"lancastServerAcceptRotation(PICKER,\n            probed.address, rotationShown)",
 	} {
 		if !strings.Contains(page, want) {
 			t.Errorf("the picker does not carry %q", want)
