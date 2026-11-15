@@ -68,10 +68,19 @@ func (s *Server) collisions(w http.ResponseWriter, r *http.Request) {
 		Unreadable bool `json:"unreadable,omitempty"`
 	}
 	type collision struct {
-		Provider   string   `json:"provider"`
-		ExternalID string   `json:"external_id"`
-		SameSize   bool     `json:"same_size"`
-		Members    []member `json:"members"`
+		Provider   string `json:"provider"`
+		ExternalID string `json:"external_id"`
+		/*
+		 * Season and Episode complete the work key for an episode, as the
+		 * spec has always said. Every episode carries its *show's*
+		 * external_id, so without them a client cannot tell one colliding
+		 * episode from another -- and the report's Compare showed S01E05's
+		 * card S01E01's files (R13-4).
+		 */
+		Season   *int64   `json:"season,omitempty"`
+		Episode  *int64   `json:"episode,omitempty"`
+		SameSize bool     `json:"same_size"`
+		Members  []member `json:"members"`
 		/*
 		 * SameBytes is a tri-state and the name is deliberate: it says
 		 * "identical so far as sampled", never "identical". Three 1 MB windows
@@ -89,7 +98,8 @@ func (s *Server) collisions(w http.ResponseWriter, r *http.Request) {
 	rows := make([]collision, 0, len(found))
 	for _, c := range found {
 		row := collision{
-			Provider: c.Provider, ExternalID: c.ExternalID, SameSize: c.SameSize,
+			Provider: c.Provider, ExternalID: c.ExternalID,
+			Season: c.Season, Episode: c.Episode, SameSize: c.SameSize,
 			DismissedAt: c.DismissedAt,
 			Members:     make([]member, 0, len(c.Members)),
 		}

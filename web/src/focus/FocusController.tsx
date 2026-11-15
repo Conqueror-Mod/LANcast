@@ -4,6 +4,7 @@ import {
   useContext,
   useEffect,
   useId,
+  useLayoutEffect,
   useRef,
   type ReactNode,
 } from "react";
@@ -413,9 +414,25 @@ export function useFocusable(
 // useBackHandler registers what Escape should do while this component is
 // mounted, on top of any handler already registered. Removing it on unmount
 // restores the one beneath, so a modal over a screen nests correctly.
+//
+// **A handler's place in the stack is fixed by when its component mounted,
+// not by when it last rendered.** The effect used to depend on `fn`, so a
+// screen passing an inline handler re-pushed itself on every render. Opening a
+// dialog re-renders the screen that owns the dialog's state, and React runs
+// the parent's effects after the child's, so the screen's handler landed back
+// on top of the dialog it had just opened: Escape navigated away and left the
+// dialog standing (R13-5). Now it is pushed once, as a stable wrapper, and the
+// wrapper calls whatever `fn` the latest render gave it. The dependency is
+// `pushBack` itself, which is stable, and not the context value, which is a
+// new object whenever the provider renders and would reorder the stack the
+// same way.
 export function useBackHandler(fn: () => void) {
-  const api = useFocusController();
-  useEffect(() => api.pushBack(fn), [api, fn]);
+  const { pushBack } = useFocusController();
+  const latest = useRef(fn);
+  useLayoutEffect(() => {
+    latest.current = fn;
+  });
+  useEffect(() => pushBack(() => latest.current()), [pushBack]);
 }
 
 /*

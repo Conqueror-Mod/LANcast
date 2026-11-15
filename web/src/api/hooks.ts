@@ -589,11 +589,30 @@ export function useSetSensitive() {
       apiSend(`/api/items/${id}/sensitive`, "PUT", { sensitive }),
     onSuccess: (_data, { id }) => {
       qc.invalidateQueries({ queryKey: ["item", id] });
-      qc.invalidateQueries({ queryKey: ["items"] });
-      qc.invalidateQueries({ queryKey: ["items-infinite"] });
-      qc.invalidateQueries({ queryKey: ["children"] });
-      qc.invalidateQueries({ queryKey: ["recently-added"] });
-      qc.invalidateQueries({ queryKey: ["search"] });
+      /*
+       * Home's photo shelves were missing (R13-3): "On this day" reads
+       * ["memories"] and keeps it fifteen minutes, New this week's photo row
+       * reads ["recent-photos"], and both are siblings of ["items"], not
+       * children of it. So a photo just marked sensitive was drawn unblurred
+       * on Home, which is the moment ADR 0051 exists for. A collection, a
+       * playlist, the duplicates report and a photo search draw thumbnails
+       * from their own keys too. (`["items-infinite"]` used to be named here
+       * and matched nothing: the grid's key is ["items", "infinite", …].)
+       */
+      for (const key of [
+        "items",
+        "children",
+        "recently-added",
+        "search",
+        "recent-photos",
+        "memories",
+        "collection-members",
+        "playlist-entries",
+        "duplicates",
+        "photo-search",
+      ]) {
+        qc.invalidateQueries({ queryKey: [key] });
+      }
     },
   });
 }
@@ -1287,16 +1306,45 @@ export function useItem(id: number) {
 // keeps its own, so an album asked for without it arrives alphabetically. It is
 // part of the query key, or two callers wanting different orders would share one
 // cached answer.
+//
+// **Every child, paged to `total`.** The server caps `limit` at 500 and
+// defaults it to 100, and this used to ask once with no limit and drop
+// `total`: a gallery of 250 photos showed 100, counted "100 photos", and a
+// season's Play all queued the first 100 episodes, with nothing on screen
+// saying the list had been cut short (R13-1). fetchDescendantIDs met the same
+// cap and pages for the same reason.
 export function useChildren(parentID: number, enabled: boolean, sort?: string) {
   return useQuery({
     queryKey: ["children", parentID, sort ?? ""],
-    queryFn: ({ signal }) =>
-      apiGet<ItemsPage>(
-        `/api/items?parent_id=${parentID}` + (sort ? `&sort=${sort}` : ""),
-        signal,
-      ).then((r) => r.items),
+    queryFn: ({ signal }) => fetchAllChildren(parentID, sort, signal),
     enabled: enabled && parentID > 0,
   });
+}
+
+// The largest page /api/items will serve.
+const CHILDREN_PAGE = 500;
+
+export async function fetchAllChildren(
+  parentID: number,
+  sort: string | undefined,
+  signal?: AbortSignal,
+): Promise<Item[]> {
+  const kids: Item[] = [];
+  for (let offset = 0; ;) {
+    const page = await apiGet<ItemsPage>(
+      `/api/items?parent_id=${parentID}` +
+        (sort ? `&sort=${sort}` : "") +
+        `&limit=${CHILDREN_PAGE}&offset=${offset}`,
+      signal,
+    );
+    const items = page.items ?? [];
+    kids.push(...items);
+    offset += items.length;
+    // An empty page stops the walk even if `total` disagrees: a row removed
+    // between pages must not become a loop.
+    if (items.length === 0 || offset >= page.total) break;
+  }
+  return kids;
 }
 
 // The members of a collection, in curated order. Membership is many-to-many and
@@ -1394,6 +1442,14 @@ export function useDeleteItem(id: number) {
         // counted there until something else refreshed it.
         "duplicates",
         "timeline",
+        // Home's photo shelves, which are siblings of ["items"] and kept a
+        // removed photo for up to fifteen minutes (R13-3); and the other
+        // lists with keys of their own that can show the removed title.
+        "recent-photos",
+        "memories",
+        "search",
+        "playlist-entries",
+        "photo-search",
       ]) {
         qc.invalidateQueries({ queryKey: [key] });
       }
@@ -1537,8 +1593,17 @@ export function useCollisions(enabled: boolean) {
  * `staleTime: Infinity` because the answer is about bytes on disk: it does not
  * go stale while a page is open, and re-reading 14 GB on a window focus would
  * be a surprising thing for a report to do.
+ *
+ * **It answers with the one collision asked about, matched on the whole work
+ * key.** `?compare=` takes an external_id, and every episode of a show carries
+ * the show's, so the server compares every colliding episode at once. The card
+ * used to take the first answer with a matching external_id, which for
+ * S01E05's card was S01E01: an administrator deciding which copy to delete was
+ * shown the wrong pair (R13-4). The fetch is still keyed by external_id, so the
+ * episodes of one show share it; `select` picks this collision out of it.
  */
-export function useCompareCollision(externalID: string | null) {
+export function useCompareCollision(collision: Collision | null) {
+  const externalID = collision?.external_id ?? null;
   return useQuery({
     queryKey: ["collisions", "compare", externalID],
     queryFn: ({ signal }) =>
@@ -1546,9 +1611,32 @@ export function useCompareCollision(externalID: string | null) {
         `/api/collisions?compare=${encodeURIComponent(externalID ?? "")}`,
         signal,
       ),
+    select: (r) =>
+      collision ? r.collisions.find((c) => sameWork(c, collision)) : undefined,
     enabled: !!externalID,
     staleTime: Infinity,
   });
+}
+
+type WorkKeyed = Pick<Collision, "provider" | "external_id" | "season" | "episode">;
+
+/**
+ * Whether two collisions are the same work: `(provider, external_id, season,
+ * episode)`, the key the server groups on. The pair alone matches every
+ * colliding episode of a show.
+ */
+export function sameWork(a: WorkKeyed, b: WorkKeyed): boolean {
+  return (
+    a.provider === b.provider &&
+    a.external_id === b.external_id &&
+    (a.season ?? null) === (b.season ?? null) &&
+    (a.episode ?? null) === (b.episode ?? null)
+  );
+}
+
+/** A collision's work key as one string, for a React key. */
+export function collisionKey(c: WorkKeyed): string {
+  return `${c.provider}:${c.external_id}:${c.season ?? ""}:${c.episode ?? ""}`;
 }
 
 export function useReview(libraryID?: number) {
@@ -3633,6 +3721,7 @@ export async function fetchShowEpisodes(showID: number): Promise<Item[]> {
  *   recently-added     — the hero is drawn from the same list
  *   search             — results carry ticks too
  *   profile, history-count — totals and history that count viewings
+ *   memories, year-in-review — Home's "On this day" and the year's totals
  *
  * Prefix invalidation refetches only what is mounted, so the breadth costs a
  * request per visible list and nothing for the rest.
@@ -3654,6 +3743,10 @@ export function invalidateWatchState(qc: QueryClient) {
     "to-rate",
     // A book's place and finish live on its own route (ADR 0116 step 2).
     "book",
+    // Home's "On this day" draws its watched cards from finished viewings,
+    // and holds them for fifteen minutes; the year in review counts them.
+    "memories",
+    "year-in-review",
   ]) {
     qc.invalidateQueries({ queryKey: [key] });
   }
@@ -4644,17 +4737,18 @@ export function useResetHistory() {
        * side of before, and the reason the grid's key is a *child* of the one
        * callers invalidate rather than a sibling like `["items-infinite"]`.
        */
-      for (const key of [
-        "history-count",
-        "profile",
-        "items",
-        "continue",
-        "recently-added",
-        "review",
-        "children",
-      ]) {
-        qc.invalidateQueries({ queryKey: [key] });
-      }
+      /*
+       * Clearing history is watch state changing for everything it touched at
+       * once, so it redraws everything invalidateWatchState does -- the
+       * detail page's tick, a collection's films, search results -- plus the
+       * review queue. The list used to be its own, and missed Home's "On this
+       * day": its watched cards are the very `viewing` rows this deletes, and
+       * ["memories"] keeps them for fifteen minutes (R13-2). For a control
+       * called "clear history", showing the history back is the worst kind of
+       * stale.
+       */
+      invalidateWatchState(qc);
+      qc.invalidateQueries({ queryKey: ["review"] });
     },
   });
 }
