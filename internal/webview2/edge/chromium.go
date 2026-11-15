@@ -28,6 +28,8 @@ type Chromium struct {
 	webResourceRequested  *iCoreWebView2WebResourceRequestedEventHandler
 	acceleratorKeyPressed *ICoreWebView2AcceleratorKeyPressedEventHandler
 	navigationCompleted   *ICoreWebView2NavigationCompletedEventHandler
+	// LOCAL ADDITION (R11-3): see ICoreWebView2_14.go.
+	serverCertificateError *ICoreWebView2ServerCertificateErrorDetectedEventHandler
 
 	environment *ICoreWebView2Environment
 
@@ -43,6 +45,10 @@ type Chromium struct {
 	WebResourceRequestedCallback func(request *ICoreWebView2WebResourceRequest, args *ICoreWebView2WebResourceRequestedEventArgs)
 	NavigationCompletedCallback  func(sender *ICoreWebView2, args *ICoreWebView2NavigationCompletedEventArgs)
 	AcceleratorKeyCallback       func(uint) bool
+	// ServerCertificateErrorCallback hears about a certificate this view
+	// refused (LOCAL ADDITION, R11-3). The refusal has already happened; this
+	// is so the host can say why instead of leaving an error page.
+	ServerCertificateErrorCallback func(uri string)
 }
 
 func NewChromium() *Chromium {
@@ -65,6 +71,7 @@ func NewChromium() *Chromium {
 	e.webResourceRequested = newICoreWebView2WebResourceRequestedEventHandler(e)
 	e.acceleratorKeyPressed = newICoreWebView2AcceleratorKeyPressedEventHandler(e)
 	e.navigationCompleted = newICoreWebView2NavigationCompletedEventHandler(e)
+	e.serverCertificateError = newICoreWebView2ServerCertificateErrorDetectedEventHandler(e)
 	e.permissions = make(map[CoreWebView2PermissionKind]CoreWebView2PermissionState)
 
 	return e
@@ -221,6 +228,24 @@ func (e *Chromium) CreateCoreWebView2ControllerCompleted(res uintptr, controller
 	)
 
 	_ = e.controller.AddAcceleratorKeyPressed(e.acceleratorKeyPressed, &token)
+
+	/*
+	 * LOCAL ADDITION (R11-3). Certificate errors are refused by the host, not
+	 * offered to the person as an interstitial with a way through. A runtime
+	 * too old for the interface keeps Chromium's behaviour, and says so,
+	 * because silently keeping the click-through is the failure this exists
+	 * to remove.
+	 */
+	if wv14 := e.webview.GetICoreWebView2_14(); wv14 != nil {
+		_, _, _ = wv14.vtbl.AddServerCertificateErrorDetected.Call(
+			uintptr(unsafe.Pointer(wv14)),
+			uintptr(unsafe.Pointer(e.serverCertificateError)),
+			uintptr(unsafe.Pointer(&token)),
+		)
+	} else {
+		log.Printf("webview2: this runtime has no ServerCertificateErrorDetected; " +
+			"a certificate error falls back to the browser's own warning")
+	}
 
 	atomic.StoreUintptr(&e.inited, 1)
 

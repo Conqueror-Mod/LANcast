@@ -2,12 +2,13 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
+	"strings"
 	"time"
 
 	"lancast/internal/clientwindow"
-	"lancast/internal/identity"
 	"lancast/internal/knownserver"
 )
 
@@ -111,7 +112,25 @@ func (l *launcher) serverBindings(win func() clientwindow.Controller) map[string
 				// it is met.
 				out["refusal"] = mismatchMessage(addr)
 			case knownserver.TrustRotated:
-				out["rotation"] = rotationMessage(addr)
+				/*
+				 * Ask the server to prove it is the one on record (ADR 0124)
+				 * before asking a person anything. A proof that fails is the
+				 * strongest refusal there is; no proof at all (an older
+				 * server, a TLS-terminating proxy, an impostor declining)
+				 * falls back to the person comparing the certificate.
+				 */
+				prev, _ := known.Find(addr)
+				switch proof := proveRotation(ctx, addr, offered.Pin, prev.Identity); proof {
+				case proofFailed:
+					out["trust"] = knownserver.TrustMismatch.String()
+					out["refusal"] = proofFailedMessage(addr)
+				default:
+					out["proof"] = proof
+					out["rotation"] = rotationMessage(addr)
+					if proof == proofProven {
+						out["rotation"] = provenRotationMessage(addr)
+					}
+				}
 			}
 			if prev, ok := known.Find(addr); ok {
 				out["known_name"] = prev.Name
@@ -120,12 +139,15 @@ func (l *launcher) serverBindings(win func() clientwindow.Controller) map[string
 				// than merely asserted. Somebody who reinstalled their server
 				// is entitled to see that this is what that looks like.
 				out["known_fingerprint"] = knownserver.Fingerprint(prev.Pin)
-				// The anchor, for the rotation screen to show beside the new
-				// certificate. Grouped by identity's own rule so it looks
-				// the same here as on the server's settings screen.
-				if prev.Identity != "" {
-					out["identity_display"] = identity.Group(prev.Identity)
-				}
+				/*
+				 * The identity on record is deliberately not reported
+				 * (R11-1). The rotation screen used to show it and ask the
+				 * operator to read theirs out, which compares the record with
+				 * the record: an impostor in the server's place is shown the
+				 * same value, so the comparison passes every time. What a
+				 * person can usefully compare is the certificate fingerprint
+				 * above, which comes from this connection.
+				 */
 			}
 			return out
 		},
@@ -259,13 +281,21 @@ func (l *launcher) serverBindings(win func() clientwindow.Controller) map[string
 
 		/*
 		 * lancastServerAcceptRotation records a new serving key for a server
-		 * whose identity the person has confirmed out of band.
+		 * whose new certificate fingerprint the person has confirmed out of
+		 * band.
 		 *
 		 * Separate from Accept, and reachable only from the rotation screen.
 		 * It keeps the identity, so confirming one rotation does not spend the
 		 * anchor that makes the next one explicable.
+		 *
+		 * `shown` is the fingerprint the screen showed and the person
+		 * compared. It cannot widen anything -- the pin stored is still the
+		 * one this process reads from the address -- it only narrows: if the
+		 * key at the address is not the one that was compared, nothing is
+		 * stored. Without it the key compared and the key saved were two
+		 * separate fetches with nothing tying them together.
 		 */
-		"lancastServerAcceptRotation": func(raw string) map[string]any {
+		"lancastServerAcceptRotation": func(raw, shown string) map[string]any {
 			addr, err := knownserver.ParseAddress(raw)
 			if err != nil {
 				return map[string]any{"error": err.Error()}
@@ -283,6 +313,19 @@ func (l *launcher) serverBindings(win func() clientwindow.Controller) map[string
 			// checked against, so the refusal stands.
 			if known.Check(addr, offered.Pin) != knownserver.TrustRotated {
 				return map[string]any{"error": "this server has no confirmed identity to check against"}
+			}
+			if !sameFingerprint(shown, offered.Pin) {
+				return map[string]any{"error": rotationMovedMessage}
+			}
+			/*
+			 * Asked again rather than remembered from the probe: the
+			 * decision belongs to the key being stored now. A proof that
+			 * fails is refused whatever the person compared; with no proof,
+			 * the person's comparison of the certificate is what decides.
+			 */
+			prev, _ := known.Find(addr)
+			if proveRotation(ctx, addr, offered.Pin, prev.Identity) == proofFailed {
+				return map[string]any{"error": proofFailedMessage(addr)}
 			}
 			if err := knownserver.Save(dir, known.AcceptRotation(addr, offered.Pin)); err != nil {
 				return map[string]any{"error": err.Error()}
@@ -364,8 +407,16 @@ func serverRows(l knownserver.List, current string) []map[string]any {
  * impostor warning on maintenance is how people learn to click past it.
  */
 
-// rotationMessage is the likely-innocent case, and it asks rather than accuses.
-// It sends the person to the one value that does not rotate.
+/*
+ * rotationMessage is the likely-innocent case, and it asks rather than accuses.
+ *
+ * It sends the person to the certificate fingerprint, not the identity
+ * (R11-1). The identity is the value that does not rotate, which is exactly
+ * why it cannot settle this: the client already holds it, an impostor would
+ * be shown the same value, and the real operator would read out the same
+ * value. Only the certificate fingerprint is a fact about the connection
+ * being trusted, so only it can tell the two apart.
+ */
 func rotationMessage(addr string) string {
 	return fmt.Sprintf(
 		"The TLS certificate at %s has changed.\n\n"+
@@ -373,11 +424,82 @@ func rotationMessage(addr string) string {
 			"reissued for ordinary reasons: the server was reinstalled, its "+
 			"certificate was deleted to pick up a new network address, or whoever "+
 			"runs it replaced one they supplied.\n\n"+
-			"It is not proof of that, so check the one thing that does not change. "+
-			"Ask whoever runs this server to read out its identity fingerprint "+
-			"from Settings, General, and compare it with the one shown here.\n\n"+
+			"It is not proof of that, so check the new certificate itself. Ask "+
+			"whoever runs this server to read out its TLS certificate fingerprint "+
+			"from Settings, General, by phone or in person, and compare it with "+
+			"the one shown here.\n\n"+
 			"If they match, this is the same server and you can carry on. If they "+
 			"do not, do not connect.", addr)
+}
+
+/*
+ * The three answers to "did the server prove it is the one on record"
+ * (ADR 0124), as the strings the picker reads.
+ */
+const (
+	proofProven = "proven"
+	proofNone   = "none"
+	proofFailed = "failed"
+)
+
+// proveRotation asks the server at addr to prove the identity on record over
+// a connection presenting pin.
+func proveRotation(ctx context.Context, addr, pin, identity string) string {
+	err := knownserver.Prove(ctx, addr, pin, identity)
+	switch {
+	case err == nil:
+		return proofProven
+	case errors.Is(err, knownserver.ErrProofFailed):
+		slog.Warn("server failed to prove its identity", "address", addr, "error", err)
+		return proofFailed
+	default:
+		slog.Info("server offered no identity proof", "address", addr, "error", err)
+		return proofNone
+	}
+}
+
+// provenRotationMessage is the rotation the server has proved: nobody needs
+// to read anything out.
+func provenRotationMessage(addr string) string {
+	return fmt.Sprintf(
+		"The TLS certificate at %s has changed, and the server has proved it "+
+			"is the same server you accepted.\n\n"+
+			"It signed a challenge from this computer with its identity key, "+
+			"over the connection that presented the new certificate. Nothing "+
+			"else at this address could have done that, so there is nothing to "+
+			"compare.", addr)
+}
+
+/*
+ * proofFailedMessage is a server that answered for the identity on record and
+ * could not prove it. Not a reissued certificate: something at this address
+ * claims to be the server you accepted and is not.
+ */
+func proofFailedMessage(addr string) string {
+	return fmt.Sprintf(
+		"The server at %s is not the one you accepted.\n\n"+
+			"Its certificate has changed, and when asked to prove it is still the "+
+			"same server, it could not. A reissued certificate never causes this: "+
+			"the server's identity key signs the proof, and that key does not "+
+			"change.\n\n"+
+			"Do not connect. Check with whoever runs it.", addr)
+}
+
+// rotationMovedMessage is for a key that changed again between being shown
+// and being accepted. Rare, and worth stopping on: what was compared is not
+// what would be trusted.
+const rotationMovedMessage = "The certificate at this address changed again " +
+	"after it was shown to you, so the one you compared is not the one that " +
+	"would be trusted. Go back and look again."
+
+// sameFingerprint compares a fingerprint as a screen showed it with a pin as
+// read from the address. Spaces are the only difference grouping introduces;
+// base64 is case-sensitive, so case is not folded.
+func sameFingerprint(shown, pin string) bool {
+	if shown == "" || pin == "" {
+		return false
+	}
+	return strings.ReplaceAll(shown, " ", "") == pin
 }
 
 /*

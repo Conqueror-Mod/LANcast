@@ -116,3 +116,24 @@ in the *same* window never shows a GPU swapchain beneath it, so a second window
 is the only shape that works. It keeps position, size, visibility and focus in
 step with the main window from inside this package's window procedure, which is
 the only place those messages arrive. Outside playback none of it runs.
+
+## Local addition — certificate errors are refused (2026-11-15)
+
+`edge/ICoreWebView2_14.go` (the `ICoreWebView2_14` vtable, the
+`ServerCertificateErrorDetected` handler and its arguments), the
+`serverCertificateError` field and `ServerCertificateErrorCallback` on
+`edge.Chromium`, its registration in `CreateCoreWebView2ControllerCompleted`,
+and `WebViewOptions.OnCertificateError`.
+
+Upstream registers no handler, so a certificate error is Chromium's own
+interstitial, and that offers a way through. In this app that meant a pin
+mismatch could be clicked past, sending the session cookie to whichever key
+answered (review finding R11-3). The handler cancels every certificate error
+and then tells the host, which shows the server picker. The pinned key itself
+never reaches it: `--ignore-certificate-errors-spki-list` exempts that key
+before the event is raised.
+
+`ICoreWebView2_14` extends `_2` to `_13`, and only their slot counts are
+written out (as an anonymous array); `edge/vtable14_test.go` pins the offset.
+A runtime older than 1.0.1245 has no `_14`; that is logged and the old
+behaviour stays.

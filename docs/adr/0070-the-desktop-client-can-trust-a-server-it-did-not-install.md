@@ -252,6 +252,18 @@ it an attack. What it does depends on what it knows:
   asks the person to confirm out of band that the server is still that one.
   Confirming accepts the new serving key. Nothing is sent to the new key before
   that, so a server answering in the impostor's place receives no session.
+
+  > **Corrected 2026-11-15 (review finding R11-1).** That comparison cannot
+  > detect an impostor. The identity shown came from the client's own record,
+  > the real operator reads out the same value, and nothing in the comparison
+  > involves the new key -- so it matches whoever is answering. The rotation
+  > prompt now shows the *new certificate* fingerprint, read from the
+  > connection, and asks the operator to read out theirs; accepting refuses if
+  > the key at the address is not the one that was shown. That is a stopgap:
+  > the real fix is for the server to prove its identity over the new
+  > connection, so that nobody has to compare anything -- which
+  > [ADR 0124](0124-a-server-proves-its-identity-over-the-connection.md) does.
+  > The manual comparison remains only for a server that offers no proof.
 - **No identity on record**, because nothing ever got as far as signing in.
   Then the two cases genuinely cannot be told apart, and the refusal stands.
 

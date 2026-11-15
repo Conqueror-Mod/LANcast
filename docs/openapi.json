@@ -737,6 +737,62 @@
         }
       }
     },
+    "/identity/proof": {
+      "get": {
+        "operationId": "getIdentityProof",
+        "tags": [
+          "identity"
+        ],
+        "summary": "Prove this server holds its identity key, over this connection",
+        "description": "**Public**, narrowly (ADR 0124). The desktop client asks this when the TLS certificate at an address it knows has changed, before it will send anything to the new key. The server signs `\"LANcast identity proof v1\" || 0x00 || nonce || EKM` with its Ed25519 identity key, where `EKM` is 32 bytes exported from **this TLS session** (RFC 5705 / RFC 8446 §7.5) with the label `EXPORTER-LANcast-identity-proof` and no context. Somebody in the middle runs a different session each way, so cannot relay a valid proof.\n\nAnswers only over TLS and only when `fingerprint` is this server's own: anything else is the same `404` as a route that does not exist, so a caller learns nothing it did not already know. That is how this keeps the reason `GET /api/identity` is session-gated (ADR 0044 §7).\n\nThe client checks that SHA-256 of `public_key` is the identity it has on record and that the signature verifies over its own nonce and its own export of the same connection.",
+        "security": [],
+        "parameters": [
+          {
+            "name": "fingerprint",
+            "in": "query",
+            "required": true,
+            "description": "The identity fingerprint the caller expects (ADR 0044 §2). Case, spaces and dashes are ignored.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "nonce",
+            "in": "query",
+            "required": true,
+            "description": "16 to 64 random bytes, base64url without padding.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The proof. Not cacheable: it is bound to one connection and one nonce.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IdentityProof"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "404": {
+            "description": "Not over TLS, not this server's fingerprint, or no keying material to export.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/items/{id}/previews": {
       "get": {
         "operationId": "getItemPreviews",
@@ -16510,6 +16566,23 @@
           },
           "name": {
             "type": "string"
+          }
+        }
+      },
+      "IdentityProof": {
+        "type": "object",
+        "required": [
+          "public_key",
+          "signature"
+        ],
+        "properties": {
+          "public_key": {
+            "type": "string",
+            "description": "The raw 32-byte Ed25519 identity public key, base64 (standard, padded)."
+          },
+          "signature": {
+            "type": "string",
+            "description": "The 64-byte Ed25519 signature, base64 (standard, padded)."
           }
         }
       },
