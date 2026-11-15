@@ -673,6 +673,92 @@ func TestBitrateCeilingSetsTarget(t *testing.T) {
 	}
 }
 
+/*
+ * A ceiling holds when the probe measured no video bit rate (R09-4).
+ *
+ * ffprobe states no stream bit_rate for Matroska, so the stored rate is zero
+ * for most of a library, and the ceiling only refused a known rate above it:
+ * a 20 Mbps 1080p file under a 10 Mbps ceiling was copied untouched, as a
+ * remux from MKV and as direct play from MP4. The rate is now worked out from
+ * the whole file, less the audio that states its own.
+ */
+func TestBitrateCeilingHoldsWithoutAProbedRate(t *testing.T) {
+	p := BrowserProfile()
+	p.MaxHeight = 1080
+	p.MaxVideoBitRate = 10_000_000
+
+	for _, container := range []string{"matroska", "mov"} {
+		a := audio("aac", 2)
+		a.BitRate = 256_000
+		r := result(container, video("h264", 1080), a)
+		r.SizeBytes = 2_500_000 // 20 Mbps over the helper's one second
+
+		d := Decide(r, p)
+		if d.Method != Transcode || d.VideoAction != "encode" {
+			t.Fatalf("%s: decision = %s/%s (%s), want a video encode", container, d.Method, d.VideoAction, d.Reason)
+		}
+		want := "video bitrate of about 19744000 (estimated from the whole file) exceeds the limit"
+		if d.Reason != want {
+			t.Errorf("%s: Reason = %q, want %q", container, d.Reason, want)
+		}
+		if d.TargetVideoBitRate != 10_000_000 {
+			t.Errorf("%s: TargetVideoBitRate = %d, want the ceiling", container, d.TargetVideoBitRate)
+		}
+	}
+}
+
+// The container's own stated rate is used before size and duration, which is
+// what ffprobe reports for a file it could not break down per stream.
+func TestBitrateCeilingUsesTheContainerRate(t *testing.T) {
+	p := BrowserProfile()
+	p.MaxVideoBitRate = 10_000_000
+	r := result("matroska", video("h264", 1080), audio("aac", 2))
+	r.BitRate = 30_000_000
+
+	d := Decide(r, p)
+	if d.VideoAction != "encode" {
+		t.Fatalf("decision = %s/%s (%s), want a video encode", d.Method, d.VideoAction, d.Reason)
+	}
+	if want := "video bitrate of about 30000000 (estimated from the whole file) exceeds the limit"; d.Reason != want {
+		t.Errorf("Reason = %q, want %q", d.Reason, want)
+	}
+}
+
+// The estimate is a reason to encode only when it is over the line. A file
+// whose whole rate fits, once its audio is taken off, is still copied: the
+// fix must not turn every MKV into an encode the moment a ceiling is set.
+func TestBitrateCeilingCopiesAnEstimateUnderIt(t *testing.T) {
+	p := BrowserProfile()
+	p.MaxVideoBitRate = 10_000_000
+	a := audio("aac", 2)
+	a.BitRate = 1_000_000
+	r := result("matroska", video("h264", 1080), a)
+	r.BitRate = 10_500_000 // 9.5 Mbps of video once the audio is off
+
+	d := Decide(r, p)
+	if d.Method != Remux || d.VideoAction != "copy" {
+		t.Errorf("decision = %s/%s (%s), want a remux with the video copied", d.Method, d.VideoAction, d.Reason)
+	}
+	if want := "matroska container is not supported, but both codecs are"; d.Reason != want {
+		t.Errorf("Reason = %q, want %q", d.Reason, want)
+	}
+}
+
+// With nothing to go on — no stream rate, no container rate, no size — the
+// ceiling passes, as before: re-encoding on a figure that does not exist would
+// be a guess, not a cap.
+func TestBitrateCeilingPassesWhenNothingIsKnown(t *testing.T) {
+	p := BrowserProfile()
+	p.MaxVideoBitRate = 10_000_000
+	d := Decide(result("mov", video("h264", 1080), audio("aac", 2)), p)
+	if d.Method != DirectPlay {
+		t.Errorf("Method = %q (%s), want direct play", d.Method, d.Reason)
+	}
+	if want := "container and codecs are supported"; d.Reason != want {
+		t.Errorf("Reason = %q, want %q", d.Reason, want)
+	}
+}
+
 // A copy cannot honour a ceiling. Reporting one on a remux would have the
 // client believe a cap applied to bytes nothing re-encoded.
 func TestNoTargetOnACopy(t *testing.T) {
