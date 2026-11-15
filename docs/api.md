@@ -3223,6 +3223,13 @@ Returns `503` without an API key, `429` when the daily quota is spent.
 returning its `key`. Files are written to the data directory, **never beside
 the media** — the same rule NFO writing follows.
 
+`language` defaults to `en` and becomes part of the file's name, so it must be a
+language: a code or name the server recognises (`en`, `eng`, `English`) or a
+plain tag of two or three letters with at most one subtag (`pt-br`). Anything
+else is `400` before the provider is asked, so a refused request spends none of
+the daily allowance. The item must be one the caller may play; an item in a
+library hidden from them is `404`, as though it did not exist.
+
 ### `DELETE /api/items/{id}/subtitles/{key}`
 
 Removes a **downloaded** subtitle: its row and its file. `204` on success.
