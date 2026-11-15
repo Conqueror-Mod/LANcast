@@ -126,11 +126,11 @@ func TestResultFromItem(t *testing.T) {
 	probed := int64(1)
 	dur := int64(7284512)
 	container, vcodec, acodec := "mkv", "h264", "eac3"
-	w, h, ch := 1920, 1080, 6
+	w, h, ch, fps := 1920, 1080, 6, 59.94
 
 	it := &store.Item{
 		ProbedAt: &probed, DurationMS: &dur, Container: &container,
-		VideoCodec: &vcodec, Width: &w, Height: &h,
+		VideoCodec: &vcodec, Width: &w, Height: &h, FrameRate: &fps,
 		AudioCodec: &acodec, AudioChannels: &ch,
 	}
 
@@ -143,7 +143,9 @@ func TestResultFromItem(t *testing.T) {
 	if r.Container != "matroska" {
 		t.Errorf("Container = %q, want matroska", r.Container)
 	}
-	if v := r.Video(); v == nil || v.Codec != "h264" || v.Height != 1080 {
+	// The rate is what the encoder's level and keyframe interval are chosen
+	// from (R09-3); dropping it here made every decision report zero.
+	if v := r.Video(); v == nil || v.Codec != "h264" || v.Height != 1080 || v.FrameRate != "59.94" {
 		t.Errorf("Video() = %+v", v)
 	}
 	if a := r.Audio(); a == nil || a.Codec != "eac3" || a.Channels != 6 {
