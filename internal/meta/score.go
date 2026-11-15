@@ -174,12 +174,15 @@ func scoreAlbum(q Query, c Candidate) Breakdown {
 }
 
 /*
- * albumText is normalize for music: every script's letters, not only a to z.
+ * albumText is the matcher's normalizer for music: every script's letters.
  *
- * normalize keeps a-z and 0-9, which is right for the film titles it was
- * written for and blind to "Страшно" and "夜更けと雨と", which it reduces
- * to nothing, so an exact Cyrillic match scored zero (measured, ADR 0115).
- * Built on the same SortTitle, so the two agree on everything Latin.
+ * The film normalizer once kept only a-z and 0-9 and reduced "Страшно" and
+ * "夜更けと雨と" to nothing, so an exact Cyrillic match scored zero (measured,
+ * ADR 0115). This was the fix for music; film and TV now use
+ * media.MatchTitle (R08-3), which also folds Latin and Greek accents. This
+ * one does not fold, and is left so that album scores, tuned without
+ * folding, do not move. Built on the same SortTitle, so the two agree on
+ * everything unaccented.
  */
 func albumText(s string) string {
 	var b strings.Builder
@@ -440,7 +443,7 @@ func bestTitleScore(a string, c Candidate) float64 {
 }
 
 func titleScore(a, b string) float64 {
-	na, nb := normalize(a), normalize(b)
+	na, nb := media.MatchTitle(a), media.MatchTitle(b)
 	if na == "" || nb == "" {
 		return 0
 	}
@@ -448,31 +451,6 @@ func titleScore(a, b string) float64 {
 		return 1
 	}
 	return jaroWinkler(na, nb)
-}
-
-// normalize lowercases, drops leading articles, and strips punctuation so that
-// "Ocean's Eleven" and "Oceans Eleven" compare equal.
-func normalize(s string) string {
-	s = media.SortTitle(s)
-	var b strings.Builder
-	b.Grow(len(s))
-	prevSpace := false
-	for _, r := range s {
-		switch {
-		case r >= 'a' && r <= 'z', r >= '0' && r <= '9':
-			b.WriteRune(r)
-			prevSpace = false
-		case r == ' ':
-			if !prevSpace && b.Len() > 0 {
-				b.WriteRune(' ')
-				prevSpace = true
-			}
-		default:
-			// Punctuation is dropped entirely rather than becoming a space, so
-			// "Ocean's" normalizes to "oceans" and not "ocean s".
-		}
-	}
-	return strings.TrimSpace(b.String())
 }
 
 // yearScore rewards exact release years and punishes distant ones hard. A
