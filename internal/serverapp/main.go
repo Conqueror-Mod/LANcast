@@ -1554,7 +1554,11 @@ func applyStagedUpdate(dataDir string, log *slog.Logger) {
 	if err != nil {
 		return
 	}
-	m, err := selfupdate.Apply(dataDir, filepath.Dir(exe))
+	// Only an update newer than this build: startup discards an older
+	// staging, and this holds the same line for one staged after it.
+	m, err := selfupdate.Apply(dataDir, filepath.Dir(exe), func(v string) bool {
+		return update.Newer(api.Version, v)
+	})
 	if errors.Is(err, os.ErrNotExist) {
 		return // nothing staged, which is every ordinary shutdown
 	}

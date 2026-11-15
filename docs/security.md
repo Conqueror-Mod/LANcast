@@ -345,6 +345,18 @@ sessions.
 **Browse lists directories only.** Never files, never contents, and hidden or
 system directories are omitted.
 
+**An update is proved twice.** The downloader checks the release's signature
+(a key compiled into the binary) and the archive's digest before anything is
+staged. The service then checks all of it again when it moves the staged files
+into the install directory at shutdown. It checks the signature over the
+checksum list, the archive against it, the archive's name against the staged
+version, and every staged file's SHA-256 against the archive. It refuses any
+name outside the install set, and any version not newer than the one running.
+Each file is checked once more where it lands, and a mismatch puts the install
+back. Before this (R10-1), a staging that any local account could write in the
+data directory was moved into Program Files as SYSTEM unchecked. It no longer
+depends on the data directory's permissions for this.
+
 ## Deployment guidance
 
 **Do not port-forward a server that only has its self-signed certificate.** A

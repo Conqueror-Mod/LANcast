@@ -36,6 +36,8 @@
 package selfupdate
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -70,29 +72,25 @@ type Manifest struct {
 // Dir is the staging directory inside a data directory.
 func Dir(dataDir string) string { return filepath.Join(dataDir, DirName) }
 
-// Stage writes verified files into the staging directory and records a
-// manifest.
+// Stage writes verified files into the staging directory, with the release's
+// proof beside them, and records a manifest.
+//
+// The files must be exactly the install files of proof's archive, and the
+// proof must verify for version: Stage checks it here too, so a staging that
+// Apply would refuse is never written.
 //
 // The manifest is written last, on purpose: it is the marker that a staged
 // update is complete, so an interrupted download leaves a directory with no
 // manifest, which Pending reports as nothing to do.
-func Stage(dataDir, version string, files map[string][]byte, now int64) error {
+func Stage(dataDir, version string, proof Proof, files map[string][]byte, now int64) error {
 	if version == "" {
 		return fmt.Errorf("selfupdate: staging needs a version")
 	}
 	if len(files) == 0 {
 		return fmt.Errorf("selfupdate: nothing to stage")
 	}
-	dir := Dir(dataDir)
-	if err := os.RemoveAll(dir); err != nil {
-		return fmt.Errorf("selfupdate: clearing staging: %w", err)
-	}
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return fmt.Errorf("selfupdate: %w", err)
-	}
-
-	m := Manifest{Version: version, StagedAt: now}
-	for name, body := range files {
+	names := make([]string, 0, len(files))
+	for name := range files {
 		// Flat names only. A staged path containing a separator could be
 		// written outside the staging directory, and later moved anywhere the
 		// service can write — which is everywhere.
@@ -105,10 +103,41 @@ func Stage(dataDir, version string, files map[string][]byte, now int64) error {
 		if !safeStagedName(name) {
 			return fmt.Errorf("selfupdate: refusing a staged path %q", name)
 		}
+		names = append(names, name)
+	}
+	want, err := prove(version, proof)
+	if err != nil {
+		return fmt.Errorf("selfupdate: %w", err)
+	}
+	if err := checkNames(names, want); err != nil {
+		return fmt.Errorf("selfupdate: %w", err)
+	}
+	for name, body := range files {
+		if digest(body) != want[name] {
+			return fmt.Errorf("selfupdate: %s is not the file the release holds", name)
+		}
+	}
+	dir := Dir(dataDir)
+	if err := os.RemoveAll(dir); err != nil {
+		return fmt.Errorf("selfupdate: clearing staging: %w", err)
+	}
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return fmt.Errorf("selfupdate: %w", err)
+	}
+
+	m := Manifest{Version: version, StagedAt: now}
+	for name, body := range files {
 		if err := os.WriteFile(filepath.Join(dir, name), body, 0o755); err != nil {
 			return fmt.Errorf("selfupdate: writing %s: %w", name, err)
 		}
 		m.Files = append(m.Files, name)
+	}
+	for name, body := range map[string][]byte{
+		proofChecksums: proof.Checksums, proofSignature: proof.Signature, proofArchive: proof.Archive,
+	} {
+		if err := os.WriteFile(filepath.Join(dir, name), body, 0o644); err != nil {
+			return fmt.Errorf("selfupdate: writing %s: %w", name, err)
+		}
 	}
 
 	raw, err := json.MarshalIndent(m, "", "  ")
@@ -139,15 +168,26 @@ func Discard(dataDir string) error { return os.RemoveAll(Dir(dataDir)) }
 // files it replaces may be running, and the new ones take effect at the next
 // start.
 //
-// Every staged file is checked to exist before anything is moved, and a failure
-// partway rolls back what was already done. An install that did not update is a
-// recoverable disappointment; an install missing its executable is not.
-func Apply(dataDir, installDir string) (Manifest, error) {
+// The staging is proved again first (verify.go): the signature over the
+// checksum list, the archive against it, and every staged file against the
+// archive, with names limited to InstallFiles. newer, when set, must accept
+// the staged version, so a genuine older release staged after startup's own
+// check cannot be installed as a downgrade. A staging that fails any of that
+// is discarded. Each file is checked once more where it lands, and a failure
+// partway rolls back what was already done. An install that did not update is
+// a recoverable disappointment; an install missing its executable, or running
+// somebody else's, is not.
+func Apply(dataDir, installDir string, newer func(version string) bool) (Manifest, error) {
 	m, ok := Pending(dataDir)
 	if !ok {
 		return Manifest{}, os.ErrNotExist
 	}
 	staging := Dir(dataDir)
+
+	if newer != nil && !newer(m.Version) {
+		_ = os.RemoveAll(staging)
+		return m, fmt.Errorf("selfupdate: staged %s is not newer than this build, so it was discarded", m.Version)
+	}
 
 	/*
 	 * Check first. Moving half an update and discovering the rest is missing is
@@ -164,19 +204,24 @@ func Apply(dataDir, installDir string) (Manifest, error) {
 	 * ever while the log repeats one line nobody reads. Clearing it costs a
 	 * re-download and puts the next check back in charge.
 	 */
-	for _, name := range m.Files {
-		if _, err := os.Stat(filepath.Join(staging, name)); err != nil {
-			_ = os.RemoveAll(staging)
-			return m, fmt.Errorf(
-				"selfupdate: staged %s is missing, so the staged update was "+
-					"discarded and will be fetched again: %w", name, err)
-		}
+	want, err := checkStaged(staging, m)
+	if err != nil {
+		_ = os.RemoveAll(staging)
+		return m, fmt.Errorf("selfupdate: the staged update was refused and discarded, "+
+			"and will be fetched again: %w", err)
 	}
+	afterCheck()
 
 	type undo struct{ from, to string }
 	var done []undo
+	// added are files the update put where nothing was, which rolling back
+	// removes rather than leaves.
+	var added []string
 
 	rollback := func() {
+		for _, p := range added {
+			_ = os.Remove(p)
+		}
 		// Reverse order, so a file renamed out of the way goes back before
 		// anything that was moved on top of it.
 		for i := len(done) - 1; i >= 0; i-- {
@@ -215,7 +260,9 @@ func Apply(dataDir, installDir string) (Manifest, error) {
 		target := filepath.Join(installDir, name)
 		backup := target + ".old." + stamp
 
+		existed := false
 		if _, err := os.Stat(target); err == nil {
+			existed = true
 			// Rename rather than delete. The file may be this very process's
 			// executable, which cannot be deleted while running but can be
 			// moved aside.
@@ -228,6 +275,22 @@ func Apply(dataDir, installDir string) (Manifest, error) {
 		if err := os.Rename(filepath.Join(staging, name), target); err != nil {
 			rollback()
 			return m, fmt.Errorf("selfupdate: installing %s: %w", name, err)
+		}
+		if !existed {
+			added = append(added, target)
+		}
+		// Once more where it landed. Between the check above and this move the
+		// staged file is reachable through the data directory; here it is in a
+		// folder only an administrator can write, so what this reads is what
+		// the next start runs.
+		if got, err := fileDigest(target); err != nil || got != want[name] {
+			if existed {
+				_ = os.Remove(target)
+			}
+			rollback()
+			_ = os.RemoveAll(staging)
+			return m, fmt.Errorf("selfupdate: %s changed after it was checked; the install is unchanged "+
+				"and the staged update was discarded", name)
 		}
 	}
 
@@ -313,4 +376,13 @@ func safeStagedName(name string) bool {
 	// starts with one, and allowing it invites confusion with the .old files
 	// Apply creates.
 	return !strings.HasPrefix(name, ".")
+}
+
+// afterCheck runs between Apply's proof and its moves. Tests swap a staged
+// file here, to show that the check where it lands is what catches it.
+var afterCheck = func() {}
+
+func digest(b []byte) string {
+	sum := sha256.Sum256(b)
+	return hex.EncodeToString(sum[:])
 }

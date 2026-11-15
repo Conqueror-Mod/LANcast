@@ -1,10 +1,19 @@
 package selfupdate
 
 import (
+	"archive/zip"
+	"bytes"
+	"crypto/ed25519"
+	"crypto/rand"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"lancast/internal/release"
 )
 
 func read(t *testing.T, path string) string {
@@ -16,39 +25,79 @@ func read(t *testing.T, path string) string {
 	return string(b)
 }
 
+// signedRelease builds what a published release is — an archive holding
+// files, a checksum list naming the archive, and a signature over the list —
+// and installs the signing key for the test.
+func signedRelease(t *testing.T, version string, files map[string][]byte) Proof {
+	t.Helper()
+	var buf bytes.Buffer
+	zw := zip.NewWriter(&buf)
+	for name, body := range files {
+		w, err := zw.Create(name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := w.Write(body); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := zw.Close(); err != nil {
+		t.Fatal(err)
+	}
+	archive := buf.Bytes()
+	sum := sha256.Sum256(archive)
+	checks := []byte(hex.EncodeToString(sum[:]) + "  " + ArchiveName(version) + "\n")
+	pub, priv, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(release.SetKeyForTest(hex.EncodeToString(pub)))
+	return Proof{
+		Checksums: checks,
+		Signature: []byte(hex.EncodeToString(ed25519.Sign(priv, checks))),
+		Archive:   archive,
+	}
+}
+
+// stage stages a genuine release of files.
+func stage(t *testing.T, data, version string, files map[string][]byte) {
+	t.Helper()
+	if err := Stage(data, version, signedRelease(t, version, files), files, 1000); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestStageThenApplyReplacesTheInstall(t *testing.T) {
 	data, install := t.TempDir(), t.TempDir()
-	if err := os.WriteFile(filepath.Join(install, "LANcast-Server.exe"), []byte("old server"), 0o755); err != nil {
+	if err := os.WriteFile(filepath.Join(install, "LANcast.exe"), []byte("old program"), 0o755); err != nil {
 		t.Fatal(err)
 	}
 
-	if err := Stage(data, "v0.7.0", map[string][]byte{
-		"LANcast-Server.exe": []byte("new server"),
-		"LANcast-Client.exe": []byte("new client"),
-	}, 1000); err != nil {
-		t.Fatal(err)
-	}
+	stage(t, data, "v0.7.0", map[string][]byte{
+		"LANcast.exe":        []byte("new program"),
+		"WebView2Loader.dll": []byte("new loader"),
+	})
 
 	m, ok := Pending(data)
 	if !ok || m.Version != "v0.7.0" {
 		t.Fatalf("Pending = %+v, %v", m, ok)
 	}
 
-	if _, err := Apply(data, install); err != nil {
+	if _, err := Apply(data, install, nil); err != nil {
 		t.Fatalf("Apply: %v", err)
 	}
 
-	if got := read(t, filepath.Join(install, "LANcast-Server.exe")); got != "new server" {
-		t.Errorf("server = %q, want the new one", got)
+	if got := read(t, filepath.Join(install, "LANcast.exe")); got != "new program" {
+		t.Errorf("program = %q, want the new one", got)
 	}
-	if got := read(t, filepath.Join(install, "LANcast-Client.exe")); got != "new client" {
-		t.Errorf("client = %q, want the new one", got)
+	if got := read(t, filepath.Join(install, "WebView2Loader.dll")); got != "new loader" {
+		t.Errorf("loader = %q, want the new one", got)
 	}
 	// The replaced file is moved aside rather than deleted, because it may be
 	// the running process's own image. The name is stamped rather than fixed —
 	// see backupOf and the test below for why — so it is found by pattern.
-	if got := read(t, backupOf(t, install, "LANcast-Server.exe")); got != "old server" {
-		t.Errorf("the previous server was not preserved, got %q", got)
+	if got := read(t, backupOf(t, install, "LANcast.exe")); got != "old program" {
+		t.Errorf("the previous program was not preserved, got %q", got)
 	}
 	if _, ok := Pending(data); ok {
 		t.Error("staging survived a successful apply")
@@ -56,36 +105,34 @@ func TestStageThenApplyReplacesTheInstall(t *testing.T) {
 }
 
 // The failure that must never happen: an install left without its executable.
-// A move that fails partway puts everything back.
+// A staging that fails its check moves nothing.
 func TestApplyRollsBackOnFailure(t *testing.T) {
 	data, install := t.TempDir(), t.TempDir()
-	if err := os.WriteFile(filepath.Join(install, "a.exe"), []byte("old a"), 0o755); err != nil {
+	if err := os.WriteFile(filepath.Join(install, "LANcast.exe"), []byte("old a"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(install, "b.exe"), []byte("old b"), 0o755); err != nil {
+	if err := os.WriteFile(filepath.Join(install, "WebView2Loader.dll"), []byte("old b"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := Stage(data, "v0.7.0", map[string][]byte{
-		"a.exe": []byte("new a"),
-		"b.exe": []byte("new b"),
-	}, 1000); err != nil {
-		t.Fatal(err)
-	}
+	stage(t, data, "v0.7.0", map[string][]byte{
+		"LANcast.exe":        []byte("new a"),
+		"WebView2Loader.dll": []byte("new b"),
+	})
 
 	// Delete one staged file behind Apply's back, so the pre-flight check fires
 	// before anything has been moved.
-	if err := os.Remove(filepath.Join(Dir(data), "b.exe")); err != nil {
+	if err := os.Remove(filepath.Join(Dir(data), "WebView2Loader.dll")); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := Apply(data, install); err == nil {
+	if _, err := Apply(data, install, nil); err == nil {
 		t.Fatal("Apply succeeded with a staged file missing")
 	}
 
-	if got := read(t, filepath.Join(install, "a.exe")); got != "old a" {
-		t.Errorf("a.exe = %q; the install was modified despite the failure", got)
+	if got := read(t, filepath.Join(install, "LANcast.exe")); got != "old a" {
+		t.Errorf("LANcast.exe = %q; the install was modified despite the failure", got)
 	}
-	if got := read(t, filepath.Join(install, "b.exe")); got != "old b" {
-		t.Errorf("b.exe = %q; the install was modified despite the failure", got)
+	if got := read(t, filepath.Join(install, "WebView2Loader.dll")); got != "old b" {
+		t.Errorf("WebView2Loader.dll = %q; the install was modified despite the failure", got)
 	}
 }
 
@@ -96,7 +143,7 @@ func TestIncompleteStagingIsNotPending(t *testing.T) {
 	if err := os.MkdirAll(Dir(data), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(Dir(data), "LANcast-Server.exe"), []byte("half"), 0o755); err != nil {
+	if err := os.WriteFile(filepath.Join(Dir(data), "LANcast.exe"), []byte("half"), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	if _, ok := Pending(data); ok {
@@ -115,7 +162,8 @@ func TestStageRefusesPathsThatEscape(t *testing.T) {
 		"",
 		".",
 	} {
-		if err := Stage(data, "v1.0.0", map[string][]byte{bad: []byte("x")}, 1); err == nil {
+		files := map[string][]byte{bad: []byte("x")}
+		if err := Stage(data, "v1.0.0", signedRelease(t, "v1.0.0", files), files, 1); err == nil {
 			t.Errorf("Stage accepted the path %q", bad)
 		}
 	}
@@ -125,17 +173,13 @@ func TestStageRefusesPathsThatEscape(t *testing.T) {
 // must not ride along with the next.
 func TestStagingReplacesAnEarlierOne(t *testing.T) {
 	data := t.TempDir()
-	if err := Stage(data, "v0.7.0", map[string][]byte{"a.exe": []byte("a")}, 1); err != nil {
-		t.Fatal(err)
-	}
-	if err := Stage(data, "v0.8.0", map[string][]byte{"b.exe": []byte("b")}, 2); err != nil {
-		t.Fatal(err)
-	}
+	stage(t, data, "v0.7.0", map[string][]byte{"LANcast.exe": []byte("a")})
+	stage(t, data, "v0.8.0", map[string][]byte{"WebView2Loader.dll": []byte("b")})
 	m, _ := Pending(data)
-	if m.Version != "v0.8.0" || len(m.Files) != 1 || m.Files[0] != "b.exe" {
+	if m.Version != "v0.8.0" || len(m.Files) != 1 || m.Files[0] != "WebView2Loader.dll" {
 		t.Errorf("manifest = %+v, want only the newer staging", m)
 	}
-	if _, err := os.Stat(filepath.Join(Dir(data), "a.exe")); err == nil {
+	if _, err := os.Stat(filepath.Join(Dir(data), "LANcast.exe")); err == nil {
 		t.Error("a file from the abandoned staging survived")
 	}
 }
@@ -162,7 +206,7 @@ func TestCleanupOldRemovesPreviousImages(t *testing.T) {
 // Applying with nothing staged is not an error worth propagating; it is the
 // normal case on every start.
 func TestApplyWithNothingStaged(t *testing.T) {
-	if _, err := Apply(t.TempDir(), t.TempDir()); !os.IsNotExist(err) {
+	if _, err := Apply(t.TempDir(), t.TempDir(), nil); !os.IsNotExist(err) {
 		t.Errorf("Apply with nothing staged = %v, want ErrNotExist", err)
 	}
 }
@@ -204,7 +248,7 @@ func backupOf(t *testing.T, dir, name string) string {
  */
 func TestASecondUpdateSurvivesAnImmovableBackup(t *testing.T) {
 	data, install := t.TempDir(), t.TempDir()
-	exe := filepath.Join(install, "LANcast-Server.exe")
+	exe := filepath.Join(install, "LANcast.exe")
 	if err := os.WriteFile(exe, []byte("v1"), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -218,14 +262,12 @@ func TestASecondUpdateSurvivesAnImmovableBackup(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := Stage(data, "v2", map[string][]byte{"LANcast-Server.exe": []byte("v2")}, 1); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := Apply(data, install); err != nil {
+	stage(t, data, "v2", map[string][]byte{"LANcast.exe": []byte("v2")})
+	if _, err := Apply(data, install, nil); err != nil {
 		t.Fatalf("Apply refused to update past an immovable backup: %v", err)
 	}
 	if got := read(t, exe); got != "v2" {
-		t.Errorf("server = %q, want v2 — the update did not take", got)
+		t.Errorf("program = %q, want v2 — the update did not take", got)
 	}
 }
 
@@ -260,18 +302,16 @@ func TestCleanupTakesOldAndStampedBackups(t *testing.T) {
  */
 func TestAnUnsatisfiableStagingIsDiscarded(t *testing.T) {
 	data, install := t.TempDir(), t.TempDir()
-	if err := Stage(data, "v2", map[string][]byte{
-		"a.exe": []byte("a"),
-		"b.exe": []byte("b"),
-	}, 1); err != nil {
-		t.Fatal(err)
-	}
+	stage(t, data, "v2", map[string][]byte{
+		"LANcast.exe":        []byte("a"),
+		"WebView2Loader.dll": []byte("b"),
+	})
 	// One of them vanishes, exactly as a half-finished Apply leaves it.
-	if err := os.Remove(filepath.Join(Dir(data), "b.exe")); err != nil {
+	if err := os.Remove(filepath.Join(Dir(data), "WebView2Loader.dll")); err != nil {
 		t.Fatal(err)
 	}
 
-	if _, err := Apply(data, install); err == nil {
+	if _, err := Apply(data, install, nil); err == nil {
 		t.Fatal("Apply accepted a staging it could not satisfy")
 	}
 	if _, ok := Pending(data); ok {
@@ -291,11 +331,7 @@ func TestAnUnsatisfiableStagingIsDiscarded(t *testing.T) {
  */
 func TestDiscardStagedLeavesNothingPending(t *testing.T) {
 	data := t.TempDir()
-	if err := Stage(data, "v0.8.33", map[string][]byte{
-		"LANcast-Server.exe": []byte("older"),
-	}, 1); err != nil {
-		t.Fatal(err)
-	}
+	stage(t, data, "v0.8.33", map[string][]byte{"LANcast.exe": []byte("older")})
 	if _, ok := Pending(data); !ok {
 		t.Fatal("nothing staged to discard")
 	}
@@ -315,4 +351,166 @@ func TestDiscardStagedOnAnEmptyDataDir(t *testing.T) {
 	if err := DiscardStaged(t.TempDir()); err != nil {
 		t.Errorf("DiscardStaged with nothing staged: %v", err)
 	}
+}
+
+// --- R10-1: what Apply must refuse, whoever wrote the staging ---
+
+// assertRefused applies and checks that nothing in install changed, nothing
+// was written beside it, and the staging is gone.
+func assertRefused(t *testing.T, data, install string, newer func(string) bool) error {
+	t.Helper()
+	_, err := Apply(data, install, newer)
+	if err == nil {
+		t.Fatal("Apply installed the staging")
+	}
+	if got := read(t, filepath.Join(install, "LANcast.exe")); got != "genuine" {
+		t.Errorf("LANcast.exe = %q; the install was changed", got)
+	}
+	entries, _ := os.ReadDir(install)
+	if len(entries) != 1 {
+		t.Errorf("the install directory holds %d entries, want only LANcast.exe", len(entries))
+	}
+	if _, ok := Pending(data); ok {
+		t.Error("the refused staging is still pending, so every stop retries it")
+	}
+	return err
+}
+
+func newInstall(t *testing.T) (data, install string) {
+	t.Helper()
+	data, install = t.TempDir(), filepath.Join(t.TempDir(), "Program Files", "LANcast")
+	if err := os.MkdirAll(install, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(install, "LANcast.exe"), []byte("genuine"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	return data, install
+}
+
+// The review's proving test, as a regression: a manifest and files written by
+// hand, with nothing from Stage, including a name that leaves the install
+// directory. It used to install both.
+func TestApplyRefusesAHandWrittenStaging(t *testing.T) {
+	signedRelease(t, "v99.0.0", map[string][]byte{"LANcast.exe": []byte("x")}) // a key is installed
+	data, install := newInstall(t)
+	st := Dir(data)
+	if err := os.MkdirAll(st, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(st, "LANcast.exe"), []byte("planted"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	escape := filepath.Join(filepath.Dir(filepath.Dir(install)), "escape.dll")
+	if err := os.WriteFile(filepath.Join(filepath.Dir(data), "escape.dll"), []byte("planted"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	m, _ := json.Marshal(Manifest{Version: "v99.0.0", Files: []string{"LANcast.exe", "../../escape.dll"}})
+	if err := os.WriteFile(filepath.Join(st, manifestName), m, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	err := assertRefused(t, data, install, nil)
+	t.Logf("refused: %v", err)
+	if _, err := os.Stat(escape); err == nil {
+		t.Error("a file was written outside the install directory")
+	}
+}
+
+// A genuine staging whose file is replaced afterwards: the planted copy has the
+// right name, and the signature still verifies, but the bytes are not the
+// release's.
+func TestApplyRefusesAStagedFileReplacedAfterStaging(t *testing.T) {
+	data, install := newInstall(t)
+	stage(t, data, "v2.0.0", map[string][]byte{"LANcast.exe": []byte("release")})
+	if err := os.WriteFile(filepath.Join(Dir(data), "LANcast.exe"), []byte("planted"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	assertRefused(t, data, install, nil)
+}
+
+// A name added to a genuine manifest, outside the install set or outside the
+// directory, is refused even though every listed file it shares with the
+// release matches.
+func TestApplyRefusesANameOutsideTheInstallSet(t *testing.T) {
+	for _, extra := range []string{"version.dll", `..\..\Windows\System32\x.dll`, "LANcast.exe"} {
+		t.Run(extra, func(t *testing.T) {
+			data, install := newInstall(t)
+			stage(t, data, "v2.0.0", map[string][]byte{"LANcast.exe": []byte("release")})
+			m, _ := Pending(data)
+			m.Files = append(m.Files, extra)
+			raw, _ := json.Marshal(m)
+			if err := os.WriteFile(filepath.Join(Dir(data), manifestName), raw, 0o644); err != nil {
+				t.Fatal(err)
+			}
+			if !strings.Contains(extra, `\`) {
+				_ = os.WriteFile(filepath.Join(Dir(data), extra), []byte("planted"), 0o755)
+			}
+			assertRefused(t, data, install, nil)
+		})
+	}
+}
+
+// Half a release: a manifest naming fewer files than the archive holds, which
+// would pair a new program with old DLLs.
+func TestApplyRefusesASubsetOfTheRelease(t *testing.T) {
+	data, install := newInstall(t)
+	stage(t, data, "v2.0.0", map[string][]byte{
+		"LANcast.exe": []byte("release"), "libmpv-2.dll": []byte("player"),
+	})
+	m, _ := Pending(data)
+	m.Files = []string{"LANcast.exe"}
+	raw, _ := json.Marshal(m)
+	if err := os.WriteFile(filepath.Join(Dir(data), manifestName), raw, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	assertRefused(t, data, install, nil)
+}
+
+// A signature by any key but the release key.
+func TestApplyRefusesAProofSignedByAnotherKey(t *testing.T) {
+	data, install := newInstall(t)
+	files := map[string][]byte{"LANcast.exe": []byte("release")}
+	stage(t, data, "v2.0.0", files)
+	other := signedRelease(t, "v2.0.0", map[string][]byte{"LANcast.exe": []byte("release")})
+	_ = other // signedRelease installed a new key; the staged signature is the old one's
+	assertRefused(t, data, install, nil)
+}
+
+// A genuine release staged under a newer version's number: the archive's
+// signed name carries the real version, which does not match.
+func TestApplyRefusesAReleaseUnderAnotherVersion(t *testing.T) {
+	data, install := newInstall(t)
+	stage(t, data, "v0.9.0", map[string][]byte{"LANcast.exe": []byte("old release")})
+	m, _ := Pending(data)
+	m.Version = "v99.0.0"
+	raw, _ := json.Marshal(m)
+	if err := os.WriteFile(filepath.Join(Dir(data), manifestName), raw, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	assertRefused(t, data, install, nil)
+}
+
+// And one honestly labelled but older than the running build: a downgrade.
+func TestApplyRefusesAVersionThatIsNotNewer(t *testing.T) {
+	data, install := newInstall(t)
+	stage(t, data, "v0.9.0", map[string][]byte{"LANcast.exe": []byte("old release")})
+	err := assertRefused(t, data, install, func(v string) bool { return v != "v0.9.0" })
+	if !strings.Contains(err.Error(), "not newer") {
+		t.Errorf("err = %v, want it to say the version is not newer", err)
+	}
+}
+
+// A file swapped between the check and the move is caught where it lands, and
+// the install is put back.
+func TestApplyChecksEachFileWhereItLands(t *testing.T) {
+	data, install := newInstall(t)
+	stage(t, data, "v2.0.0", map[string][]byte{
+		"LANcast.exe": []byte("release"), "WebView2Loader.dll": []byte("loader"),
+	})
+	afterCheck = func() {
+		_ = os.WriteFile(filepath.Join(Dir(data), "WebView2Loader.dll"), []byte("planted"), 0o755)
+	}
+	t.Cleanup(func() { afterCheck = func() {} })
+	assertRefused(t, data, install, nil)
 }
