@@ -56,18 +56,35 @@ func (s *Store) RemoveFromWatchlist(ctx context.Context, userID string, itemID i
 // Watchlist is an account's list, newest first. Titles whose files have gone
 // missing are left out rather than shown as tiles that will not play; their
 // rows stay, so a remounted drive brings them back.
+//
+// Titles the account may no longer see are left out the same way (ADR 0084):
+// one added before its library was hidden, or before the rating ceiling was
+// lowered. The handler filters again on the way out, but the limit has to
+// count only what is shown, and a store method that lists items should not
+// depend on every caller remembering to. The rule is the listing predicate,
+// not a restatement of it, so it cannot drift from what browsing applies.
 func (s *Store) Watchlist(ctx context.Context, userID string, limit int) ([]Item, error) {
 	if limit <= 0 || limit > 500 {
 		limit = 200
 	}
+	access, err := s.accessFor(ctx, userID)
+	if err != nil {
+		return nil, fmt.Errorf("watchlist: %w", err)
+	}
+	permitted, permittedArgs := "", []any(nil)
+	if pred, pargs := access.predicate(); pred != "" {
+		permitted = ` AND mi.id IN (SELECT media_item.id FROM media_item WHERE 1 = 1` + pred + `)`
+		permittedArgs = pargs
+	}
+	args := append(append([]any{userID}, permittedArgs...), limit)
 	rows, err := s.db.QueryContext(ctx, `SELECT `+itemColsMI+`
 		FROM user_watchlist w
 		JOIN media_item mi ON mi.id = w.item_id
-		WHERE w.user_id = ? AND mi.missing = 0
+		WHERE w.user_id = ? AND mi.missing = 0`+permitted+`
 		-- Ties on the second broken by when the row was written, not by the
 		-- title's id: two titles added in one second are still newest first.
 		ORDER BY w.added_at DESC, w.rowid DESC
-		LIMIT ?`, userID, limit)
+		LIMIT ?`, args...)
 	if err != nil {
 		return nil, fmt.Errorf("watchlist: %w", err)
 	}
