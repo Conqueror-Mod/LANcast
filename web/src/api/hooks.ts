@@ -1590,8 +1590,17 @@ export function useCollisions(enabled: boolean) {
  * `staleTime: Infinity` because the answer is about bytes on disk: it does not
  * go stale while a page is open, and re-reading 14 GB on a window focus would
  * be a surprising thing for a report to do.
+ *
+ * **It answers with the one collision asked about, matched on the whole work
+ * key.** `?compare=` takes an external_id, and every episode of a show carries
+ * the show's, so the server compares every colliding episode at once. The card
+ * used to take the first answer with a matching external_id, which for
+ * S01E05's card was S01E01: an administrator deciding which copy to delete was
+ * shown the wrong pair (R13-4). The fetch is still keyed by external_id, so the
+ * episodes of one show share it; `select` picks this collision out of it.
  */
-export function useCompareCollision(externalID: string | null) {
+export function useCompareCollision(collision: Collision | null) {
+  const externalID = collision?.external_id ?? null;
   return useQuery({
     queryKey: ["collisions", "compare", externalID],
     queryFn: ({ signal }) =>
@@ -1599,9 +1608,32 @@ export function useCompareCollision(externalID: string | null) {
         `/api/collisions?compare=${encodeURIComponent(externalID ?? "")}`,
         signal,
       ),
+    select: (r) =>
+      collision ? r.collisions.find((c) => sameWork(c, collision)) : undefined,
     enabled: !!externalID,
     staleTime: Infinity,
   });
+}
+
+type WorkKeyed = Pick<Collision, "provider" | "external_id" | "season" | "episode">;
+
+/**
+ * Whether two collisions are the same work: `(provider, external_id, season,
+ * episode)`, the key the server groups on. The pair alone matches every
+ * colliding episode of a show.
+ */
+export function sameWork(a: WorkKeyed, b: WorkKeyed): boolean {
+  return (
+    a.provider === b.provider &&
+    a.external_id === b.external_id &&
+    (a.season ?? null) === (b.season ?? null) &&
+    (a.episode ?? null) === (b.episode ?? null)
+  );
+}
+
+/** A collision's work key as one string, for a React key. */
+export function collisionKey(c: WorkKeyed): string {
+  return `${c.provider}:${c.external_id}:${c.season ?? ""}:${c.episode ?? ""}`;
 }
 
 export function useReview(libraryID?: number) {

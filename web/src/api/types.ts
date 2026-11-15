@@ -394,37 +394,14 @@ export type PeerLibrary = components["schemas"]["GuestLibrary"];
  * the thirteen pairs in the library this was built against, two were not
  * duplicates at all — a film split across two discs, and a 1989 film wearing a
  * 2022 film's identity from a stale .nfo.
+ *
+ * Generated, not restated. A hand-written copy used to sit here and dropped
+ * `season` and `episode`, so no caller could tell one colliding episode of a
+ * show from another -- every episode carries the show's external_id -- and the
+ * report's Compare showed one episode's card another episode's files (R13-4).
  */
-export type CollisionMember = {
-  id: number;
-  title: string;
-  /** The one place this API returns a path: the report is for going and
-   *  looking at the two files. Admin-only for that reason. */
-  path: string;
-  /** What the filename claimed. A label, never a grouping key — the file that
-   *  motivated ADR 0042 called itself an alternate cut and was a copy. */
-  edition?: string;
-  size_bytes: number | null;
-  library_id: number;
-  missing: boolean;
-  /** Present only after a comparison. Sampled, not exhaustive. */
-  fingerprint?: string;
-  /** Could not be read. An absence of evidence, not a difference. */
-  unreadable?: boolean;
-};
-
-export type Collision = {
-  provider: string;
-  external_id: string;
-  same_size: boolean;
-  members: CollisionMember[];
-  /** Absent until compared, and absent afterwards if any member was
-   *  unreadable. "Identical so far as sampled" — never "identical". */
-  same_bytes?: boolean;
-  /** When somebody looked at exactly these rows and accepted them. Absent on a
-   *  server too old to record it, which reads the same as never dismissed. */
-  dismissed_at?: number;
-};
+export type CollisionMember = components["schemas"]["CollisionMember"];
+export type Collision = components["schemas"]["Collision"];
 
 /*
  * Backups (ADR 0058). A backup is the database and nothing else: no artwork,

@@ -1,5 +1,6 @@
 import { useState } from "react";
 import {
+  collisionKey,
   useCollisions,
   useCompareCollision,
   useDeleteItem,
@@ -136,11 +137,10 @@ function MemberRow({
 
 function CollisionCard({ collision }: { collision: Collision }) {
   const [comparing, setComparing] = useState(false);
-  const { data, isFetching } = useCompareCollision(
-    comparing ? collision.external_id : null,
-  );
-  const compared = data?.collisions.find(
-    (c) => c.external_id === collision.external_id,
+  // The answer for this collision's whole work key, not the first with its
+  // external_id: that was another episode of the same show (R13-4).
+  const { data: compared, isFetching } = useCompareCollision(
+    comparing ? collision : null,
   );
   const shown = compared ?? collision;
   const compare = useFocusable(() => setComparing(true));
@@ -288,7 +288,7 @@ export function Collisions({ enabled }: { enabled: boolean }) {
 
       <div className="collide-list">
         {listed.map((c) => (
-          <CollisionCard key={`${c.provider}:${c.external_id}`} collision={c} />
+          <CollisionCard key={collisionKey(c)} collision={c} />
         ))}
       </div>
       {listed.length === 0 && (
