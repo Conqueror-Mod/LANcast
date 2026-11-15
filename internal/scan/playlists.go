@@ -23,7 +23,7 @@ import (
 // is enforced everywhere else, and a second mechanism would be a second thing
 // to remember. This is that rule applied to membership — a rescan reconciles
 // files, it does not re-litigate decisions.
-const membersLock = "members"
+const membersLock = store.PlaylistMembersLock
 
 // isPlaylistFile matches by extension only.
 //
@@ -46,12 +46,17 @@ func isPlaylistFile(path string) bool {
 // the pass continues.
 func (s *Scanner) importPlaylists(ctx context.Context, lib store.Library, p *Progress, paths []string) {
 	for _, path := range paths {
-		if s.skipLockedPlaylist(ctx, path) {
-			continue
-		}
-
 		res, err := playlist.ImportFile(ctx, s.st, lib.ID, path)
 		if err != nil {
+			// Somebody has edited it since it was imported, so the file no
+			// longer decides what it holds. The store answers this inside the
+			// write, not here beforehand: a check of its own could fail and be
+			// read as "not locked", or be overtaken by an edit before the
+			// write, and either way the edit was lost (R08-4).
+			if errors.Is(err, store.ErrPlaylistLocked) {
+				s.log.Debug("playlist edited since import, leaving it alone", "path", path)
+				continue
+			}
 			// Our own HLS output, or something else calling itself .m3u8. Not
 			// an issue to report: nothing is wrong, and a user who sees
 			// "could not import stream.m3u8" will reasonably go looking for a
@@ -78,31 +83,6 @@ func (s *Scanner) importPlaylists(ctx context.Context, lib store.Library, p *Pro
 		s.log.Info("playlist imported", "library", lib.ID, "title", res.Title,
 			"tracks", res.Imported, "missing", res.MissingCount, "skipped", res.Skipped)
 	}
-}
-
-// skipLockedPlaylist reports whether this .m3u has already become a playlist
-// that somebody has since edited.
-//
-// A lookup failure is treated as "not locked". The consequence of being wrong
-// in that direction is re-importing a playlist, which is recoverable; being
-// wrong in the other direction means a file on disk silently stops importing
-// forever, which is not.
-func (s *Scanner) skipLockedPlaylist(ctx context.Context, path string) bool {
-	id, err := s.st.ItemIDByPath(ctx, path)
-	if err != nil || id == 0 {
-		return false
-	}
-	locked, err := s.st.LockedFields(ctx, id)
-	if err != nil {
-		return false
-	}
-	for _, f := range locked {
-		if f == membersLock {
-			s.log.Debug("playlist edited since import, leaving it alone", "path", path)
-			return true
-		}
-	}
-	return false
 }
 
 // missingReason phrases the count for a human reading the scan report.

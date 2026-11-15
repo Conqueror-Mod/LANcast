@@ -47,25 +47,68 @@ func (s *Store) PlaylistEntries(ctx context.Context, playlistID int64) ([]Item, 
 // (playlist_id, ord): reordering existing rows in place would collide with
 // itself halfway through unless every write happened at once.
 func (s *Store) SetPlaylistEntries(ctx context.Context, playlistID int64, itemIDs []int64) error {
+	return s.replacePlaylistEntries(ctx, "set playlist entries", playlistID, itemIDs, false)
+}
+
+// PlaylistMembersLock is the item_lock field that marks a playlist's
+// membership as a person's (ADR 0030): every edit sets it, and an import from
+// the .m3u on disk never overwrites a playlist carrying it.
+const PlaylistMembersLock = "members"
+
+// ErrPlaylistLocked is ImportPlaylistEntries refusing: a person has edited this
+// playlist, and the file it was seeded from no longer decides what it holds.
+var ErrPlaylistLocked = errors.New("playlist membership is locked")
+
+/*
+ * ImportPlaylistEntries is SetPlaylistEntries for the .m3u importer: it
+ * replaces membership only if no person has edited the playlist, and refuses
+ * with ErrPlaylistLocked if one has.
+ *
+ * The lock is read inside the transaction that writes, and that is the whole
+ * point (R08-4). Checked beforehand, in a statement of its own, it had two
+ * ways to lose an edit: a lookup that failed was read as "not locked", and an
+ * edit that landed between the check and the write was overwritten by it.
+ * Here there is no between, because store transactions begin IMMEDIATE and
+ * hold the write lock from their first statement; and any error, the lock
+ * read's included, means nothing was written. A rescan reconciles files, it
+ * does not re-litigate decisions (CLAUDE.md).
+ */
+func (s *Store) ImportPlaylistEntries(ctx context.Context, playlistID int64, itemIDs []int64) error {
+	return s.replacePlaylistEntries(ctx, "import playlist entries", playlistID, itemIDs, true)
+}
+
+func (s *Store) replacePlaylistEntries(ctx context.Context, op string, playlistID int64, itemIDs []int64, unlessLocked bool) error {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
-		return fmt.Errorf("set playlist entries: %w", err)
+		return fmt.Errorf("%s: %w", op, err)
 	}
 	defer tx.Rollback()
 
+	if unlessLocked {
+		var locked bool
+		if err := tx.QueryRowContext(ctx,
+			`SELECT EXISTS (SELECT 1 FROM item_lock WHERE item_id = ? AND field = ?)`,
+			playlistID, PlaylistMembersLock).Scan(&locked); err != nil {
+			return fmt.Errorf("%s: read lock: %w", op, err)
+		}
+		if locked {
+			return ErrPlaylistLocked
+		}
+	}
+
 	if _, err := tx.ExecContext(ctx,
 		`DELETE FROM playlist_entry WHERE playlist_id = ?`, playlistID); err != nil {
-		return fmt.Errorf("set playlist entries: clear: %w", err)
+		return fmt.Errorf("%s: clear: %w", op, err)
 	}
 	for i, id := range itemIDs {
 		if _, err := tx.ExecContext(ctx,
 			`INSERT INTO playlist_entry (playlist_id, item_id, ord) VALUES (?, ?, ?)`,
 			playlistID, id, i); err != nil {
-			return fmt.Errorf("set playlist entries: insert %d: %w", id, err)
+			return fmt.Errorf("%s: insert %d: %w", op, id, err)
 		}
 	}
 	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("set playlist entries: commit: %w", err)
+		return fmt.Errorf("%s: commit: %w", op, err)
 	}
 	return nil
 }

@@ -36,7 +36,7 @@ import (
 // open question ("mine versus the server's") is decided awake, and a shared
 // list every member can edit is the smaller claim of the two available; the
 // alternative is a household where only the admin may make a playlist.
-const membersLock = "members"
+const membersLock = store.PlaylistMembersLock
 
 // playlistByID loads an item and insists it is a playlist.
 //
