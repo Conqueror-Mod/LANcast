@@ -105,3 +105,49 @@ func TestACorrectPasswordClearsTheThrottle(t *testing.T) {
 		t.Error("a successful password change did not clear the counter")
 	}
 }
+
+/*
+ * Signing in to your own account does not reset the guesses at somebody
+ * else's (R01-2).
+ *
+ * Inside the house the per-account wait is off on purpose, so the per-address
+ * count is the only limit there, and an address is the whole household. When
+ * any correct password cleared it, a child's account could send nine guesses
+ * at the administrator, sign in to itself, and repeat for ever.
+ */
+func TestOwnSignInDoesNotResetGuessesAtAnotherAccount(t *testing.T) {
+	h := newHarness(t)
+	h.secure(t, "the admin's long password")
+	h.addMember(t, "kid", "the kid's own password")
+
+	max := auth.NewThrottle().Max
+	throttled := false
+	for round := 0; round < 4 && !throttled; round++ {
+		for i := 0; i < max-1; i++ {
+			resp := h.do(t, "POST", "/api/auth/login", map[string]any{
+				"username": testUser, "password": "guess",
+			})
+			resp.Body.Close()
+			if resp.StatusCode == http.StatusTooManyRequests {
+				throttled = true
+				break
+			}
+		}
+		if !throttled {
+			h.loginAs(t, "kid", "the kid's own password")
+		}
+	}
+	if !throttled {
+		t.Fatal("guessing at the admin was never throttled: the kid's own sign-in kept clearing the address")
+	}
+
+	// The kid's right password is not what is being counted, and B is still
+	// refused after it.
+	resp := h.do(t, "POST", "/api/auth/login", map[string]any{
+		"username": testUser, "password": "guess",
+	})
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusTooManyRequests {
+		t.Errorf("status = %d, want 429 for another guess at the admin", resp.StatusCode)
+	}
+}

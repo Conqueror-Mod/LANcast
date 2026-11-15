@@ -166,3 +166,52 @@ func TestHiddenLibraryRowsGoWithTheLibraryAndTheAccount(t *testing.T) {
 		t.Errorf("rows after deleting the account = %d, %v", n, err)
 	}
 }
+
+/*
+ * A failed account lookup means no access, never no limits (R04-4).
+ *
+ * The role and ceiling reads used to treat every error as "no account row",
+ * which is the unsecured-loopback case and carries no limits. A cancelled
+ * request stands in for the transient read error (a locked database, an I/O
+ * failure) that would otherwise hand a narrowed account the whole library for
+ * one request. Every chokepoint must answer with an error or a refusal; none
+ * may answer "nothing hidden".
+ */
+func TestALimitLookupThatFailsRefuses(t *testing.T) {
+	f := seedForAccess(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	if h, err := f.st.HiddenLibraries(ctx, f.member.ID); err == nil {
+		t.Errorf("HiddenLibraries on a failed lookup answered %v with no error: the hidden library is shown", h)
+	}
+	if ok, err := f.st.MayOpenLibrary(ctx, f.member.ID, f.private.ID); ok || err == nil {
+		t.Errorf("MayOpenLibrary on a failed lookup = %v, %v; want a refusal with the error", ok, err)
+	}
+	if a, err := f.st.accessFor(ctx, f.member.ID); err == nil {
+		t.Errorf("accessFor on a failed lookup answered %+v with no error: no limits", a)
+	}
+	if clause, err := f.st.hiddenClause(ctx, f.member.ID, "item_id"); err == nil {
+		t.Errorf("hiddenClause on a failed lookup answered %q with no error", clause)
+	}
+	if ok, err := f.st.MayPlay(ctx, Account(f.member.ID), f.privateFilm); ok || err == nil {
+		t.Errorf("MayPlay on a failed lookup = %v, %v; want a refusal with the error", ok, err)
+	}
+	if _, err := f.st.MaxContentRating(ctx, f.member.ID); err == nil || errors.Is(err, ErrNotFound) {
+		t.Errorf("MaxContentRating on a failed lookup = %v; want an error that is not 'no account'", err)
+	}
+
+	// The positive control: with a live context the same account is still
+	// narrowed, and an id with no account row is still unlimited (the
+	// unsecured loopback case the old default was written for).
+	live := context.Background()
+	if ok, err := f.st.MayOpenLibrary(live, f.member.ID, f.private.ID); err != nil || ok {
+		t.Errorf("MayOpenLibrary live = %v, %v; want hidden", ok, err)
+	}
+	if h, err := f.st.HiddenLibraries(live, "u_nobody"); err != nil || len(h) != 0 {
+		t.Errorf("HiddenLibraries for no account = %v, %v; want nothing hidden and no error", h, err)
+	}
+	if _, err := f.st.MaxContentRating(live, "u_nobody"); !errors.Is(err, ErrNotFound) {
+		t.Errorf("MaxContentRating for no account = %v; want ErrNotFound", err)
+	}
+}

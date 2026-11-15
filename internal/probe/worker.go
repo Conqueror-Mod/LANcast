@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"runtime"
+	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -255,7 +256,24 @@ func ResultWithStreams(it *store.Item, streams []store.MediaStream) *Result {
 			Width: s.Width, Height: s.Height, Channels: s.Channels, BitRate: s.BitRate,
 		})
 	}
+	// The track list has no frame rate of its own, but the item's column is
+	// the rate of exactly the stream Video picks: toStoreResult wrote it from
+	// that stream. Without it every decision reported a rate of zero, the
+	// encoder was promised a level by frame size alone, and NVENC refused
+	// every 1080p50/60 and 2160p60 encode before writing a frame (R09-3).
+	if v := r.Video(); v != nil && v.FrameRate == "" {
+		v.FrameRate = itemFrameRate(it)
+	}
 	return r
+}
+
+// itemFrameRate renders the stored rate in the probe's own vocabulary: a
+// decimal string, empty when unknown.
+func itemFrameRate(it *store.Item) string {
+	if it.FrameRate == nil || *it.FrameRate <= 0 {
+		return ""
+	}
+	return strconv.FormatFloat(*it.FrameRate, 'f', -1, 64)
 }
 
 // ResultFromItem rebuilds enough of a Result from stored columns to make a
@@ -264,7 +282,9 @@ func ResultFromItem(it *store.Item) *Result {
 	if it == nil || it.ProbedAt == nil {
 		return nil
 	}
-	r := &Result{DurationMS: derefInt64(it.DurationMS)}
+	// The size is what a bit-rate ceiling falls back on when the probe could
+	// not measure the video's own rate, which is most Matroska (R09-4).
+	r := &Result{DurationMS: derefInt64(it.DurationMS), SizeBytes: derefInt64(it.SizeBytes)}
 	if it.Container != nil {
 		r.Container = containerFromExtension(*it.Container)
 	}
@@ -274,6 +294,7 @@ func ResultFromItem(it *store.Item) *Result {
 			Profile: derefString(it.VideoProfile),
 			Width:   derefInt(it.Width), Height: derefInt(it.Height),
 			BitRate: derefInt64(it.VideoBitRate), Default: true,
+			FrameRate: itemFrameRate(it),
 		})
 	}
 	if it.AudioCodec != nil {

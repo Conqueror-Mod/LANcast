@@ -1,6 +1,7 @@
 /*
- * Two-factor sign-in in the Security pane (ADR 0100): turning it on shows the
- * key and then the recovery codes, once; turning it off asks for the password.
+ * Two-factor sign-in in the Security pane (ADR 0100): turning it on asks for
+ * the password, then shows the key and then the recovery codes, once; turning
+ * it off asks for the password.
  */
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { act } from "react";
@@ -36,6 +37,9 @@ beforeEach(() => {
       const json = (v: unknown, status = 200) =>
         new Response(JSON.stringify(v), { status, headers: { "Content-Type": "application/json" } });
       if (url.endsWith("/api/profile/two-factor/setup")) {
+        if (body?.current_password !== "right") {
+          return json({ error: { code: "forbidden", message: "that password is not right" } }, 403);
+        }
         return json({ key: "GEZD GNBV", url: "otpauth://totp/LANcast:dana?secret=GEZDGNBV" });
       }
       if (url.endsWith("/api/profile/two-factor") && method === "POST") {
@@ -93,10 +97,25 @@ const button = (text: string) =>
   [...host.querySelectorAll("button")].find((b) => b.textContent?.trim() === text);
 
 describe("two-factor sign-in in Settings", () => {
-  it("turns on with a code from the app, then shows the recovery codes once", async () => {
+  it("turns on with the password and a code from the app, then shows the recovery codes once", async () => {
     await render();
     await act(async () => button("Turn on")!.click());
+    expect(calls.some((c) => c.url.endsWith("/setup"))).toBe(false);
+
+    type(host.querySelector('input[type="password"]') as HTMLInputElement, "wrong");
+    await act(async () => {
+      host.querySelector("form")!.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+    });
     await settle();
+    expect(host.querySelector('[role="alert"]')?.textContent).toContain("that password is not right");
+    expect(host.textContent).not.toContain("GEZD GNBV");
+
+    type(host.querySelector('input[type="password"]') as HTMLInputElement, "right");
+    await act(async () => {
+      host.querySelector("form")!.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+    });
+    await settle();
+    expect(calls.filter((c) => c.url.endsWith("/setup")).at(-1)?.body).toEqual({ current_password: "right" });
     expect(host.textContent).toContain("GEZD GNBV");
     expect(host.querySelector('a[href^="otpauth://"]')).toBeTruthy();
 

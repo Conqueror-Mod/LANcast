@@ -126,11 +126,11 @@ func TestResultFromItem(t *testing.T) {
 	probed := int64(1)
 	dur := int64(7284512)
 	container, vcodec, acodec := "mkv", "h264", "eac3"
-	w, h, ch := 1920, 1080, 6
+	w, h, ch, fps := 1920, 1080, 6, 59.94
 
 	it := &store.Item{
 		ProbedAt: &probed, DurationMS: &dur, Container: &container,
-		VideoCodec: &vcodec, Width: &w, Height: &h,
+		VideoCodec: &vcodec, Width: &w, Height: &h, FrameRate: &fps,
 		AudioCodec: &acodec, AudioChannels: &ch,
 	}
 
@@ -143,7 +143,9 @@ func TestResultFromItem(t *testing.T) {
 	if r.Container != "matroska" {
 		t.Errorf("Container = %q, want matroska", r.Container)
 	}
-	if v := r.Video(); v == nil || v.Codec != "h264" || v.Height != 1080 {
+	// The rate is what the encoder's level and keyframe interval are chosen
+	// from (R09-3); dropping it here made every decision report zero.
+	if v := r.Video(); v == nil || v.Codec != "h264" || v.Height != 1080 || v.FrameRate != "59.94" {
 		t.Errorf("Video() = %+v", v)
 	}
 	if a := r.Audio(); a == nil || a.Codec != "eac3" || a.Channels != 6 {
@@ -178,6 +180,33 @@ func TestStoredProbeDrivesDecision(t *testing.T) {
 	}
 	if d.VideoAction != "copy" {
 		t.Errorf("VideoAction = %q, want copy — the video is fine", d.VideoAction)
+	}
+}
+
+// The stored size has to reach the decision, or the bit-rate ceiling has
+// nothing to estimate from on the path every real playback takes (R09-4).
+func TestStoredSizeHoldsTheBitrateCeiling(t *testing.T) {
+	probed := int64(1)
+	dur := int64(60_000)
+	size := int64(150_000_000) // 20 Mbps over a minute
+	container, vcodec, acodec := "mkv", "h264", "aac"
+	w, h, ch := 1920, 1080, 2
+	it := &store.Item{
+		ProbedAt: &probed, DurationMS: &dur, SizeBytes: &size, Container: &container,
+		VideoCodec: &vcodec, Width: &w, Height: &h,
+		AudioCodec: &acodec, AudioChannels: &ch,
+	}
+	streams := []store.MediaStream{
+		{Index: 0, Kind: "video", Codec: "h264", Width: w, Height: h, Default: true},
+		{Index: 1, Kind: "audio", Codec: "aac", Channels: 2, Default: true},
+	}
+	p := BrowserProfile()
+	p.MaxVideoBitRate = 10_000_000
+
+	d := Decide(ResultWithStreams(it, streams), p)
+	if d.VideoAction != "encode" || d.TargetVideoBitRate != 10_000_000 {
+		t.Errorf("decision = %s/%s target %d (%s), want an encode capped at the ceiling",
+			d.Method, d.VideoAction, d.TargetVideoBitRate, d.Reason)
 	}
 }
 
