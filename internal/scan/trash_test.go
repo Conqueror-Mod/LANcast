@@ -3,6 +3,7 @@ package scan
 import (
 	"context"
 	"os"
+	"path/filepath"
 	"testing"
 
 	"lancast/internal/store"
@@ -174,5 +175,64 @@ func TestAScanIsNotFinishedUntilTheTrashIs(t *testing.T) {
 	}
 	if n, _ := st.TrashCount(context.Background(), lib.ID); n != 0 {
 		t.Errorf("the trash still holds %d rows", n)
+	}
+}
+
+/*
+ * One folder the walk could not list, and the trash is left alone (R08-2).
+ *
+ * The location itself reads fine, so the scan succeeds and is not "skipped";
+ * the folder inside it is, and every known file under it is unseen and marked
+ * missing. That is a fact about the walk. Emptying the trash on it would delete
+ * those films with their history because of an ACL or one SMB hiccup.
+ */
+func TestAnUnreadableFolderStopsIt(t *testing.T) {
+	sc, st := newScanner(t)
+	root := t.TempDir()
+	writeFile(t, root, "Kept (2020).mkv", 16)
+	writeFile(t, root, "Films B-D/Brazil (1985).mkv", 16)
+	writeFile(t, root, "Films B-D/Dune (1984).mkv", 16)
+
+	lib, err := st.CreateLibrary(context.Background(), "Media", "movie", root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	scanAndWait(t, sc, *lib)
+	_, before, err := st.ListItems(context.Background(), store.ItemFilter{LibraryID: lib.ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if before != 3 {
+		t.Fatalf("library lists %d items before the folder went unreadable, want 3", before)
+	}
+
+	sub := filepath.Join(root, "Films B-D")
+	makeUnreadable(t, sub)
+	if _, err := os.ReadDir(sub); err == nil {
+		// Root, or an administrator whose privileges override the deny: the
+		// folder still lists, so this machine cannot stage the failure.
+		t.Skip("the folder is still listable here, so the failure cannot be staged")
+	}
+
+	sc.EmptyTrashWhen(func() bool { return true })
+	p := scanAndWait(t, sc, *lib)
+
+	if p.Unreadable == 0 {
+		t.Errorf("the scan did not count the folder it could not list: %+v", p.Issues)
+	}
+	if v := MayEmptyTrash(p); v.Allowed {
+		t.Error("a scan that could not list a folder was trusted to say what is missing")
+	}
+	// Marked missing, as the walk honestly found — and not deleted.
+	if n, _ := st.TrashCount(context.Background(), lib.ID); n != 2 {
+		t.Errorf("trash holds %d rows, want the two films under the unreadable folder", n)
+	}
+	// Missing rows are listed unless the filter excludes them.
+	_, total, err := st.ListItems(context.Background(), store.ItemFilter{LibraryID: lib.ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if total != 3 {
+		t.Errorf("library holds %d rows after the scan, want all 3: the trash was emptied", total)
 	}
 }

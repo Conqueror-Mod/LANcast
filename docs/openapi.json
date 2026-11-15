@@ -18547,6 +18547,7 @@
           "items_changed",
           "items_missing",
           "skipped",
+          "unreadable",
           "skipped_kind",
           "skipped_extras",
           "skipped_untagged",
@@ -18576,6 +18577,10 @@
           "skipped": {
             "type": "integer",
             "description": "Files something went wrong reading."
+          },
+          "unreadable": {
+            "type": "integer",
+            "description": "Folders or files the walk could not list or stat — an ACL, an SMB hiccup, a folder renamed mid-walk. Each is also counted in `skipped` and named in `issues`. Every known file under such a folder is marked missing, so a scan with any of these **never empties the trash**, whatever `empty_trash_on_scan` says."
           },
           "skipped_kind": {
             "type": "integer",
