@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"strings"
 	"testing"
+	"time"
 
 	"lancast/internal/auth"
 )
@@ -233,5 +234,38 @@ func TestAWithdrawnLinkDiesAndGuessingIsThrottled(t *testing.T) {
 	}
 	if !got429 {
 		t.Fatal("fifteen wrong guesses were never throttled")
+	}
+}
+
+// A made-up secret is refused before the password is hashed, so a stranger
+// cannot spend the machine's cores on bcrypt, and once an address is
+// throttled even a right secret waits (R01-8). On main the junk redeem took
+// 200 ms and the right secret was let through with 201.
+func TestRedeemChecksTheSecretBeforeHashing(t *testing.T) {
+	h := newHarness(t)
+	h.secure(t, "a good long password")
+	m := makeInvite(t, h, map[string]any{"note": "a friend"})
+
+	start := time.Now()
+	resp := h.do(t, "POST", "/api/invites/redeem", map[string]any{
+		"token": "not a real secret", "username": "x", "password": "long enough password"})
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusNotFound {
+		t.Fatalf("junk secret: %d", resp.StatusCode)
+	}
+	// bcrypt at cost 12 is ~200 ms; the lookup alone is well under 50.
+	if cost := time.Since(start); cost > 100*time.Millisecond {
+		t.Errorf("a junk-secret redeem took %v; the password was hashed", cost)
+	}
+
+	for i := 0; i < 15; i++ {
+		resp := h.do(t, "POST", "/api/invites/check", map[string]any{"token": "guess" + itoa(int64(i))})
+		resp.Body.Close()
+	}
+	resp = h.do(t, "POST", "/api/invites/redeem", map[string]any{
+		"token": m.Token, "username": "friend", "password": "long enough password"})
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusTooManyRequests {
+		t.Fatalf("a right secret from a throttled address: %d, want 429", resp.StatusCode)
 	}
 }

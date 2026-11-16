@@ -252,3 +252,23 @@ func TestClientKeyIgnoresForwardedHeaders(t *testing.T) {
 		t.Errorf("ClientKey = %q, want the remote address only", got)
 	}
 }
+
+// Blocked answers without counting, so asking it can never be what trips the
+// limit (R01-8).
+func TestBlockedDoesNotCount(t *testing.T) {
+	th := NewThrottle()
+	th.Max = 2
+	for i := 0; i < 5; i++ {
+		if th.Blocked("a") {
+			t.Fatal("asking tripped the limit")
+		}
+	}
+	th.Allow("a")
+	th.Allow("a")
+	if !th.Blocked("a") {
+		t.Fatal("a spent window is not blocked")
+	}
+	if th.Blocked("b") {
+		t.Fatal("another key is blocked")
+	}
+}

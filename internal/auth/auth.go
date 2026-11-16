@@ -210,6 +210,16 @@ func (t *Throttle) Allow(key string) bool {
 	return true
 }
 
+// Blocked reports whether key has used up its window, without counting an
+// attempt. For a route that must refuse an over-limit caller before doing any
+// work, but counts only the attempts that fail (R01-8).
+func (t *Throttle) Blocked(key string) bool {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	w, ok := t.attempts[key]
+	return ok && !time.Now().After(w.reset) && w.count >= t.Max
+}
+
 // Attribute ties the attempt Allow just counted from key to account, once the
 // handler knows which account it was aimed at. An attempt never attributed —
 // a malformed body, a passkey that matched nobody — stays on the address until
