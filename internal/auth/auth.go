@@ -47,12 +47,29 @@ var (
 	ErrTooManyAttempts = errors.New("too many attempts")
 	// ErrWeakPassword is returned when a proposed password is too short.
 	ErrWeakPassword = fmt.Errorf("password must be at least %d characters", MinPasswordLength)
+	// ErrPasswordTooLong is returned when a proposed password is longer than
+	// bcrypt can hash. The limit is in bytes, so a passphrase in a non-Latin
+	// script reaches it at a third of the characters (R01-5).
+	ErrPasswordTooLong = fmt.Errorf("password must be at most %d bytes (shorter for non-Latin text)", MaxPasswordBytes)
 )
+
+// MaxPasswordBytes is bcrypt's own limit. Nothing pre-hashes to lift it: that
+// would change what every stored hash means.
+const MaxPasswordBytes = 72
+
+// PasswordRefused reports whether err is a password rule the person can fix
+// (too short or too long), as against the server failing.
+func PasswordRefused(err error) bool {
+	return errors.Is(err, ErrWeakPassword) || errors.Is(err, ErrPasswordTooLong)
+}
 
 // HashPassword returns a bcrypt hash suitable for storing.
 func HashPassword(password string) (string, error) {
 	if len([]rune(password)) < MinPasswordLength {
 		return "", ErrWeakPassword
+	}
+	if len(password) > MaxPasswordBytes {
+		return "", ErrPasswordTooLong
 	}
 	h, err := bcrypt.GenerateFromPassword([]byte(password), bcryptCost)
 	if err != nil {

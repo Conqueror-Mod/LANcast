@@ -164,6 +164,13 @@ already present.
 | `POST /api/auth/logout` | Ends this session |
 | `POST /api/auth/password` | `{current_password, new_password}`; changes **your own** password and revokes **your** sessions. **Throttled**, sharing one counter with `login` — see below |
 
+**A new password is 8 characters to 72 bytes.** Every route that sets one
+(`setup`, `password`, `POST /api/users`, `POST /api/users/{id}/password`,
+`POST /api/invites/redeem`) answers `400 bad_request` with the rule in the
+message when it is broken either way. The upper limit is bcrypt's and it is
+counted in **bytes**, so a passphrase in a non-Latin script reaches it at 24 to
+36 characters. Before this was checked a long password was answered `500`.
+
 `login` and `password` share **one** throttle: ten attempts per five minutes per
 address, decaying on their own, with no lockout — a lockout is a denial of
 service an attacker can aim at the owner. A correct password clears the counter

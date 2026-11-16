@@ -656,7 +656,7 @@ func (s *Server) authSetup(w http.ResponseWriter, r *http.Request) {
 	}
 
 	hash, err := auth.HashPassword(req.Password)
-	if errors.Is(err, auth.ErrWeakPassword) {
+	if auth.PasswordRefused(err) {
 		writeError(w, http.StatusBadRequest, "bad_request", err.Error())
 		return
 	}
@@ -901,7 +901,7 @@ func (s *Server) authChangePassword(w http.ResponseWriter, r *http.Request) {
 	s.accountWait.Reset(u.Name)
 
 	hash, err := auth.HashPassword(req.New)
-	if errors.Is(err, auth.ErrWeakPassword) {
+	if auth.PasswordRefused(err) {
 		writeError(w, http.StatusBadRequest, "bad_request", err.Error())
 		return
 	}

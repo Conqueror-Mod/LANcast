@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
+	"strings"
 	"testing"
 
 	"lancast/internal/auth"
@@ -120,6 +121,23 @@ func TestSetupRejectsWeakPassword(t *testing.T) {
 	h := newHarness(t)
 	wantError(t, h.do(t, "POST", "/api/auth/setup", map[string]any{"username": "admin", "password": "short"}),
 		400, "bad_request")
+}
+
+// A passphrase longer than bcrypt can hash is the person's to fix, so it is a
+// 400 that says so rather than a 500 that blames the server (R01-5). 87 bytes
+// here; a non-Latin passphrase reaches 72 at a third of the characters.
+func TestALongPassphraseIsRefusedWithTheLimit(t *testing.T) {
+	h := newHarness(t)
+	long := strings.Repeat("correct horse battery staple ", 3)
+	resp := h.do(t, "POST", "/api/auth/setup", map[string]any{"username": "admin", "password": long})
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400", resp.StatusCode)
+	}
+	if msg := errorMessage(t, resp); !strings.Contains(msg, "72") {
+		t.Errorf("message %q does not state the limit", msg)
+	}
+	// And at the limit it is accepted.
+	h.secure(t, strings.Repeat("x", 72))
 }
 
 func TestSetupTwiceIsRefused(t *testing.T) {

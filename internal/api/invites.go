@@ -186,7 +186,7 @@ func (s *Server) redeemInvite(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	hash, err := auth.HashPassword(req.Password)
-	if errors.Is(err, auth.ErrWeakPassword) {
+	if auth.PasswordRefused(err) {
 		writeError(w, http.StatusBadRequest, "bad_request", err.Error())
 		return
 	}

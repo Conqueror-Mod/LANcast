@@ -39,6 +39,20 @@ func TestShortPasswordRejected(t *testing.T) {
 	}
 }
 
+// bcrypt cannot hash more than 72 bytes, and the limit is bytes: twenty-five
+// three-byte characters are over it (R01-5).
+func TestLongPasswordRejected(t *testing.T) {
+	if _, err := HashPassword(strings.Repeat("a", MaxPasswordBytes+1)); err != ErrPasswordTooLong {
+		t.Errorf("error = %v, want ErrPasswordTooLong", err)
+	}
+	if _, err := HashPassword(strings.Repeat("日", 25)); err != ErrPasswordTooLong {
+		t.Errorf("75 bytes of CJK: error = %v, want ErrPasswordTooLong", err)
+	}
+	if !PasswordRefused(ErrPasswordTooLong) || !PasswordRefused(ErrWeakPassword) {
+		t.Error("PasswordRefused misses a rule")
+	}
+}
+
 func TestCheckPasswordAgainstGarbageHash(t *testing.T) {
 	if CheckPassword("not-a-bcrypt-hash", "anything") {
 		t.Error("a malformed hash verified")
