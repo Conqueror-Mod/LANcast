@@ -209,9 +209,9 @@ func (s *Server) redeemInvite(w http.ResponseWriter, r *http.Request) {
 		s.writeInternal(w, err, "check invite")
 		return
 	}
-	name := strings.TrimSpace(req.Username)
-	if name == "" || len(name) > 64 {
-		writeError(w, http.StatusBadRequest, "bad_request", "choose a name of up to 64 characters")
+	name, ok := validName(req.Username)
+	if !ok {
+		writeError(w, http.StatusBadRequest, "bad_request", nameRule)
 		return
 	}
 	hash, err := auth.HashPassword(req.Password)

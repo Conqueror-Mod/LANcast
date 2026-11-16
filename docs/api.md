@@ -2214,7 +2214,11 @@ route.
 ### `PATCH /api/profile`
 
 Changes your own display name. `{ "name": "Dana" }`, 60 characters or fewer,
-no control characters. `409 duplicate` if the name is taken.
+no control characters and no invisible format characters (Unicode category Cf,
+such as a zero-width space). `409 duplicate` if the name is taken. **Every
+route that takes an account name applies this one rule**: setup,
+`POST /api/users`, `POST /api/invites/redeem` and both renames, each answering
+`400 bad_request` for a name that breaks it.
 
 The account **id does not change**, which is what makes this a rename rather
 than a replacement: sessions, watch history, ratings and playlist membership all

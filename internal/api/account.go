@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"unicode"
+	"unicode/utf8"
 
 	"lancast/internal/store"
 )
@@ -29,18 +31,27 @@ import (
 
 const maxNameLength = 60
 
-// validName applies the same rule to both surfaces, so an administrator cannot
-// create a name a person could not choose for themselves — two rules would
-// eventually disagree and the disagreement would be a bug report.
+// nameRule is what every route that takes an account name says when it
+// refuses one.
+const nameRule = "a name is required, and must be 60 characters or fewer, with no control or invisible characters"
+
+// validName applies the same rule to every surface that takes an account name
+// — setup, an administrator creating one, an invite redeemed, and both renames
+// — so an administrator cannot create a name a person could not choose for
+// themselves, and nobody can choose one the rule exists to refuse. Two rules
+// would eventually disagree and the disagreement would be a bug report; three
+// of the five routes once skipped it (R01-10).
 func validName(raw string) (string, bool) {
 	name := strings.TrimSpace(raw)
-	if name == "" || len(name) > maxNameLength {
+	if name == "" || len(name) > maxNameLength || !utf8.ValidString(name) {
 		return "", false
 	}
-	// Control characters would render as nothing and make two accounts look
-	// identical in every list that shows a name.
+	// Control characters, and format characters such as a zero-width space
+	// (Unicode category Cf), render as nothing and make two accounts look
+	// identical in every list that shows a name: "admin" and "admin" plus a
+	// zero-width joiner would be two admins on the People page.
 	for _, r := range name {
-		if r < 0x20 || r == 0x7f {
+		if unicode.IsControl(r) || unicode.Is(unicode.Cf, r) {
 			return "", false
 		}
 	}
@@ -67,8 +78,7 @@ func (s *Server) patchProfile(w http.ResponseWriter, r *http.Request) {
 	}
 	name, ok := validName(req.Name)
 	if !ok {
-		writeError(w, http.StatusBadRequest, "bad_request",
-			"a name is required, and must be 60 characters or fewer")
+		writeError(w, http.StatusBadRequest, "bad_request", nameRule)
 		return
 	}
 
@@ -131,8 +141,7 @@ func (s *Server) patchUser(w http.ResponseWriter, r *http.Request) {
 	if req.Name != nil {
 		name, ok := validName(*req.Name)
 		if !ok {
-			writeError(w, http.StatusBadRequest, "bad_request",
-				"a name is required, and must be 60 characters or fewer")
+			writeError(w, http.StatusBadRequest, "bad_request", nameRule)
 			return
 		}
 		if err := s.st.RenameUser(r.Context(), id, name); err != nil {

@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"net/http"
+	"strings"
 	"testing"
 
 	"lancast/internal/store"
@@ -163,4 +164,52 @@ func TestProfilePatchWithoutAnAccount(t *testing.T) {
 	h := newHarness(t)
 	wantError(t, h.do(t, "PATCH", "/api/profile", map[string]any{"name": "Dana"}),
 		http.StatusConflict, "no_account")
+}
+
+// Every route that takes an account name applies one rule: no control
+// characters, no invisible format characters, at most 60 bytes (R01-10). On
+// main, setup, POST /api/users and invite redemption trimmed spaces and
+// nothing else, so an invite holder could become a second "admin".
+func TestEveryRouteThatTakesANameAppliesTheRule(t *testing.T) {
+	bad := []string{
+		"bad\u0007name",
+		"admin\u200b", // zero-width space, category Cf
+		"admin\u2060", // word joiner
+		"adm\u0085in", // C1 control
+		strings.Repeat("n", maxNameLength+1),
+		"   ",
+	}
+	const pw = "a good long password"
+
+	// Setup, before any account exists.
+	for _, name := range bad {
+		h := newHarness(t)
+		wantError(t, h.do(t, "POST", "/api/auth/setup", map[string]any{"username": name, "password": pw}),
+			http.StatusBadRequest, "bad_request")
+	}
+
+	h := newHarness(t)
+	h.secure(t, pw)
+	member := h.addMember(t, "member", pw)
+	m := makeInvite(t, h, map[string]any{"note": "a friend"})
+	for _, name := range bad {
+		wantError(t, h.authed(t, "POST", "/api/users", map[string]any{"username": name, "password": pw}),
+			http.StatusBadRequest, "bad_request")
+		wantError(t, h.do(t, "POST", "/api/invites/redeem", map[string]any{"token": m.Token, "username": name, "password": pw}),
+			http.StatusBadRequest, "bad_request")
+		wantError(t, h.doAs(t, member, "PATCH", "/api/profile", map[string]any{"name": name}),
+			http.StatusBadRequest, "bad_request")
+	}
+	// The invite is still good after all of that: a refused name never spends it.
+	resp := h.do(t, "POST", "/api/invites/redeem", map[string]any{"token": m.Token, "username": "friend", "password": pw})
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusCreated {
+		t.Fatalf("a good name after refusals: %d", resp.StatusCode)
+	}
+	// Ordinary non-Latin names are fine.
+	resp = h.authed(t, "POST", "/api/users", map[string]any{"username": "Zoë 日本", "password": pw})
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusCreated {
+		t.Fatalf("a non-Latin name: %d", resp.StatusCode)
+	}
 }

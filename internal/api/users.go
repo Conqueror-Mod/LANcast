@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"strings"
 
 	"lancast/internal/auth"
 	"lancast/internal/store"
@@ -68,9 +67,9 @@ func (s *Server) createUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	name := strings.TrimSpace(req.Username)
-	if name == "" {
-		writeError(w, http.StatusBadRequest, "bad_request", "username is required")
+	name, ok := validName(req.Username)
+	if !ok {
+		writeError(w, http.StatusBadRequest, "bad_request", nameRule)
 		return
 	}
 	role := req.Role

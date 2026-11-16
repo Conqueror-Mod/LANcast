@@ -7707,7 +7707,7 @@ export interface components {
             scope: string;
         };
         RenameProfileRequest: {
-            /** @description 60 characters or fewer, no control characters. */
+            /** @description 60 characters or fewer, no control or invisible (Unicode Cf) characters. */
             name: string;
         };
         SharingRequest: {
@@ -11168,7 +11168,7 @@ export interface operations {
                     "application/json": components["schemas"]["User"];
                 };
             };
-            /** @description No name, a name over 64 characters, or a password that is too short. */
+            /** @description No name, a name breaking the account-name rule (60 characters or fewer, no control or invisible characters), or a password that is too short or too long. */
             400: {
                 headers: {
                     [name: string]: unknown;

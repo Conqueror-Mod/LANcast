@@ -649,9 +649,9 @@ func (s *Server) authSetup(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "bad_request", "malformed JSON body")
 		return
 	}
-	name := strings.TrimSpace(req.Username)
-	if name == "" {
-		writeError(w, http.StatusBadRequest, "bad_request", "username is required")
+	name, ok := validName(req.Username)
+	if !ok {
+		writeError(w, http.StatusBadRequest, "bad_request", nameRule)
 		return
 	}
 

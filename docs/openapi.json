@@ -243,7 +243,7 @@
         "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object", "required": ["token", "username", "password"], "properties": { "token": { "type": "string" }, "username": { "type": "string", "maxLength": 64 }, "password": { "type": "string" } } } } } },
         "responses": {
           "201": { "description": "Made and signed in.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/User" } } } },
-          "400": { "description": "No name, a name over 64 characters, or a password that is too short.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorEnvelope" } } } },
+          "400": { "description": "No name, a name breaking the account-name rule (60 characters or fewer, no control or invisible characters), or a password that is too short or too long.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorEnvelope" } } } },
           "404": { "description": "Used, withdrawn, expired or never made.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorEnvelope" } } } },
           "409": { "description": "That name is taken.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorEnvelope" } } } },
           "429": { "description": "Too many failed lookups from this address.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorEnvelope" } } } }
@@ -18058,7 +18058,7 @@
           "name": {
             "type": "string",
             "maxLength": 60,
-            "description": "60 characters or fewer, no control characters."
+            "description": "60 characters or fewer, no control or invisible (Unicode Cf) characters."
           }
         }
       },
