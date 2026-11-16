@@ -100,9 +100,10 @@
   border-color: var(--gold-dormant);
   outline: none;
 }
+/* Muted, not gold: every row carries one, and gold on every row at once is
+   ambient gold in one focus scope, competing with the focused row's ring. */
 .dirpick__folder {
-  color: var(--gold);
-  opacity: 0.5;
+  color: var(--text-muted);
 }
 
 .dirpick__msg {

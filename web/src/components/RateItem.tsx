@@ -50,7 +50,9 @@ export function RateItem({ itemID }: { itemID: number }) {
         <span className="rate__label">Your rating</span>
 
         <div
-          className="rate__stars"
+          // Previewing lights the stars gold; a saved score at rest is not
+          // where you are, and is drawn in the text colour (RateItem.css).
+          className={"rate__stars" + (hover !== null ? " is-previewing" : "")}
           onMouseLeave={() => setHover(null)}
           role="group"
           aria-label="Your rating out of five stars"

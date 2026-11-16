@@ -97,13 +97,15 @@
   font-size: 18px;
   color: var(--text-primary);
   background: var(--space-raised);
-  border: 1px solid var(--gold);
+  /* Dormant at rest; full gold is where you are (docs/design.md). */
+  border: 1px solid var(--gold-dormant);
   border-radius: var(--radius-panel);
   cursor: pointer;
 }
 
 .rweb__start:focus-visible,
 .rweb__start:hover {
+  border-color: var(--gold);
   box-shadow: 0 0 0 4px var(--gold-ring);
   outline: none;
 }
