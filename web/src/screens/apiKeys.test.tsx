@@ -232,20 +232,36 @@ describe("the API keys panel", () => {
     expect(text()).toContain("Last used");
   });
 
-  // Revoking asks the server to revoke, rather than only hiding the row.
-  it("revokes through the server", async () => {
+  /*
+   * Revoking takes two presses, and then asks the server rather than only
+   * hiding the row (R15-3). A revoked key cannot be brought back, so one
+   * misclick on the wrong row used to cut off whatever held it.
+   */
+  it("asks once before revoking, then revokes through the server", async () => {
     mount([
       { id: "k1", name: "old key", created_at: 1788500000, last_used: 1788500900 },
     ]);
     await render();
+    const button = (label: string) =>
+      [...host.querySelectorAll("button")].find(
+        (b) => b.textContent?.trim() === label,
+      );
 
-    const revoke = [...host.querySelectorAll("button")].find(
-      (b) => b.textContent?.trim() === "Revoke",
-    )!;
-    expect(revoke).toBeTruthy();
-    await act(async () => revoke.click());
+    await act(async () => button("Revoke")!.click());
     await settle();
+    expect(posted.some((p) => p.url.includes("/api/keys/k1"))).toBe(false);
+    expect(text()).toContain("Revoke “old key”?");
 
+    // Keep backs out, and nothing was sent.
+    await act(async () => button("Keep")!.click());
+    await settle();
+    expect(posted.some((p) => p.url.includes("/api/keys/k1"))).toBe(false);
+    expect(button("Yes, revoke")).toBeUndefined();
+
+    await act(async () => button("Revoke")!.click());
+    await settle();
+    await act(async () => button("Yes, revoke")!.click());
+    await settle();
     expect(posted.some((p) => p.url.includes("/api/keys/k1"))).toBe(true);
   });
 });
