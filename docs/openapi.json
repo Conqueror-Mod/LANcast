@@ -638,16 +638,6 @@
                 }
               }
             }
-          },
-          "429": {
-            "description": "Too many sign-ins in flight.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorEnvelope"
-                }
-              }
-            }
           }
         },
         "security": []

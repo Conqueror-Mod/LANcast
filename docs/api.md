@@ -2596,8 +2596,11 @@ back into base64url to answer.
 1. `POST /api/auth/passkey/login/options` → `{challenge_id, public_key}`.
    `public_key` is the `PublicKeyCredentialRequestOptions`: `challenge`,
    `rpId`, `timeout`, and `userVerification: "required"`. No credentials are
-   listed, so the response says nothing about any account. `429` when too many
-   sign-ins are in flight.
+   listed, so the response says nothing about any account. Never refused for
+   being busy: one address holds at most 32 sign-in challenges, its own oldest
+   going first, and a full store drops its oldest sign-in challenge rather than
+   refuse a new one, so a stranger flooding this route cannot switch passkey
+   sign-in off for anybody else. An IPv6 caller counts as its /64.
 2. `POST /api/auth/passkey/login` with `{challenge_id, id, client_data_json,
    authenticator_data, signature, user_handle}`, from the
    `PublicKeyCredential` the browser returned (`id` is the raw id). Answers
