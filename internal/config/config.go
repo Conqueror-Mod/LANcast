@@ -35,7 +35,9 @@ func Resolve(addr, dataDir string) (Config, error) {
 	if err != nil {
 		return Config{}, fmt.Errorf("resolve data dir %q: %w", dataDir, err)
 	}
-	if err := os.MkdirAll(abs, 0o755); err != nil {
+	// 0700: the database, the keys and the sessions live here. Windows ignores
+	// the mode; its ACL comes from internal/dataperm.
+	if err := os.MkdirAll(abs, 0o700); err != nil {
 		return Config{}, fmt.Errorf("create data dir %q: %w", abs, err)
 	}
 	return Config{Addr: addr, DataDir: abs}, nil

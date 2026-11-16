@@ -55,7 +55,7 @@ func LogReport(log *slog.Logger, dir string, r Report, err error) {
 		return
 	}
 	if r.Applied {
-		log.Info("data directory protected: SYSTEM and Administrators only, Users may list its top folder",
+		log.Info(protectedSummary,
 			"dir", dir, "reclaimed", r.Reclaimed)
 	}
 	for _, l := range r.Links {

@@ -241,3 +241,6 @@ func ShareCert(path string) error {
 	}
 	return nil
 }
+
+// protectedSummary is what LogReport says was done.
+const protectedSummary = "data directory protected: SYSTEM and Administrators only, Users may list its top folder"

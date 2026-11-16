@@ -113,6 +113,13 @@ log with `journalctl -u lancastd`. The unit has no `User=` line, so the server
 and its ffmpeg run as root; [security.md](security.md) says what that costs and
 how to narrow it.
 
+**Upgrading from 0.11.0 or earlier:** the unit those versions wrote started the
+desktop launcher instead of the server, so it never answered on its port. Run
+`sudo lancast service install` once more after installing the new binary; it
+rewrites the unit with `serve` and restarts the service. From this version the
+server also makes `/var/lib/lancast` readable by root alone (mode 0700) every
+time it starts.
+
 To run the server in the foreground instead, `lancast serve`. `lancast` with no
 arguments starts a server and tries to open a browser, which a headless machine
 does not have.

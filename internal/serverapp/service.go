@@ -93,7 +93,7 @@ func runService(args []string) error {
 		if r, err := dataperm.Protect(*data); err != nil {
 			fmt.Fprintf(os.Stderr, "warning: could not protect the data directory %s: %v\n", *data, err)
 		} else if r.Applied {
-			fmt.Printf("protected the data directory %s (SYSTEM and Administrators only)\n", *data)
+			fmt.Printf("protected the data directory %s (administrators only)\n", *data)
 		}
 		// Record where ffmpeg lives while we can still see it. Install runs with
 		// the installing user's PATH; the service will not have it, and without

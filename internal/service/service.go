@@ -99,7 +99,15 @@ func SystemdUnit(c Config) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "[Unit]\nDescription=%s\nAfter=network-online.target\nWants=network-online.target\n\n", Description)
 	b.WriteString("[Service]\nType=simple\n")
-	fmt.Fprintf(&b, "ExecStart=%s -data %s -addr %s\n", systemdArg(c.ExePath), systemdArg(c.DataDir), systemdArg(c.Addr))
+	/*
+	 * `serve` first. Since ADR 0080 one executable is both the app and the
+	 * server, and a launch that starts with flags is the desktop launcher:
+	 * under systemd it found "lancastd" active (itself), waited 90 s for a
+	 * server that never started, exited, and Restart=on-failure looped it for
+	 * ever, with nothing on the port and `systemctl status` saying active
+	 * (found by the Linux amd64 run, docs/review/linux-amd64-run.md).
+	 */
+	fmt.Fprintf(&b, "ExecStart=%s serve -data %s -addr %s\n", systemdArg(c.ExePath), systemdArg(c.DataDir), systemdArg(c.Addr))
 	if c.FFmpegDir != "" {
 		fmt.Fprintf(&b, "Environment=PATH=%s:/usr/local/bin:/usr/bin:/bin\n", c.FFmpegDir)
 	}
