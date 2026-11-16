@@ -270,6 +270,31 @@ func (s *Store) DeleteUser(ctx context.Context, id string) error {
 	}
 	defer tx.Rollback()
 
+	/*
+	 * The last administrator is refused here, inside the transaction, rather
+	 * than by a count the handler took first (R01-11, R04-5). With two
+	 * administrators deleting each other at once, both handlers counted two and
+	 * both deletes went through, leaving none. The connection takes the write
+	 * lock when the transaction begins, so the count and the delete cannot be
+	 * split by another writer. SetUserRole does the same for a demotion.
+	 */
+	var role string
+	switch err := tx.QueryRowContext(ctx, `SELECT role FROM user WHERE id = ?`, id).Scan(&role); {
+	case errors.Is(err, sql.ErrNoRows):
+		return ErrNotFound
+	case err != nil:
+		return fmt.Errorf("delete user: %w", err)
+	}
+	if role == RoleAdmin {
+		var admins int
+		if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM user WHERE role = ?`, RoleAdmin).Scan(&admins); err != nil {
+			return fmt.Errorf("delete user: count admins: %w", err)
+		}
+		if admins <= 1 {
+			return ErrLastAdmin
+		}
+	}
+
 	if _, err := tx.ExecContext(ctx, `DELETE FROM session WHERE user_id = ?`, id); err != nil {
 		return fmt.Errorf("delete user sessions: %w", err)
 	}

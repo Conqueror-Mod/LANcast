@@ -116,19 +116,15 @@ func (s *Server) deleteUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if target.Role == store.RoleAdmin {
-		admins, err := s.st.CountAdmins(r.Context())
-		if err != nil {
-			s.writeInternal(w, err, "count admins")
-			return
-		}
-		if admins <= 1 {
-			writeError(w, http.StatusConflict, "conflict", "cannot delete the last administrator")
-			return
-		}
+	// The last-administrator rule is the store's, inside the delete's own
+	// transaction: a count taken here first lost the race when two
+	// administrators deleted each other at once (R01-11, R04-5).
+	err = s.st.DeleteUser(r.Context(), id)
+	if errors.Is(err, store.ErrLastAdmin) {
+		writeError(w, http.StatusConflict, "conflict", "cannot delete the last administrator")
+		return
 	}
-
-	if err := s.st.DeleteUser(r.Context(), id); s.notFoundOr(w, err, "delete user", "no such user") {
+	if s.notFoundOr(w, err, "delete user", "no such user") {
 		return
 	}
 	// The rows went with the account; the save files are the other half

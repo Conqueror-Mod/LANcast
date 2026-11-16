@@ -362,3 +362,64 @@ func TestDeleteAllUsersClearsEveryCredential(t *testing.T) {
 		t.Errorf("queued unlocks after reset = %d, %v; want 0", n, err)
 	}
 }
+
+// The last administrator cannot be deleted, and the refusal is the store's:
+// two administrators deleting each other at the same moment leave one, not
+// none (R01-11, R04-5). Before, the count lived in the handler and both
+// deletes of a pair that each counted two went through.
+func TestTwoAdminsDeletingEachOtherLeaveOne(t *testing.T) {
+	for round := 0; round < 20; round++ {
+		st := newStore(t)
+		ctx := context.Background()
+		a, err := st.CreateUser(ctx, "", "A", "h", RoleAdmin)
+		if err != nil {
+			t.Fatal(err)
+		}
+		b, err := st.CreateUser(ctx, "", "B", "h", RoleAdmin)
+		if err != nil {
+			t.Fatal(err)
+		}
+		start := make(chan struct{})
+		errs := make(chan error, 2)
+		for _, id := range []string{a.ID, b.ID} {
+			go func(id string) {
+				<-start
+				errs <- st.DeleteUser(ctx, id)
+			}(id)
+		}
+		close(start)
+		e1, e2 := <-errs, <-errs
+		lost := 0
+		for _, e := range []error{e1, e2} {
+			switch {
+			case e == nil:
+			case errors.Is(e, ErrLastAdmin):
+				lost++
+			default:
+				t.Fatalf("round %d: %v", round, e)
+			}
+		}
+		if lost != 1 {
+			t.Fatalf("round %d: %d deletes refused, want exactly 1", round, lost)
+		}
+		if n, err := st.CountAdmins(ctx); err != nil || n != 1 {
+			t.Fatalf("round %d: %d administrators left (%v)", round, n, err)
+		}
+	}
+}
+
+func TestTheOnlyAdminCannotBeDeletedByTheStore(t *testing.T) {
+	st := newStore(t)
+	ctx := context.Background()
+	a, _ := st.CreateUser(ctx, "", "A", "h", RoleAdmin)
+	m, _ := st.CreateUser(ctx, "", "M", "h", RoleMember)
+	if err := st.DeleteUser(ctx, a.ID); !errors.Is(err, ErrLastAdmin) {
+		t.Fatalf("deleting the only admin: %v, want ErrLastAdmin", err)
+	}
+	if err := st.DeleteUser(ctx, m.ID); err != nil {
+		t.Fatalf("deleting a member: %v", err)
+	}
+	if err := st.DeleteUser(ctx, "u_nobody"); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("deleting nobody: %v, want ErrNotFound", err)
+	}
+}
