@@ -6874,7 +6874,8 @@ written, so a backup file cannot sign anyone in.
     "requested_by": "dana", "requested_at": 1788460000,
     "safety_backup": "lancast-backup-20260903-164640.db",
     "applied_at": 1788460004, "ok": true,
-    "schema_from": 39, "schema_to": 39 }
+    "schema_from": 39, "schema_to": 39,
+    "api_keys_cleared": 2, "passkeys_cleared": 1 }
 }
 ```
 
@@ -6883,7 +6884,13 @@ true when it runs as a service, or as a process the relaunch helper can start
 again. `staged` is a restore waiting for that restart, or `null`.
 `last_restore` is what the most recent restore from Settings did, or `null`;
 when `ok` is `false`, `error` says why, and the server started with the
-database that was there.
+database that was there. `api_keys_cleared` and `passkeys_cleared` are how many
+of each the restored backup held: a restore clears them, as it signs everyone
+out, so a key revoked or a passkey deleted since the backup cannot come back
+with it ([ADR 0058](adr/0058-a-backup-is-the-database.md), amended 2026-11-16).
+Each person issues keys and registers passkeys again; passwords are kept. The
+restore is also recorded in the audit log of the restored database
+(`backup.restore`), saying who asked and where the previous database was kept.
 
 Newest first. A server that has never taken one answers `backups: []` — not an
 error.

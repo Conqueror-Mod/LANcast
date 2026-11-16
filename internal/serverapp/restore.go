@@ -131,6 +131,10 @@ Without -yes this reports what it would do and changes nothing.
 	// carried, which is zero for anything this build wrote — printing "signed
 	// out 0 sessions" would read as the restore having failed to do something.
 	fmt.Println("everyone is signed out — those sessions belonged to the database that was replaced")
+	// API keys and passkeys too (ADR 0058, amended): a revoked one must not
+	// come back with an older backup.
+	fmt.Printf("the backup's API keys (%d) and passkeys (%d) were cleared; issue and register them again\n",
+		res.APIKeysCleared, res.PasskeysCleared)
 	if res.SessionsCleared > 0 {
 		fmt.Printf("the backup itself carried %s, from before backups stopped keeping them; cleared\n",
 			plural(res.SessionsCleared, "session"))

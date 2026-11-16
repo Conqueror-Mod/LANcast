@@ -9244,6 +9244,10 @@ export interface components {
             schema_from?: number;
             /** @description The revision after migrating forward; equal to schema_from when nothing was migrated. */
             schema_to?: number;
+            /** @description API keys the restored backup held, cleared by the restore so a revoked key cannot come back with it (ADR 0058, amended). */
+            api_keys_cleared?: number;
+            /** @description Passkeys the restored backup held, cleared for the same reason. Passwords are kept. */
+            passkeys_cleared?: number;
         };
         RestoreStarted: {
             staged: components["schemas"]["RestorePending"];

@@ -56,6 +56,15 @@ type Restore struct {
 	// carries its sessions and stays restorable, which is the point of having
 	// backups, and this is the only thing that covers one.
 	SessionsCleared int `json:"sessions_cleared"`
+	/*
+	 * APIKeysCleared and PasskeysCleared are the other revocable credentials
+	 * the backup carried, cleared for the reason sessions are (ADR 0058,
+	 * amended 2026-11-16): a key revoked after a leak, or a passkey deleted for
+	 * a lost phone, must not work again because an older backup was put back.
+	 * Passwords stay; they are how everyone signs in and re-issues these.
+	 */
+	APIKeysCleared  int `json:"api_keys_cleared"`
+	PasskeysCleared int `json:"passkeys_cleared"`
 }
 
 // sidecars are the files SQLite keeps beside a database. They must travel with
@@ -135,14 +144,51 @@ func RestoreSnapshot(ctx context.Context, dbPath, snapshotPath string) (Restore,
 	if err := st.DeleteAllSessions(ctx); err != nil {
 		return undo(fmt.Errorf("restore: clear sessions: %w", err))
 	}
+	keys, passkeys, err := st.clearRevocableCredentials(ctx)
+	if err != nil {
+		return undo(fmt.Errorf("restore: clear API keys and passkeys: %w", err))
+	}
 	version, err := st.SchemaVersion()
 	if err != nil {
 		return undo(fmt.Errorf("restore: read schema version: %w", err))
 	}
+	restore.APIKeysCleared = keys
+	restore.PasskeysCleared = passkeys
 
 	restore.SessionsCleared = count
 	restore.SchemaVersionAfter = version
 	return restore, nil
+}
+
+/*
+ * clearRevocableCredentials removes every API key and passkey from a restored
+ * database, in one transaction, and says how many there were (R04-3).
+ *
+ * Revocation is a person pressing a button (ADR 0061). A restore that handed
+ * back the rows that button removed would undo it silently: the leaked key and
+ * the lost phone work again. Sessions are already cleared for this reason;
+ * these are the other two credentials that can be revoked.
+ */
+func (s *Store) clearRevocableCredentials(ctx context.Context) (keys, passkeys int, err error) {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return 0, 0, err
+	}
+	defer tx.Rollback()
+	res, err := tx.ExecContext(ctx, `DELETE FROM api_key`)
+	if err != nil {
+		return 0, 0, err
+	}
+	k, _ := res.RowsAffected()
+	res, err = tx.ExecContext(ctx, `DELETE FROM passkey`)
+	if err != nil {
+		return 0, 0, err
+	}
+	p, _ := res.RowsAffected()
+	if err := tx.Commit(); err != nil {
+		return 0, 0, err
+	}
+	return int(k), int(p), nil
 }
 
 type movedFile struct{ from, to string }

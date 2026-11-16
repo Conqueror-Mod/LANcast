@@ -308,6 +308,11 @@ func TestARestoreIsAuditedInTheRestoredDatabase(t *testing.T) {
 		t.Errorf("event = %+v", ev)
 	}
 
+	// R04-3: and it says what credentials were cleared.
+	if !strings.Contains(ev.Summary, "0 API keys and 0 passkeys") {
+		t.Errorf("summary does not say what was cleared: %q", ev.Summary)
+	}
+
 	// A failed one is recorded too, as a failure.
 	ev = outcomeAudit(&Outcome{Pending: Pending{Name: "x.db"}, Error: "boom"})
 	if !strings.Contains(ev.Summary, "did not take") || !strings.Contains(ev.Detail, "boom") || ev.ActorName == "" {

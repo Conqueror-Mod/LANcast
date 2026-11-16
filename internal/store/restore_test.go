@@ -400,3 +400,59 @@ func TestRestoreKeepsEveryReplacedDatabase(t *testing.T) {
 		t.Errorf("the first replaced database is not what was live: %v", got)
 	}
 }
+
+/*
+ * R04-3, as decided (ADR 0058, amended 2026-11-16): a restore clears the API
+ * keys and passkeys the backup carried. A key revoked after a leak, or a
+ * passkey deleted for a lost phone, must not work again because an older
+ * backup was put back. The password stays, so everyone can still sign in.
+ */
+func TestRestoreClearsAPIKeysAndPasskeys(t *testing.T) {
+	ctx := context.Background()
+	dir := t.TempDir()
+	db := filepath.Join(dir, "lancast.db")
+	src, err := Open(filepath.Join(dir, "source.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	u, err := src.CreateUser(ctx, "u_1", "Dana", "hash", "admin")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, h := range []string{"key-a", "key-b"} {
+		if _, err := src.CreateAPIKey(ctx, h, u.ID, h); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := src.AddPasskey(ctx, pk(u.ID, 1)); err != nil {
+		t.Fatal(err)
+	}
+	snap := filepath.Join(dir, "backup.db")
+	if _, err := src.Snapshot(ctx, snap); err != nil {
+		t.Fatal(err)
+	}
+	src.Close()
+
+	res, err := RestoreSnapshot(ctx, db, snap)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.APIKeysCleared != 2 || res.PasskeysCleared != 1 {
+		t.Errorf("cleared %d keys and %d passkeys, want 2 and 1", res.APIKeysCleared, res.PasskeysCleared)
+	}
+	restored, err := Open(db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer restored.Close()
+	if keys, err := restored.ListAPIKeys(ctx, u.ID); err != nil || len(keys) != 0 {
+		t.Errorf("API keys after restore = %d (%v)", len(keys), err)
+	}
+	if pks, err := restored.PasskeysByUser(ctx, u.ID); err != nil || len(pks) != 0 {
+		t.Errorf("passkeys after restore = %d (%v)", len(pks), err)
+	}
+	// The account and its password are what a restore keeps.
+	if got, err := restored.UserByID(ctx, u.ID); err != nil || got.Name != "Dana" {
+		t.Errorf("account after restore = %+v (%v)", got, err)
+	}
+}

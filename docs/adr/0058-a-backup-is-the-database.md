@@ -213,3 +213,41 @@ had already stripped `serve` (ADR 0080), so a server the LANcast window started
 as `LANcast.exe serve …` came back as the window. Finishing an update on an
 install that is not a service had the same fault from v0.9.79; a service never
 takes that path. The relaunch now puts `serve` back.
+
+## Amendment — a restore clears API keys and passkeys, 2026-11-16
+
+Sessions were cleared from every restore because they are server-side so that
+they can be revoked, and a restore handing them back would undo that. API keys
+(ADR 0061) and passkeys (ADR 0082) are revocable on exactly the same terms —
+revocation is a person pressing a button after a leak or a lost phone — and they
+rode along untouched, so restoring an older backup (an automatic pre-update one,
+say) brought the leaked key and the lost phone back to life (review finding
+R04-3). Chris decided it: **a restore clears every API key and passkey from the
+database it puts back, as it clears sessions.**
+
+- **Passwords stay.** They are how everyone signs in after a restore, and how
+  each person issues keys and registers passkeys again. A restore already
+  reverts password hashes, which is inherent to putting a database back; the
+  difference is that a password is not something people revoke by deleting a
+  row.
+- **Said, not silent.** The restore's outcome (`api_keys_cleared`,
+  `passkeys_cleared` in `last_restore`), its audit record and the `restore`
+  command all say how many were cleared, so nobody discovers it from a script
+  failing at 3am.
+- **At restore, not at snapshot.** Sessions moved to snapshot time so a file
+  copied back by hand would not carry them. Keys and passkeys are cleared by
+  `RestoreSnapshot`, which both the command and Settings use; a database file
+  copied into place by hand, without either, keeps them. Clearing them from
+  every backup as well was not part of the decision, and would make a backup
+  useless as a record of which keys existed.
+- **Used recovery codes: not cleared, and left open.** The decision named them
+  too. They are stored as one list of the *unused* codes' hashes per account,
+  so a restore cannot tell which were spent after the backup was taken — the
+  only way to clear "the used ones" is to clear them all. ADR 0100 keeps them
+  precisely so that a backup restored on another machine, where the sealed
+  authenticator secret cannot be opened, still has a way in; clearing them
+  there would leave a two-factor account, an administrator's included, with no
+  second factor that works. Left as they are until that trade is decided with
+  that in view. A recovery code is single-use and long, so one that comes back
+  is still only usable by the person who held it.
+

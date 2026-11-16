@@ -62,6 +62,11 @@ type Outcome struct {
 	// after migrating forward. Equal when nothing was migrated.
 	SchemaFrom int `json:"schema_from,omitempty"`
 	SchemaTo   int `json:"schema_to,omitempty"`
+	// APIKeysCleared and PasskeysCleared are the credentials the backup
+	// carried and the restore removed (ADR 0058, amended 2026-11-16), so
+	// Settings can say what has to be issued again.
+	APIKeysCleared  int `json:"api_keys_cleared"`
+	PasskeysCleared int `json:"passkeys_cleared"`
 }
 
 func (d *Dir) pendingPath() string { return filepath.Join(d.path, pendingFile) }
@@ -183,6 +188,8 @@ func (d *Dir) ApplyPending(ctx context.Context, dbPath string, now time.Time) *O
 	out.OK = true
 	out.SchemaFrom = res.Snapshot.SchemaVersion
 	out.SchemaTo = res.SchemaVersionAfter
+	out.APIKeysCleared = res.APIKeysCleared
+	out.PasskeysCleared = res.PasskeysCleared
 	d.writeResult(out)
 	return out
 }
@@ -268,8 +275,11 @@ func outcomeAudit(out *Outcome) store.AuditEvent {
 		if out.SafetyBackup != "" {
 			ev.Summary += fmt.Sprintf(" (the database before it was kept as %s)", out.SafetyBackup)
 		}
+		ev.Summary += ". " + ClearedSentence(out.APIKeysCleared, out.PasskeysCleared)
 		detail["schema_from"] = out.SchemaFrom
 		detail["schema_to"] = out.SchemaTo
+		detail["api_keys_cleared"] = out.APIKeysCleared
+		detail["passkeys_cleared"] = out.PasskeysCleared
 	} else {
 		ev.Summary = fmt.Sprintf("A restore of the backup %s did not take, so the database that was there was kept: %s",
 			out.Name, out.Error)
@@ -279,4 +289,19 @@ func outcomeAudit(out *Outcome) store.AuditEvent {
 		ev.Detail = string(b)
 	}
 	return ev
+}
+
+// ClearedSentence says what a restore removed besides sessions, for the audit
+// log and the restore command: always said, even at zero, because "were API
+// keys and passkeys kept?" is the question somebody restoring will have.
+func ClearedSentence(keys, passkeys int) string {
+	return fmt.Sprintf("Everyone is signed out, and the %s and %s the backup held were cleared; "+
+		"issue keys and register passkeys again", count(keys, "API key"), count(passkeys, "passkey"))
+}
+
+func count(n int, what string) string {
+	if n == 1 {
+		return "1 " + what
+	}
+	return fmt.Sprintf("%d %ss", n, what)
 }
