@@ -102,3 +102,27 @@ describe("removing a photo", () => {
     expectInvalidated(thumbnails, "the removal");
   });
 });
+
+/*
+ * A delete that removes some files and keeps those another program holds
+ * answers 409, and the rows that went are gone anyway (T-8). The lists are
+ * refreshed on a failure too, or they keep showing what was removed.
+ */
+describe("a delete that only partly succeeds", () => {
+  it("still refreshes every list", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        new Response(JSON.stringify({ error: { code: "not_deleted", message: "1 of 2" } }), {
+          status: 409,
+          headers: { "Content-Type": "application/json" },
+        }),
+      ),
+    );
+    for (const key of thumbnails) qc.setQueryData(key, { seeded: true });
+    await act(async () => {
+      await remove.mutateAsync("delete").catch(() => {});
+    });
+    expectInvalidated(thumbnails, "the partial delete");
+  });
+});

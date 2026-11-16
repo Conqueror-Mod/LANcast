@@ -1398,6 +1398,31 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/stream/{id}/hls": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The item's id. */
+                id: components["parameters"]["ItemId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Stop the caller's own HLS encode for this item
+         * @description What a player sends when it stops watching: stop, another title, the page closing. An HLS encode writes segments whether anyone reads them or not, so without this an abandoned encode ran until the idle timeout reaped it, up to ten minutes later.
+         *
+         *     Scoped as segment access is: only the caller's own sessions for this item, never another account's viewing of the same film. A conversion that has already finished is kept, since it costs nothing and coming back reuses it. Leaving when nothing is running is still `204`.
+         */
+        delete: operations["leaveHLS"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/stream/{id}/hls/index.m3u8": {
         parameters: {
             query?: never;
@@ -13659,6 +13684,29 @@ export interface operations {
             };
         };
     };
+    leaveHLS: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The item's id. */
+                id: components["parameters"]["ItemId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Nothing of the caller's is encoding this item any more. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+        };
+    };
     streamHLSPlaylist: {
         parameters: {
             query?: {
@@ -19083,7 +19131,7 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
-            /** @description `not_available` — the models are missing, with the reason in the message. */
+            /** @description `not_available` — the models are missing, with the reason in the message; or `already_running` — a pass is indexing photographs now, and this one did not start. */
             409: {
                 headers: {
                     [name: string]: unknown;

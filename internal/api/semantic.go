@@ -2,8 +2,11 @@ package api
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"strings"
+
+	"lancast/internal/faces"
 )
 
 /*
@@ -91,11 +94,22 @@ func (s *Server) startSemanticPass(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	go func() {
-		if err := s.embedder.Run(context.Background(), id); err != nil {
+	// Detached from the request: the pass outlives the call that started it.
+	err = s.embedder.Start(context.Background(), id, func(err error) {
+		if err != nil {
 			s.log.Error("semantic pass", "library", id, "error", err)
 		}
-	}()
+	})
+	if errors.Is(err, faces.ErrAlreadyIndexing) {
+		// Said, not swallowed, as the face pass says it (R07-10, T-9).
+		writeError(w, http.StatusConflict, "already_running",
+			"photographs are already being indexed; start this one when it finishes")
+		return
+	}
+	if err != nil {
+		s.writeInternal(w, err, "start semantic pass")
+		return
+	}
 
 	s.audit(r, "photos.index", "library", lib.Name,
 		"started indexing photographs for search", nil)

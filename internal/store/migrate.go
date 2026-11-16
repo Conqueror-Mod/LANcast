@@ -6,7 +6,7 @@ import (
 )
 
 // CurrentSchemaVersion is the revision this build expects.
-const CurrentSchemaVersion = 96
+const CurrentSchemaVersion = 97
 
 // migration is one forward step. There are deliberately no down migrations:
 // rolling a media library's schema backwards loses data that a rescan cannot
@@ -241,6 +241,22 @@ var migrations = []migration{
 	{version: 96, sql: `UPDATE media_item SET group_artist = NULL, group_album = NULL,
 		group_dir = NULL, group_album_from_folder = NULL, group_album_at_root = NULL
 		WHERE kind = 'track'`},
+	/*
+	 * Films whose length is a provider's runtime, not the file's
+	 * (T-6, from T-3). Enrichment used to fill duration_ms while the probe ran
+	 * alongside it, and where enrichment wrote last the row kept a runtime in
+	 * whole minutes: Halloween II (2009) was stored as 16:00 against a 7,145 s
+	 * file, from a wrong first match to a short, so every encode listed sixteen
+	 * minutes and stopped. The probe is now the only writer; this sends back
+	 * through it the rows the old race left. A probe measures milliseconds, so
+	 * a whole minute on a film a provider matched is the race's mark: 31 films
+	 * on the real library, every one matched, and none a probe wrote. Probing again re-stamps the credits pass
+	 * where the length changes (SaveProbe). The probe worker is kicked at
+	 * startup, so the queue drains without a scan.
+	 */
+	{version: 97, sql: `UPDATE media_item SET probed_at = NULL
+		WHERE kind = 'movie' AND provider IS NOT NULL AND missing = 0 AND path IS NOT NULL
+		  AND duration_ms > 0 AND duration_ms % 60000 = 0`},
 }
 
 // migrate brings the database up to CurrentSchemaVersion.

@@ -3628,6 +3628,32 @@
         }
       }
     },
+    "/stream/{id}/hls": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/ItemId"
+        }
+      ],
+      "delete": {
+        "operationId": "leaveHLS",
+        "tags": [
+          "playback"
+        ],
+        "summary": "Stop the caller's own HLS encode for this item",
+        "description": "What a player sends when it stops watching: stop, another title, the page closing. An HLS encode writes segments whether anyone reads them or not, so without this an abandoned encode ran until the idle timeout reaped it, up to ten minutes later.\n\nScoped as segment access is: only the caller's own sessions for this item, never another account's viewing of the same film. A conversion that has already finished is kept, since it costs nothing and coming back reuses it. Leaving when nothing is running is still `204`.",
+        "responses": {
+          "204": {
+            "description": "Nothing of the caller's is encoding this item any more."
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      }
+    },
     "/stream/{id}/hls/index.m3u8": {
       "parameters": [
         {
@@ -10857,7 +10883,7 @@
             "$ref": "#/components/responses/NotFound"
           },
           "409": {
-            "description": "`not_available` — the models are missing, with the reason in the message.",
+            "description": "`not_available` — the models are missing, with the reason in the message; or `already_running` — a pass is indexing photographs now, and this one did not start.",
             "content": {
               "application/json": {
                 "schema": {

@@ -70,6 +70,7 @@ import { mediaCapability } from "@/lib/liveTransport";
 import { attachMediaHandlers, type MediaBackend, type MediaEventName } from "./backend";
 import { MusicDeck, GAPLESS_OVERLAP_S, PRELOAD_LEAD_S } from "./musicDeck";
 import { mpvBackend, nativeFeatures, nativePlaybackAvailable } from "./mpvBackend";
+import { leaveHLS, leftHLS } from "./leaveHLS";
 import { HIDDEN, nativeLayout, sameLayout } from "./nativeLayout";
 import { isGameOnScreen, stopGame, subscribeGameOnScreen } from "./retro";
 import { DOCK_WIDTHS, getDock, subscribeDock, type DockState } from "@/lib/dock";
@@ -1182,6 +1183,35 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
+  /*
+   * Leaving an item ends this viewer's HLS encode of it (T-5, leaveHLS.ts).
+   *
+   * Keyed on the item alone, not on the audio track or the quality: those
+   * re-run the load for the same item, and the playlist they ask for already
+   * stops the old encode (EnsureHLS supersedes by owner and item). A leave sent
+   * then could reach the server after the new playlist and stop that instead.
+   *
+   * Asked only of an item that went out as segments. chosenPath and
+   * sourceItem still describe the item being left when this runs: the load
+   * that changes them runs after every cleanup in the commit.
+   */
+  const leaveIfSegments = useCallback((id: number, keepalive = false) => {
+    if (id > 0 && sourceItem.current === id && chosenPath.current === "hls") {
+      leaveHLS(id, keepalive);
+    }
+  }, []);
+  useEffect(() => {
+    const id = itemID;
+    return () => leaveIfSegments(id);
+  }, [itemID, leaveIfSegments]);
+  const leavingRef = useRef(itemID);
+  leavingRef.current = itemID;
+  useEffect(() => {
+    const onHide = () => leaveIfSegments(leavingRef.current, true);
+    window.addEventListener("pagehide", onHide);
+    return () => window.removeEventListener("pagehide", onHide);
+  }, [leaveIfSegments]);
+
   // ---- play / stop ----------------------------------------------------------
   /*
    * What is playing, readable from play() without making play() re-created.
@@ -1975,6 +2005,10 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
     });
 
     (async () => {
+      // A leave sent for this item lands first, or it could stop the encode
+      // about to be asked for (leaveHLS.ts).
+      await leftHLS(item.id);
+      if (cancelled) return;
       /*
        * Native first (ADR 0067). Video in the desktop client with libmpv plays
        * the file's own bytes: no decision to ask for, nothing to convert. Music

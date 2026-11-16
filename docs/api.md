@@ -4565,6 +4565,20 @@ A session is reused only for the caller who started it. Two accounts playing the
 same film from the same position each get their own, with their own audio track
 and quality, and one seeking never stops the other's.
 
+### `DELETE /api/stream/{id}/hls`
+
+**Stops the caller's own HLS encode for this item.** A player sends it when it
+stops watching: stop, another title, the page closing (with `keepalive`). An HLS
+encode writes segments whether anybody reads them or not, so before this an
+abandoned one ran until the idle timeout reaped it, up to ten minutes later.
+
+Scoped as segment access is: only the caller's sessions for this item, never
+another account's viewing of the same film. A conversion that has already
+finished is kept, since it costs nothing and coming back reuses it. Answers
+`204` whether or not anything was running. Deleting an item's file
+(`DELETE /api/items/{id}?mode=delete`) stops every encode of it, whoever is
+watching, so Windows can remove the file.
+
 ### `GET /api/transcode`
 
 Whether ffmpeg is available, which encoder is in use, and the running transcode
@@ -6386,7 +6400,9 @@ Give every photograph in a picture library a vector. Admin only. `202` with the
 pass's stats; progress appears in `GET /api/activity` as a `semantic` task.
 
 `400 wrong_kind` for a library that is not a picture library. `409
-not_available` carries the reason when the models are not installed.
+not_available` carries the reason when the models are not installed. `409
+already_running` while a pass is indexing photographs: one runs at a time, and
+this one did not start.
 
 Asynchronous and detached from the request, like every other pass: a picture
 library is a long job, and inheriting the request's context would cancel it the

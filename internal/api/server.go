@@ -1091,6 +1091,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/stream/{id}/transcode", s.transcodeStream)
 	mux.HandleFunc("GET /api/stream/{id}/hls/index.m3u8", s.hlsPlaylist)
 	mux.HandleFunc("GET /api/stream/{id}/hls/{session}/{name}", s.hlsSegment)
+	mux.HandleFunc("DELETE /api/stream/{id}/hls", s.leaveHLS)
 	mux.HandleFunc("GET /api/transcode", s.transcodeSessions)
 
 	/*

@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"os/exec"
@@ -76,6 +77,53 @@ type Indexer struct {
 
 	mu    sync.Mutex
 	stats EmbedStats
+	// busy is held for a whole pass, from the claim to the end. Stats'
+	// Running is not the claim: it is set inside the pass, after the worker
+	// has been asked whether it is ready, which leaves a window a second
+	// start can walk through.
+	busy bool
+}
+
+// ErrAlreadyIndexing is the answer to a second search-indexing pass while one
+// runs.
+var ErrAlreadyIndexing = errors.New("a search-indexing pass is already running")
+
+// claim marks the indexer busy, or reports that it already was.
+func (ix *Indexer) claim() bool {
+	ix.mu.Lock()
+	defer ix.mu.Unlock()
+	if ix.busy {
+		return false
+	}
+	ix.busy = true
+	return true
+}
+
+func (ix *Indexer) release() {
+	ix.mu.Lock()
+	ix.busy = false
+	ix.mu.Unlock()
+}
+
+/*
+ * Start claims the indexer now and runs the pass in the background, handing its
+ * result to done (T-9).
+ *
+ * The face worker's Start, for the same reason (R07-10): run in a goroutine with
+ * no claim, a second press answered 202 and started a second pass over the same
+ * library, and both were handed the same pending photographs. The claim is made
+ * before Start returns, so the caller can say the pass did not start.
+ */
+func (ix *Indexer) Start(ctx context.Context, libraryID int64, done func(error)) error {
+	if !ix.claim() {
+		return ErrAlreadyIndexing
+	}
+	go func() {
+		err := ix.run(ctx, libraryID)
+		ix.release()
+		done(err)
+	}()
+	return nil
 }
 
 func NewIndexer(st EmbedStore, tool *Tool, log *slog.Logger) *Indexer {
@@ -111,6 +159,14 @@ type embedLine struct {
  * own comment makes.
  */
 func (ix *Indexer) Run(ctx context.Context, libraryID int64) error {
+	if !ix.claim() {
+		return ErrAlreadyIndexing
+	}
+	defer ix.release()
+	return ix.run(ctx, libraryID)
+}
+
+func (ix *Indexer) run(ctx context.Context, libraryID int64) error {
 	caps := ix.tool.Capabilities(ctx)
 	if !caps.SemanticReady {
 		// The reason travels rather than a bare failure: "not installed" and
