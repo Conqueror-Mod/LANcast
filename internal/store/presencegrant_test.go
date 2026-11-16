@@ -6,8 +6,9 @@ import (
 	"time"
 )
 
-// grantFixture gives a local account, a paired peer, and one person on it —
-// the minimum for a grant to be possible at all.
+// grantFixture gives a local account listed to peers, a paired peer, and one
+// person on it — the minimum for a grant to be possible at all, and to be
+// read (ReadersOf answers only for accounts with visible_to_peers on).
 func grantFixture(t *testing.T) (*Store, context.Context, string) {
 	t.Helper()
 	st := newStore(t)
@@ -15,6 +16,9 @@ func grantFixture(t *testing.T) (*Store, context.Context, string) {
 
 	u, err := st.CreateUser(ctx, "dana", "Dana", "hash", "admin")
 	if err != nil {
+		t.Fatal(err)
+	}
+	if err := st.SetVisibleToPeers(ctx, u.ID, true); err != nil {
 		t.Fatal(err)
 	}
 	if err := st.AddPeer(ctx, samplePeer(fpA)); err != nil {
@@ -214,5 +218,38 @@ func TestDeletingAnAccountTakesItsGrants(t *testing.T) {
 	}
 	if readers, _ := st.ReadersOf(ctx, fpA, "g-1"); len(readers) != 0 {
 		t.Errorf("ReadersOf = %v after the granting account was deleted", readers)
+	}
+}
+
+/*
+ * R04-8, as decided 2026-11-16: the visible-to-peers switch outranks the
+ * per-person grants. Off, the account reads to no peer, grants or not; the
+ * grants are kept, so on again restores exactly what was given. The control
+ * is the read before the switch is touched.
+ */
+func TestTheVisibilitySwitchOutranksGrants(t *testing.T) {
+	st, ctx, dana := grantFixture(t)
+	if err := st.GrantPresence(ctx, dana, fpA, "g-1", time.Unix(1000, 0)); err != nil {
+		t.Fatal(err)
+	}
+	if readers, _ := st.ReadersOf(ctx, fpA, "g-1"); len(readers) != 1 {
+		t.Fatalf("control: ReadersOf = %v, want [%s]", readers, dana)
+	}
+
+	if err := st.SetVisibleToPeers(ctx, dana, false); err != nil {
+		t.Fatal(err)
+	}
+	if readers, _ := st.ReadersOf(ctx, fpA, "g-1"); len(readers) != 0 {
+		t.Errorf("ReadersOf = %v with visibility off; the switch must take the grant back", readers)
+	}
+	if got, _ := st.PresenceGrants(ctx, dana); len(got) != 1 {
+		t.Errorf("grants = %+v with visibility off; the rows are kept", got)
+	}
+
+	if err := st.SetVisibleToPeers(ctx, dana, true); err != nil {
+		t.Fatal(err)
+	}
+	if readers, _ := st.ReadersOf(ctx, fpA, "g-1"); len(readers) != 1 || readers[0] != dana {
+		t.Errorf("ReadersOf = %v with visibility back on, want [%s]", readers, dana)
 	}
 }

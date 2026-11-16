@@ -123,6 +123,11 @@ func newTwoServers(t *testing.T) twoServers {
 	if err := host.st.ReplaceRemotePeople(ctx, guestFP, []store.RemotePerson{{ID: gu.ID, Name: "Gerda"}}); err != nil {
 		t.Fatal(err)
 	}
+	// The host's person is listed to peers too: a grant from an account that
+	// is not reads to nobody (R04-8, the switch outranks the grants).
+	if err := host.st.SetVisibleToPeers(ctx, hu.ID, true); err != nil {
+		t.Fatal(err)
+	}
 	if err := host.st.GrantPresence(ctx, hu.ID, guestFP, gu.ID, time.Now()); err != nil {
 		t.Fatal(err)
 	}

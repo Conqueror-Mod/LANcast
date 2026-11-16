@@ -73,3 +73,46 @@ func TestPeopleDoesNotNameAnOptedOutReader(t *testing.T) {
 		t.Fatalf("peers %+v: the host answered its roster, so it is reachable", body.Peers)
 	}
 }
+
+/*
+ * R04-8, as decided 2026-11-16: turning "visible to peers" off withdraws
+ * presence the account had granted, over the wire, and turning it back on
+ * restores it. The control is the answer before the switch is touched.
+ */
+func TestTheSwitchWithdrawsGrantedPresence(t *testing.T) {
+	x := newTwoServers(t)
+	ctx := context.Background()
+	p, err := x.guest.st.PeerByFingerprint(ctx, x.hostFP)
+	if err != nil {
+		t.Fatal(err)
+	}
+	names := func() bool {
+		t.Helper()
+		seen, err := x.guest.srvAPI.askPeerPresence(ctx, p, x.guestUser)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, v := range seen {
+			if v.ID == x.hostUser {
+				return true
+			}
+		}
+		return false
+	}
+
+	if !names() {
+		t.Fatal("control: the host's person, who granted the guest, is not named")
+	}
+	if err := x.host.st.SetVisibleToPeers(ctx, x.hostUser, false); err != nil {
+		t.Fatal(err)
+	}
+	if names() {
+		t.Error("the host's person turned visibility off and is still named, watching, to the peer")
+	}
+	if err := x.host.st.SetVisibleToPeers(ctx, x.hostUser, true); err != nil {
+		t.Fatal(err)
+	}
+	if !names() {
+		t.Error("visibility back on did not restore the grant")
+	}
+}
