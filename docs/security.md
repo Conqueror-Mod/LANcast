@@ -7,6 +7,11 @@
 > another and admit its people as guests; and a server with a public name can
 > earn a publicly trusted certificate and offer passkeys. This document
 > describes what is protected, what is not, and what remains open.
+>
+> Checked against the code on 2026-11-16 (`main` at `b6eaa2cb`), after the
+> whole-app review in [review/](review/). Where a section names a review
+> finding (R01-4 and so on), its ledger in [review/findings/](review/findings/)
+> has the detail.
 
 ## Current model
 
@@ -65,7 +70,54 @@ until somebody narrows it.
 **API keys are not sessions.** A third-party client can authenticate with a
 long-lived key sent as `Authorization: Bearer`, stored as a hash like a session
 token ([ADR 0061](adr/0061-an-api-key-is-not-a-session.md)). A key never reaches
-an administrator route, whoever owns it, and cannot mint, list or revoke keys.
+an administrator route, whoever owns it, and cannot mint, list or revoke keys,
+or change how its account signs in (two-factor, below).
+
+- **Minting a key needs the account's password**, not only a session (R01-4).
+  A key outlives every session, so a session left open, or a stolen cookie,
+  must not be enough to turn into one.
+- **Changing your own password keeps your keys.** That is deliberate: the
+  machine that copies photographs should not break because somebody rotated a
+  password. The keys are listed under Security and can be revoked one by one.
+- **An administrator's reset of somebody's password revokes that account's
+  keys**, signs it out everywhere, and says how many keys went, in the answer
+  and the audit log. A reset is the "this account was compromised" action,
+  and a key minted while it was compromised must not survive it.
+
+**Two-factor sign-in is each person's own choice**
+([ADR 0100](adr/0100-a-code-after-the-password-for-whoever-wants-one.md)).
+With it on, the right password earns a challenge, not a session: good for five
+minutes and five tries, traded for a session by a six-digit code from an
+authenticator app or by one of ten single-use recovery codes. Turning it on or
+off needs the password, and an API key cannot do either. An administrator can
+only take it off somebody's account (a lost phone), never put it on. A wrong
+code counts against the same throttles as a wrong password, so knowing the
+password does not buy a fresh budget for guessing codes. Passkey sign-in skips
+the code, because a passkey is already two factors. The TOTP secret is sealed
+in the database (*Where secrets are kept*, below), and recovery codes are
+stored as hashes.
+
+**A native player borrows the session with a stream ticket**
+([ADR 0068](adr/0068-a-native-player-streams-with-a-ticket.md)). libmpv cannot
+carry the window's `HttpOnly` cookie and should not carry an API key, so the
+window mints a ticket for one item. It opens `GET /api/stream/{id}` for that
+item and nothing else (for a retro game, also that game's files, the minting
+person's saves for it, and its RetroAchievements requests). It is sent as a
+header, never in a URL, lives only in memory, and re-checks the credential that
+minted it on every use, so signing out, a password change or revoking the key
+ends the ticket too.
+
+**An invite link makes one member account, once**
+([ADR 0104](adr/0104-a-friend-is-invited-by-a-link-that-works-once.md)). Only an
+administrator can make one. It lasts seven days, carries the content-rating
+ceiling and hidden libraries the administrator chose, and always makes a
+**member**. The secret is in the link's fragment, which a browser never sends,
+so it reaches neither the request log nor a `Referer`. The two public routes
+take it in a `POST` body. Only its hash is stored. Redeeming deletes the invite
+in the same transaction that makes the account, so two people racing one link
+get one account. A wrong, spent, withdrawn or expired secret all get the same
+`404`, and guesses are throttled per address before any lookup or password
+hashing is done (R01-8).
 
 ## What requires a session
 
@@ -77,18 +129,38 @@ Everything under `/api/` except these:
 | `GET /api/auth/status` | The client must know whether to show setup or login |
 | `POST /api/auth/setup` | Only works while unconfigured, which is loopback-only |
 | `POST /api/auth/login` | Obviously |
-| `POST /api/auth/passkey/login/options`, `POST /api/auth/passkey/login` | Passkey sign-in: whoever is signing in has no session yet. Throttled with the password login |
+| `POST /api/auth/login/two-factor` | The second half of a two-factor sign-in: the caller holds a challenge, not a session. Throttled with the password login |
+| `POST /api/auth/passkey/login/options`, `POST /api/auth/passkey/login` | Passkey sign-in: whoever is signing in has no session yet. Throttled with the password login, and the challenge store is capped per address (R01-6) |
 | `GET /api/auth/accounts` | The sign-in page's account picker. Names only, and only to the home network; anybody else gets an empty list. An administrator can turn it off |
+| `POST /api/invites/check`, `POST /api/invites/redeem` | Joining with an invite link: whoever holds it has no account yet. The secret is the credential, and guesses are throttled |
+| `GET /api/identity/proof` | A server proving its identity to a desktop window deciding whether to trust a new certificate (*Transport security*). Answers only a caller who already names this server's fingerprint, over TLS; anybody else gets `404` |
+| `POST /api/guest/session` | Redeeming a guest ticket a paired server signed (*Another server*). The handler is the gate: signature, audience, pairing, expiry and nonce |
 | The web assets | The login form lives in them — gating the page behind a session nobody can obtain yet is a locked door with the key inside |
 
 The `/api/federation/` routes skip the session gate too, but are not public:
 they are for paired servers, authenticated by the peer's pinned certificate
 instead, and each one refuses a caller that did not present one. They are a
 fixed list rather than a prefix, so a new route under that path is gated until
-somebody adds it deliberately.
+somebody adds it deliberately, and a test fails if the router has a federation
+route the list does not.
 
-**Streaming is gated.** `GET /api/stream/{id}` requires a session. A public
-stream URL would make the password decorative.
+Besides a session, the gate accepts four narrower credentials, each in an
+`Authorization` header and never in a URL: an API key (anything but
+administration and key management), a stream ticket (one item's stream), a
+redeemed guest session (its own allow-list, below), and the metrics token
+(`GET /api/metrics` and nothing else, below).
+
+**Streaming is gated.** `GET /api/stream/{id}` requires a session (or a ticket
+for that item). A public stream URL would make the password decorative.
+
+**Every request body has a ceiling, before the gate.** 1 MiB for every route,
+applied in front of the router and the session check, so the routes that
+answer before sign-in cannot be made to hold an arbitrarily large body in
+memory. A body that declares a larger `Content-Length` is refused with `413`
+unread, and one that does not say is cut off at the ceiling. Four routes that
+take a file have their own, larger ceilings: a profile picture, a game save, a
+problem report and a plugin bundle. A handler may set a smaller limit of its
+own, and the smaller one wins.
 
 ## CSRF
 
@@ -100,7 +172,12 @@ Two independent defences, because either alone leaves a gap:
   and `DELETE` must present an `Origin` or `Referer` matching the request host.
 
 A request with neither header is allowed: non-browser clients (curl, a TV app,
-a script) legitimately send neither, and they are not the CSRF threat. Reads
+a script) legitimately send neither, and they are not the CSRF threat. A
+request authenticated by an API key or a guest session skips the origin check,
+but only when that credential actually resolved: a browser never attaches an
+`Authorization` header by itself, so such a request cannot be forged the way
+a cookie can, while a cookie request that merely *carries* a junk header keeps
+both defences. Reads
 are not origin-checked — the session gate covers them, and blocking
 cross-origin `GET` would break embedding a stream URL.
 
@@ -113,8 +190,11 @@ nothing to gain.
 
 Login attempts are throttled per client IP — 10 per 5 minutes, decaying on
 their own. A password is one guessable secret, so unlimited attempts against it
-is the entire attack. Passkey sign-in and changing a password share the same
-counter.
+is the entire attack. Passkey sign-in, the two-factor code, and every place a
+signed-in person re-enters their password share the same counter: changing it,
+adding a passkey, minting an API key, and turning two-factor on or off all go
+through one check that applies both this throttle and the per-account wait
+below. Invite links have a counter of their own, per address.
 
 The key is the remote address. Forwarded headers are attacker-controlled
 unless a trusted proxy sets them, and honouring them from anyone would let
@@ -227,6 +307,21 @@ desktop client reads the server's own `cert.pem` from local disk and pins that
 security property the native window was built for
 ([ADR 0023](adr/0023-native-desktop-client.md)).
 
+**A window trusts a changed key only on proof over that connection**
+([ADR 0124](adr/0124-a-server-proves-its-identity-over-the-connection.md)). A
+window that already knows a server by its identity
+([ADR 0070](adr/0070-the-desktop-client-can-trust-a-server-it-did-not-install.md))
+and finds a different serving key at the address asks
+`GET /api/identity/proof` with a fresh nonce. The server signs the nonce and
+keying material exported from *that* TLS session with its Ed25519 identity
+key. Somebody in the middle necessarily runs a different TLS session on each
+side, so the signature cannot be relayed. It replaced a check that asked a
+person to compare two copies of an identity the window already held, which
+matched whoever was answering (R11-1). The route answers only over TLS, only
+to a caller who already names this server's fingerprint, and never for a TLS
+1.2 session without the extended master secret, the one case where two
+sessions could share an export.
+
 **A public name can earn a public certificate, only if an administrator asks**
 ([ADR 0081](adr/0081-a-public-name-can-earn-a-public-certificate.md), amending
 the "no ACME" of ADR 0014). It is off by default, and off on every upgraded
@@ -258,6 +353,52 @@ addition to the password**, never instead of it: the password stays the
 recovery path and the way to sign in by address. Changing the password does not
 remove passkeys, and still ends every session.
 
+### What is quantum-resistant
+
+**The key exchange is hybrid post-quantum; nothing that proves identity is.**
+
+- **Key exchange: X25519MLKEM768, by default.** LANcast never sets
+  `CurvePreferences`, so Go (1.24 and later) offers and prefers the hybrid
+  X25519 + ML-KEM-768 group on every TLS 1.3 connection whose other end offers
+  it too. Traffic recorded today cannot be decrypted later by somebody who
+  gets a quantum computer, as long as ML-KEM or X25519 holds. Checked with
+  real handshakes on 2026-11-16 (Go 1.26.11), against a listener built with
+  the server's own TLS calls on loopback:
+
+  | Client | Negotiated |
+  |---|---|
+  | Go, default `tls.Config` (any Go client of the API) | TLS 1.3, X25519MLKEM768 |
+  | `certpin.TLSConfig` (libmpv's relay, the retro player) | TLS 1.3, X25519MLKEM768 |
+  | `peer.ClientConfig` (one paired server to another) | TLS 1.3, X25519MLKEM768 |
+  | Edge 157, headless (the Chromium major version of the installed WebView2 runtime, which is the desktop window) | TLS 1.3, X25519MLKEM768 |
+  | The Claude desktop app's Chromium pane (ClientHello only; it refused the self-signed certificate) | offered X25519MLKEM768 first |
+  | OpenSSL 3.5.6 `s_client` | TLS 1.3, X25519MLKEM768 |
+  | curl 8.19 with Schannel (Windows' own TLS, as PowerShell and .NET use) | TLS 1.3, **X25519** |
+
+  The last row is the limit: a client whose TLS library does not offer ML-KEM
+  gets classical X25519, and nothing on the server can change that. Windows'
+  own Schannel offered no ML-KEM group on this machine. A TLS 1.2 client gets
+  classical ECDHE. The browser rows are Chromium builds, not the LANcast
+  window itself driven against a server: WebView2 shares Edge's network stack,
+  so it is expected to match, but that row was not captured from the window.
+
+  `internal/peer/pqkex_test.go` holds this: one test fails if any Go source
+  in the repository names `CurvePreferences` or turns the hybrid off with
+  `tlsmlkem=0` / `tlssecpmlkem=0` (in a `//go:debug` line or `go.mod`), and
+  three run the handshakes in the first three rows and require the hybrid.
+- **Signatures and identity: not quantum-resistant.** The server identity, the
+  guest tickets it signs, the identity proof above and the update signature
+  are Ed25519. The TLS certificates are ECDSA (self-signed) or whatever the CA
+  issues. A quantum computer that could break these could impersonate a
+  server, but only while it is actively in the connection. It cannot decrypt
+  recordings, because the key exchange above does not depend on them. Moving
+  them is for when the platform offers post-quantum signatures in TLS and in
+  WebAuthn, not something LANcast can do alone.
+- **Sealed secrets: fine.** AES-256-GCM with a 256-bit key (*Where secrets are
+  kept*). Grover's algorithm halves the effective strength of a symmetric key
+  at best, which leaves 128 bits. Session and key hashes are SHA-256, and
+  passwords are bcrypt, for the same reason.
+
 ## The audit log
 
 Every authorised mutation is recorded with who did it and to what — libraries,
@@ -287,25 +428,143 @@ published to whoever later reads or shares that file.
 each side has added the other. A relationship one party can create alone is one
 that can be created *at* you.
 
+**Peer connections are mutual TLS 1.3, pinned both ways.** Each server
+presents a certificate for its Ed25519 identity key, and each side checks the
+other's key against the fingerprint recorded at pairing. A certificate a CA
+issued for the right name would still fail that check.
+
 **Presence is never written down.** Who is watching what, right now, is shared
 only under a per-account, per-peer grant, and there is no history and
 deliberately no *last seen watching*
 ([ADR 0045](adr/0045-live-presence-between-paired-servers.md)). The harm ADR
 0035 names is a record that accumulates; this one does not exist to accumulate.
+Each account's **visible to peers** switch is off by default, and it outranks
+the grants (R04-8): with it off, no paired server is sent that person's
+presence whatever grants exist, and the person is not named in the roster a
+paired server receives (R02-4). The grants are kept, so turning visibility
+back on restores them.
 
 **A remote guest is a principal, not an account.** Admitted by a ticket their
 own server signs, default-deny in middleware — because `requireAuth` grants by
 default and withdraws by exception, which is the wrong direction for somebody
-who is not a user here. A guest may stream **only the item the room is
-playing**: allow-listing the route would not be enough, since that handler
-streams whatever id it is handed. A guest writes no state at all
-([ADR 0046](adr/0046-remote-guests.md)), and what they may be sent is capped by
-the host rather than by their own capability
-([ADR 0047](adr/0047-remote-streaming-is-capped-by-the-host.md)).
+who is not a user here ([ADR 0046](adr/0046-remote-guests.md)).
+
+- **The ticket.** Ed25519-signed by the guest's own server, naming the person
+  (a server can only mint one for the signed-in person asking), the host's
+  fingerprint as audience, a random nonce, and an expiry two minutes out, with
+  a minute's allowance for a clock that is ahead. The host verifies it against
+  the key it pinned at pairing and spends the nonce, so a ticket works once.
+  Every refusal looks the same from outside; the reason goes to the host's log.
+- **The session it buys** lasts fifteen minutes and is renewed by presenting a
+  fresh ticket. At most 512 exist at once, and a full book refuses rather than
+  evicting somebody.
+- **What a guest may reach** is one allow-list in `guestgate.go`, every entry a
+  `GET`: who they are, the libraries shared with their server and their items,
+  and the stream, conversion and subtitle routes. Every route that names an
+  item is checked against that item, and a refusal is the same `404` as an item
+  that does not exist. Allow-listing the routes alone would hand over the
+  library, since the stream handler streams whatever id it is handed.
+- **Which items.** Those in a library this server has shared with the guest's
+  server ([ADR 0071](adr/0071-a-shared-library-is-a-standing-grant.md)), under
+  the content-rating ceiling set on that share. (Before ADR 0071 a guest could
+  stream only the item a Watch Together room was playing; a share is now a
+  standing grant to the other household.) The share is looked up on every
+  request, so un-sharing or unpairing takes effect on the next one, not when
+  the session lapses.
+- **Nothing else.** A guest writes no state at all, and what they may be sent
+  is capped by the host rather than by their own capability
+  ([ADR 0047](adr/0047-remote-streaming-is-capped-by-the-host.md)).
+
+## Your other devices
+
+**Play on another device**
+([ADR 0117](adr/0117-play-on-another-device.md)) lets one of your windows send
+*play*, *pause* and the like to another window signed in as **the same
+account**. Every route is scoped to the caller's own account. There is no
+administrator view, and a command to somebody else's player is a `404`, the
+same answer as a player that does not exist. The receiving window plays
+through its own session, so library access and the rating ceiling apply as if
+it had been pressed there. The desktop window offers itself by default. A
+browser or a phone does so only once switched on in Settings › Playback.
+Players are held in memory only.
+
+## What leaves the server, when an administrator asks
+
+None of these does anything until an administrator sets it up, which is what
+the no-phone-home rule permits.
+
+**Webhooks** ([ADR 0097](adr/0097-a-webhook-goes-where-the-owner-points-it.md)).
+Administrator-only, at most ten, `http` or `https` with no credentials in the
+URL. LAN addresses are allowed, because that is where Home Assistant lives, so
+an administrator can point the server's requests at any address the server can
+reach; that is accepted as an administrator's power. Each delivery is signed
+with HMAC-SHA256 under the webhook's own secret
+(`X-LANcast-Signature: sha256=…`). The secret is shown once, when the webhook
+is made. Deliveries never follow a redirect, time out after ten seconds, and a
+failure is logged without the URL, which can carry a token. The events
+are playback started or stopped, a scan finished, and a backup taken.
+**Playback events name an account and a title, so they are sent only for
+accounts that switched that on themselves** (off by default, and an
+administrator cannot switch it on for somebody). Webhooks live in
+`config.json`, not the database, so restoring a backup does not bring back one
+that was deleted.
+
+**The metrics token** ([ADR 0096](adr/0096-metrics-have-their-own-key.md)).
+`GET /api/metrics` (Prometheus text) answers an administrator's session or a
+token an administrator generates in Settings. The token is shown once, stored
+only as a hash, compared in constant time, and is a credential for that one
+route and method only. Presented anywhere else it is simply an unknown key. It
+is not an API key, because the numbers (accounts, libraries, running
+conversions) are an administrator's view, and API keys never reach those.
+
+**Provider keys a release carries**
+([ADR 0110](adr/0110-lancast-carries-its-own-provider-keys.md)). Release builds
+carry a TMDB and an OpenSubtitles key, set at build time from repository
+secrets and never committed, so a fresh install matches films with no
+sign-up. Anybody with the binary can read them out; that is true of every
+client that ships a key, and a revoked one is replaced by shipping a release.
+A key the person enters always wins. **Settings can switch the built-in keys
+off** (`builtin_keys_off`), and then a server with no key of its own fetches
+nothing from either service. Plugins are never handed a built-in key, only one the
+person entered, because an abusive plugin could get the built-in key revoked
+for every install. A provider's key is stripped from any network error before
+it reaches the log (R08-6), since the log is what *Report an issue* attaches.
+
+**Report an issue** ([ADR 0109](adr/0109-a-report-goes-only-when-sent.md))
+sends nothing until somebody presses Send: there is no background report and
+no crash upload. It posts to the developer's own webhook, whose URL is a build
+secret like the provider keys. What goes with it is said beside the button,
+never an account name, address or the server's identity unless typed, and
+only an administrator can attach the server log, after reading it. A failed
+send is logged without that URL (R07-9).
+
+## DLNA
+
+A TV on the LAN can browse and play through DLNA
+([ADR 0086](adr/0086-a-tv-browses-as-somebody.md)). Off by default. It runs only
+when it is switched on, an account to browse as is chosen and still exists,
+and the server is LAN-bound (a password is set), and it stops within seconds
+of any of those ceasing to hold.
+
+DLNA has no authentication: renderers cannot sign in. So it is bounded in
+other ways:
+
+- **Its own plain-HTTP listener** on port 8200, serving the DLNA routes and
+  nothing else. No LANcast API is reachable through it.
+- **Local network only.** Requests and discovery from anything but a private,
+  loopback or link-local address are refused, judged on the connection rather
+  than a header, so port forwarding or a public IPv6 address cannot make it an
+  open media server (R10-8).
+- **It sees what its account sees.** Every lookup is made as the chosen
+  account, with that account's hidden libraries and rating ceiling. Choose an
+  account limited to what anything on the LAN may play.
 
 ## Still unprotected
 
-- **No API rate limiting** beyond sign-in and changing a password.
+- **No API rate limiting** beyond the places a password, code or secret is
+  guessed: sign-in and its second factor, passkey sign-in, re-entering a
+  password while signed in, and invite links. Signed-in traffic is not
+  limited, and neither is DLNA on the LAN.
 
 ## Standing risks that authentication does not remove
 
@@ -322,12 +581,16 @@ login does not hand them the filesystem.
 
 These hold regardless of authentication and should not regress.
 
-**Stream containment.** `GET /api/stream/{id}` re-resolves the item path with
-`filepath.Abs` and verifies it still falls inside the owning library root
-before opening anything. The database is trusted, but a hand-edited or
+**Stream containment.** Every handler that turns a database row into a file
+path (the stream, and the other routes that open a library file) re-checks
+that the path still falls inside the owning library root before opening
+anything, through `internal/contain`. The check **follows links**
+([ADR 0094](adr/0094-containment-follows-links.md)): the lexical
+`filepath.Abs` + `filepath.Rel` test it replaced passed a `film.mkv` that was a
+link to anywhere on the machine. The database is trusted, but a hand-edited or
 corrupted row must not become arbitrary file read access. Covered by tests
-asserting both an outside path and a traversal path are refused *and* that the
-file contents are not served.
+asserting that an outside path, a traversal path and a link out are refused
+*and* that the file contents are not served.
 
 **Artwork hashes are validated.** A hash arrives from a URL path and becomes a
 filesystem path, so it is checked for length and hex-only characters first.
@@ -337,10 +600,26 @@ Traversal attempts are a cache miss, never a file read.
 have no use for server paths, and withholding them keeps the layout private
 even when the API is reachable.
 
-**The TMDB key is write-only.** Stored `0600` in `config.json`, never in the
-database, and `GET /api/settings` reports only `configured: true`. A secret
-readable back out of an API leaks through screenshots, logs, and shared
-sessions.
+**Secrets are write-only.** No API returns a secret after the answer that
+created it. A secret readable back out of an API leaks through screenshots,
+logs, and shared sessions. For a provider key, `GET /api/settings` reports
+whether one is set and which key is in use (`configured`, `source`), never the
+value; for the metrics token, whether one exists and since when.
+
+**Where secrets are kept.** Three places, each chosen for whether a backup
+should carry it (a backup is the database, [ADR 0058](adr/0058-a-backup-is-the-database.md)):
+
+| Secret | Where | In a backup? |
+|---|---|---|
+| Provider keys (TMDB, OMDb, OpenSubtitles) and the OpenSubtitles login, webhook URLs and secrets, the metrics token's hash | `config.json`, written `0600` | No |
+| Two-factor (TOTP) secrets, the RetroAchievements key | The database, **sealed** with AES-256-GCM under `secrets.key`, a key file beside the database ([ADR 0090](adr/0090-retroachievements-are-yours-to-connect.md)) | Sealed, and unopenable without that machine's `secrets.key`: restored elsewhere, people enter them again and two-factor accounts sign in with a recovery code |
+| Session, API key, invite and recovery-code hashes; password hashes (bcrypt) | The database | Hashes only |
+| A plugin's own credentials | The database, **not sealed** | Yes, in the clear |
+
+On Windows the `0600` modes mean nothing; what protects all of these on disk
+is the data directory's own permissions (*The data directory*, below). The
+last row is the exception to the sealing rule: a plugin credential someone
+entered travels with every copy of the backup.
 
 **Browse lists directories only.** Never files, never contents, and hidden or
 system directories are omitted.
@@ -356,6 +635,17 @@ Each file is checked once more where it lands, and a mismatch puts the install
 back. Before this (R10-1), a staging that any local account could write in the
 data directory was moved into Program Files as SYSTEM unchecked. It no longer
 depends on the data directory's permissions for this.
+
+**A restore does not bring back revoked credentials** (R04-3, ADR 0058
+amended). A restored database has its sessions, **API keys and passkeys**
+cleared, because a key revoked after a leak, or a passkey deleted for a lost
+phone, would otherwise come back with the backup. Everyone signs in again with
+their password, and re-issues keys and re-adds passkeys, and the restore's
+result says how many of each went. **Recovery codes are kept**: only unused
+hashes are stored, so a restore cannot tell which were spent after the backup,
+and clearing them could lock a two-factor account out on a machine where the
+TOTP secret cannot be unsealed. The result tells two-factor accounts to make
+new codes if they used one since the backup.
 
 **A restore runs only from files LANcast wrote.** A restore staged from Settings
 is a marker in `backups\` that the next start acts on before it opens the
