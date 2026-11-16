@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import {
   heroEligible,
   useHeroMode,
@@ -322,14 +322,16 @@ function SecondaryButton({
   label,
   onPress,
   className = "detail__fix",
+  disabled = false,
 }: {
   label: string;
   onPress: () => void;
   className?: string;
+  disabled?: boolean;
 }) {
   const focusable = useFocusable(onPress);
   return (
-    <button {...focusable} className={className} onClick={onPress}>
+    <button {...focusable} className={className} onClick={onPress} disabled={disabled}>
       {label}
     </button>
   );
@@ -633,6 +635,14 @@ export function Detail() {
     item?.kind === "show" || item?.kind === "season" || item?.kind === "collection",
   );
   const deletePlaylist = useDeletePlaylist(itemID);
+  /*
+   * A delete in flight, set at the press rather than read from isPending,
+   * which reaches React a tick later. A second DELETE sent inside the first's
+   * round trip took over the per-call onSuccess (TanStack runs it for the
+   * latest mutate only), and that one 404s — so nothing went back, and the
+   * person was left on a playlist that no longer existed (R15-5).
+   */
+  const deleteSent = useRef(false);
   const isAdmin = useIsAdmin();
   const [posterOpen, setPosterOpen] = useState(false);
   /*
@@ -1382,6 +1392,7 @@ export function Detail() {
               {isPlaylist && (
                 <SecondaryButton
                   className="detail__remove"
+                  disabled={deletePlaylist.isPending}
                   label={
                     deletePlaylist.isPending
                       ? "Deleting…"
@@ -1394,7 +1405,15 @@ export function Detail() {
                       setConfirmDelete(true);
                       return;
                     }
-                    deletePlaylist.mutate(undefined, { onSuccess: back });
+                    if (deleteSent.current) return;
+                    deleteSent.current = true;
+                    deletePlaylist.mutate(undefined, {
+                      onSuccess: back,
+                      // Failed: it is still there, and may be tried again.
+                      onError: () => {
+                        deleteSent.current = false;
+                      },
+                    });
                   }}
                 />
               )}
