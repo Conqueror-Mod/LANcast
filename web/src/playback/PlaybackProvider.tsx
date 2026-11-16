@@ -1048,7 +1048,7 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
   // every list on screen.
   const finishedShown = useRef<number | null>(null);
   const saveProgress = useCallback(
-    (force = false, at?: number) => {
+    (force = false, at?: number, keepalive = false) => {
       const now = Date.now();
       if (!force && now - lastSaved.current < 5000) return;
       lastSaved.current = now;
@@ -1136,10 +1136,15 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
        */
       const done = totalDuration ? pos / totalDuration > 0.92 : false;
       if (!done && pos * 1000 < startedFloorMs(totalDuration * 1000)) return;
-      void apiSend(`/api/items/${itemID}/progress`, "PUT", {
-        position_ms: Math.floor(pos * 1000),
-        watched: done,
-      })
+      void apiSend(
+        `/api/items/${itemID}/progress`,
+        "PUT",
+        {
+          position_ms: Math.floor(pos * 1000),
+          watched: done,
+        },
+        { keepalive },
+      )
         .then(() => {
           /*
            * Finishing something changes what the page behind the player
@@ -1164,7 +1169,12 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
   const saveRef = useRef(saveProgress);
   saveRef.current = saveProgress;
   useEffect(() => {
-    const onHide = () => saveRef.current(true);
+    /*
+     * keepalive, as BookPlayer's own pagehide write has: a browser cancels an
+     * ordinary request from a page being unloaded, so closing a tab dropped
+     * this write and resume came back up to five seconds early (R14-7).
+     */
+    const onHide = () => saveRef.current(true, undefined, true);
     window.addEventListener("pagehide", onHide);
     return () => {
       window.removeEventListener("pagehide", onHide);
