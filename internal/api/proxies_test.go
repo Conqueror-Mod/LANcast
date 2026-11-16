@@ -1,11 +1,14 @@
 package api
 
 import (
+	"bytes"
 	"encoding/json"
 	"net"
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	"lancast/internal/auth"
 )
 
 // pickerVia asks for the sign-in page's accounts from a proxy on this machine,
@@ -95,5 +98,42 @@ func TestTrustedProxiesSettingIsValidatedAndNormalised(t *testing.T) {
 	decode(t, h.authed(t, "GET", "/api/settings", nil), &raw)
 	if string(raw["trusted_proxies"]) != "[]" {
 		t.Fatalf("cleared list reads as %s", raw["trusted_proxies"])
+	}
+}
+
+// Behind a trusted proxy that ended TLS, the session cookie is marked Secure;
+// the same header from anybody else changes nothing (R01-13).
+func TestSignInThroughATLSProxyGetsASecureCookie(t *testing.T) {
+	h := newHarness(t)
+	h.secure(t, "a good long password")
+	cur := h.settings.Get()
+	cur.TrustedProxies = []string{"127.0.0.1/32"}
+	if err := h.settings.Set(cur); err != nil {
+		t.Fatal(err)
+	}
+	login := func(remote string) *http.Cookie {
+		b, _ := json.Marshal(map[string]any{"username": testUser, "password": "a good long password"})
+		req := httptest.NewRequest("POST", "/api/auth/login", bytes.NewReader(b))
+		req.RemoteAddr = remote
+		req.Header.Set("X-Forwarded-For", "198.51.100.4")
+		req.Header.Set("X-Forwarded-Proto", "https")
+		rec := httptest.NewRecorder()
+		h.srvAPI.Handler().ServeHTTP(rec, req)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("login via %s: %d %s", remote, rec.Code, rec.Body.String())
+		}
+		for _, c := range rec.Result().Cookies() {
+			if c.Name == auth.CookieName {
+				return c
+			}
+		}
+		t.Fatal("no session cookie")
+		return nil
+	}
+	if c := login("127.0.0.1:51000"); !c.Secure {
+		t.Error("a session issued over the proxy's https is not Secure")
+	}
+	if c := login("192.168.1.30:51000"); c.Secure {
+		t.Error("an untrusted caller's X-Forwarded-Proto made the cookie Secure")
 	}
 }

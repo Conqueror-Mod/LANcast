@@ -393,7 +393,10 @@ LANcast, with a publicly trusted certificate. Have the proxy set
 Network — otherwise LANcast's throttle sees every request as coming from one
 client, the per-account wait treats every caller as local, and the sign-in
 page's account picker is shown to the internet. Point the proxy at LANcast over HTTPS, or run
-LANcast loopback-only behind it.
+LANcast loopback-only behind it. In the second arrangement have the proxy also
+set `X-Forwarded-Proto: https`: the hop to LANcast is plain HTTP, and from a
+trusted proxy that header is what marks the session cookie `Secure`, so a
+later plain `http://` address for the same name cannot carry it in the clear.
 
 Built-in TLS with a self-signed certificate
 ([ADR 0014](adr/0014-transport-security.md)) closes the plaintext hole on the

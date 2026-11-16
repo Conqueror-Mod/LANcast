@@ -922,7 +922,8 @@ func (s *Server) issueSession(w http.ResponseWriter, r *http.Request, userID str
 	}
 	// Secure follows the connection (from the TLS work): a LAN-bound server
 	// serves HTTPS, and marking the cookie Secure there stops it downgrading.
-	http.SetCookie(w, auth.Cookie(token, auth.SessionTTL, r.TLS != nil))
+	// Behind a trusted proxy that ended TLS, the proxy's word counts (R01-13).
+	http.SetCookie(w, auth.Cookie(token, auth.SessionTTL, auth.SecureRequest(r)))
 	s.cookieIssued(token)
 	// An expired session already refuses every request; this only stops its
 	// row piling up. A sign-in is rare enough to carry the sweep, and a
