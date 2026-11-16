@@ -49,6 +49,18 @@ var validKinds = map[string]bool{
 	"audiobooks": true,
 }
 
+// kindList is every kind validKinds accepts, sorted, for the refusal that
+// names them: built from the map so it cannot fall behind it again, as the
+// hand-written list did when retro, comics and audiobooks arrived (R06-9).
+func kindList() string {
+	kinds := make([]string, 0, len(validKinds))
+	for k := range validKinds {
+		kinds = append(kinds, k)
+	}
+	sort.Strings(kinds)
+	return strings.Join(kinds, ", ")
+}
+
 func (s *Server) createLibrary(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Name string `json:"name"`
@@ -84,7 +96,7 @@ func (s *Server) createLibrary(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !validKinds[req.Kind] {
-		writeError(w, http.StatusBadRequest, "bad_request", "kind must be one of movie, show, music, picture, other")
+		writeError(w, http.StatusBadRequest, "bad_request", "kind must be one of "+kindList())
 		return
 	}
 

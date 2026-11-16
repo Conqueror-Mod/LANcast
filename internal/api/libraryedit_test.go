@@ -2,8 +2,10 @@ package api
 
 import (
 	"context"
+	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -137,6 +139,20 @@ func TestARefusedLibraryEditChangesNothing(t *testing.T) {
 		if after.Name != before.Name || after.Path != before.Path {
 			t.Errorf("%v was refused but left name %q path %q (was %q, %q)",
 				body, after.Name, after.Path, before.Name, before.Path)
+		}
+	}
+}
+
+// R06-9: the refusal of an unknown kind names every kind there is.
+func TestABadKindNamesEveryKind(t *testing.T) {
+	h := newHarness(t)
+	resp := h.do(t, "POST", "/api/libraries",
+		map[string]any{"name": "X", "kind": "film", "path": t.TempDir()})
+	defer resp.Body.Close()
+	b, _ := io.ReadAll(resp.Body)
+	for k := range validKinds {
+		if !strings.Contains(string(b), k) {
+			t.Errorf("the refusal %s does not name %q", b, k)
 		}
 	}
 }
