@@ -4,15 +4,15 @@ Drafted 2026-11-16 against `main` at `dbba732f`. The ledgers are in [findings/](
 
 **State of play.** All 18 S1s and 37 of the 39 S2s are fixed and merged (#1087–#1145). The swap sitting on 2026-11-15 proved them on the installed service. This sheet covers what is left: two S2 decisions, 73 S3s, and four items found after the ledgers were written. I checked every S3 against `main`, and none was fixed in passing.
 
-**How to read it.** Every row has a recommendation. Rows marked **Decide** are policy calls that need Chris. Everything else stands unless Chris strikes it out. "Before 1.0" means it goes into a fix wave ahead of v0.11.1. "After 1.0" means it goes to the 1.x backlog with its ledger entry as the brief. "Won't fix" gets one line of reason, written into the ledger.
+**How to read it.** Every row has a recommendation. The three policy calls were decided by Chris on 2026-11-16, all as recommended, and the rest of the sheet was accepted. "Before 1.0" means it goes into a fix wave ahead of v0.11.1. "After 1.0" means it goes to the 1.x backlog with its ledger entry as the brief. "Won't fix" gets one line of reason, written into the ledger.
 
 The tally of recommendations: **57 before 1.0** (56 S3s and T-3, most of them a few lines each), **18 after 1.0**, and **3 decisions** (two S2s and one S3). R10-11 is split between the two lists: its quoting goes before 1.0, its `User=` line after.
 
 ---
 
-## Decide (Chris)
+## Decided (Chris, 2026-11-16: all three as recommended)
 
-| ID | What | Recommendation |
+| ID | What | Decision |
 |---|---|---|
 | R01-4 (S2) | A session alone can mint an API key, and the key outlives a password change | **Ask for the password when minting a key**, as adding a passkey already does. This keeps ADR 0061's rule that a routine password change does not break the machine that copies photos. Also have an **administrator's password reset revoke that account's keys, and say so**, because that action means "this account was compromised". ADR 0061 needs an amendment. |
 | R04-3 (S2) | Restoring a backup brings back API keys and passkeys that were revoked | **Clear `api_key`, `passkey` and the used recovery-code state from the restored database, as sessions already are** (ADR 0058's own reasoning). A restore is rare and deliberate, every account still has its password, and re-issuing a key or re-adding a passkey costs a minute. The alternative is to keep them and list them in the restore result. That leaves a leaked key working until somebody reads the list. ADR 0058 needs an amendment. |
@@ -22,7 +22,7 @@ The tally of recommendations: **57 before 1.0** (56 S3s and T-3, most of them a 
 
 | ID | What | Severity | Recommendation |
 |---|---|---|---|
-| R05-4 | A book part someone moved went back to the folder order on the next scan: `SetBookPart` overwrote a locked `episode` | S1 (a locked field overwritten) | **Done**, fixed in #1136 (its second commit). Record it in R05.md. |
+| R05-4 | A book part someone moved went back to the folder order on the next scan: `SetBookPart` overwrote a locked `episode` | S1 (a locked field overwritten) | **Done**, fixed in #1136 (its second commit). Recorded in R05.md. |
 | T-1 | A Quality or audio-track change made before playback moved reused the running HLS session | S2 | **Done**, #1144, proven on the service. |
 | T-2 | Odd frame rates listed too few segments, and a 1000 fps probe set a GOP of about 83 s (a #1093 regression, never released) | S2 | **Done**, #1145, proven on the service. |
 | T-3 | *Halloween II (2009)* is stored as 16 min (960000 ms), but its file is 7,145 s, so any encode lists 16 minutes and then stops | S2 | **Before 1.0: investigate.** The value is exactly 16:00, so it most likely came from metadata, not the probe. Find which writer set `duration_ms`. Only the probe should own it. Fold this into R09-8's duration sanity check. |
@@ -53,7 +53,7 @@ Grouped into fix waves by the files they touch, so the sessions can run in paral
 | R04-6 | A deleted account's reviews and totals remain → delete them, and add a test that walks every `user_id` table | S |
 | R13-8 | The downloads list is shared across accounts on one device → key it by account (client, `downloads.ts`) | XS |
 | R15-3 | Revoking an API key takes one press → two presses (client, `security.tsx`) | XS |
-| R01-4 | If decided as recommended above | S |
+| R01-4 | As decided: a password to mint a key, and an admin reset revokes keys (ADR 0061 amendment) | S |
 
 ### Wave B: federation, DLNA, network (`api/guest*`, `presence.go`, `peerwatch.go`, `api/dlna.go`, `internal/dlna`, `serverapp/dlna.go`)
 
@@ -63,7 +63,7 @@ Grouped into fix waves by the files they touch, so the sessions can run in paral
 | R02-5 | Peer JSON is decoded with no size limit → `LimitReader` plus the roster checks | XS |
 | R03-6 | DLNA answers with no limits for up to 3 s after its account is cleared → 503 | XS |
 | R10-8 | SSDP answers any source → private and same-subnet sources only (Aither is public) | S |
-| R04-8 | If decided as recommended above | XS |
+| R04-8 | As decided: the switch outranks the grants | XS |
 
 ### Wave C: library data and settings (`api/libraries.go`, `items.go`, `playlists.go`, `activity.go`, `meta.go`, `viewings.go`, `backups.go`, `faces.go`, `store/plugin.go`, `store/browsefilter.go`, `serverapp/main.go`)
 
@@ -81,7 +81,7 @@ Grouped into fix waves by the files they touch, so the sessions can run in paral
 | R05-3 | Removing a plugin can leave its credentials behind → one transaction | XS |
 | R08-7 | The artwork prune can delete images written during the walk → skip files newer than the snapshot | XS |
 | R10-10 | Shutdown closes the DB under unowned goroutines → one wait group | S |
-| R04-3 | If decided as recommended above (`backup`, `serverapp`) | S |
+| R04-3 | As decided: clear keys, passkeys and used recovery codes on restore (ADR 0058 amendment) (`backup`, `serverapp`) | S |
 
 ### Wave D: metadata and logs (`internal/meta`, `nfo`, `enrich`, `report`, `reportissue.go`)
 
@@ -156,6 +156,6 @@ None recommended. Every S3 is either cheap enough to take before 1.0 or real eno
 
 ## After Chris's pass
 
-1. Write each row's outcome into its ledger's `Triage:` line, and add R05-4 to R05.md.
+1. ~~Write each row's outcome into its ledger's `Triage:` line, and add R05-4 to R05.md.~~ Done 2026-11-16.
 2. Start the waves. A to G share no files, so up to seven sessions can run at once. Wave E is the only one that needs a swap sitting.
 3. Merge on green, one at a time for anything touching `dist`, then the run plan's S3 and S4 sessions, then cut v0.11.1.
