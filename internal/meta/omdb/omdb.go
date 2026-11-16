@@ -11,7 +11,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -250,7 +249,7 @@ func (c *Client) doWithRetry(ctx context.Context, endpoint string) ([]byte, erro
 			// The endpoint carries the API key in its query (R08-6).
 			lastErr = meta.RedactURLError(err)
 		} else {
-			body, readErr := io.ReadAll(resp.Body)
+			body, readErr := meta.ReadCapped(resp.Body, meta.MaxResponseBytes)
 			resp.Body.Close()
 
 			switch {

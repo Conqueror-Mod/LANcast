@@ -29,3 +29,20 @@ func TestNetworkErrorDoesNotCarryTheKey(t *testing.T) {
 		t.Errorf("the key reached the error: %q", err)
 	}
 }
+
+// R08-8: an endless 200 is refused at the cap rather than read until timeout.
+func TestOversizedResponseIsRefused(t *testing.T) {
+	c := testClient(t, func(w http.ResponseWriter, r *http.Request) {
+		chunk := make([]byte, 1<<20)
+		for i := 0; i < 9; i++ {
+			if _, err := w.Write(chunk); err != nil {
+				return
+			}
+		}
+	})
+	c.MaxRetries = 0
+	_, err := c.Ratings(context.Background(), "tt0133093")
+	if err == nil || !strings.Contains(err.Error(), "larger than") {
+		t.Errorf("a 9 MiB answer was not refused at the cap: %v", err)
+	}
+}

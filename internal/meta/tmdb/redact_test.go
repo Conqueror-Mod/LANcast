@@ -38,3 +38,22 @@ func TestNetworkErrorDoesNotCarryTheKey(t *testing.T) {
 		t.Errorf("the cause was lost: %q", err)
 	}
 }
+
+// R08-8: an endless 200 is refused at the cap rather than read until timeout.
+func TestOversizedResponseIsRefused(t *testing.T) {
+	srv := fakeTMDB(t, func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		chunk := make([]byte, 1<<20)
+		for i := 0; i < 9; i++ {
+			if _, err := w.Write(chunk); err != nil {
+				return
+			}
+		}
+	})
+	c := newClient(t, srv)
+	c.MaxRetries = 0
+	_, err := c.Fetch(context.Background(), meta.Ref{Kind: meta.KindMovie, ExternalID: "603"})
+	if err == nil || !strings.Contains(err.Error(), "larger than") {
+		t.Errorf("a 9 MiB answer was not refused at the cap: %v", err)
+	}
+}
