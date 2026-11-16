@@ -44,19 +44,38 @@ import (
  * so a copy keeps ffmpeg's growing playlist.
  */
 
-// SegmentLength estimates how long each segment of an encode will run.
-//
-// ffmpeg cuts at the first keyframe at or past each SegmentSeconds boundary,
-// and the encode places a keyframe every gopFrames frames, so a segment is the
-// smallest whole number of GOPs that reaches SegmentSeconds. At 23.976fps that
-// is three 48-frame GOPs, 144 frames, 6.006s — which is what ffmpeg wrote for
-// all 49 segments of the film this was measured on.
+/*
+ * SegmentLength estimates how long each segment of an encode will run.
+ *
+ * ffmpeg's segmenter cuts at the first keyframe at or past each boundary, and
+ * the boundaries are **cumulative** — 6s, 12s, 18s from the start — not six
+ * seconds after the last cut. The encode places a keyframe every gopFrames
+ * frames, so the cuts fall on whole GOPs, and over a film they average exactly
+ * SegmentSeconds. The length of almost every segment is therefore the whole
+ * number of GOPs *nearest* SegmentSeconds:
+ *
+ *   - 23.976fps: 48-frame GOPs of 2.002s, three of them, 6.006s — what ffmpeg
+ *     wrote for all 49 segments of the film this was first measured on;
+ *   - 66.67fps (a VFR file probed at 29933/449): 133-frame GOPs of 1.995s.
+ *     Measured with NVENC, one 7.98s segment and then fifteen of 5.985s.
+ *
+ * This used to take the *smallest* whole number of GOPs reaching
+ * SegmentSeconds, which is only the first segment. Below six seconds by a
+ * hair, three GOPs became four: Spider-Man was listed at 7.98s a segment
+ * against a real 5.985s, so its playlist named about three quarters of the
+ * segments ffmpeg wrote and the film ended early. It went unseen while every
+ * decision carried a frame rate of zero (fixed by R09-3), which fell back to
+ * SegmentSeconds below.
+ *
+ * The listed length only has to be close — a player places a fragment by its
+ * own timestamps — but the *count* it implies has to be right.
+ */
 func SegmentLength(fps float64) float64 {
 	if fps <= 0 || math.IsNaN(fps) || math.IsInf(fps, 0) {
 		return SegmentSeconds
 	}
 	g := float64(gopFrames(fps))
-	gops := math.Ceil(SegmentSeconds*fps/g - 1e-9)
+	gops := math.Round(SegmentSeconds * fps / g)
 	if gops < 1 {
 		gops = 1
 	}

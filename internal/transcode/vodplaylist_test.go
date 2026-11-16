@@ -34,6 +34,44 @@ func TestSegmentLengthAtCommonRates(t *testing.T) {
 	}
 }
 
+/*
+ * Rates where the GOP is rounded down a hair, so three GOPs fall just short of
+ * six seconds. The cuts are cumulative, so ffmpeg still cuts every three GOPs;
+ * listing four made the playlist name about three quarters of the segments.
+ * Measured with h264_nvenc on a file the library actually has: Spider-Man, at
+ * 29933/449 fps, wrote one 7.98s segment and then fifteen of 5.985s. 1000fps is
+ * a time base, not a rate, and Decide no longer believes it (maxFrameRate); it
+ * is here only to show the arithmetic stays sane if a rate that high arrives.
+ */
+func TestSegmentLengthAtOddRates(t *testing.T) {
+	cases := []struct {
+		fps  float64
+		want float64
+	}{
+		{29933.0 / 449.0, 5.985},
+		{1000, 6},
+	}
+	for _, c := range cases {
+		if got := SegmentLength(c.fps); math.Abs(got-c.want) > 0.001 {
+			t.Errorf("SegmentLength(%v) = %.4f, want %.3f as measured", c.fps, got, c.want)
+		}
+	}
+}
+
+/*
+ * Whatever the rate, the listed length is never more than one GOP away from
+ * SegmentSeconds. Anything further makes the playlist's segment count wrong by
+ * the same proportion, and a count that is short ends the film early.
+ */
+func TestSegmentLengthStaysWithinAGOPOfTheTarget(t *testing.T) {
+	for fps := 6.0; fps <= 240; fps += 0.01 {
+		gop := float64(gopFrames(fps)) / fps
+		if got := SegmentLength(fps); math.Abs(got-SegmentSeconds) > gop/2+1e-9 {
+			t.Fatalf("SegmentLength(%.2f) = %.4f, more than half a %.3fs GOP from %d", fps, got, gop, SegmentSeconds)
+		}
+	}
+}
+
 // An unknown rate is not a guess dressed as a measurement: it falls back to the
 // target ffmpeg is told to aim for.
 func TestSegmentLengthWithoutAFrameRate(t *testing.T) {

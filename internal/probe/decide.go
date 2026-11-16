@@ -447,6 +447,21 @@ func ParseCapabilities(s string) []string {
 	return out
 }
 
+/*
+ * maxFrameRate is the highest source rate believed. Anything above it is
+ * treated as unknown.
+ *
+ * A Matroska file with a 1/1000 time base and no stated rate can probe at
+ * exactly 1000fps; nine episodes of one library did. Once the rate reached the
+ * encoder (R09-3), that number set a keyframe every 2,000 frames — about 83
+ * seconds of real 24fps video — and a hardware encoder cuts segments only on
+ * those, so a playlist listing six-second segments described a stream cut
+ * every minute and a half. 240 is above any real camera or display rate a
+ * media library holds; an unknown rate falls back to defaults that are right
+ * for the common case.
+ */
+const maxFrameRate = 240
+
 // Decide works out how to deliver a file to a client, using the file's default
 // audio track.
 func Decide(r *Result, p Profile) Decision {
@@ -576,7 +591,7 @@ func DecideTrack(r *Result, p Profile, audioIndex int) Decision {
 			d.SourceWidth, d.SourceHeight = video.Width, video.Height
 			// Already normalised to a decimal string by the probe; an
 			// unparseable one stays zero rather than becoming a guess.
-			if f, err := strconv.ParseFloat(video.FrameRate, 64); err == nil {
+			if f, err := strconv.ParseFloat(video.FrameRate, 64); err == nil && f <= maxFrameRate {
 				d.SourceFrameRate = f
 			}
 
