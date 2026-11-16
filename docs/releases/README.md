@@ -13,3 +13,15 @@ Bump the status line at the top of the repository README to the same version
 in the same commit. `internal/projectdocs/readme_test.go` fails until it
 matches the newest file here, because a stale version is the first thing a
 stranger reads.
+
+## Release candidates are swap kits, never `-rc` tags
+
+A 1.0 candidate (or any candidate) is tested as a test-build swap kit dropped
+into an installed service, not published under a tag such as `v1.0.0-rc1`.
+`parseVersion` in `internal/update/check.go` rejects any suffix on purpose, so
+a stable install is never offered a candidate. The same rule cuts the other
+way: a build stamped `1.0.0-rc1` cannot compare its own version, so it would
+never be offered 1.0.0 and would sit on the candidate until reinstalled by
+hand. `TestReleaseCandidatesAreNeverOffered` pins that behaviour, and
+`TestTheStepToOnePointZero` pins that every 0.10.x and 0.11.x install is
+offered 1.0.0.

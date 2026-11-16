@@ -171,3 +171,47 @@ func TestEndToEndAgainstAPublicRepository(t *testing.T) {
 		t.Errorf("unexpected error: %s", st.Error)
 	}
 }
+
+// The step from 0.x to 1.0 (v1-plan §3D.3). Every 0.10.x and 0.11.x install
+// must be offered 1.0.0, and 1.0.0 must never be offered an 0.11.x. Two-digit
+// patch components are included because "0.11.10" is where a textual compare
+// would first go wrong.
+func TestTheStepToOnePointZero(t *testing.T) {
+	olds := []string{
+		"0.10.0", "0.10.9", "0.10.11",
+		"0.11.0", "0.11.1", "0.11.9", "0.11.10",
+	}
+	for _, old := range olds {
+		for _, one := range []string{"1.0.0", "v1.0.0"} {
+			if !Newer(old, one) {
+				t.Errorf("Newer(%q, %q) = false; an %s install would never be offered 1.0", old, one, old)
+			}
+			if !Newer("v"+old, one) {
+				t.Errorf("Newer(%q, %q) = false", "v"+old, one)
+			}
+		}
+		if Newer("1.0.0", "v"+old) {
+			t.Errorf("Newer(%q, %q) = true; 1.0.0 would be offered a downgrade", "1.0.0", "v"+old)
+		}
+	}
+}
+
+// A release candidate is never offered and can never offer itself an update.
+// This is deliberate, not a gap to fix: parseVersion rejects any suffix, so a
+// build stamped "1.0.0-rc1" cannot compare itself and would sit on the rc for
+// ever. That is why 1.0 candidates go through test-build swap kits and never
+// -rc tags (docs/releases/README.md). Loosening parseVersion to accept a
+// suffix must change this test on purpose.
+func TestReleaseCandidatesAreNeverOffered(t *testing.T) {
+	for _, rc := range []string{"1.0.0-rc1", "v1.0.0-rc1", "v1.0.0-rc.1", "1.0.0-beta", "1.0.0+build5"} {
+		if _, ok := parseVersion(rc); ok {
+			t.Errorf("parseVersion(%q) accepted a suffixed version", rc)
+		}
+		if Newer("0.11.10", rc) {
+			t.Errorf("Newer(%q, %q) = true; a candidate would be offered as a stable update", "0.11.10", rc)
+		}
+		if Newer(rc, "v1.0.0") {
+			t.Errorf("Newer(%q, %q) = true; expected an rc build to be unable to compare itself", rc, "v1.0.0")
+		}
+	}
+}
