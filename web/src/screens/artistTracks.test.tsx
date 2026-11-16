@@ -146,7 +146,8 @@ describe("an artist's track list", () => {
     await press(host.querySelector<HTMLElement>('[aria-label="Play Second"]')!);
     expect(landed?.id).toBe("102");
     expect(landed?.search).toBe("");
-    expect(landed?.state).toEqual({ queue: [101, 102, 201] });
+    // With its position, so a repeated song plays on from the copy pressed.
+    expect(landed?.state).toEqual({ queue: [101, 102, 201], at: 1 });
   });
 
   it("Play all queues every track in order", async () => {

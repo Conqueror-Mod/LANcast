@@ -105,6 +105,12 @@ export function Player() {
    */
   const handoff = (useLocation().state ?? null) as {
     queue?: number[];
+    /*
+     * Which entry of the queue was pressed. A playlist may hold the same track
+     * twice, and the id cannot say which copy: without this the cursor took
+     * the first and the second copy played on from there (R16-6).
+     */
+    at?: number;
     shuffle?: boolean;
     fromStart?: boolean;
     /*
@@ -116,6 +122,7 @@ export function Player() {
   } | null;
   const stateQueue = handoff?.queue;
   const stateShuffle = handoff?.shuffle;
+  const stateAt = handoff?.at;
   const fromStart = !!handoff?.fromStart;
   const continuing = !!handoff?.continuing;
 
@@ -198,7 +205,7 @@ export function Player() {
     if (fromStart && playingRef.current === itemID) {
       pb.seekTo(0);
     }
-    play(itemID, queue, fromStart);
+    play(itemID, queue, fromStart, stateAt);
     /*
      * An explicit request wins; supplying a queue means "in this order";
      * supplying nothing leaves the session's flag alone.
@@ -229,7 +236,7 @@ export function Player() {
     // stateQueue is stable for a history entry; its length identifies it well
     // enough to avoid re-running on an unrelated render.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [itemID, queueParam, play, setShuffle, stateQueue?.length, stateShuffle, gateOpen]);
+  }, [itemID, queueParam, play, setShuffle, stateQueue?.length, stateShuffle, stateAt, gateOpen]);
 
   // **The URL is not kept in step with the queue, deliberately.**
   //
@@ -1123,6 +1130,7 @@ export function Player() {
                         // what is coming next.
                         ids={pb.playOrder}
                         currentID={pb.itemID}
+                        currentAt={pb.playPos}
                         // Queued by hand, which is not in playOrder and never
                         // will be — it is a lane beside the queue. Without this
                         // the panel showed the queue a queued track was not
