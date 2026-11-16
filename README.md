@@ -18,6 +18,14 @@ compromises.
 > [docs/roadmap.md](docs/roadmap.md) is the honest ledger — every release, what
 > shipped, and what was *not* looked at before it shipped.
 
+**Runs on:** Windows 10 and 11 (x64), as an app with its own window and as a
+Windows service; Linux on amd64, as a systemd service you reach from a browser.
+A Linux arm64 build (Raspberry Pi and similar) is published too, and is *built,
+not run*: it is cross-compiled for every release, and nobody has run it on an
+arm64 machine yet. There is no macOS build. Installing is
+**[docs/install.md](docs/install.md)**; what LANcast sends beyond your network
+is **[docs/privacy.md](docs/privacy.md)**.
+
 ## Why
 
 Kodi had the right bones — everything was extensible — but never the sustained
@@ -71,8 +79,8 @@ have yet ([ADR 0093](docs/adr/0093-a-collection-knows-its-missing-films.md)).
 
 **Playback anywhere.** ffprobe decides direct play, remux, or transcode *and
 states its reason* ([ADR 0012](docs/adr/0012-probe-before-transcode.md)).
-Hardware encoding (NVENC, QSV, AMF, VideoToolbox) is chosen by a real test
-encode rather than a capability list. Clients declare what they decode, and the
+Hardware encoding (NVENC, Quick Sync, AMF) is chosen by a real test
+encode rather than a capability list, and falls back to the CPU. Clients declare what they decode, and the
 server widens the profile rather than re-encoding what the machine could have
 played. The desktop window plays through libmpv, so most files never need
 converting at all ([ADR 0067](docs/adr/0067-the-desktop-client-plays-through-libmpv.md)).
@@ -124,12 +132,14 @@ PC games installed on the machine, launched from the same hub
 once a human edits the membership, no rescan may undo it
 ([ADR 0030](docs/adr/0030-playlists-and-m3u.md)).
 
-**Live TV** *(parked)*. M3U channel sources with an EPG, for people who
-already have a stream to point at. Media Source Extensions playback is built and
-**off by default**, and a browser without it falls back rather than failing
+**Live TV** *(off in 1.0)*. M3U channel sources with an EPG, for people who
+already have a stream to point at
 ([ADR 0013](docs/adr/0013-transcode-pipeline.md),
-[ADR 0036](docs/adr/0036-epg.md)). Usable, and the one feature here not being
-called finished; further work on it is parked.
+[ADR 0036](docs/adr/0036-epg.md)). It is built but not finished, so it is
+**turned off** and appears on no screen: the menus leave it out and its routes
+answer `409 live_tv_off`. Nothing is deleted. Adding `"live_tv": true` to
+`config.json` in the data directory and restarting brings it back as it was,
+unsupported; further work on it is parked until after 1.0.
 
 **People.** Multi-user accounts with admin and member roles, per-user watch
 state, profile pages with real history and totals, and viewing that is private
@@ -161,27 +171,55 @@ two things a third party still cannot do.
 ([ADR 0106](docs/adr/0106-the-dashboard-remembers-two-days.md)), metrics for
 Prometheus ([ADR 0096](docs/adr/0096-metrics-have-their-own-key.md)),
 webhooks ([ADR 0097](docs/adr/0097-a-webhook-goes-where-the-owner-points-it.md)),
+trusted reverse proxies (the last three *checked with simulated clients*; see
+[What is not proven](#what-is-not-proven)),
 scheduled backups with restore from Settings
 ([ADR 0058](docs/adr/0058-a-backup-is-the-database.md)), live updates to every
 open screen ([ADR 0079](docs/adr/0079-the-server-says-when-something-changed.md)),
 and **Report an issue**, a form whose report leaves the server only when you
 press Send ([ADR 0109](docs/adr/0109-a-report-goes-only-when-sent.md)).
 
-**Its own window.** `LANcast` opens a WebView2 window rather than handing
-a URL to a browser — which is what lets it pin the server's certificate instead
-of showing you a warning it cannot resolve
-([ADR 0023](docs/adr/0023-native-desktop-client.md)).
+**Its own window.** On Windows, `LANcast` opens a WebView2 window rather than
+handing a URL to a browser — which is what lets it pin the server's certificate
+instead of showing you a warning it cannot resolve
+([ADR 0023](docs/adr/0023-native-desktop-client.md)). On Linux there is no
+window: the server is reached from a browser on any device.
+
+## What is not proven
+
+1.0 is a promise that everything built has been seen working, or is named here
+as not having been. These are named:
+
+- **Trusted reverse proxies, Prometheus metrics and Home Assistant webhooks**
+  are *checked with simulated clients*: the proxy headers and the metrics were
+  exercised with `curl`, and the webhooks with a local receiver, on the
+  installed service. None has been run behind a real Caddy or nginx, scraped by
+  a real Prometheus, or received by a real Home Assistant.
+- **Theater output** (HDR and audio passthrough to a receiver) is *parked*
+  until the hardware to test it is to hand. Frame-rate matching and uncomposed
+  video, which it builds on, shipped and are in use.
+- **Live TV** is *off by default* (above).
+- **Linux arm64** is *built, not run* (above). Linux amd64 is supported.
+
+The full list of what each release did and did not look at is the roadmap's
+ledger, [docs/roadmap.md](docs/roadmap.md).
 
 ## Requirements
 
-- **Go 1.25+** — required to build; nothing at all to *run* a release
-- **ffmpeg** — needed for probing and conversion. You do not have to install it
-  yourself: setup offers to fetch a pinned, checksum-verified build as a ticked
-  option on the form you already submit, and Settings has the same button
+- **Nothing at all to *run* a release.** To build from source: Go (`go.mod`
+  pins the toolchain, currently Go 1.26.11, and any Go from 1.21 on fetches it
+  for you). Node 24 only if you change the client in `web/`.
+- **ffmpeg** — needed for probing and conversion. On Windows you do not have to
+  install it yourself: setup offers to fetch a pinned, checksum-verified build as
+  a ticked option on the form you already submit, and Settings › Transcoding has
+  the same button
   ([ADR 0043](docs/adr/0043-media-tools-are-fetched-not-bundled.md),
   [ADR 0048](docs/adr/0048-media-tools-install-themselves-on-first-run.md)).
-  Untick it and bring your own on `PATH`, or go without — LANcast still runs and
-  serves direct-play files, and says so plainly rather than failing.
+  On Linux, install it from your distribution (`sudo apt install ffmpeg`).
+  Without it LANcast still runs and serves direct-play files, and says so
+  plainly rather than failing. The Windows service runs ffmpeg only from a
+  folder only administrators can change; [docs/install.md](docs/install.md#ffmpeg)
+  explains what that means for an ffmpeg you installed yourself.
 
 SQLite is *not* a requirement — LANcast uses a pure-Go driver, so there is no
 cgo and no C toolchain needed on any platform. See
@@ -193,13 +231,16 @@ cgo and no C toolchain needed on any platform. See
 go test ./... && go run ./cmd/lancast serve -addr :8080
 ```
 
-Then open <http://localhost:8080>, create the first account, add a library
-pointing at a folder of media, and scan it.
+Then open <http://localhost:8080> on the same machine and create the first
+account. Until that account exists the server listens on `127.0.0.1` only (see
+[Security](#security)); restart it afterwards and other devices can reach it,
+over HTTPS. Then, under Settings › Libraries, add a library pointing at a
+folder of media and scan it.
 
 | Flag | Default | Meaning |
 |---|---|---|
 | `-addr` | `:8080` | Listen address |
-| `-data` | `%APPDATA%/LANcast` (platform config dir) | Where `lancast.db` lives |
+| `-data` | your per-user config folder: `%APPDATA%\LANcast` on Windows, `~/.config/LANcast` on Linux | Where `lancast.db`, `config.json` and the logs live |
 | `-v` | off | Verbose logging |
 
 Build the one LANcast executable (the app, and the server as `LANcast serve`):
@@ -259,9 +300,9 @@ Releases ship one executable — `LANcast.exe` on Windows, `lancast` on Linux �
 with no runtime to install. Opened, it is the app, with its window and tray
 icon; installed as a service, the same file is the server
 ([ADR 0080](docs/adr/0080-one-executable-two-roles.md)). On Windows the
-installer registers the service and adds a shortcut; on Linux/NAS it runs as a
-systemd service. Full steps, including the one
-data-directory rule that matters most, are in
+installer adds a shortcut and asks whether to run the server as a service; on
+Linux it runs as a systemd service. Full steps, including the one
+data-directory rule that matters most and getting ffmpeg to the service, are in
 **[docs/install.md](docs/install.md)**.
 
 The server can check for, download, verify, and stage an update that swaps
