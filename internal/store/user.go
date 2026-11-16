@@ -342,6 +342,17 @@ func (s *Store) DeleteUser(ctx context.Context, id string) error {
 	if _, err := tx.ExecContext(ctx, `DELETE FROM retro_unlock_queue WHERE user_id = ?`, id); err != nil {
 		return fmt.Errorf("delete user retroachievements unlocks: %w", err)
 	}
+	// Their ratings and written reviews (revision 21) and their banked watch
+	// totals (revision 30). Missed until R04-6, so a deleted member's reviews
+	// stayed in every backup under an id nobody would have again. The test
+	// that walks every user_id table in sqlite_master is what keeps the next
+	// one from being forgotten.
+	if _, err := tx.ExecContext(ctx, `DELETE FROM user_rating WHERE user_id = ?`, id); err != nil {
+		return fmt.Errorf("delete user ratings: %w", err)
+	}
+	if _, err := tx.ExecContext(ctx, `DELETE FROM profile_totals WHERE user_id = ?`, id); err != nil {
+		return fmt.Errorf("delete user profile totals: %w", err)
+	}
 	res, err := tx.ExecContext(ctx, `DELETE FROM user WHERE id = ?`, id)
 	if err != nil {
 		return fmt.Errorf("delete user: %w", err)

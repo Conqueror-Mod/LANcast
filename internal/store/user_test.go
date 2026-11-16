@@ -2,8 +2,10 @@ package store
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -422,4 +424,130 @@ func TestTheOnlyAdminCannotBeDeletedByTheStore(t *testing.T) {
 	if err := st.DeleteUser(ctx, "u_nobody"); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("deleting nobody: %v, want ErrNotFound", err)
 	}
+}
+
+/*
+ * Deleting an account leaves nothing keyed to it, in any table (R04-6).
+ *
+ * Most user-keyed tables have no foreign key to user, so DeleteUser removes
+ * their rows by hand, and the list has been forgotten twice: user_rating (a
+ * written review) and profile_totals (banked watch time) outlived the account
+ * in every backup since. This walks sqlite_master rather than a list, so the
+ * next table with a user_id column is covered the day it is created: it puts
+ * one row for the account in every such table, deletes the account, and asks
+ * every table again.
+ *
+ * Rows are written with foreign keys off on one connection, since a row in
+ * playback_state must name an item and the point here is the user_id, not
+ * the item. Columns that are NOT NULL with no default get a placeholder of
+ * their type.
+ */
+func TestDeletingAnAccountLeavesNoRowInAnyUserTable(t *testing.T) {
+	st := newStore(t)
+	ctx := context.Background()
+	if _, err := st.CreateUser(ctx, "", "Keeper", "h", RoleAdmin); err != nil {
+		t.Fatal(err)
+	}
+	gone, err := st.CreateUser(ctx, "", "Gone", "h", RoleMember)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	tables := userTables(t, st)
+	if len(tables) < 10 {
+		t.Fatalf("found only %d tables with a user_id column; the walk is broken", len(tables))
+	}
+
+	conn, err := st.db.Conn(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := conn.ExecContext(ctx, `PRAGMA foreign_keys = OFF`); err != nil {
+		t.Fatal(err)
+	}
+	for _, table := range tables {
+		cols, vals := placeholderRow(t, conn, table, gone.ID)
+		q := `INSERT INTO "` + table + `" (` + strings.Join(cols, ", ") + `) VALUES (?` +
+			strings.Repeat(", ?", len(cols)-1) + `)`
+		if _, err := conn.ExecContext(ctx, q, vals...); err != nil {
+			t.Fatalf("seed %s: %v (teach placeholderRow about this table)", table, err)
+		}
+	}
+	if _, err := conn.ExecContext(ctx, `PRAGMA foreign_keys = ON`); err != nil {
+		t.Fatal(err)
+	}
+	conn.Close()
+
+	if err := st.DeleteUser(ctx, gone.ID); err != nil {
+		t.Fatal(err)
+	}
+	for _, table := range tables {
+		var n int
+		if err := st.db.QueryRowContext(ctx,
+			`SELECT COUNT(*) FROM "`+table+`" WHERE user_id = ?`, gone.ID).Scan(&n); err != nil {
+			t.Fatal(err)
+		}
+		if n != 0 {
+			t.Errorf("%s keeps %d row(s) for a deleted account", table, n)
+		}
+	}
+}
+
+// userTables lists every table with a column named user_id.
+func userTables(t *testing.T, st *Store) []string {
+	t.Helper()
+	rows, err := st.db.QueryContext(context.Background(), `
+		SELECT DISTINCT m.name FROM sqlite_master m JOIN pragma_table_info(m.name) p
+		WHERE m.type = 'table' AND p.name = 'user_id' ORDER BY m.name`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rows.Close()
+	var out []string
+	for rows.Next() {
+		var name string
+		if err := rows.Scan(&name); err != nil {
+			t.Fatal(err)
+		}
+		out = append(out, name)
+	}
+	return out
+}
+
+// placeholderRow is a row for table naming userID, filling every column that
+// must be filled with a value of its declared type.
+func placeholderRow(t *testing.T, conn *sql.Conn, table, userID string) ([]string, []any) {
+	t.Helper()
+	rows, err := conn.QueryContext(context.Background(),
+		`SELECT name, type, "notnull", dflt_value IS NOT NULL, pk FROM pragma_table_info(?)`, table)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rows.Close()
+	var cols []string
+	var vals []any
+	for rows.Next() {
+		var name, typ string
+		var notNull, hasDefault bool
+		var pk int
+		if err := rows.Scan(&name, &typ, &notNull, &hasDefault, &pk); err != nil {
+			t.Fatal(err)
+		}
+		switch {
+		case name == "user_id":
+			cols, vals = append(cols, name), append(vals, userID)
+		case (notNull || pk > 0) && !hasDefault:
+			var v any = "x"
+			switch u := strings.ToUpper(typ); {
+			case strings.Contains(u, "INT"):
+				v = 1
+			case strings.Contains(u, "REAL"), strings.Contains(u, "FLOA"):
+				v = 1.0
+			case strings.Contains(u, "BLOB"):
+				v = []byte{1}
+			}
+			cols, vals = append(cols, `"`+name+`"`), append(vals, v)
+		}
+	}
+	return cols, vals
 }
