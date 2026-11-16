@@ -31,6 +31,10 @@ func TestStoredFrameRateReachesTheEncoder(t *testing.T) {
 		{"2160p60", 3840, 2160, 60, "5.2", "120"},
 		// The ordinary case keeps the level it always had.
 		{"1080p23.976", 1920, 1080, 24000.0 / 1001, "4.1", "48"},
+		// A Matroska time base probed as a rate. Believed, it set a keyframe
+		// every 2,000 frames and level 6.1; it is treated as unknown instead,
+		// which is what every decision did before R09-3.
+		{"1080p probed at 1000fps", 1920, 1080, 1000, "4.1", "48"},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
