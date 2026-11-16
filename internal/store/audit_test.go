@@ -28,6 +28,10 @@ func TestAuditEventOutlivesItsActor(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// Another administrator, since the store refuses to delete the last one.
+	if _, err := st.CreateUser(ctx, "u2", "trent", "hash", RoleAdmin); err != nil {
+		t.Fatal(err)
+	}
 	if err := st.AppendAudit(ctx, AuditEvent{
 		ActorID: u.ID, ActorName: u.Name, Action: "library.delete",
 		TargetKind: "library", TargetID: "3",

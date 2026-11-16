@@ -40,6 +40,8 @@ type harness struct {
 	dataDir  string
 	enriched int
 	cookie   *http.Cookie
+	// password is the admin's, as secure() set it, for routes that ask for it.
+	password string
 }
 
 func newHarness(t *testing.T) *harness {

@@ -86,6 +86,11 @@ function APIKeysPanel() {
   const create = useCreateAPIKey();
   const revoke = useRevokeAPIKey();
   const [name, setName] = useState("");
+  const [password, setPassword] = useState("");
+  // The key whose Revoke was pressed once (R15-3). A revoked key cannot be
+  // brought back, and whatever held it has to be given a new one by hand, so
+  // the first press asks and only the second revokes.
+  const [confirming, setConfirming] = useState<string | null>(null);
   const [fresh, setFresh] = useState<{ name: string; secret: string } | null>(
     null,
   );
@@ -106,13 +111,17 @@ function APIKeysPanel() {
         onSubmit={(e) => {
           e.preventDefault();
           const wanted = name.trim();
-          if (!wanted) return;
-          create.mutate(wanted, {
-            onSuccess: (r) => {
-              setFresh({ name: r.key.name, secret: r.secret });
-              setName("");
+          if (!wanted || !password) return;
+          create.mutate(
+            { name: wanted, current_password: password },
+            {
+              onSuccess: (r) => {
+                setFresh({ name: r.key.name, secret: r.secret });
+                setName("");
+                setPassword("");
+              },
             },
-          });
+          );
         }}
       >
         <input
@@ -123,10 +132,22 @@ function APIKeysPanel() {
           onChange={(e) => setName(e.target.value)}
           maxLength={64}
         />
+        {/*
+          The password, because a key outlives every session: somebody at a
+          window left signed in must not be able to make one (ADR 0061).
+        */}
+        <input
+          className="set-input"
+          type="password"
+          placeholder="Your password"
+          autoComplete="current-password"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+        />
         <button
           className="set-btn"
           type="submit"
-          disabled={create.isPending || name.trim().length === 0}
+          disabled={create.isPending || name.trim().length === 0 || !password}
         >
           {create.isPending ? "Creating…" : "Create a key"}
         </button>
@@ -178,15 +199,36 @@ function APIKeysPanel() {
               {new Date(k.created_at * 1000).toLocaleDateString()}
             </div>
           </div>
-          <button
-            className="set-btn set-btn--danger"
-            onClick={() => revoke.mutate(k.id)}
-            disabled={revoke.isPending}
-          >
-            Revoke
-          </button>
+          {confirming === k.id ? (
+            <>
+              <span className="set-row__sub">Revoke “{k.name}”?</span>
+              <button
+                className="set-btn set-btn--danger"
+                onClick={() =>
+                  revoke.mutate(k.id, { onSettled: () => setConfirming(null) })
+                }
+                disabled={revoke.isPending}
+              >
+                {revoke.isPending ? "Revoking…" : "Yes, revoke"}
+              </button>
+              <button className="set-btn" onClick={() => setConfirming(null)}>
+                Keep
+              </button>
+            </>
+          ) : (
+            <button
+              className="set-btn set-btn--danger"
+              onClick={() => setConfirming(k.id)}
+              disabled={revoke.isPending}
+            >
+              Revoke
+            </button>
+          )}
         </div>
       ))}
+      {revoke.isError && (
+        <span className="set-error">{errorMessage(revoke.error)}</span>
+      )}
     </>
   );
 }

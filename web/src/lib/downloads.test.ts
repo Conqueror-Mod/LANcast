@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { writeDevice } from "./device";
 import {
   DOWNLOADS_KEY,
+  downloadsKey,
   downloadURL,
   downloadedAt,
   recordReceipt,
@@ -51,6 +52,15 @@ describe("download receipts", () => {
     expect(JSON.parse(localStorage.getItem(DOWNLOADS_KEY)!)).toHaveLength(1);
     expect(downloadedAt(7)).toBeDefined();
     expect(downloadedAt(8)).toBeUndefined();
+  });
+
+  // Each account on the device keeps its own list (R13-8).
+  it("keys the receipts by account", () => {
+    expect(downloadsKey("u_1")).not.toBe(downloadsKey("u_2"));
+    expect(downloadsKey(undefined)).toBe(DOWNLOADS_KEY);
+    writeDevice<Receipt[]>(downloadsKey("u_1"), [receipt(9, "Mine")]);
+    expect(downloadedAt(9, "u_1")).toBeDefined();
+    expect(downloadedAt(9, "u_2")).toBeUndefined();
   });
 
   // The one URL mistake worth a test: a stream plays in a tab and a download

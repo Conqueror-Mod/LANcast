@@ -173,3 +173,35 @@ credentials is a bad trade.
 first real thing somebody wants a key for. That would mean the boundary is drawn
 in the wrong place, and the honest response is another ADR moving it — not a
 flag that quietly grants admin.
+
+## Amended 2026-11-16: minting asks for the password, and an administrator's reset revokes keys
+
+The whole-app review (R01-4) found the gap this decision left. "Changing a
+password does not revoke keys" assumed a key could only be made by the person
+who knows the password. It could be made by a **session** alone: somebody with
+a few seconds at an unlocked window, or a stolen cookie, posted to
+`/api/keys`, and got a credential that survived the remedy. The owner changed
+their password, or an administrator reset it, every session died, and the key
+went on reading the library, the watch history and the streams as that person
+until somebody thought to open the list.
+
+Adding a passkey already asked for the password for exactly this reason (ADR
+0082): a new way into the account must not come from a session somebody left
+open. A key is the same kind of thing, a way in that outlives sessions, so the
+same rule applies. Two changes, decided by the owner:
+
+1. **Minting a key asks for the current password.** `POST /api/keys` takes
+   `{name, current_password}`. A wrong or missing password is `403`, on the
+   sign-in throttle and the per-account wait, through the same function every
+   other password prompt uses. Listing and revoking keys still need only a
+   session: neither creates a way in.
+2. **An administrator's password reset revokes that account's keys**, and says
+   so: `POST /api/users/{id}/password` answers `200 {api_keys_revoked}` instead
+   of `204`, and the audit entry names the count. That route is the "this
+   account was compromised" action, so it ends every way in, not only the
+   sessions.
+
+The section above still stands for the case it was written for. **Changing
+your own password keeps your keys**: rotating it should not break the machine
+that copies your photographs, and once minting needs the password, a key that
+exists was made by somebody who knew it.

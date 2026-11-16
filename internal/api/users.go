@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"strings"
 
 	"lancast/internal/auth"
 	"lancast/internal/store"
@@ -68,9 +67,9 @@ func (s *Server) createUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	name := strings.TrimSpace(req.Username)
-	if name == "" {
-		writeError(w, http.StatusBadRequest, "bad_request", "username is required")
+	name, ok := validName(req.Username)
+	if !ok {
+		writeError(w, http.StatusBadRequest, "bad_request", nameRule)
 		return
 	}
 	role := req.Role
@@ -83,7 +82,7 @@ func (s *Server) createUser(w http.ResponseWriter, r *http.Request) {
 	}
 
 	hash, err := auth.HashPassword(req.Password)
-	if errors.Is(err, auth.ErrWeakPassword) {
+	if auth.PasswordRefused(err) {
 		writeError(w, http.StatusBadRequest, "bad_request", err.Error())
 		return
 	}
@@ -117,19 +116,15 @@ func (s *Server) deleteUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if target.Role == store.RoleAdmin {
-		admins, err := s.st.CountAdmins(r.Context())
-		if err != nil {
-			s.writeInternal(w, err, "count admins")
-			return
-		}
-		if admins <= 1 {
-			writeError(w, http.StatusConflict, "conflict", "cannot delete the last administrator")
-			return
-		}
+	// The last-administrator rule is the store's, inside the delete's own
+	// transaction: a count taken here first lost the race when two
+	// administrators deleted each other at once (R01-11, R04-5).
+	err = s.st.DeleteUser(r.Context(), id)
+	if errors.Is(err, store.ErrLastAdmin) {
+		writeError(w, http.StatusConflict, "conflict", "cannot delete the last administrator")
+		return
 	}
-
-	if err := s.st.DeleteUser(r.Context(), id); s.notFoundOr(w, err, "delete user", "no such user") {
+	if s.notFoundOr(w, err, "delete user", "no such user") {
 		return
 	}
 	// The rows went with the account; the save files are the other half
@@ -161,7 +156,7 @@ func (s *Server) resetUserPassword(w http.ResponseWriter, r *http.Request) {
 	}
 
 	hash, err := auth.HashPassword(req.NewPassword)
-	if errors.Is(err, auth.ErrWeakPassword) {
+	if auth.PasswordRefused(err) {
 		writeError(w, http.StatusBadRequest, "bad_request", err.Error())
 		return
 	}
@@ -177,13 +172,33 @@ func (s *Server) resetUserPassword(w http.ResponseWriter, r *http.Request) {
 		s.writeInternal(w, err, "revoke sessions")
 		return
 	}
+	/*
+	 * And their API keys (R01-4, ADR 0061 amended 2026-11-16). A routine change
+	 * of your own password keeps them, so the machine that copies photographs
+	 * does not break; an administrator's reset is the "this account was
+	 * compromised" action, and a key somebody minted while it was compromised
+	 * must not outlive it. Said in the answer and the audit, so whoever has to
+	 * hand out new keys knows how many.
+	 */
+	keys, err := s.st.DeleteUserAPIKeys(r.Context(), id)
+	if err != nil {
+		s.writeInternal(w, err, "revoke api keys")
+		return
+	}
 	// An admin setting someone else's password is the single most
 	// impersonation-shaped act the API allows, so it is recorded whoever does it.
 	name := id
 	if u, err := s.st.UserByID(r.Context(), id); err == nil {
 		name = u.Name
 	}
-	s.audit(r, "user.password_reset", "user", id,
-		fmt.Sprintf("Reset the password for %q and signed them out everywhere", name), nil)
-	w.WriteHeader(http.StatusNoContent)
+	summary := fmt.Sprintf("Reset the password for %q and signed them out everywhere", name)
+	switch keys {
+	case 0:
+	case 1:
+		summary += "; revoked their API key"
+	default:
+		summary += fmt.Sprintf("; revoked their %d API keys", keys)
+	}
+	s.audit(r, "user.password_reset", "user", id, summary, map[string]any{"api_keys_revoked": keys})
+	writeJSON(w, http.StatusOK, map[string]any{"api_keys_revoked": keys})
 }

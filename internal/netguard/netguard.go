@@ -85,11 +85,45 @@ func blocked(ip net.IP) bool {
 	if ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() || ip.IsInterfaceLocalMulticast() {
 		return true
 	}
+	if v4 := ip.To4(); v4 != nil {
+		for _, n := range reservedV4 {
+			if n.Contains(v4) {
+				return true
+			}
+		}
+	}
 	// Everything left that is not ordinary routable internet: multicast,
 	// broadcast, and the reserved blocks. Checked last so the categories above
 	// keep their own names in the code.
 	return !ip.IsGlobalUnicast()
 }
+
+/*
+ * reservedV4 is the IPv4 space Go's net package calls global unicast and is
+ * not the internet (R01-15).
+ *
+ *   100.64.0.0/10   carrier-grade NAT (RFC 6598), and where Tailscale puts
+ *                   every device on a tailnet: the network this machine sits
+ *                   in, by another route.
+ *   0.0.0.0/8       "this network"; some stacks route it to this host.
+ *   192.0.0.0/24    IETF protocol assignments.
+ *   198.18.0.0/15   benchmarking, which some appliances use internally.
+ *   240.0.0.0/4     reserved for future use, and 255.255.255.255 with it.
+ *
+ * The documentation ranges (192.0.2.0/24 and friends) are left alone: nothing
+ * answers there, so refusing them protects nothing.
+ */
+var reservedV4 = func() []*net.IPNet {
+	var out []*net.IPNet
+	for _, c := range []string{"100.64.0.0/10", "0.0.0.0/8", "192.0.0.0/24", "198.18.0.0/15", "240.0.0.0/4"} {
+		_, n, err := net.ParseCIDR(c)
+		if err != nil {
+			panic(err)
+		}
+		out = append(out, n)
+	}
+	return out
+}()
 
 // Dialer returns a dialer that refuses private and local addresses.
 func Dialer() *net.Dialer {

@@ -442,3 +442,43 @@ func TestTheStatusNamesWherePasskeysWouldWork(t *testing.T) {
 		t.Errorf("expired certificate: %v", pk)
 	}
 }
+
+// A stranger asking for sign-in challenges as fast as they like no longer
+// switches passkey sign-in off for everybody: past the old cap of 1,000, every
+// request is still answered, and the stranger's flood displaces only its own
+// (R01-6). The harness is one address, so this is the flood's own view.
+func TestPasskeyChallengesCannotBeExhaustedByAnyone(t *testing.T) {
+	h := newHarness(t)
+	h.secure(t, pkPassword)
+	enablePasskeys(h)
+	for i := 0; i < 1001; i++ {
+		resp := h.do(t, "POST", "/api/auth/passkey/login/options", nil)
+		resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			t.Fatalf("request %d: status %d", i, resp.StatusCode)
+		}
+	}
+	// And the newest of the flood still works; only its oldest went.
+	f := newFakeKey(t)
+	addPasskey(t, h, f, "phone")
+	opts := loginOptions(t, h)
+	resp := h.do(t, "POST", "/api/auth/passkey/login", f.signIn(t, opts, adminID(t, h)))
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("sign-in after a flood: %d", resp.StatusCode)
+	}
+}
+
+func TestChallengeClientIsTheIPv6Slash64(t *testing.T) {
+	r := httptest.NewRequest("GET", "/", nil)
+	r.RemoteAddr = "[2001:db8:1:2:aaaa::1]:443"
+	a := challengeClient(r)
+	r.RemoteAddr = "[2001:db8:1:2:bbbb::9]:443"
+	if b := challengeClient(r); a != b {
+		t.Errorf("one /64 is two clients: %q and %q", a, b)
+	}
+	r.RemoteAddr = "192.0.2.7:80"
+	if got := challengeClient(r); got != "192.0.2.7" {
+		t.Errorf("IPv4 client = %q", got)
+	}
+}

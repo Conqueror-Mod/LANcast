@@ -1,9 +1,12 @@
 package api
 
 import (
+	"bytes"
 	"encoding/base32"
 	"encoding/json"
+	"fmt"
 	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
@@ -429,5 +432,37 @@ func TestAnAPIKeyCannotChangeTwoFactor(t *testing.T) {
 		if resp.StatusCode != http.StatusForbidden {
 			t.Errorf("%s %s with a key: %d, want 403", c.method, c.path, resp.StatusCode)
 		}
+	}
+}
+
+// The password prompt in front of two-factor changes carries the per-account
+// wait as well as the per-address throttle (R01-12). With a stolen session
+// and many addresses, each address used to get its own ten guesses and no
+// limit across them; now the right password, from yet another address, is
+// refused unchecked once the account is waiting, as at sign-in.
+func TestTwoFactorPasswordPromptWaitsPerAccount(t *testing.T) {
+	h := newHarness(t)
+	h.secure(t, tfPassword)
+	h.withSealer(t)
+	turnOnTwoFactor(t, h)
+	handler := h.srvAPI.Handler()
+	from := func(addr, pw string) int {
+		b, _ := json.Marshal(map[string]any{"current_password": pw})
+		r := httptest.NewRequest("DELETE", "/api/profile/two-factor", bytes.NewReader(b))
+		r.Header.Set("Content-Type", "application/json")
+		r.RemoteAddr = addr
+		r.AddCookie(h.cookie)
+		w := httptest.NewRecorder()
+		handler.ServeHTTP(w, r)
+		return w.Code
+	}
+	free := auth.NewAccountBackoff().Free
+	for i := 0; i < free+1; i++ {
+		if code := from(fmt.Sprintf("203.0.113.%d:4000", i+1), "wrong"); code != http.StatusForbidden {
+			t.Fatalf("guess %d: %d, want 403", i+1, code)
+		}
+	}
+	if code := from("198.51.100.7:4000", tfPassword); code != http.StatusTooManyRequests {
+		t.Fatalf("the right password during the wait: %d, want 429", code)
 	}
 }

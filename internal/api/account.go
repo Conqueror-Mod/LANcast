@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"unicode"
+	"unicode/utf8"
 
 	"lancast/internal/store"
 )
@@ -29,18 +31,27 @@ import (
 
 const maxNameLength = 60
 
-// validName applies the same rule to both surfaces, so an administrator cannot
-// create a name a person could not choose for themselves — two rules would
-// eventually disagree and the disagreement would be a bug report.
+// nameRule is what every route that takes an account name says when it
+// refuses one.
+const nameRule = "a name is required, and must be 60 characters or fewer, with no control or invisible characters"
+
+// validName applies the same rule to every surface that takes an account name
+// — setup, an administrator creating one, an invite redeemed, and both renames
+// — so an administrator cannot create a name a person could not choose for
+// themselves, and nobody can choose one the rule exists to refuse. Two rules
+// would eventually disagree and the disagreement would be a bug report; three
+// of the five routes once skipped it (R01-10).
 func validName(raw string) (string, bool) {
 	name := strings.TrimSpace(raw)
-	if name == "" || len(name) > maxNameLength {
+	if name == "" || len(name) > maxNameLength || !utf8.ValidString(name) {
 		return "", false
 	}
-	// Control characters would render as nothing and make two accounts look
-	// identical in every list that shows a name.
+	// Control characters, and format characters such as a zero-width space
+	// (Unicode category Cf), render as nothing and make two accounts look
+	// identical in every list that shows a name: "admin" and "admin" plus a
+	// zero-width joiner would be two admins on the People page.
 	for _, r := range name {
-		if r < 0x20 || r == 0x7f {
+		if unicode.IsControl(r) || unicode.Is(unicode.Cf, r) {
 			return "", false
 		}
 	}
@@ -67,8 +78,7 @@ func (s *Server) patchProfile(w http.ResponseWriter, r *http.Request) {
 	}
 	name, ok := validName(req.Name)
 	if !ok {
-		writeError(w, http.StatusBadRequest, "bad_request",
-			"a name is required, and must be 60 characters or fewer")
+		writeError(w, http.StatusBadRequest, "bad_request", nameRule)
 		return
 	}
 
@@ -128,64 +138,64 @@ func (s *Server) patchUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	/*
+	 * Every field is checked, and then all of them are written in one
+	 * transaction, so an edit that is refused is not half applied (R01-16).
+	 * Before, a rename was saved and audited before the role change after it
+	 * could be refused.
+	 */
+	edit := store.UserEdit{Role: req.Role, MaxContentRating: req.MaxContentRating}
 	if req.Name != nil {
 		name, ok := validName(*req.Name)
 		if !ok {
+			writeError(w, http.StatusBadRequest, "bad_request", nameRule)
+			return
+		}
+		edit.Name = &name
+	}
+	if req.Role != nil && !store.ValidRole(*req.Role) {
+		writeError(w, http.StatusBadRequest, "bad_request",
+			"role must be admin or member")
+		return
+	}
+	if err := s.st.EditUser(r.Context(), id, edit); err != nil {
+		switch {
+		case errors.Is(err, store.ErrDuplicate):
+			writeError(w, http.StatusConflict, "duplicate", "that name is already taken")
+		case errors.Is(err, store.ErrLastAdmin):
+			// Refused in the store, inside a transaction with the count —
+			// two admins demoting each other at once is a race a handler
+			// check loses, and the prize is a server nobody can administer.
+			writeError(w, http.StatusConflict, "last_admin",
+				"this is the only administrator; promote somebody else first")
+		case errors.Is(err, store.ErrUnknownRating):
+			/*
+			 * A label this server cannot place is refused rather than
+			 * stored, and it is a 400 rather than a 500: the request was
+			 * wrong, and silently keeping a ceiling nothing can place would
+			 * leave a household believing a limit was in force that was
+			 * not.
+			 */
 			writeError(w, http.StatusBadRequest, "bad_request",
-				"a name is required, and must be 60 characters or fewer")
-			return
+				"that is not a content rating this server can place on its scale")
+		case errors.Is(err, store.ErrNotFound):
+			writeError(w, http.StatusNotFound, "not_found", "no such account")
+		default:
+			s.writeInternal(w, err, "edit user")
 		}
-		if err := s.st.RenameUser(r.Context(), id, name); err != nil {
-			s.renameError(w, err)
-			return
-		}
-		s.audit(r, "user.rename", "user", id,
-			fmt.Sprintf("renamed %q to %q", target.Name, name), nil)
+		return
 	}
 
+	// Audited once it has all happened, one entry per field as before.
+	if edit.Name != nil {
+		s.audit(r, "user.rename", "user", id,
+			fmt.Sprintf("renamed %q to %q", target.Name, *edit.Name), nil)
+	}
 	if req.Role != nil {
-		if !store.ValidRole(*req.Role) {
-			writeError(w, http.StatusBadRequest, "bad_request",
-				"role must be admin or member")
-			return
-		}
-		if err := s.st.SetUserRole(r.Context(), id, *req.Role); err != nil {
-			switch {
-			case errors.Is(err, store.ErrLastAdmin):
-				// Refused in the store, inside a transaction with the count —
-				// two admins demoting each other at once is a race a handler
-				// check loses, and the prize is a server nobody can administer.
-				writeError(w, http.StatusConflict, "last_admin",
-					"this is the only administrator; promote somebody else first")
-			case errors.Is(err, store.ErrNotFound):
-				writeError(w, http.StatusNotFound, "not_found", "no such account")
-			default:
-				s.writeInternal(w, err, "set role")
-			}
-			return
-		}
 		s.audit(r, "user.role", "user", id,
 			fmt.Sprintf("%q is now %s", target.Name, *req.Role), nil)
 	}
-
 	if req.MaxContentRating != nil {
-		if err := s.st.SetMaxContentRating(r.Context(), id, *req.MaxContentRating); err != nil {
-			switch {
-			case errors.Is(err, store.ErrNotFound):
-				writeError(w, http.StatusNotFound, "not_found", "no such account")
-			default:
-				/*
-				 * A label this server cannot place is refused rather than
-				 * stored, and it is a 400 rather than a 500: the request was
-				 * wrong, and silently keeping a ceiling nothing can place would
-				 * leave a household believing a limit was in force that was
-				 * not.
-				 */
-				writeError(w, http.StatusBadRequest, "bad_request",
-					"that is not a content rating this server can place on its scale")
-			}
-			return
-		}
 		what := "removed the content rating limit on %q"
 		if *req.MaxContentRating != "" {
 			what = "limited %q to " + *req.MaxContentRating + " and under"

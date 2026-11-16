@@ -501,18 +501,12 @@ func (s *Server) twoFactorAlreadyOn(w http.ResponseWriter, r *http.Request, user
 	return false
 }
 
-// passwordConfirmed reads {"current_password"} and checks it against the caller's
-// account, on the same throttle as sign-in (see authChangePassword).
+// passwordConfirmed reads {"current_password"} and checks it against the
+// caller's account (see confirmPassword). A wrong one is 403 on these routes.
 func (s *Server) passwordConfirmed(w http.ResponseWriter, r *http.Request) (*store.Session, bool) {
 	sess, ok := sessionFromContext(r)
 	if !ok {
 		writeError(w, http.StatusUnauthorized, "unauthorized", "sign in to continue")
-		return sess, false
-	}
-	key := auth.ClientKey(r)
-	if !s.throttle.Allow(key) {
-		writeError(w, http.StatusTooManyRequests, "too_many_requests",
-			"too many attempts; wait a few minutes")
 		return sess, false
 	}
 	var req struct {
@@ -522,17 +516,60 @@ func (s *Server) passwordConfirmed(w http.ResponseWriter, r *http.Request) (*sto
 		writeError(w, http.StatusBadRequest, "bad_request", "malformed JSON body")
 		return sess, false
 	}
-	u, err := s.st.UserByID(r.Context(), sess.UserID)
-	if s.notFoundOr(w, err, "lookup user", "no such user") {
+	if _, ok := s.confirmPassword(w, r, sess.UserID, req.Password,
+		http.StatusForbidden, "forbidden", "that password is not right"); !ok {
 		return sess, false
+	}
+	return sess, true
+}
+
+/*
+ * confirmPassword is the one place a signed-in caller proves they know their
+ * own password: changing it, adding a passkey, minting an API key, and
+ * changing two-factor. It writes the refusal itself, with the wrong-password
+ * answer each route has always given.
+ *
+ * Both throttles, always. The per-address one is the login counter, because
+ * this is the same question asked a different way. The per-account wait is
+ * there because a stolen session must not be a fresh budget for learning the
+ * password from many addresses. The two-factor routes once had only the first
+ * (R01-12): somebody holding a session and many addresses could guess at ten
+ * per five minutes per address with no limit across them. One function means
+ * a fifth caller cannot forget either.
+ *
+ * A correct password clears this account's share of both, as a sign-in does.
+ */
+func (s *Server) confirmPassword(w http.ResponseWriter, r *http.Request, userID, password string,
+	wrongStatus int, wrongCode, wrongMsg string) (*store.User, bool) {
+	key := auth.ClientKey(r)
+	if !s.throttle.Allow(key) {
+		writeError(w, http.StatusTooManyRequests, "too_many_requests",
+			"too many attempts; wait a few minutes")
+		return nil, false
+	}
+	u, err := s.st.UserByID(r.Context(), userID)
+	if s.notFoundOr(w, err, "lookup user", "no such user") {
+		return nil, false
 	}
 	s.throttle.Attribute(key, u.Name)
-	if !auth.CheckPassword(u.PasswordHash, req.Password) {
-		writeError(w, http.StatusForbidden, "forbidden", "that password is not right")
-		return sess, false
+	inside := auth.InsideNetwork(r)
+	if !inside {
+		if ok, _ := s.accountWait.Allow(u.Name); !ok {
+			writeError(w, http.StatusTooManyRequests, "too_many_requests",
+				"too many attempts; wait a few minutes")
+			return nil, false
+		}
+	}
+	if !auth.CheckPassword(u.PasswordHash, password) {
+		if !inside {
+			s.accountWait.Fail(u.Name)
+		}
+		writeError(w, wrongStatus, wrongCode, wrongMsg)
+		return nil, false
 	}
 	s.throttle.Reset(key, u.Name)
-	return sess, true
+	s.accountWait.Reset(u.Name)
+	return u, true
 }
 
 func newRecoverySet() (codes, hashes []string, err error) {

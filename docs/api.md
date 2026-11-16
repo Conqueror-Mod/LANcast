@@ -115,9 +115,12 @@ the server still held its session.
 account's name, and nothing else, for the sign-in page to offer as tiles. A
 name is half of every login and this server may answer the internet at a
 public name, so only this computer, private and link-local addresses, and
-addresses on a network one of this machine's interfaces is on get the list
-(the last is what makes a phone on the house Wi-Fi count when it speaks global
-IPv6). Everything else gets `{"accounts": []}`, as does every request while
+IPv6 addresses on a network (no wider than a /48) one of this machine's
+interfaces is on get the list (the last is what makes a phone on the house
+Wi-Fi count when it speaks global IPv6). There is no interface rule for IPv4:
+on a machine holding a public IPv4 address directly, its interface's network
+is the provider's subnet, full of strangers, and a house's own IPv4 network is
+always private. Everything else gets `{"accounts": []}`, as does every request while
 the `login_picker` setting is off. An empty list rather than a `403`: it says
 nothing about whether there is anything to hide.
 
@@ -163,6 +166,13 @@ without ffmpeg — it simply cannot convert. Nothing is fetched when ffmpeg is
 already present.
 | `POST /api/auth/logout` | Ends this session |
 | `POST /api/auth/password` | `{current_password, new_password}`; changes **your own** password and revokes **your** sessions. **Throttled**, sharing one counter with `login` — see below |
+
+**A new password is 8 characters to 72 bytes.** Every route that sets one
+(`setup`, `password`, `POST /api/users`, `POST /api/users/{id}/password`,
+`POST /api/invites/redeem`) answers `400 bad_request` with the rule in the
+message when it is broken either way. The upper limit is bcrypt's and it is
+counted in **bytes**, so a passphrase in a non-Latin script reaches it at 24 to
+36 characters. Before this was checked a long password was answered `500`.
 
 `login` and `password` share **one** throttle: ten attempts per five minutes per
 address, decaying on their own, with no lockout — a lockout is a denial of
@@ -651,14 +661,14 @@ delete, `match`, item `refresh`); `GET`/`PUT /api/settings`; and all of
 |---|---|
 | `GET /api/users` | `{users: [{id, name, role, picture}]}`. `picture` is the hash of the account's uploaded picture, or `null` ([ADR 0121](adr/0121-a-picture-of-your-own.md)) |
 | `POST /api/users` | `{username, password, role?}` → `201 {id, name, role}`. Role defaults to `member`. `409` if the name is taken |
-| `PATCH /api/users/{id}` | `{name?, role?, max_content_rating?}` — rename an account, change its role, set the content rating it may not exceed, or any combination. At least one field is required. The account **id** is unchanged, which is what makes it a rename rather than a replacement: sessions, history, ratings and playlist membership hang off the id and follow silently. `409 last_admin` when it would demote the only administrator, refused in the store inside a transaction with the count. `max_content_rating` is a **ceiling set for the account by an administrator**, and empty clears it; `400` for a label this server cannot place on its scale, because a ceiling that means nothing would leave a household believing a limit was in force. It is deliberately the mirror image of the sharing switch, which has no administrator route at all: a switch somebody else can flip is not consent, and a limit you can lift is not a limit |
+| `PATCH /api/users/{id}` | `{name?, role?, max_content_rating?}` — rename an account, change its role, set the content rating it may not exceed, or any combination. At least one field is required, and the fields are applied **together or not at all**: one that is refused leaves the others unwritten and unaudited. The account **id** is unchanged, which is what makes it a rename rather than a replacement: sessions, history, ratings and playlist membership hang off the id and follow silently. `409 last_admin` when it would demote the only administrator, refused in the store inside a transaction with the count. `max_content_rating` is a **ceiling set for the account by an administrator**, and empty clears it; `400` for a label this server cannot place on its scale, because a ceiling that means nothing would leave a household believing a limit was in force. It is deliberately the mirror image of the sharing switch, which has no administrator route at all: a switch somebody else can flip is not consent, and a limit you can lift is not a limit |
 
 **What a ceiling does.** It is enforced on the server, in listings **and in playback authorisation** — a client-side hide is a suggestion and this API serves files. An item above the ceiling answers `404` from every route that turns an id into bytes, and `404` rather than `403` on purpose: "you may not see this" and "this does not exist" must be indistinguishable, or walking the ids becomes a way to enumerate what a household is keeping from somebody. An item with no rating of its own **inherits its parent's, then its grandparent's** — an episode is judged by its show — and anything still unrated after that is **blocked**, on the reasoning that a limit stopping at the catalogued and waving the rest past is a filter that looks like a limit. Music and photographs are exempt: a track and a photograph carry no certificate and never will, so judging them by one would mean a limited account could not see a single song or a single photograph — a lockout rather than a limit.
 
 **What a hidden library does** (ADR 0084). It is the same kind of limit as the ceiling and is enforced in the same places: the library leaves the account's `GET /api/libraries`, every listing, and every route that turns an id into an item or bytes, which answer `404`. Every `/api/libraries/{id}/` route answers `404` for it, exactly as for a library that does not exist. A **deny list**: an account nobody narrowed sees everything, and a library added later is visible to everyone until somebody narrows them. Administrators are never restricted. What a paired server may see is decided by its share and is unaffected.
 | `DELETE /api/users/{id}` | Removes the account, its sessions, and its watch state. `409` if it is the last admin |
 | `DELETE /api/users/{id}/picture` | Clears that account's uploaded picture → `204`, whether or not it had one. `404` for no such account. Audited as `user.picture.clear` when there was one ([ADR 0121](adr/0121-a-picture-of-your-own.md) §5) |
-| `POST /api/users/{id}/password` | `{new_password}` → resets that user's password and revokes their sessions |
+| `POST /api/users/{id}/password` | `{new_password}` → `200 {api_keys_revoked}`: resets that user's password, revokes their sessions **and their API keys**, and says how many keys went. Before 1.0 this answered `204` and kept the keys |
 | `GET /api/users/{id}/libraries` | `{hidden: [libraryID], applies}` — which libraries this account cannot see ([ADR 0084](adr/0084-a-library-can-be-kept-from-an-account.md)). Empty is the default: every library. `applies` is `false` for an administrator, who is never restricted; the rows are kept, so a demotion puts them back |
 | `PUT /api/users/{id}/libraries` | `{hidden: [libraryID]}` → replaces the set and answers as `GET`. `hidden` is required (`400` without it, rather than lifting everything), and an id that is not a library is `400`. Audited as `user.libraries` |
 
@@ -672,7 +682,7 @@ A link that makes one **member** account, once ([ADR 0104](adr/0104-a-friend-is-
 | `GET /api/invites` | Admin. `{invites: [Invite]}`, the ones that still work, newest first. Expired ones are deleted on the way. Never the secret |
 | `DELETE /api/invites/{id}` | Admin. Withdraw: the link stops working at once → `204`. Audited as `invite.delete` |
 | `POST /api/invites/check` | **Public.** `{token}` → `{from, expires_at}`, who made it and when it ends. Never the note, which is the administrator's words about the person |
-| `POST /api/invites/redeem` | **Public.** `{token, username, password}` → `201 {id, name, role}`, with the session cookie set as at sign-in. `409` for a taken name and `400` for a weak password, both of which leave the invite to be tried again. Audited as `invite.redeem` |
+| `POST /api/invites/redeem` | **Public.** `{token, username, password}` → `201 {id, name, role}`, with the session cookie set as at sign-in. `409` for a taken name and `400` for a weak password, both of which leave the invite to be tried again. The secret is checked **before** the password is hashed, so a made-up one costs the server a lookup and nothing more. Unusable secrets are counted per address with `check`; past ten in five minutes both routes answer `429` to that address before doing anything, a right secret included. Audited as `invite.redeem` |
 
 **The secret travels in the fragment** (`#…`), which a browser never sends, and then in a POST body, never a path or query, so it is in no request log and no Referer. Only its SHA-256 is stored. An unknown, spent, withdrawn or expired secret gets **one** answer, `404`, so the answer does not say which. Failed lookups are counted per address and a run of them is `429`. A taken name or a short password is not counted, because that is not guessing.
 
@@ -2207,7 +2217,11 @@ route.
 ### `PATCH /api/profile`
 
 Changes your own display name. `{ "name": "Dana" }`, 60 characters or fewer,
-no control characters. `409 duplicate` if the name is taken.
+no control characters and no invisible format characters (Unicode category Cf,
+such as a zero-width space). `409 duplicate` if the name is taken. **Every
+route that takes an account name applies this one rule**: setup,
+`POST /api/users`, `POST /api/invites/redeem` and both renames, each answering
+`400 bad_request` for a name that breaks it.
 
 The account **id does not change**, which is what makes this a rename rather
 than a replacement: sessions, watch history, ratings and playlist membership all
@@ -2589,8 +2603,11 @@ back into base64url to answer.
 1. `POST /api/auth/passkey/login/options` → `{challenge_id, public_key}`.
    `public_key` is the `PublicKeyCredentialRequestOptions`: `challenge`,
    `rpId`, `timeout`, and `userVerification: "required"`. No credentials are
-   listed, so the response says nothing about any account. `429` when too many
-   sign-ins are in flight.
+   listed, so the response says nothing about any account. Never refused for
+   being busy: one address holds at most 32 sign-in challenges, its own oldest
+   going first, and a full store drops its oldest sign-in challenge rather than
+   refuse a new one, so a stranger flooding this route cannot switch passkey
+   sign-in off for anybody else. An IPv6 caller counts as its /64.
 2. `POST /api/auth/passkey/login` with `{challenge_id, id, client_data_json,
    authenticator_data, signature, user_handle}`, from the
    `PublicKeyCredential` the browser returned (`id` is the raw id). Answers
@@ -2680,7 +2697,8 @@ codes are the way in**, which is what they are for.
 | `DELETE /api/users/{id}/two-factor` | Administrators: take it off somebody else's account → `204` |
 
 Setup, turning it off and new codes ask for the password, on the sign-in
-throttle; a wrong one is `403`. Every route here that changes two-factor wants
+throttle **and** the per-account wait that sign-in applies from outside the
+house, as changing the password and adding a passkey do; a wrong one is `403`. Every route here that changes two-factor wants
 a signed-in session: an **API key is refused** with `403`, as it is for
 managing keys, since a key that could set the second factor could lock its own
 owner out. `GET /api/users` marks an account
@@ -6258,7 +6276,7 @@ to "have I watched this".
 | `max_quality` | `""` | one of `quality_rungs` | The ceiling this server imposes on **every** stream. Empty is no limit, the default, and the right answer for a LAN-only server — any rung below Original is a re-encode that makes the picture worse and the machine hotter to solve a problem nobody on a gigabit link has. A **limit, not a target**: it only ever narrows what a client asked for and can never raise it, so a laptop on hotel wifi asking for 480p still gets 480p on a server capped at 1080p. The two halves are compared independently — a client wanting 1080p at 2 Mbps on a server capped at 720p at 4 Mbps gets **720p at 2 Mbps**. Distinct from the quality a client picks for itself, which is a fact about that screen; this is a fact about the server. **Server-wide rather than per network**, deliberately: "cap remote clients only" is the setting people want and needs a way to tell a remote client from a local one that this server does not have — guessing from the peer address would be wrong for a VPN, which is how a household reaches its server from outside. A rung outside `quality_rungs` is **400**, not stored-and-ignored |
 | `audit_retention_days` | `90` | 0–3650 | Audit events older than this are deleted by a daily pass. **0 means keep for ever**, the same shape of answer `continue_weeks` gives — not "delete now". Takes effect without a restart. Cached provider responses are dropped after **7 days** regardless: that is a cache, every entry refetches, and it is not covered by this setting. Changing this value makes a pass due on the next check rather than a day later — a stamp records the policy it ran under, so shortening a window takes effect promptly instead of looking broken |
 | `backup_every_days` | `7` | 0–90 | Take a backup on a schedule, every this many days (`GET /api/backups`). **0 is off.** On by default, weekly: the database holds every correction made by hand, the one thing a rescan cannot rebuild. Checked every half hour, so turning it on, or shortening the interval past the last scheduled backup, takes one within the half hour. Scheduled backups are named with `-auto` before the extension and listed with `scheduled: true`. Not audited when taken — nobody did it — and logged as `scheduled backup taken`. On the Scheduled tasks board as `backup` |
-| `trusted_proxies` | `[]` | up to 32 | Reverse proxies whose `X-Forwarded-For` is believed, as IP addresses or CIDR networks. **Empty by default**, which reads only the connecting address, as LANcast always has. When a request arrives from an address on this list, the header is read **right to left** and the first entry that is not itself a trusted proxy becomes the caller's address — for the login throttle, the per-account wait's home-network exemption, the sign-in page's account picker, the request log and a session's device address. An entry to the left of that is the caller's own claim and is not believed. A trusted proxy that sends no usable header leaves the request as it was. Stored normalised (`127.0.0.1` reads back as `127.0.0.1/32`); refused with `400` when an entry does not parse, is wider than an IPv4 `/8` or IPv6 `/16`, or there are more than 32. Applies to the next request, with no restart. Audited. Only `X-Forwarded-For` is read, not `Forwarded` or `X-Real-IP` |
+| `trusted_proxies` | `[]` | up to 32 | Reverse proxies whose `X-Forwarded-For` is believed, as IP addresses or CIDR networks. **Empty by default**, which reads only the connecting address, as LANcast always has. When a request arrives from an address on this list, the header is read **right to left** and the first entry that is not itself a trusted proxy becomes the caller's address — for the login throttle, the per-account wait's home-network exemption, the sign-in page's account picker, the request log and a session's device address. An entry to the left of that is the caller's own claim and is not believed. A trusted proxy that sends no usable header leaves the request as it was. Stored normalised (`127.0.0.1` reads back as `127.0.0.1/32`); refused with `400` when an entry does not parse, is wider than an IPv4 `/8` or IPv6 `/16`, or there are more than 32. Applies to the next request, with no restart. Audited. Only `X-Forwarded-For` is read for the address, not `Forwarded` or `X-Real-IP`. From the same trusted proxies, **`X-Forwarded-Proto: https`** marks the session cookie `Secure` when the proxy ended TLS and the hop to LANcast is plain HTTP; every value in it must be `https` |
 | `preroll_dir` | `""` | a folder | The folder of pre-roll clips ([ADR 0099](adr/0099-a-preroll-plays-before-a-film-from-the-start.md)). Every video directly in it is a candidate, one played at random before a film started from the beginning (`GET /api/preroll`). **`""` is off**, the default. Must be a full path to a folder this server can read, or `400`. Audited. Read back with `preroll_clips`, how many videos the folder holds now (read only), so a folder with none can be named as playing nothing |
 | `backup_keep` | `4` | 1–52 | How many **scheduled** backups to keep. After each scheduled backup, older scheduled ones past this count are deleted. **A backup taken by hand is never counted and never deleted**, however many there are: the one somebody took before an upgrade is the one they will come looking for. Lowering it deletes the extras at the next scheduled run, not at once. Rotation runs only after a backup has been written, so a schedule failing on a full disk does not then delete the copies it has |
 | `dlna_enabled` | `false` | — | DLNA, so TVs, consoles and VLC can find and play the library with no LANcast app ([ADR 0086](adr/0086-a-tv-browses-as-somebody.md)). **Off by default.** Runs only when `dlna_account` is set and the server is bound to the LAN; never widens the loopback rule. Serves plain HTTP on **8200** and discovery on UDP **1900**, to LAN clients only. Takes effect within seconds, no restart. Audited |
@@ -6560,11 +6578,16 @@ refused on every write it makes. A request that carries a cookie keeps both CSRF
 defences exactly as before — presenting an unusable `Authorization` header does
 **not** turn them off.
 
-**Changing a password does not revoke keys.** It deletes every session,
+**Changing your own password does not revoke keys.** It deletes every session,
 including the caller's own, and that is deliberate — but rotating a password
 should not silently break a machine that has been running for a year. A
 suspected theft is handled by revoking deliberately, which is what the list and
-its `last_used` column are for.
+its `last_used` column are for. **An administrator's reset does revoke them**
+(`POST /api/users/{id}/password` answers how many): that is the "this account
+was compromised" action, and it ends every way in. Since a key can only be
+minted with the password, a key that survives your own change was made by
+somebody who knew it
+([ADR 0061](adr/0061-an-api-key-is-not-a-session.md), amended 2026-11-16).
 
 **A key does not make its owner appear online.** A script polling every minute is
 not a person being present.
@@ -6586,7 +6609,12 @@ Requires a session.
 
 ### `POST /api/keys`
 
-Mint a key. `{ "name": "backup script" }`. Requires a session.
+Mint a key. `{ "name": "backup script", "current_password": "…" }`. Requires a
+session **and the account's password**, as adding a passkey does: a key
+outlives every session, so a session somebody left open must not be enough to
+make one. A missing or wrong password is `403 forbidden`, on the sign-in
+throttle and the per-account wait (`429` past them). An API key is refused
+with `403` before the password is looked at.
 
 ```json
 { "key": { "id": "9f3c…", "name": "backup script",

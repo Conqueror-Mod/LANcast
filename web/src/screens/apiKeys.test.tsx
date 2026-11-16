@@ -128,6 +128,17 @@ async function settle() {
 
 const text = () => host.textContent ?? "";
 
+async function type(input: HTMLInputElement, value: string) {
+  await act(async () => {
+    const setter = Object.getOwnPropertyDescriptor(
+      window.HTMLInputElement.prototype,
+      "value",
+    )!.set!;
+    setter.call(input, value);
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+}
+
 describe("the API keys panel", () => {
   // A key nothing has ever presented says so. This is the column somebody
   // reads when deciding what is safe to revoke.
@@ -159,22 +170,27 @@ describe("the API keys panel", () => {
     ) as HTMLInputElement;
     expect(input).toBeTruthy();
 
-    await act(async () => {
-      const setter = Object.getOwnPropertyDescriptor(
-        window.HTMLInputElement.prototype,
-        "value",
-      )!.set!;
-      setter.call(input, "deploy bot");
-      input.dispatchEvent(new Event("input", { bubbles: true }));
-    });
+    await type(input, "deploy bot");
 
+    // Not without the password: the button stays off until it is typed.
     const submit = [...host.querySelectorAll("button")].find(
       (b) => b.textContent?.includes("Create a key"),
-    )!;
+    ) as HTMLButtonElement;
+    expect(submit.disabled).toBe(true);
+    const pw = host.querySelector(
+      'input[placeholder="Your password"]',
+    ) as HTMLInputElement;
+    expect(pw.type).toBe("password");
+    await type(pw, "hunter2 but longer");
+
     await act(async () => submit.click());
     await settle();
 
-    expect(posted.some((p) => p.body.includes("deploy bot"))).toBe(true);
+    const sent = posted.find((p) => p.url.includes("/api/keys"));
+    expect(sent && JSON.parse(sent.body)).toEqual({
+      name: "deploy bot",
+      current_password: "hunter2 but longer",
+    });
     expect(text()).toContain("SECRET-VALUE-ONLY-ONCE");
     expect(text()).toContain("not shown again");
   });
@@ -216,20 +232,36 @@ describe("the API keys panel", () => {
     expect(text()).toContain("Last used");
   });
 
-  // Revoking asks the server to revoke, rather than only hiding the row.
-  it("revokes through the server", async () => {
+  /*
+   * Revoking takes two presses, and then asks the server rather than only
+   * hiding the row (R15-3). A revoked key cannot be brought back, so one
+   * misclick on the wrong row used to cut off whatever held it.
+   */
+  it("asks once before revoking, then revokes through the server", async () => {
     mount([
       { id: "k1", name: "old key", created_at: 1788500000, last_used: 1788500900 },
     ]);
     await render();
+    const button = (label: string) =>
+      [...host.querySelectorAll("button")].find(
+        (b) => b.textContent?.trim() === label,
+      );
 
-    const revoke = [...host.querySelectorAll("button")].find(
-      (b) => b.textContent?.trim() === "Revoke",
-    )!;
-    expect(revoke).toBeTruthy();
-    await act(async () => revoke.click());
+    await act(async () => button("Revoke")!.click());
     await settle();
+    expect(posted.some((p) => p.url.includes("/api/keys/k1"))).toBe(false);
+    expect(text()).toContain("Revoke “old key”?");
 
+    // Keep backs out, and nothing was sent.
+    await act(async () => button("Keep")!.click());
+    await settle();
+    expect(posted.some((p) => p.url.includes("/api/keys/k1"))).toBe(false);
+    expect(button("Yes, revoke")).toBeUndefined();
+
+    await act(async () => button("Revoke")!.click());
+    await settle();
+    await act(async () => button("Yes, revoke")!.click());
+    await settle();
     expect(posted.some((p) => p.url.includes("/api/keys/k1"))).toBe(true);
   });
 });

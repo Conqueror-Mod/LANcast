@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"net/http"
+	"strings"
 	"testing"
 
 	"lancast/internal/store"
@@ -163,4 +164,108 @@ func TestProfilePatchWithoutAnAccount(t *testing.T) {
 	h := newHarness(t)
 	wantError(t, h.do(t, "PATCH", "/api/profile", map[string]any{"name": "Dana"}),
 		http.StatusConflict, "no_account")
+}
+
+// Every route that takes an account name applies one rule: no control
+// characters, no invisible format characters, at most 60 bytes (R01-10). On
+// main, setup, POST /api/users and invite redemption trimmed spaces and
+// nothing else, so an invite holder could become a second "admin".
+func TestEveryRouteThatTakesANameAppliesTheRule(t *testing.T) {
+	bad := []string{
+		"bad\u0007name",
+		"admin\u200b", // zero-width space, category Cf
+		"admin\u2060", // word joiner
+		"adm\u0085in", // C1 control
+		strings.Repeat("n", maxNameLength+1),
+		"   ",
+	}
+	const pw = "a good long password"
+
+	// Setup, before any account exists.
+	for _, name := range bad {
+		h := newHarness(t)
+		wantError(t, h.do(t, "POST", "/api/auth/setup", map[string]any{"username": name, "password": pw}),
+			http.StatusBadRequest, "bad_request")
+	}
+
+	h := newHarness(t)
+	h.secure(t, pw)
+	member := h.addMember(t, "member", pw)
+	m := makeInvite(t, h, map[string]any{"note": "a friend"})
+	for _, name := range bad {
+		wantError(t, h.authed(t, "POST", "/api/users", map[string]any{"username": name, "password": pw}),
+			http.StatusBadRequest, "bad_request")
+		wantError(t, h.do(t, "POST", "/api/invites/redeem", map[string]any{"token": m.Token, "username": name, "password": pw}),
+			http.StatusBadRequest, "bad_request")
+		wantError(t, h.doAs(t, member, "PATCH", "/api/profile", map[string]any{"name": name}),
+			http.StatusBadRequest, "bad_request")
+	}
+	// The invite is still good after all of that: a refused name never spends it.
+	resp := h.do(t, "POST", "/api/invites/redeem", map[string]any{"token": m.Token, "username": "friend", "password": pw})
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusCreated {
+		t.Fatalf("a good name after refusals: %d", resp.StatusCode)
+	}
+	// Ordinary non-Latin names are fine.
+	resp = h.authed(t, "POST", "/api/users", map[string]any{"username": "Zoë 日本", "password": pw})
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusCreated {
+		t.Fatalf("a non-Latin name: %d", resp.StatusCode)
+	}
+}
+
+// An administrator's edit that is refused in part is refused whole (R01-16).
+// On main the rename was saved before the role or the ceiling was refused, so
+// the answer was an error over an edit that had half happened.
+func TestAHalfRefusedEditChangesNothing(t *testing.T) {
+	h := newHarness(t)
+	ctx := context.Background()
+	h.secure(t, "a good long password")
+	admin, err := h.st.UserByName(ctx, testUser)
+	if err != nil {
+		t.Fatal(err)
+	}
+	member, err := h.st.CreateUser(ctx, "", "someone", "hash", store.RoleMember)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// The only administrator renamed and demoted at once: 409, and still named
+	// as before.
+	wantError(t, h.authed(t, "PATCH", "/api/users/"+admin.ID,
+		map[string]any{"name": "renamed admin", "role": "member"}),
+		http.StatusConflict, "last_admin")
+	if u, _ := h.st.UserByID(ctx, admin.ID); u.Name != testUser || u.Role != store.RoleAdmin {
+		t.Errorf("after a refused edit: %q %s", u.Name, u.Role)
+	}
+
+	// A rename with a ceiling nothing can place: 400, and nothing changed.
+	wantError(t, h.authed(t, "PATCH", "/api/users/"+member.ID,
+		map[string]any{"name": "renamed member", "max_content_rating": "NOT-A-RATING"}),
+		http.StatusBadRequest, "bad_request")
+	if u, _ := h.st.UserByID(ctx, member.ID); u.Name != "someone" || u.MaxContentRating != "" {
+		t.Errorf("after a refused edit: %q %q", u.Name, u.MaxContentRating)
+	}
+
+	// And nothing was audited for either.
+	events, _, err := h.st.ListAudit(ctx, store.AuditFilter{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, e := range events {
+		if e.Action == "user.rename" {
+			t.Errorf("a refused edit was audited: %s", e.Summary)
+		}
+	}
+
+	// All three together, when all are good, apply.
+	resp := h.authed(t, "PATCH", "/api/users/"+member.ID,
+		map[string]any{"name": "renamed member", "role": "admin", "max_content_rating": ""})
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("a good edit: %d", resp.StatusCode)
+	}
+	if u, _ := h.st.UserByID(ctx, member.ID); u.Name != "renamed member" || u.Role != store.RoleAdmin {
+		t.Errorf("after a good edit: %q %s", u.Name, u.Role)
+	}
 }

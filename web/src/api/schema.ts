@@ -231,7 +231,7 @@ export interface paths {
         };
         /**
          * Accounts to pick from on the sign-in page
-         * @description No session needed. Lists every account's name, and nothing else, but only to a request from the home network: this computer, private and link-local addresses, and addresses on a network one of this machine's interfaces is on (a phone on the house Wi-Fi speaking global IPv6 counts; the rest of the internet does not). Any other request, or any request while `login_picker` is off, gets an empty list, which says nothing about whether accounts exist.
+         * @description No session needed. Lists every account's name, and nothing else, but only to a request from the home network: this computer, private and link-local addresses, and IPv6 addresses on a network (no wider than a /48) one of this machine's interfaces is on (a phone on the house Wi-Fi speaking global IPv6 counts; the rest of the internet does not). IPv4 has no interface rule: a machine holding a public IPv4 address would otherwise count its provider's subnet as home. Any other request, or any request while `login_picker` is off, gets an empty list, which says nothing about whether accounts exist.
          */
         get: operations["loginAccounts"];
         put?: never;
@@ -2956,7 +2956,7 @@ export interface paths {
         put?: never;
         /**
          * Reset another account's password
-         * @description Administrators only. Revokes that account's sessions. Audited as `user.password_reset`.
+         * @description Administrators only. Revokes that account's sessions **and its API keys**: this is the action for an account that was compromised (ADR 0061, amended 2026-11-16). Audited as `user.password_reset`, with the number of keys revoked.
          *
          *     Distinct from `POST /api/auth/password`, which changes your **own** and requires the current one.
          */
@@ -4788,7 +4788,7 @@ export interface paths {
         put?: never;
         /**
          * Mint an API key
-         * @description Returns the secret **once**. Requires a **session**; an API key is refused with `403`. A key that could mint keys could not be revoked by revoking it — whoever held a stolen one would make a second and keep it — so revocation is only the end of the story if minting needs the credential a person types.
+         * @description Returns the secret **once**. Requires a **session** and the account's **password**, as adding a passkey does; a missing or wrong password is `403`, on the sign-in throttle and the per-account wait. An API key is refused with `403`. A key that could mint keys could not be revoked by revoking it — whoever held a stolen one would make a second and keep it — so revocation is only the end of the story if minting needs the credential a person types.
          */
         post: operations["createAPIKey"];
         delete?: never;
@@ -7707,7 +7707,7 @@ export interface components {
             scope: string;
         };
         RenameProfileRequest: {
-            /** @description 60 characters or fewer, no control characters. */
+            /** @description 60 characters or fewer, no control or invisible (Unicode Cf) characters. */
             name: string;
         };
         SharingRequest: {
@@ -11174,7 +11174,7 @@ export interface operations {
                     "application/json": components["schemas"]["User"];
                 };
             };
-            /** @description No name, a name over 64 characters, or a password that is too short. */
+            /** @description No name, a name breaking the account-name rule (60 characters or fewer, no control or invisible characters), or a password that is too short or too long. */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -11519,15 +11519,6 @@ export interface operations {
             };
             /** @description Not at the server's public name over HTTPS, where passkeys cannot work. */
             409: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorEnvelope"];
-                };
-            };
-            /** @description Too many sign-ins in flight. */
-            429: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -16500,12 +16491,16 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Reset. No body. */
-            204: {
+            /** @description Reset, and how many of the account's API keys were revoked with it. */
+            200: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": {
+                        api_keys_revoked: number;
+                    };
+                };
             };
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
@@ -19189,6 +19184,8 @@ export interface operations {
                 "application/json": {
                     /** @description Required rather than defaulted, so the key can be told apart later. Trimmed to 64 characters. */
                     name: string;
+                    /** @description The account's password. A key outlives every session, so a session alone is not enough to make one (ADR 0061, amended 2026-11-16). */
+                    current_password: string;
                 };
             };
         };
@@ -19212,8 +19209,17 @@ export interface operations {
                 };
             };
             401: components["responses"]["Unauthorized"];
-            /** @description `forbidden` — the caller authenticated with an API key. */
+            /** @description `forbidden` — the caller authenticated with an API key, or the password is missing or wrong. */
             403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description `too_many_requests` — too many password attempts from this address, or at this account from outside the home network. */
+            429: {
                 headers: {
                     [name: string]: unknown;
                 };

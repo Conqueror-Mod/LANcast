@@ -213,6 +213,10 @@ func TestDeletingAnAccountTakesItsGrants(t *testing.T) {
 	if err := st.GrantPresence(ctx, dana, fpA, "g-1", time.Unix(1000, 0)); err != nil {
 		t.Fatal(err)
 	}
+	// Another administrator, since the store refuses to delete the last one.
+	if _, err := st.CreateUser(ctx, "", "Other", "hash", RoleAdmin); err != nil {
+		t.Fatal(err)
+	}
 	if err := st.DeleteUser(ctx, dana); err != nil {
 		t.Fatal(err)
 	}

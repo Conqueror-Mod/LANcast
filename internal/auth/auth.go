@@ -47,12 +47,29 @@ var (
 	ErrTooManyAttempts = errors.New("too many attempts")
 	// ErrWeakPassword is returned when a proposed password is too short.
 	ErrWeakPassword = fmt.Errorf("password must be at least %d characters", MinPasswordLength)
+	// ErrPasswordTooLong is returned when a proposed password is longer than
+	// bcrypt can hash. The limit is in bytes, so a passphrase in a non-Latin
+	// script reaches it at a third of the characters (R01-5).
+	ErrPasswordTooLong = fmt.Errorf("password must be at most %d bytes (shorter for non-Latin text)", MaxPasswordBytes)
 )
+
+// MaxPasswordBytes is bcrypt's own limit. Nothing pre-hashes to lift it: that
+// would change what every stored hash means.
+const MaxPasswordBytes = 72
+
+// PasswordRefused reports whether err is a password rule the person can fix
+// (too short or too long), as against the server failing.
+func PasswordRefused(err error) bool {
+	return errors.Is(err, ErrWeakPassword) || errors.Is(err, ErrPasswordTooLong)
+}
 
 // HashPassword returns a bcrypt hash suitable for storing.
 func HashPassword(password string) (string, error) {
 	if len([]rune(password)) < MinPasswordLength {
 		return "", ErrWeakPassword
+	}
+	if len(password) > MaxPasswordBytes {
+		return "", ErrPasswordTooLong
 	}
 	h, err := bcrypt.GenerateFromPassword([]byte(password), bcryptCost)
 	if err != nil {
@@ -64,6 +81,25 @@ func HashPassword(password string) (string, error) {
 // CheckPassword verifies a password against a stored hash in constant time.
 func CheckPassword(hash, password string) bool {
 	return bcrypt.CompareHashAndPassword([]byte(hash), []byte(password)) == nil
+}
+
+// noAccountHash is a hash of nothing anybody's password is, at the real cost,
+// made the first time a sign-in names nobody.
+var noAccountHash = sync.OnceValue(func() []byte {
+	h, err := bcrypt.GenerateFromPassword([]byte("lancast: no such account"), bcryptCost)
+	if err != nil {
+		panic(err) // a fixed short input at a fixed cost cannot fail
+	}
+	return h
+})
+
+// CheckNoAccount spends what CheckPassword would on a real account, and always
+// fails. A sign-in naming nobody calls it so that how long the refusal takes
+// does not say whether the account exists (R01-7): without it, an unknown name
+// was answered in half a millisecond and a real one in two hundred.
+func CheckNoAccount(password string) bool {
+	_ = bcrypt.CompareHashAndPassword(noAccountHash(), []byte(password))
+	return false
 }
 
 // NewToken returns a fresh session token and the hash to store against it.
@@ -137,6 +173,10 @@ type Throttle struct {
 	attempts map[string]*window
 	Max      int
 	Window   time.Duration
+	// Cap bounds how many addresses are remembered (R01-9). Every address that
+	// tries a password gets an entry, and only a success used to remove one,
+	// so a server on the internet kept every scanner until it restarted.
+	Cap int
 }
 
 type window struct {
@@ -153,6 +193,7 @@ func NewThrottle() *Throttle {
 		attempts: map[string]*window{},
 		Max:      10,
 		Window:   5 * time.Minute,
+		Cap:      10000,
 	}
 }
 
@@ -164,6 +205,9 @@ func (t *Throttle) Allow(key string) bool {
 	now := time.Now()
 	w, ok := t.attempts[key]
 	if !ok || now.After(w.reset) {
+		if !ok {
+			t.makeRoom(now)
+		}
 		t.attempts[key] = &window{count: 1, reset: now.Add(t.Window)}
 		return true
 	}
@@ -172,6 +216,47 @@ func (t *Throttle) Allow(key string) bool {
 	}
 	w.count++
 	return true
+}
+
+/*
+ * makeRoom keeps the map under Cap before a new address is added. Called with
+ * mu held.
+ *
+ * Expired windows go first: they would be replaced on their address's next
+ * attempt anyway. If that is not enough, the window with the fewest attempts
+ * goes, as AccountBackoff.makeRoom does and for its reason: somebody spraying
+ * from a whole /64 leaves thousands of addresses on one attempt each, and
+ * evicting by age instead would let the spray push out the address that is
+ * actually over its limit, and so reset it.
+ */
+func (t *Throttle) makeRoom(now time.Time) {
+	if t.Cap <= 0 || len(t.attempts) < t.Cap {
+		return
+	}
+	for k, w := range t.attempts {
+		if now.After(w.reset) {
+			delete(t.attempts, k)
+		}
+	}
+	for len(t.attempts) >= t.Cap {
+		victim, least := "", 0
+		for k, w := range t.attempts {
+			if victim == "" || w.count < least {
+				victim, least = k, w.count
+			}
+		}
+		delete(t.attempts, victim)
+	}
+}
+
+// Blocked reports whether key has used up its window, without counting an
+// attempt. For a route that must refuse an over-limit caller before doing any
+// work, but counts only the attempts that fail (R01-8).
+func (t *Throttle) Blocked(key string) bool {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	w, ok := t.attempts[key]
+	return ok && !time.Now().After(w.reset) && w.count >= t.Max
 }
 
 // Attribute ties the attempt Allow just counted from key to account, once the

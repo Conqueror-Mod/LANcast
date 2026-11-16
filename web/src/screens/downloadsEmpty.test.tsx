@@ -43,21 +43,35 @@ afterEach(() => {
   window.localStorage.clear();
 });
 
-async function render() {
+// The receipts are kept per account (R13-8), so the page has to know who is
+// signed in. React Query is imported alongside the page, after the module
+// reset, so both see the same instance of its context.
+async function render(userId = "u1") {
   const { Downloads } = await import("./Downloads");
+  const { QueryClient, QueryClientProvider } = await import(
+    "@tanstack/react-query"
+  );
+  const client = new QueryClient();
+  client.setQueryData(["auth-status"], {
+    configured: true,
+    authenticated: true,
+    user: { id: userId, name: userId, role: "member" },
+  });
   await act(async () => {
     root.render(
-      <MemoryRouter>
-        <Downloads />
-      </MemoryRouter>,
+      <QueryClientProvider client={client}>
+        <MemoryRouter>
+          <Downloads />
+        </MemoryRouter>
+      </QueryClientProvider>,
     );
   });
 }
 
-async function seed() {
-  const { DOWNLOADS_KEY } = await import("@/lib/downloads");
+async function seed(userId = "u1") {
+  const { downloadsKey } = await import("@/lib/downloads");
   window.localStorage.setItem(
-    DOWNLOADS_KEY,
+    downloadsKey(userId),
     JSON.stringify([
       { itemId: 1, title: "A Film", filename: "A Film.mkv", at: Date.now() },
     ]),
@@ -89,5 +103,18 @@ describe("the downloads page", () => {
     expect(host.querySelectorAll(".downloads__row").length).toBe(1);
     expect(host.querySelector(".downloads__list")).not.toBeNull();
     expect(host.textContent).not.toContain("Nothing yet");
+  });
+
+  /*
+   * One device, two accounts: somebody else signing in on the family laptop
+   * does not see what the first person downloaded (R13-8). On main the list
+   * was one key for the whole device, so a child's account was shown a
+   * parent's titles past its own rating ceiling.
+   */
+  it("shows only the signed-in account's receipts", async () => {
+    await seed("parent");
+    await render("child");
+    expect(host.querySelectorAll(".downloads__row").length).toBe(0);
+    expect(host.textContent).not.toContain("A Film");
   });
 });

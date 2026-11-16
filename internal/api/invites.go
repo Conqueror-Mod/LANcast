@@ -122,6 +122,20 @@ func readInviteToken(w http.ResponseWriter, r *http.Request, into any) bool {
 	return true
 }
 
+// inviteThrottled refuses, before any lookup or hashing, an address that has
+// already guessed too often. Without it the throttle only ever turned a 404
+// into a 429 after the work was done, and a right secret got through it
+// (R01-8).
+func (s *Server) inviteThrottled(w http.ResponseWriter, r *http.Request) bool {
+	if !s.inviteThrottle.Blocked("invite:" + auth.ClientKey(r)) {
+		return false
+	}
+	s.log.Warn("invite refused", "reason", "throttled", "client", auth.ClientKey(r))
+	writeError(w, http.StatusTooManyRequests, "too_many_requests",
+		"too many attempts; wait a few minutes")
+	return true
+}
+
 /*
  * inviteUnusable answers for a secret that is unknown, spent, withdrawn or
  * expired: one answer for all four, and counted per address, so a run of
@@ -145,7 +159,7 @@ func (s *Server) checkInvite(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Token string `json:"token"`
 	}
-	if !readInviteToken(w, r, &req) {
+	if !readInviteToken(w, r, &req) || s.inviteThrottled(w, r) {
 		return
 	}
 	inv, err := s.st.InviteByToken(r.Context(), []byte(auth.HashToken(req.Token)), time.Now())
@@ -173,20 +187,35 @@ func (s *Server) redeemInvite(w http.ResponseWriter, r *http.Request) {
 		Username string `json:"username"`
 		Password string `json:"password"`
 	}
-	if !readInviteToken(w, r, &req) {
+	if !readInviteToken(w, r, &req) || s.inviteThrottled(w, r) {
 		return
 	}
+	/*
+	 * Throttle, then look up, then hash (R01-8). The route is public, and
+	 * bcrypt before the lookup let anybody spend 200 ms of a core with a
+	 * made-up secret, as often as they liked. RedeemInvite still does the
+	 * single-use check in its transaction; this lookup only decides whether
+	 * the work is worth doing.
+	 */
+	tokenHash := []byte(auth.HashToken(req.Token))
 	if req.Token == "" {
 		s.inviteUnusable(w, r)
 		return
 	}
-	name := strings.TrimSpace(req.Username)
-	if name == "" || len(name) > 64 {
-		writeError(w, http.StatusBadRequest, "bad_request", "choose a name of up to 64 characters")
+	if _, err := s.st.InviteByToken(r.Context(), tokenHash, time.Now()); errors.Is(err, store.ErrInviteUnusable) {
+		s.inviteUnusable(w, r)
+		return
+	} else if err != nil {
+		s.writeInternal(w, err, "check invite")
+		return
+	}
+	name, ok := validName(req.Username)
+	if !ok {
+		writeError(w, http.StatusBadRequest, "bad_request", nameRule)
 		return
 	}
 	hash, err := auth.HashPassword(req.Password)
-	if errors.Is(err, auth.ErrWeakPassword) {
+	if auth.PasswordRefused(err) {
 		writeError(w, http.StatusBadRequest, "bad_request", err.Error())
 		return
 	}
@@ -194,7 +223,7 @@ func (s *Server) redeemInvite(w http.ResponseWriter, r *http.Request) {
 		s.writeInternal(w, err, "hash password")
 		return
 	}
-	u, inv, err := s.st.RedeemInvite(r.Context(), []byte(auth.HashToken(req.Token)), name, hash, time.Now())
+	u, inv, err := s.st.RedeemInvite(r.Context(), tokenHash, name, hash, time.Now())
 	switch {
 	case errors.Is(err, store.ErrInviteUnusable):
 		s.inviteUnusable(w, r)

@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"net"
@@ -175,12 +176,65 @@ func parseHop(h string) net.IP {
  */
 func TrustProxies(nets func() []*net.IPNet, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if client, ok := ForwardedClient(r, nets()); ok {
+		n := nets()
+		// Read before RemoteAddr is rewritten: the question is whether the
+		// proxy is trusted, and afterwards RemoteAddr is the client.
+		httpsAtProxy := ForwardedHTTPS(r, n)
+		if client, ok := ForwardedClient(r, n); ok {
 			r2 := new(http.Request)
 			*r2 = *r
 			r2.RemoteAddr = net.JoinHostPort(client, "0")
 			r = r2
 		}
+		if httpsAtProxy {
+			r = r.WithContext(context.WithValue(r.Context(), forwardedHTTPSKey{}, true))
+		}
 		next.ServeHTTP(w, r)
 	})
+}
+
+type forwardedHTTPSKey struct{}
+
+/*
+ * ForwardedHTTPS reports whether a trusted proxy says the request reached it
+ * over HTTPS (R01-13).
+ *
+ * Behind a proxy that ends TLS, the hop to LANcast is plain HTTP, so r.TLS is
+ * nil and the session cookie went out without Secure while the person was on
+ * https://. A later plain http:// address for the same name then carried the
+ * cookie in the clear before the proxy could redirect.
+ *
+ * Only from a trusted proxy, for the reason X-Forwarded-For is: from anybody
+ * else the header is whatever the caller typed. And only when every value the
+ * chain lists is https, so a proxy that appends rather than overwrites cannot
+ * be talked into it by a caller who sent "https" ahead of a plain hop.
+ */
+func ForwardedHTTPS(r *http.Request, nets []*net.IPNet) bool {
+	if len(nets) == 0 {
+		return false
+	}
+	peer := net.ParseIP(ClientKey(r))
+	if peer == nil || !trusted(peer, nets) {
+		return false
+	}
+	seen := false
+	for _, line := range r.Header.Values("X-Forwarded-Proto") {
+		for _, part := range strings.Split(line, ",") {
+			if !strings.EqualFold(strings.TrimSpace(part), "https") {
+				return false
+			}
+			seen = true
+		}
+	}
+	return seen
+}
+
+// SecureRequest reports whether the person is on HTTPS: the connection is TLS,
+// or a trusted proxy ended TLS for it. It decides the session cookie's Secure.
+func SecureRequest(r *http.Request) bool {
+	if r.TLS != nil {
+		return true
+	}
+	v, _ := r.Context().Value(forwardedHTTPSKey{}).(bool)
+	return v
 }

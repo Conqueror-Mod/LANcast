@@ -126,3 +126,56 @@ func TestTrustProxiesMakesAnInternetCallerOutside(t *testing.T) {
 		t.Fatalf("no list: inside=%v key=%q, want the unchanged loopback caller", inside, key)
 	}
 }
+
+// X-Forwarded-Proto counts only from a trusted proxy, and only when the whole
+// chain says https (R01-13).
+func TestForwardedHTTPSOnlyFromATrustedProxy(t *testing.T) {
+	nets := mustProxies(t, "127.0.0.1")
+	cases := []struct {
+		remote string
+		proto  []string
+		want   bool
+	}{
+		{"127.0.0.1:5000", []string{"https"}, true},
+		{"127.0.0.1:5000", []string{"HTTPS"}, true},
+		{"127.0.0.1:5000", nil, false},
+		{"127.0.0.1:5000", []string{"http"}, false},
+		{"127.0.0.1:5000", []string{"https, http"}, false},
+		{"127.0.0.1:5000", []string{"https", "http"}, false},
+		{"203.0.113.9:5000", []string{"https"}, false}, // not a trusted proxy
+	}
+	for _, c := range cases {
+		r := request(c.remote)
+		for _, v := range c.proto {
+			r.Header.Add("X-Forwarded-Proto", v)
+		}
+		if got := ForwardedHTTPS(r, nets); got != c.want {
+			t.Errorf("%s %v: %v, want %v", c.remote, c.proto, got, c.want)
+		}
+	}
+	if ForwardedHTTPS(request("127.0.0.1:5000"), nil) {
+		t.Error("with no trusted proxies, nothing is believed")
+	}
+}
+
+// The middleware carries the answer to the handler, after RemoteAddr has
+// become the client, which is why it is read first.
+func TestTrustProxiesMarksTheRequestSecure(t *testing.T) {
+	nets := mustProxies(t, "127.0.0.1")
+	var got bool
+	h := TrustProxies(func() []*net.IPNet { return nets }, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		got = SecureRequest(r)
+	}))
+	r := request("127.0.0.1:5000", "203.0.113.9")
+	r.Header.Set("X-Forwarded-Proto", "https")
+	h.ServeHTTP(httptest.NewRecorder(), r)
+	if !got {
+		t.Error("a request a trusted proxy received over https is not secure")
+	}
+	r = request("203.0.113.9:5000")
+	r.Header.Set("X-Forwarded-Proto", "https")
+	h.ServeHTTP(httptest.NewRecorder(), r)
+	if got {
+		t.Error("a stranger's X-Forwarded-Proto was believed")
+	}
+}

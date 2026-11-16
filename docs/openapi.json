@@ -243,7 +243,7 @@
         "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object", "required": ["token", "username", "password"], "properties": { "token": { "type": "string" }, "username": { "type": "string", "maxLength": 64 }, "password": { "type": "string" } } } } } },
         "responses": {
           "201": { "description": "Made and signed in.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/User" } } } },
-          "400": { "description": "No name, a name over 64 characters, or a password that is too short.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorEnvelope" } } } },
+          "400": { "description": "No name, a name breaking the account-name rule (60 characters or fewer, no control or invisible characters), or a password that is too short or too long.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorEnvelope" } } } },
           "404": { "description": "Used, withdrawn, expired or never made.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorEnvelope" } } } },
           "409": { "description": "That name is taken.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorEnvelope" } } } },
           "429": { "description": "Too many failed lookups from this address.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorEnvelope" } } } }
@@ -409,7 +409,7 @@
           "auth"
         ],
         "summary": "Accounts to pick from on the sign-in page",
-        "description": "No session needed. Lists every account's name, and nothing else, but only to a request from the home network: this computer, private and link-local addresses, and addresses on a network one of this machine's interfaces is on (a phone on the house Wi-Fi speaking global IPv6 counts; the rest of the internet does not). Any other request, or any request while `login_picker` is off, gets an empty list, which says nothing about whether accounts exist.",
+        "description": "No session needed. Lists every account's name, and nothing else, but only to a request from the home network: this computer, private and link-local addresses, and IPv6 addresses on a network (no wider than a /48) one of this machine's interfaces is on (a phone on the house Wi-Fi speaking global IPv6 counts; the rest of the internet does not). IPv4 has no interface rule: a machine holding a public IPv4 address would otherwise count its provider's subnet as home. Any other request, or any request while `login_picker` is off, gets an empty list, which says nothing about whether accounts exist.",
         "security": [],
         "responses": {
           "200": {
@@ -631,16 +631,6 @@
           },
           "409": {
             "description": "Not at the server's public name over HTTPS, where passkeys cannot work.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorEnvelope"
-                }
-              }
-            }
-          },
-          "429": {
-            "description": "Too many sign-ins in flight.",
             "content": {
               "application/json": {
                 "schema": {
@@ -7378,7 +7368,7 @@
           "users"
         ],
         "summary": "Reset another account's password",
-        "description": "Administrators only. Revokes that account's sessions. Audited as `user.password_reset`.\n\nDistinct from `POST /api/auth/password`, which changes your **own** and requires the current one.",
+        "description": "Administrators only. Revokes that account's sessions **and its API keys**: this is the action for an account that was compromised (ADR 0061, amended 2026-11-16). Audited as `user.password_reset`, with the number of keys revoked.\n\nDistinct from `POST /api/auth/password`, which changes your **own** and requires the current one.",
         "requestBody": {
           "required": true,
           "content": {
@@ -7390,8 +7380,23 @@
           }
         },
         "responses": {
-          "204": {
-            "description": "Reset. No body."
+          "200": {
+            "description": "Reset, and how many of the account's API keys were revoked with it.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "api_keys_revoked"
+                  ],
+                  "properties": {
+                    "api_keys_revoked": {
+                      "type": "integer"
+                    }
+                  }
+                }
+              }
+            }
           },
           "400": {
             "$ref": "#/components/responses/BadRequest"
@@ -11014,7 +11019,7 @@
           "keys"
         ],
         "summary": "Mint an API key",
-        "description": "Returns the secret **once**. Requires a **session**; an API key is refused with `403`. A key that could mint keys could not be revoked by revoking it — whoever held a stolen one would make a second and keep it — so revocation is only the end of the story if minting needs the credential a person types.",
+        "description": "Returns the secret **once**. Requires a **session** and the account's **password**, as adding a passkey does; a missing or wrong password is `403`, on the sign-in throttle and the per-account wait. An API key is refused with `403`. A key that could mint keys could not be revoked by revoking it — whoever held a stolen one would make a second and keep it — so revocation is only the end of the story if minting needs the credential a person types.",
         "requestBody": {
           "required": true,
           "content": {
@@ -11022,12 +11027,17 @@
               "schema": {
                 "type": "object",
                 "required": [
-                  "name"
+                  "name",
+                  "current_password"
                 ],
                 "properties": {
                   "name": {
                     "type": "string",
                     "description": "Required rather than defaulted, so the key can be told apart later. Trimmed to 64 characters."
+                  },
+                  "current_password": {
+                    "type": "string",
+                    "description": "The account's password. A key outlives every session, so a session alone is not enough to make one (ADR 0061, amended 2026-11-16)."
                   }
                 }
               }
@@ -11059,7 +11069,17 @@
             "$ref": "#/components/responses/Unauthorized"
           },
           "403": {
-            "description": "`forbidden` — the caller authenticated with an API key.",
+            "description": "`forbidden` — the caller authenticated with an API key, or the password is missing or wrong.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`too_many_requests` — too many password attempts from this address, or at this account from outside the home network.",
             "content": {
               "application/json": {
                 "schema": {
@@ -18068,7 +18088,7 @@
           "name": {
             "type": "string",
             "maxLength": 60,
-            "description": "60 characters or fewer, no control characters."
+            "description": "60 characters or fewer, no control or invisible (Unicode Cf) characters."
           }
         }
       },

@@ -89,6 +89,18 @@ func unb64(s string) ([]byte, error) {
 	return b64.DecodeString(strings.TrimRight(s, "="))
 }
 
+// challengeClient is who asked for a challenge, for its per-address budget
+// (R01-6). An IPv6 caller is its /64, which is what one household or one
+// attacker's machine is handed: per address, a /64 is a budget without end.
+func challengeClient(r *http.Request) string {
+	host := auth.ClientKey(r)
+	ip := net.ParseIP(host)
+	if ip == nil || ip.To4() != nil {
+		return host
+	}
+	return ip.Mask(net.CIDRMask(64, 128)).String() + "/64"
+}
+
 func (s *Server) passkeyChallengeFailed(w http.ResponseWriter, err error) {
 	if errors.Is(err, passkey.ErrTooManyChallenges) {
 		writeError(w, http.StatusTooManyRequests, "too_many_requests", "too many sign-ins in progress; try again shortly")
@@ -106,7 +118,7 @@ func (s *Server) passkeyLoginOptions(w http.ResponseWriter, r *http.Request) {
 		s.passkeyUnavailable(w)
 		return
 	}
-	id, ch, err := s.passkeyChallenges.Issue(passkey.PurposeLogin, "")
+	id, ch, err := s.passkeyChallenges.Issue(passkey.PurposeLogin, "", challengeClient(r))
 	if err != nil {
 		s.passkeyChallengeFailed(w, err)
 		return
@@ -241,11 +253,6 @@ func (s *Server) passkeyRegisterOptions(w http.ResponseWriter, r *http.Request) 
 		s.passkeyUnavailable(w)
 		return
 	}
-	key := auth.ClientKey(r)
-	if !s.throttle.Allow(key) {
-		writeError(w, http.StatusTooManyRequests, "too_many_requests", "too many attempts; wait a few minutes")
-		return
-	}
 	var req struct {
 		Current string `json:"current_password"`
 	}
@@ -253,28 +260,11 @@ func (s *Server) passkeyRegisterOptions(w http.ResponseWriter, r *http.Request) 
 		writeError(w, http.StatusBadRequest, "bad_request", "malformed JSON body")
 		return
 	}
-	u, err := s.st.UserByID(r.Context(), sess.UserID)
-	if err != nil {
-		s.writeInternal(w, err, "load user")
+	u, ok := s.confirmPassword(w, r, sess.UserID, req.Current,
+		http.StatusUnauthorized, "unauthorized", "current password is incorrect")
+	if !ok {
 		return
 	}
-	s.throttle.Attribute(key, u.Name)
-	inside := auth.InsideNetwork(r)
-	if !inside {
-		if ok, _ := s.accountWait.Allow(u.Name); !ok {
-			writeError(w, http.StatusTooManyRequests, "too_many_requests", "too many attempts; wait a few minutes")
-			return
-		}
-	}
-	if !auth.CheckPassword(u.PasswordHash, req.Current) {
-		if !inside {
-			s.accountWait.Fail(u.Name)
-		}
-		writeError(w, http.StatusUnauthorized, "unauthorized", "current password is incorrect")
-		return
-	}
-	s.throttle.Reset(key, u.Name)
-	s.accountWait.Reset(u.Name)
 
 	existing, err := s.st.PasskeysByUser(r.Context(), u.ID)
 	if err != nil {
@@ -289,7 +279,7 @@ func (s *Server) passkeyRegisterOptions(w http.ResponseWriter, r *http.Request) 
 	for _, alg := range passkey.Algorithms {
 		params = append(params, map[string]any{"type": "public-key", "alg": alg})
 	}
-	id, ch, err := s.passkeyChallenges.Issue(passkey.PurposeRegister, u.ID)
+	id, ch, err := s.passkeyChallenges.Issue(passkey.PurposeRegister, u.ID, challengeClient(r))
 	if err != nil {
 		s.passkeyChallengeFailed(w, err)
 		return

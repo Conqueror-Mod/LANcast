@@ -83,9 +83,14 @@ fuzzed decoder exists to remove.
 
 - **Challenges:** 32 random bytes, held in memory, single use (spent whether or
   not the ceremony succeeds), five minutes, bound to their purpose and, for a
-  registration, to the account that asked. At most 1,000 outstanding, because
-  the sign-in options route is public. A restart abandons ceremonies in
-  flight, which is harmless.
+  registration, to the account that asked. At most 1,000 outstanding of each
+  purpose, because the sign-in options route is public. A restart abandons
+  ceremonies in flight, which is harmless. (Amended 2026-11-16, R01-6: a full
+  sign-in budget refused everybody, so a stranger could keep passkey sign-in
+  off with three requests a second. Now one address, or one IPv6 /64, holds at
+  most 32 sign-in challenges with its own oldest evicted first, and a full
+  budget evicts its oldest sign-in challenge instead of refusing. Registration
+  still refuses when full; it is reached only after a password.)
 - **Sign-in** uses discoverable credentials: the options name no account, and
   the passkey's user handle must name the account it was registered to.
   Throttled per address like password sign-in. Every refusal gets one answer

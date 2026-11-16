@@ -60,7 +60,7 @@ func (s *Server) keepCookie(w http.ResponseWriter, r *http.Request) {
 	}
 	s.cookieMu.Unlock()
 
-	http.SetCookie(w, auth.Cookie(c.Value, auth.SessionTTL, r.TLS != nil))
+	http.SetCookie(w, auth.Cookie(c.Value, auth.SessionTTL, auth.SecureRequest(r)))
 }
 
 // cookieIssued records that a session's cookie was just set, at login or

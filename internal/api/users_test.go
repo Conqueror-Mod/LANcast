@@ -137,8 +137,8 @@ func TestAdminCanManageUsers(t *testing.T) {
 	id, _ := created["id"].(string)
 	resp = h.authed(t, "POST", "/api/users/"+id+"/password",
 		map[string]any{"new_password": "bob brand new password"})
-	if resp.StatusCode != http.StatusNoContent {
-		t.Fatalf("reset password = %d, want 204", resp.StatusCode)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("reset password = %d, want 200", resp.StatusCode)
 	}
 	resp.Body.Close()
 	h.loginAs(t, "bob", "bob brand new password") // fatals if it fails
