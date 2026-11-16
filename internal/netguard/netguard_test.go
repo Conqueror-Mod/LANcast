@@ -93,6 +93,16 @@ func TestTheForgettableRangesAreBlocked(t *testing.T) {
 		{"IPv6 unique local", "fd00::1"},
 		{"unspecified", "0.0.0.0"},
 		{"multicast", "224.0.0.1"},
+		// Go calls these global unicast; they are not the internet (R01-15).
+		{"carrier-grade NAT (Tailscale)", "100.101.102.103"},
+		{"carrier-grade NAT, low edge", "100.64.0.1"},
+		{"carrier-grade NAT, high edge", "100.127.255.254"},
+		{"carrier-grade NAT, IPv4-mapped", "::ffff:100.64.0.1"},
+		{"this network", "0.1.2.3"},
+		{"IETF protocol assignments", "192.0.0.8"},
+		{"benchmarking", "198.18.0.1"},
+		{"benchmarking, second half", "198.19.255.1"},
+		{"reserved", "240.0.0.1"},
 	} {
 		if !blocked(net.ParseIP(c.ip)) {
 			t.Errorf("%s (%s) is not blocked", c.name, c.ip)
@@ -103,7 +113,8 @@ func TestTheForgettableRangesAreBlocked(t *testing.T) {
 // And ordinary internet addresses still work, or the guard would be a way of
 // turning every fetch off.
 func TestPublicAddressesAreAllowed(t *testing.T) {
-	for _, ip := range []string{"1.1.1.1", "8.8.8.8", "93.184.216.34", "2606:4700::1111"} {
+	for _, ip := range []string{"1.1.1.1", "8.8.8.8", "93.184.216.34", "2606:4700::1111",
+		"100.63.255.255", "100.128.0.1", "198.17.255.255", "198.20.0.1"} { // either side of the reserved blocks
 		if blocked(net.ParseIP(ip)) {
 			t.Errorf("%s is blocked; the guard would stop ordinary fetches", ip)
 		}
