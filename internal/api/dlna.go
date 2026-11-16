@@ -2,7 +2,6 @@ package api
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"net"
 	"net/http"
@@ -90,19 +89,37 @@ func (s *Server) DLNAHandler(cfg func() DLNAConfig) http.Handler {
 			xmlFault(w, 401, "invalid action")
 		}
 	})
-	mux.HandleFunc("POST /dlna/control/cds", func(w http.ResponseWriter, r *http.Request) {
-		s.dlnaContentDirectory(w, r, cfg().Account)
-	})
-	mux.HandleFunc("GET /dlna/media/{id}", func(w http.ResponseWriter, r *http.Request) {
-		s.dlnaMedia(w, r, cfg().Account)
-	})
-	mux.HandleFunc("HEAD /dlna/media/{id}", func(w http.ResponseWriter, r *http.Request) {
-		s.dlnaMedia(w, r, cfg().Account)
-	})
-	mux.HandleFunc("GET /dlna/art/{id}", func(w http.ResponseWriter, r *http.Request) {
-		s.dlnaArt(w, r, cfg().Account)
-	})
+	mux.HandleFunc("POST /dlna/control/cds", s.dlnaAs(cfg, s.dlnaContentDirectory))
+	mux.HandleFunc("GET /dlna/media/{id}", s.dlnaAs(cfg, s.dlnaMedia))
+	mux.HandleFunc("HEAD /dlna/media/{id}", s.dlnaAs(cfg, s.dlnaMedia))
+	mux.HandleFunc("GET /dlna/art/{id}", s.dlnaAs(cfg, s.dlnaArt))
 	return dlnaLAN(mux)
+}
+
+/*
+ * dlnaAs runs a content route as the configured account, and refuses with 503
+ * when there is no such account (R03-6).
+ *
+ * The supervisor stops the listener when the account is cleared or deleted,
+ * but only at its next tick, and in that window every lookup would be made as
+ * "" or as an id with no row. Both mean "no limit" to the store, which for a
+ * listener that asks for no sign-in is every file in every library. So the
+ * account is checked on the request itself, and a lookup that fails refuses.
+ */
+func (s *Server) dlnaAs(cfg func() DLNAConfig,
+	next func(http.ResponseWriter, *http.Request, string)) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		account := cfg().Account
+		if account == "" {
+			http.Error(w, "no account chosen for DLNA", http.StatusServiceUnavailable)
+			return
+		}
+		if _, err := s.st.UserByID(r.Context(), account); err != nil {
+			http.Error(w, "the DLNA account is not available", http.StatusServiceUnavailable)
+			return
+		}
+		next(w, r, account)
+	}
 }
 
 // dlnaSourceProtocols is what this server can send, for GetProtocolInfo.
@@ -162,10 +179,12 @@ func (s *Server) dlnaBrowse(r *http.Request, account string, b dlna.Browse) ([]d
 	if err != nil {
 		return nil, 0, false
 	}
-	// No account row is the unsecured case and carries no ceiling; any other
-	// failure refuses the browse rather than listing past the ceiling (R04-4).
+	// Any failure refuses the browse rather than listing past the ceiling
+	// (R04-4), a missing account row included: dlnaAs has just found the
+	// account, so one gone now was deleted mid-request, and "no row" is the
+	// store's spelling of "no limit" (R03-6).
 	ceiling, err := s.st.MaxContentRating(ctx, account)
-	if err != nil && !errors.Is(err, store.ErrNotFound) {
+	if err != nil {
 		return nil, 0, false
 	}
 	limit := b.Count

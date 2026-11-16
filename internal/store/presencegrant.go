@@ -113,12 +113,19 @@ func (s *Store) PresenceGrants(ctx context.Context, userID string) ([]PresenceGr
  * and nothing else — no names, no titles, no grant dates — because the handler
  * that calls it is about to disclose only what ADR 0045 §3 permits, and a query
  * that returned more would be an invitation to send more.
+ *
+ * Only accounts with visible_to_peers on are readers (R04-8, decided
+ * 2026-11-16): the switch outranks the per-person grants. Turning it off takes
+ * an account out of every peer's view at once, grants included, as ADR 0035's
+ * "an opt-out that cannot take back what it gave is not an opt-out" asks. The
+ * grant rows are kept, so turning it back on restores exactly what was given.
  */
 func (s *Store) ReadersOf(ctx context.Context, fingerprint, personID string) ([]string, error) {
 	rows, err := s.db.QueryContext(ctx, `
-		SELECT user_id FROM presence_grant
-		WHERE fingerprint = ? AND person_id = ?
-		ORDER BY user_id`, fingerprint, personID)
+		SELECT g.user_id FROM presence_grant g
+		JOIN user u ON u.id = g.user_id
+		WHERE g.fingerprint = ? AND g.person_id = ? AND u.visible_to_peers = 1
+		ORDER BY g.user_id`, fingerprint, personID)
 	if err != nil {
 		return nil, fmt.Errorf("presence readers: %w", err)
 	}

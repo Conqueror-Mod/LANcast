@@ -105,7 +105,7 @@ func (s *Server) peerTick(ctx context.Context) {
 	if err != nil {
 		return
 	}
-	users := s.events.Users()
+	users := s.listedOnly(ctx, s.events.Users())
 	s.forgetPresenceOf(users)
 
 	var wg sync.WaitGroup
@@ -229,4 +229,36 @@ func (s *Server) forgetPresenceOf(open []string) {
 			delete(s.presenceSeen, key)
 		}
 	}
+}
+
+/*
+ * listedOnly keeps the people this server lists to its peers: those with
+ * visible_to_peers on, as RosterForPeers reports them (ADR 0035, ADR 0045).
+ *
+ * Asking a peer "what may u_7k2 see?" tells it that u_7k2 exists and has a
+ * window open, every presenceEvery. For somebody who opted out of being
+ * listed, that is the disclosure the switch exists to prevent, and it buys
+ * nothing: a peer's grants can only name people on our roster, so the answer
+ * for an unlisted person is always empty. A failed lookup lists nobody, so the
+ * failure is silence rather than disclosure.
+ */
+func (s *Server) listedOnly(ctx context.Context, users []string) []string {
+	if len(users) == 0 {
+		return users
+	}
+	roster, err := s.st.RosterForPeers(ctx)
+	if err != nil {
+		return nil
+	}
+	listed := make(map[string]bool, len(roster))
+	for _, p := range roster {
+		listed[p.ID] = true
+	}
+	out := users[:0:0]
+	for _, u := range users {
+		if listed[u] {
+			out = append(out, u)
+		}
+	}
+	return out
 }

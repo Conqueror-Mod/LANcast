@@ -141,16 +141,9 @@ func (s *Server) federationRosterPush(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "bad_request", "a roster is {people, as_of}")
 		return
 	}
-	if len(body.People) > maxRosterPeople {
-		writeError(w, http.StatusBadRequest, "bad_request",
-			fmt.Sprintf("a roster of more than %d people", maxRosterPeople))
+	if err := checkRoster(body.People); err != nil {
+		writeError(w, http.StatusBadRequest, "bad_request", err.Error())
 		return
-	}
-	for _, p := range body.People {
-		if p.ID == "" || len(p.ID) > 64 || len(p.Name) > 200 || strings.ContainsAny(p.ID, "\x00/") {
-			writeError(w, http.StatusBadRequest, "bad_request", "a person in the roster is malformed")
-			return
-		}
 	}
 	// Heard, whatever happens to the roster: it reached us.
 	s.push.noteHeard(fingerprint, time.Now())
@@ -179,6 +172,21 @@ func (s *Server) federationRosterPush(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// checkRoster is what a roster from a peer must satisfy before it is stored,
+// whether it was pushed to us or fetched by us: the two arrive by different
+// doors and end in the same table.
+func checkRoster(people []store.RemotePerson) error {
+	if len(people) > maxRosterPeople {
+		return fmt.Errorf("a roster of more than %d people", maxRosterPeople)
+	}
+	for _, p := range people {
+		if p.ID == "" || len(p.ID) > 64 || len(p.Name) > 200 || strings.ContainsAny(p.ID, "\x00/") {
+			return errors.New("a person in the roster is malformed")
+		}
+	}
+	return nil
 }
 
 // rosterKey is a roster as a comparable string: the ids and names, in the
