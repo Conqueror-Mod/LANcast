@@ -79,8 +79,30 @@ func (s *Server) decodeItemIDs(w http.ResponseWriter, r *http.Request) ([]int64,
 		s.writeInternal(w, err, "existing item ids")
 		return nil, false
 	}
+	/*
+	 * And that the caller may see it (R06-6).
+	 *
+	 * Existence alone let a member put an item from a library kept from them
+	 * into a shared playlist, and the difference between "no such item" and
+	 * success told them which ids exist where they are not meant to look. An
+	 * id the caller cannot see is answered exactly as one that does not exist,
+	 * by the same predicate the playlist's listing uses.
+	 */
+	candidates := make([]store.Item, 0, len(found))
+	for id := range found {
+		candidates = append(candidates, store.Item{ID: id})
+	}
+	permitted, err := s.st.PermittedItems(r.Context(), s.userID(r), candidates)
+	if err != nil {
+		s.writeInternal(w, err, "permitted items")
+		return nil, false
+	}
+	visible := make(map[int64]bool, len(permitted))
+	for _, it := range permitted {
+		visible[it.ID] = true
+	}
 	for _, id := range req.ItemIDs {
-		if !found[id] {
+		if !visible[id] {
 			writeError(w, http.StatusBadRequest, "bad_request",
 				"no such item: "+strconv.FormatInt(id, 10))
 			return nil, false
@@ -181,6 +203,16 @@ func (s *Server) createPlaylist(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if _, err := s.st.GetLibrary(r.Context(), req.LibraryID); s.notFoundOr(w, err, "get library", "no such library") {
+		return
+	}
+	// A library kept from the caller is answered as one that does not exist,
+	// as addHomeShelf does. Otherwise the playlist is made and is a 404 to its
+	// own creator from then on (R06-6).
+	if visible, err := s.st.MayOpenLibrary(r.Context(), s.userID(r), req.LibraryID); err != nil {
+		s.writeInternal(w, err, "check library access")
+		return
+	} else if !visible {
+		writeError(w, http.StatusNotFound, "not_found", "no such library")
 		return
 	}
 

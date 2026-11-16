@@ -349,3 +349,66 @@ func TestCastSearchKeepsToTheCallersLibraries(t *testing.T) {
 		}
 	}
 }
+
+// R06-6: playlist writes check what the caller may see, not only what exists,
+// and answer an unseen id exactly as a missing one.
+func TestPlaylistWritesKeepToTheCallersLibraries(t *testing.T) {
+	a := newAccessHarness(t)
+	ctx := context.Background()
+	it, err := a.st.GetItem(ctx, a.openFilm, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	openLib := it.LibraryID
+	if code := status(t, a.hide(t, a.private)); code != http.StatusOK {
+		t.Fatalf("hide = %d", code)
+	}
+	body := func(resp *http.Response) (int, string) {
+		defer resp.Body.Close()
+		b, _ := io.ReadAll(resp.Body)
+		return resp.StatusCode, string(b)
+	}
+
+	// Creating one inside a library kept from the caller: 404, and nothing made.
+	code, got := body(a.doAs(t, a.member, "POST", "/api/playlists",
+		map[string]any{"title": "Secret", "library_id": a.private}))
+	if code != http.StatusNotFound {
+		t.Errorf("member create in hidden library = %d %s", code, got)
+	}
+	code, missing := body(a.doAs(t, a.member, "POST", "/api/playlists",
+		map[string]any{"title": "Secret", "library_id": a.private + 999}))
+	if code != http.StatusNotFound || missing != got {
+		t.Errorf("hidden and missing library differ: %q vs %q", got, missing)
+	}
+
+	pl, err := a.st.CreatePlaylist(ctx, openLib, "Family", "family")
+	if err != nil {
+		t.Fatal(err)
+	}
+	path := fmt.Sprintf("/api/playlists/%d/entries", pl)
+	for _, method := range []string{"PUT", "POST"} {
+		code, hidden := body(a.doAs(t, a.member, method, path,
+			map[string]any{"item_ids": []int64{a.openFilm, a.privateFilm}}))
+		if code != http.StatusBadRequest || !strings.Contains(hidden, fmt.Sprint(a.privateFilm)) {
+			t.Errorf("%s with a hidden id = %d %s", method, code, hidden)
+		}
+		// The same answer, word for word, as an id that does not exist.
+		ghost := a.privateFilm + 999
+		_, absent := body(a.doAs(t, a.member, method, path,
+			map[string]any{"item_ids": []int64{a.openFilm, ghost}}))
+		if strings.ReplaceAll(absent, fmt.Sprint(ghost), "N") != strings.ReplaceAll(hidden, fmt.Sprint(a.privateFilm), "N") {
+			t.Errorf("%s: hidden %q and missing %q answer differently", method, hidden, absent)
+		}
+	}
+	entries, err := a.st.PlaylistEntries(ctx, pl)
+	if err != nil || len(entries) != 0 {
+		t.Fatalf("a refused write wrote %d entries (%v)", len(entries), err)
+	}
+	// Control: the administrator may add it, and the member an item they can see.
+	if code := status(t, a.authed(t, "POST", path, map[string]any{"item_ids": []int64{a.privateFilm}})); code != http.StatusNoContent {
+		t.Errorf("control: admin add = %d", code)
+	}
+	if code := status(t, a.doAs(t, a.member, "POST", path, map[string]any{"item_ids": []int64{a.openFilm}})); code != http.StatusNoContent {
+		t.Errorf("control: member add visible = %d", code)
+	}
+}

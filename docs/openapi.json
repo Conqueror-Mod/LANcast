@@ -8362,7 +8362,7 @@
             "description": "Replaced. No body."
           },
           "400": {
-            "description": "An item id does not exist; the message names it.",
+            "description": "An item id does not exist, or names an item the caller may not see (answered alike, so the refusal says nothing about what exists); the message names it.",
             "content": {
               "application/json": {
                 "schema": {
@@ -8404,7 +8404,7 @@
             "description": "Appended. No body."
           },
           "400": {
-            "description": "An item id does not exist; the message names it.",
+            "description": "An item id does not exist, or names an item the caller may not see (answered alike, so the refusal says nothing about what exists); the message names it.",
             "content": {
               "application/json": {
                 "schema": {

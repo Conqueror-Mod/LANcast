@@ -17199,7 +17199,7 @@ export interface operations {
                 };
                 content?: never;
             };
-            /** @description An item id does not exist; the message names it. */
+            /** @description An item id does not exist, or names an item the caller may not see (answered alike, so the refusal says nothing about what exists); the message names it. */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -17236,7 +17236,7 @@ export interface operations {
                 };
                 content?: never;
             };
-            /** @description An item id does not exist; the message names it. */
+            /** @description An item id does not exist, or names an item the caller may not see (answered alike, so the refusal says nothing about what exists); the message names it. */
             400: {
                 headers: {
                     [name: string]: unknown;

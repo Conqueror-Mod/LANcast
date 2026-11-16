@@ -4117,7 +4117,8 @@ library, and a server with films and music has no defensible default.
 ```
 
 Responds `200` with the new item, in the shape `GET /api/items/{id}` returns.
-`400` without a title, `404` if `library_id` names no library.
+`400` without a title, `404` if `library_id` names no library or one kept
+from the caller — the two are answered alike.
 
 #### `DELETE /api/playlists/{id}`
 
@@ -4142,7 +4143,9 @@ ordered sequence, and every one of those edits is the caller having decided the
 whole sequence. Repeats are kept — sending the same id twice is a playlist that
 holds a track twice, not an error.
 
-`400` naming the id if any item does not exist, and nothing is written.
+`400` naming the id if any item does not exist or is one the caller may not see
+(a hidden library, a rating above their ceiling), and nothing is written. The
+two are answered alike, so the refusal says nothing about which ids exist.
 
 The list is the one **the caller was shown**. An account kept from some entries
 (a hidden library, a rating above its ceiling) sees a shorter playlist than the
