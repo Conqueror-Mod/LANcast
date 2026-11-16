@@ -36,6 +36,35 @@ func TestTheHomeNetworkRule(t *testing.T) {
 	}
 }
 
+/*
+ * A machine holding a public IPv4 address directly — which is how the server
+ * this was written for is set up, with a static address — is on its
+ * provider's subnet, and the interface rule made that subnet "home" (R01-14).
+ * IPv4 now counts private ranges only; the house's IPv6 /64 still counts, so a
+ * phone on the house Wi-Fi keeps its tiles, and a network wider than a /48 is
+ * nobody's house.
+ */
+func TestAPublicIPv4InterfaceIsNotTheHouse(t *testing.T) {
+	_, isp, _ := net.ParseCIDR("198.51.100.0/22") // the machine's own public address's subnet
+	_, house, _ := net.ParseCIDR("2001:db8:1:1::/64")
+	_, aggregate, _ := net.ParseCIDR("2001:db8::/32")
+	local := []*net.IPNet{isp, house, aggregate}
+	cases := map[string]bool{
+		"198.51.100.77":        false, // a stranger on the provider's subnet
+		"198.51.101.3":         false,
+		"192.168.1.20":         true,  // the house's own IPv4, behind the router
+		"::ffff:198.51.100.77": false, // the same stranger, IPv4-mapped
+		"2001:db8:1:1::abcd":   true,  // a phone on the house's /64
+		"2001:db8:9::1":        false, // inside the /32 aggregate, not the house
+		"fd00::5":              true,  // unique-local
+	}
+	for addr, want := range cases {
+		if got := onHomeNetwork(net.ParseIP(addr), local); got != want {
+			t.Errorf("%s: home = %v, want %v", addr, got, want)
+		}
+	}
+}
+
 func pickerAsk(t *testing.T, h *harness, remote string) []string {
 	t.Helper()
 	req := httptest.NewRequest("GET", "/api/auth/accounts", nil)

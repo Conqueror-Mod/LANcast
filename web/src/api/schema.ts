@@ -231,7 +231,7 @@ export interface paths {
         };
         /**
          * Accounts to pick from on the sign-in page
-         * @description No session needed. Lists every account's name, and nothing else, but only to a request from the home network: this computer, private and link-local addresses, and addresses on a network one of this machine's interfaces is on (a phone on the house Wi-Fi speaking global IPv6 counts; the rest of the internet does not). Any other request, or any request while `login_picker` is off, gets an empty list, which says nothing about whether accounts exist.
+         * @description No session needed. Lists every account's name, and nothing else, but only to a request from the home network: this computer, private and link-local addresses, and IPv6 addresses on a network (no wider than a /48) one of this machine's interfaces is on (a phone on the house Wi-Fi speaking global IPv6 counts; the rest of the internet does not). IPv4 has no interface rule: a machine holding a public IPv4 address would otherwise count its provider's subnet as home. Any other request, or any request while `login_picker` is off, gets an empty list, which says nothing about whether accounts exist.
          */
         get: operations["loginAccounts"];
         put?: never;

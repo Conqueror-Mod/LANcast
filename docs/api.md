@@ -115,9 +115,12 @@ the server still held its session.
 account's name, and nothing else, for the sign-in page to offer as tiles. A
 name is half of every login and this server may answer the internet at a
 public name, so only this computer, private and link-local addresses, and
-addresses on a network one of this machine's interfaces is on get the list
-(the last is what makes a phone on the house Wi-Fi count when it speaks global
-IPv6). Everything else gets `{"accounts": []}`, as does every request while
+IPv6 addresses on a network (no wider than a /48) one of this machine's
+interfaces is on get the list (the last is what makes a phone on the house
+Wi-Fi count when it speaks global IPv6). There is no interface rule for IPv4:
+on a machine holding a public IPv4 address directly, its interface's network
+is the provider's subnet, full of strangers, and a house's own IPv4 network is
+always private. Everything else gets `{"accounts": []}`, as does every request while
 the `login_picker` setting is off. An empty list rather than a `403`: it says
 nothing about whether there is anything to hide.
 

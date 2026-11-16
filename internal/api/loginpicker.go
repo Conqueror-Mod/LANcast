@@ -12,10 +12,11 @@ import (
  * Tiles of the accounts on this server, so somebody at home picks their name
  * instead of typing it. A name is half of every login, and this server answers
  * the internet at its public name, so the list goes **only to the home
- * network**: this computer, private and link-local addresses, and addresses on
- * a network one of this machine's own interfaces is on. The last is what
- * makes a phone on the house Wi-Fi count when it speaks IPv6: its address is a
- * global one, but it is inside the house's /64, which a stranger's is not.
+ * network**: this computer, private and link-local addresses, and IPv6
+ * addresses on a network one of this machine's own interfaces is on. The last
+ * is what makes a phone on the house Wi-Fi count when it speaks IPv6: its
+ * address is a global one, but it is inside the house's /64, which a
+ * stranger's is not. See onHomeNetwork for why IPv4 has no such rule.
  *
  * Anything else gets an empty list, which the page reads as "no picker" and
  * shows the ordinary form. Not a 403: an empty answer says nothing about
@@ -67,15 +68,31 @@ func (s *Server) fromHomeNetwork(r *http.Request) bool {
 	return onHomeNetwork(ip, nets())
 }
 
-// onHomeNetwork is the rule, apart from where the interfaces come from.
+/*
+ * onHomeNetwork is the rule, apart from where the interfaces come from.
+ *
+ * IPv4: this computer, private and link-local ranges, and nothing else. The
+ * interface rule used to apply here too, and on a machine holding a public
+ * IPv4 address directly (a VPS, a PC behind a modem in bridge mode, a static
+ * address) the interface's network is the provider's subnet: a /22 of a
+ * thousand strangers, each handed the list of names (R01-14). A house's own
+ * IPv4 network is always private, because NAT is how a house has one.
+ *
+ * IPv6: unique-local and link-local, plus the interface rule, which is the
+ * whole reason it exists: a phone on the house Wi-Fi speaks a global address
+ * inside the house's /64. A network wider than a /48 is not a house (an
+ * interface reporting /0, or a provider's aggregate, must not make the
+ * internet local), and a /48 is the most a provider delegates to one site.
+ */
 func onHomeNetwork(ip net.IP, local []*net.IPNet) bool {
 	if ip.IsLoopback() || ip.IsPrivate() || ip.IsLinkLocalUnicast() {
 		return true
 	}
+	if ip.To4() != nil {
+		return false
+	}
 	for _, n := range local {
-		// A network as wide as the internet is not a home network: an
-		// interface reporting /0 must not make every address local.
-		if ones, _ := n.Mask.Size(); ones == 0 {
+		if ones, bits := n.Mask.Size(); bits != 128 || ones < 48 {
 			continue
 		}
 		if n.Contains(ip) {
