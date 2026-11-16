@@ -213,3 +213,59 @@ func TestEveryRouteThatTakesANameAppliesTheRule(t *testing.T) {
 		t.Fatalf("a non-Latin name: %d", resp.StatusCode)
 	}
 }
+
+// An administrator's edit that is refused in part is refused whole (R01-16).
+// On main the rename was saved before the role or the ceiling was refused, so
+// the answer was an error over an edit that had half happened.
+func TestAHalfRefusedEditChangesNothing(t *testing.T) {
+	h := newHarness(t)
+	ctx := context.Background()
+	h.secure(t, "a good long password")
+	admin, err := h.st.UserByName(ctx, testUser)
+	if err != nil {
+		t.Fatal(err)
+	}
+	member, err := h.st.CreateUser(ctx, "", "someone", "hash", store.RoleMember)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// The only administrator renamed and demoted at once: 409, and still named
+	// as before.
+	wantError(t, h.authed(t, "PATCH", "/api/users/"+admin.ID,
+		map[string]any{"name": "renamed admin", "role": "member"}),
+		http.StatusConflict, "last_admin")
+	if u, _ := h.st.UserByID(ctx, admin.ID); u.Name != testUser || u.Role != store.RoleAdmin {
+		t.Errorf("after a refused edit: %q %s", u.Name, u.Role)
+	}
+
+	// A rename with a ceiling nothing can place: 400, and nothing changed.
+	wantError(t, h.authed(t, "PATCH", "/api/users/"+member.ID,
+		map[string]any{"name": "renamed member", "max_content_rating": "NOT-A-RATING"}),
+		http.StatusBadRequest, "bad_request")
+	if u, _ := h.st.UserByID(ctx, member.ID); u.Name != "someone" || u.MaxContentRating != "" {
+		t.Errorf("after a refused edit: %q %q", u.Name, u.MaxContentRating)
+	}
+
+	// And nothing was audited for either.
+	events, _, err := h.st.ListAudit(ctx, store.AuditFilter{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, e := range events {
+		if e.Action == "user.rename" {
+			t.Errorf("a refused edit was audited: %s", e.Summary)
+		}
+	}
+
+	// All three together, when all are good, apply.
+	resp := h.authed(t, "PATCH", "/api/users/"+member.ID,
+		map[string]any{"name": "renamed member", "role": "admin", "max_content_rating": ""})
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("a good edit: %d", resp.StatusCode)
+	}
+	if u, _ := h.st.UserByID(ctx, member.ID); u.Name != "renamed member" || u.Role != store.RoleAdmin {
+		t.Errorf("after a good edit: %q %s", u.Name, u.Role)
+	}
+}

@@ -138,63 +138,64 @@ func (s *Server) patchUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	/*
+	 * Every field is checked, and then all of them are written in one
+	 * transaction, so an edit that is refused is not half applied (R01-16).
+	 * Before, a rename was saved and audited before the role change after it
+	 * could be refused.
+	 */
+	edit := store.UserEdit{Role: req.Role, MaxContentRating: req.MaxContentRating}
 	if req.Name != nil {
 		name, ok := validName(*req.Name)
 		if !ok {
 			writeError(w, http.StatusBadRequest, "bad_request", nameRule)
 			return
 		}
-		if err := s.st.RenameUser(r.Context(), id, name); err != nil {
-			s.renameError(w, err)
-			return
+		edit.Name = &name
+	}
+	if req.Role != nil && !store.ValidRole(*req.Role) {
+		writeError(w, http.StatusBadRequest, "bad_request",
+			"role must be admin or member")
+		return
+	}
+	if err := s.st.EditUser(r.Context(), id, edit); err != nil {
+		switch {
+		case errors.Is(err, store.ErrDuplicate):
+			writeError(w, http.StatusConflict, "duplicate", "that name is already taken")
+		case errors.Is(err, store.ErrLastAdmin):
+			// Refused in the store, inside a transaction with the count —
+			// two admins demoting each other at once is a race a handler
+			// check loses, and the prize is a server nobody can administer.
+			writeError(w, http.StatusConflict, "last_admin",
+				"this is the only administrator; promote somebody else first")
+		case errors.Is(err, store.ErrUnknownRating):
+			/*
+			 * A label this server cannot place is refused rather than
+			 * stored, and it is a 400 rather than a 500: the request was
+			 * wrong, and silently keeping a ceiling nothing can place would
+			 * leave a household believing a limit was in force that was
+			 * not.
+			 */
+			writeError(w, http.StatusBadRequest, "bad_request",
+				"that is not a content rating this server can place on its scale")
+		case errors.Is(err, store.ErrNotFound):
+			writeError(w, http.StatusNotFound, "not_found", "no such account")
+		default:
+			s.writeInternal(w, err, "edit user")
 		}
-		s.audit(r, "user.rename", "user", id,
-			fmt.Sprintf("renamed %q to %q", target.Name, name), nil)
+		return
 	}
 
+	// Audited once it has all happened, one entry per field as before.
+	if edit.Name != nil {
+		s.audit(r, "user.rename", "user", id,
+			fmt.Sprintf("renamed %q to %q", target.Name, *edit.Name), nil)
+	}
 	if req.Role != nil {
-		if !store.ValidRole(*req.Role) {
-			writeError(w, http.StatusBadRequest, "bad_request",
-				"role must be admin or member")
-			return
-		}
-		if err := s.st.SetUserRole(r.Context(), id, *req.Role); err != nil {
-			switch {
-			case errors.Is(err, store.ErrLastAdmin):
-				// Refused in the store, inside a transaction with the count —
-				// two admins demoting each other at once is a race a handler
-				// check loses, and the prize is a server nobody can administer.
-				writeError(w, http.StatusConflict, "last_admin",
-					"this is the only administrator; promote somebody else first")
-			case errors.Is(err, store.ErrNotFound):
-				writeError(w, http.StatusNotFound, "not_found", "no such account")
-			default:
-				s.writeInternal(w, err, "set role")
-			}
-			return
-		}
 		s.audit(r, "user.role", "user", id,
 			fmt.Sprintf("%q is now %s", target.Name, *req.Role), nil)
 	}
-
 	if req.MaxContentRating != nil {
-		if err := s.st.SetMaxContentRating(r.Context(), id, *req.MaxContentRating); err != nil {
-			switch {
-			case errors.Is(err, store.ErrNotFound):
-				writeError(w, http.StatusNotFound, "not_found", "no such account")
-			default:
-				/*
-				 * A label this server cannot place is refused rather than
-				 * stored, and it is a 400 rather than a 500: the request was
-				 * wrong, and silently keeping a ceiling nothing can place would
-				 * leave a household believing a limit was in force that was
-				 * not.
-				 */
-				writeError(w, http.StatusBadRequest, "bad_request",
-					"that is not a content rating this server can place on its scale")
-			}
-			return
-		}
 		what := "removed the content rating limit on %q"
 		if *req.MaxContentRating != "" {
 			what = "limited %q to " + *req.MaxContentRating + " and under"

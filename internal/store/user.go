@@ -9,6 +9,8 @@ import (
 	"fmt"
 	"strings"
 	"time"
+
+	"lancast/internal/rating"
 )
 
 // Roles. The split is a real privilege boundary (ADR 0015): only an admin can
@@ -457,6 +459,82 @@ func (s *Store) SetUserRole(ctx context.Context, id, role string) error {
 
 	if _, err := tx.ExecContext(ctx, `UPDATE user SET role = ? WHERE id = ?`, role, id); err != nil {
 		return fmt.Errorf("set role: %w", err)
+	}
+	return tx.Commit()
+}
+
+// UserEdit is an administrator's change to an account: any of a name, a role
+// and a content-rating ceiling. A nil field is not changed.
+type UserEdit struct {
+	Name             *string
+	Role             *string
+	MaxContentRating *string
+}
+
+// ErrUnknownRating refuses a ceiling this server cannot place on its scale.
+var ErrUnknownRating = errors.New("not a content rating this server can place")
+
+/*
+ * EditUser applies every field of an edit in one transaction, or none of them
+ * (R01-16). Applied one write at a time, a rename was saved before a role
+ * change could be refused as the last administrator, and the response was an
+ * error over an edit that had half happened.
+ *
+ * The rules are the ones RenameUser, SetUserRole and SetMaxContentRating
+ * apply: ErrDuplicate for a taken name, ErrLastAdmin for demoting the only
+ * administrator (counted inside this transaction), ErrUnknownRating for a
+ * ceiling that is not a known label, ErrNotFound for no such account.
+ */
+func (s *Store) EditUser(ctx context.Context, id string, e UserEdit) error {
+	if e.Role != nil && !ValidRole(*e.Role) {
+		return fmt.Errorf("unknown role %q", *e.Role)
+	}
+	if e.MaxContentRating != nil && *e.MaxContentRating != "" && !rating.Known(*e.MaxContentRating) {
+		return ErrUnknownRating
+	}
+
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("edit user: %w", err)
+	}
+	defer tx.Rollback()
+
+	var current string
+	switch err := tx.QueryRowContext(ctx, `SELECT role FROM user WHERE id = ?`, id).Scan(&current); {
+	case errors.Is(err, sql.ErrNoRows):
+		return ErrNotFound
+	case err != nil:
+		return fmt.Errorf("edit user: %w", err)
+	}
+
+	if e.Role != nil && *e.Role != current && current == RoleAdmin {
+		var admins int
+		if err := tx.QueryRowContext(ctx,
+			`SELECT COUNT(*) FROM user WHERE role = ?`, RoleAdmin).Scan(&admins); err != nil {
+			return fmt.Errorf("edit user: %w", err)
+		}
+		if admins <= 1 {
+			return ErrLastAdmin
+		}
+	}
+	if e.Name != nil {
+		if _, err := tx.ExecContext(ctx, `UPDATE user SET name = ? WHERE id = ?`, *e.Name, id); err != nil {
+			if isUniqueViolation(err) {
+				return ErrDuplicate
+			}
+			return fmt.Errorf("edit user: rename: %w", err)
+		}
+	}
+	if e.Role != nil {
+		if _, err := tx.ExecContext(ctx, `UPDATE user SET role = ? WHERE id = ?`, *e.Role, id); err != nil {
+			return fmt.Errorf("edit user: role: %w", err)
+		}
+	}
+	if e.MaxContentRating != nil {
+		if _, err := tx.ExecContext(ctx,
+			`UPDATE user SET max_content_rating = ? WHERE id = ?`, *e.MaxContentRating, id); err != nil {
+			return fmt.Errorf("edit user: ceiling: %w", err)
+		}
 	}
 	return tx.Commit()
 }
