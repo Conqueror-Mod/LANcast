@@ -107,3 +107,54 @@ func TestNothingOffTheLANIsAnswered(t *testing.T) {
 		t.Errorf("/api/libraries through the DLNA listener = %d, want 404", code)
 	}
 }
+
+/*
+ * R03-6. While DLNA's account is cleared or deleted, it answers nothing.
+ *
+ * The supervisor notices within three seconds and stops the listener; until
+ * then every request reached the store as "" or as an id with no row, both of
+ * which mean "no limit". The control is the same requests as a real account.
+ */
+func TestDLNARefusesWithNoAccount(t *testing.T) {
+	a := newAccessHarness(t)
+	film := fmt.Sprintf("/dlna/media/%d", a.privateFilm)
+	art := fmt.Sprintf("/dlna/art/%d", a.privateFilm)
+
+	var adminID string
+	users, _ := a.st.ListUsers(t.Context())
+	for _, u := range users {
+		if u.Role == "admin" {
+			adminID = u.ID
+		}
+	}
+	control := a.dlna(t, adminID)
+	if code := dlnaCall(control, "GET", film, "", tv).Code; code != http.StatusOK {
+		t.Fatalf("control: the film as the administrator = %d, want 200", code)
+	}
+
+	for name, account := range map[string]string{
+		"cleared": "",
+		"deleted": "u_gone",
+	} {
+		h := a.dlna(t, account)
+		for _, c := range []struct{ method, path, body string }{
+			{"GET", film, ""},
+			{"HEAD", film, ""},
+			{"GET", art, ""},
+			{"POST", "/dlna/control/cds", browseBody("0")},
+		} {
+			got := dlnaCall(h, c.method, c.path, c.body, tv)
+			if got.Code != http.StatusServiceUnavailable {
+				t.Errorf("%s account: %s %s = %d, want 503", name, c.method, c.path, got.Code)
+			}
+			if strings.Contains(got.Body.String(), "lib-") {
+				t.Errorf("%s account: %s listed libraries", name, c.path)
+			}
+		}
+		// The device itself still describes itself: a TV that cannot find the
+		// server at all forgets it, and the account may be chosen again.
+		if code := dlnaCall(h, "GET", "/dlna/device.xml", "", tv).Code; code != http.StatusOK {
+			t.Errorf("%s account: device.xml = %d, want 200", name, code)
+		}
+	}
+}

@@ -2,10 +2,11 @@
  * Your own rating.
  *
  * Gold is the one colour a star wants and the one colour it cannot have for
- * free: gold means where you are. A *filled* star is a state, not a location —
- * so filled stars take the dormant gold the design system already defines for
- * "present but not focused", and full-strength gold stays reserved for the
- * focus ring, exactly as it is everywhere else.
+ * free: gold means where you are. A *saved* rating is a state, not a location
+ * — the kind design.md names when it rules out gold for a favourite — so it is
+ * drawn in the text colour, as TagItem's set heart is. Gold lights the stars
+ * only while you are on them: the preview under the pointer, or keyboard
+ * focus, as on QuickRate.
  */
 
 .rate {
@@ -45,10 +46,16 @@
      to aim at. */
   color: rgba(255, 255, 255, 0.16);
   transition: color var(--dur-fast) ease;
+  --star-lit: var(--text-primary);
+}
+
+.rate__stars.is-previewing .rate__star,
+.rate__stars:has(.rate__star:focus-visible) .rate__star {
+  --star-lit: var(--gold);
 }
 
 .rate__star.is-full {
-  color: var(--gold);
+  color: var(--star-lit);
 }
 
 /* Half is the second click on a star already lit. A gradient rather than a
@@ -56,7 +63,7 @@
 .rate__star.is-half {
   background: linear-gradient(
     90deg,
-    var(--gold) 50%,
+    var(--star-lit) 50%,
     rgba(255, 255, 255, 0.16) 50%
   );
   -webkit-background-clip: text;

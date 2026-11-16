@@ -29,12 +29,15 @@ const playlists = [
 let host: HTMLDivElement;
 let root: Root;
 let requests: { method: string; url: string; body: unknown }[];
+/** What a POST answers with: 200 makes the playlist, anything else refuses. */
+let postStatus: number;
 
 beforeEach(() => {
   host = document.createElement("div");
   document.body.append(host);
   root = createRoot(host);
   requests = [];
+  postStatus = 200;
   vi.stubGlobal(
     "fetch",
     vi.fn(async (url: string, init?: RequestInit) => {
@@ -62,6 +65,12 @@ beforeEach(() => {
           status: 200,
           headers: { "Content-Type": "application/json" },
         });
+      }
+      if (method === "POST" && postStatus !== 200) {
+        return new Response(
+          JSON.stringify({ error: { code: "bad", message: "the disk is full" } }),
+          { status: postStatus, headers: { "Content-Type": "application/json" } },
+        );
       }
       if (method === "POST") {
         return new Response(
@@ -165,6 +174,68 @@ describe("playlists page", () => {
     expect(post!.body).toEqual({ title: "Tonight", library_id: 3 });
     // And it goes into the new playlist, since the useful next step is filling
     // it and that happens on its own page.
+    expect(host.querySelector("#detail")).not.toBeNull();
+  });
+
+  async function typeTitle(title: string) {
+    await act(async () => button(/New playlist/).click());
+    const input = host.querySelector<HTMLInputElement>(".pl-prompt__input")!;
+    const setValue = Object.getOwnPropertyDescriptor(
+      window.HTMLInputElement.prototype,
+      "value",
+    )!.set!;
+    await act(async () => {
+      setValue.call(input, title);
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    return input;
+  }
+
+  /*
+   * R15-4. The prompt stays open until the POST succeeds, and its button was
+   * disabled only for an empty field, so a double-click made two playlists
+   * with one name.
+   */
+  it("makes one playlist when Create is pressed twice", async () => {
+    await render();
+    await typeTitle("Tonight");
+    await act(async () => {
+      const create = button(/^Create$/);
+      create.click();
+      create.click();
+    });
+    await flush();
+    expect(requests.filter((r) => r.method === "POST")).toHaveLength(1);
+  });
+
+  it("makes one playlist when Enter is pressed twice", async () => {
+    await render();
+    const input = await typeTitle("Tonight");
+    await act(async () => {
+      const enter = () =>
+        input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+      enter();
+      enter();
+    });
+    await flush();
+    expect(requests.filter((r) => r.method === "POST")).toHaveLength(1);
+  });
+
+  // A failed create used to draw nothing: the prompt just stayed.
+  it("says why a create failed, and can be tried again", async () => {
+    postStatus = 500;
+    await render();
+    await typeTitle("Tonight");
+    await act(async () => button(/^Create$/).click());
+    await flush();
+    const alert = host.querySelector('.pl-prompt [role="alert"]');
+    expect(alert?.textContent).toContain("the disk is full");
+    expect(host.querySelector("#detail")).toBeNull();
+
+    postStatus = 200;
+    await act(async () => button(/^Create$/).click());
+    await flush();
+    expect(requests.filter((r) => r.method === "POST")).toHaveLength(2);
     expect(host.querySelector("#detail")).not.toBeNull();
   });
 

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"sort"
@@ -183,6 +184,11 @@ func (s *Server) refreshPeer(ctx context.Context, p store.Peer) error {
 	if err := s.callPeer(ctx, p, "/api/federation/roster", &body); err != nil {
 		return err
 	}
+	// The same checks a pushed roster passes (rosterpush.go): fetching it
+	// instead of being sent it is no reason to store whatever came back.
+	if err := checkRoster(body.People); err != nil {
+		return fmt.Errorf("peer %s roster: %w", p.Name, err)
+	}
 	// A roster pushed since this was asked for is fresher; keep it (ADR 0103).
 	if s.push.acceptAsOf(p.Fingerprint, body.AsOf) {
 		if err := s.st.ReplaceRemotePeople(ctx, p.Fingerprint, body.People); err != nil {
@@ -250,6 +256,11 @@ func (s *Server) peerPresence(w http.ResponseWriter, r *http.Request) {
 		People    []map[string]any `json:"people"`
 	}
 
+	// Only a person this server lists to its peers is asked about by name.
+	// Asking for somebody who opted out tells every peer they exist and are
+	// here now, and the answer is always empty (see listedOnly).
+	listed := len(s.listedOnly(r.Context(), []string{me})) == 1
+
 	out := make([]peerOut, len(peers))
 	var wg sync.WaitGroup
 	for i, p := range peers {
@@ -267,7 +278,8 @@ func (s *Server) peerPresence(w http.ResponseWriter, r *http.Request) {
 			// The roster first: a grant can only name somebody already known
 			// to be on that server, so a peer whose people have never been
 			// fetched has nobody to grant anything to. Rate-limited inside.
-			if err := s.refreshPeer(r.Context(), p); err == nil {
+			refreshErr := s.refreshPeer(r.Context(), p)
+			if refreshErr == nil {
 				if refreshed, err := s.st.RemotePeople(r.Context(), p.Fingerprint); err == nil {
 					people = refreshed
 				}
@@ -280,8 +292,20 @@ func (s *Server) peerPresence(w http.ResponseWriter, r *http.Request) {
 				}
 			}
 
-			seen, err := s.askPeerPresence(r.Context(), p, me)
-			out[i].Reachable = err == nil
+			var seen []visible
+			if listed {
+				var err error
+				seen, err = s.askPeerPresence(r.Context(), p, me)
+				out[i].Reachable = err == nil
+			} else {
+				// Not asked, so reachability comes from the roster: fetched
+				// now, or recently enough that it was not re-asked, and the
+				// peer not marked silent since.
+				s.rosterMu.Lock()
+				_, down := s.peerDown[p.Fingerprint]
+				s.rosterMu.Unlock()
+				out[i].Reachable = refreshErr == nil && !down
+			}
 			out[i].ReachesUs = !out[i].Reachable && s.push.heardFrom(p.Fingerprint)
 
 			byID := map[string]visible{}
@@ -359,7 +383,11 @@ func (s *Server) callPeer(ctx context.Context, p store.Peer, path string, out an
 			lastErr = fmt.Errorf("peer answered %d", resp.StatusCode)
 			continue
 		}
-		err = json.NewDecoder(resp.Body).Decode(out)
+		// Bounded, as every other read on the peer path is (sendPeer, the
+		// playlist, a pushed roster). A peer that answers with an endless
+		// array is cut off at the cap with a decode error, not held in
+		// memory until the deadline.
+		err = json.NewDecoder(io.LimitReader(resp.Body, maxPeerJSON)).Decode(out)
 		resp.Body.Close()
 		if err != nil {
 			lastErr = err
@@ -557,6 +585,11 @@ func presenceTitle(it *store.Item) string {
 
 // peerDeadline caps one peer's whole turn — every address, both calls.
 const peerDeadline = 3 * time.Second
+
+// maxPeerJSON caps one JSON answer from a peer. The largest honest one is a
+// page of a peer's library, a few hundred items with their artwork paths,
+// which is well under a megabyte.
+const maxPeerJSON = 4 << 20
 
 // peerProbe bounds the address race inside a call, and peerStagger is how
 // long each address waits behind the one before it.

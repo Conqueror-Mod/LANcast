@@ -142,16 +142,15 @@ func TestMergeProviderNeverOverwritesMeasuredDuration(t *testing.T) {
 	}
 }
 
-// The other half of the same rule: with nothing measured, a source is better
-// than no duration at all, so an NFO still covers a file ffprobe has not
-// reached yet.
-func TestMergeSourceSuppliesDurationWhenNoneMeasured(t *testing.T) {
+// T-3: no source supplies a duration, even when none has been measured. The
+// probe owns it; a runtime filled into the gap is what overwrote the probe.
+func TestMergeNoSourceSuppliesDuration(t *testing.T) {
 	out := Merge(Record{}, nil,
 		[]Record{rec("nfo", Fields{DurationMS: I64(5_400_000)})},
-		[]Record{rec("tmdb", Fields{DurationMS: I64(7_080_000)})})
+		[]Record{rec("tmdb", Fields{DurationMS: I64(960_000)})})
 
-	if out.Fields.DurationMS == nil || *out.Fields.DurationMS != 5_400_000 {
-		t.Errorf("DurationMS = %v, want the NFO value 5400000", out.Fields.DurationMS)
+	if out.Fields.DurationMS != nil {
+		t.Errorf("DurationMS = %d, want none: only the probe sets a duration", *out.Fields.DurationMS)
 	}
 }
 

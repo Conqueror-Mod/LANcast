@@ -166,6 +166,7 @@ export function PopoutPlayer({ onClose }: { onClose: () => void }) {
             <QueuePanel
               ids={pb.playOrder}
               currentID={pb.itemID}
+              currentAt={pb.playPos}
               onPick={(id, at) => {
                 pb.playFromQueue(id, at);
                 setPanel("none");

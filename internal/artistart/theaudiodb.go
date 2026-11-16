@@ -98,7 +98,7 @@ func (c *Client) Lookup(ctx context.Context, artist string) (*Image, error) {
 
 	req, err := http.NewRequestWithContext(ctx, "GET", endpoint, nil)
 	if err != nil {
-		return nil, err
+		return nil, keyless(err)
 	}
 	// A contactable identifier, the way MusicBrainz requires and TheAudioDB
 	// appreciates. A scraper with no name is the one that gets blocked.
@@ -106,7 +106,7 @@ func (c *Client) Lookup(ctx context.Context, artist string) (*Image, error) {
 
 	resp, err := c.http.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("artistart: %w", err)
+		return nil, fmt.Errorf("artistart: %w", keyless(err))
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
@@ -180,4 +180,19 @@ func normalise(s string) string {
 	// carries depends on whoever tagged it.
 	s = strings.TrimPrefix(s, "the ")
 	return strings.Join(strings.Fields(s), " ")
+}
+
+// keyless drops the request URL from a transport error, since TheAudioDB's key
+// is a path segment (R08-6): the host is all a log needs to say which provider
+// failed. The cause still unwraps.
+func keyless(err error) error {
+	var ue *url.Error
+	if !errors.As(err, &ue) {
+		return err
+	}
+	host := "theaudiodb"
+	if u, perr := url.Parse(ue.URL); perr == nil && u.Host != "" {
+		host = u.Host
+	}
+	return fmt.Errorf("%s %s: %w", ue.Op, host, ue.Err)
 }

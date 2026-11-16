@@ -48,16 +48,25 @@
   color: var(--text-muted);
 }
 
+/* The dormant hairline at rest, full gold only where you are (docs/design.md):
+   gold at rest here put two gold things on the page whenever focus was on
+   anything else. */
 .faces-page__scan {
   margin-left: auto;
   background: transparent;
-  border: 1px solid var(--gold);
+  border: 1px solid var(--gold-dormant);
   border-radius: 6px;
   color: var(--text-primary);
   font: inherit;
   font-size: 13px;
   padding: 7px 16px;
   cursor: pointer;
+}
+
+.faces-page__scan:hover,
+.faces-page__scan:focus-visible {
+  border-color: var(--gold);
+  outline: none;
 }
 
 .faces-page__scan:disabled {
@@ -262,9 +271,22 @@
   color: var(--text-secondary);
 }
 
+/* Primary by its text, not by gold: the dormant hairline it shares with the
+   others at rest, full gold only under the pointer or focus. */
 .facenamer__save {
-  border-color: var(--gold);
   color: var(--text-primary);
+}
+
+.facenamer__save:hover,
+.facenamer__save:focus-visible,
+.facenamer__photos:hover,
+.facenamer__photos:focus-visible,
+.facenamer__clear:hover,
+.facenamer__clear:focus-visible,
+.facenamer__cancel:hover,
+.facenamer__cancel:focus-visible {
+  border-color: var(--gold);
+  outline: none;
 }
 
 .facenamer__cancel {
@@ -360,9 +382,10 @@
   border-top-left-radius: 4px;
 }
 
-/* An accepted suggestion, marked before the refetch confirms it. */
+/* An accepted suggestion, marked before the refetch confirms it: by its ✓ and
+   the dimmed picture, never gold. It is disabled, so it can never be where
+   you are, and gold for "accepted" is a state — the misuse design.md names. */
 .facenamer__suggestion[data-taken] {
-  border-color: var(--gold);
   opacity: 1;
 }
 

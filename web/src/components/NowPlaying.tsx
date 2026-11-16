@@ -142,6 +142,7 @@ export function NowPlaying() {
               // The order that will play, as the popover always showed it.
               ids={pb.playOrder}
               currentID={pb.itemID}
+              currentAt={pb.playPos}
               upNext={pb.upNext}
               onDrop={pb.removeFromUpNext}
               onPick={(id, at) => pb.playFromQueue(id, at)}

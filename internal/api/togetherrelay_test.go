@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -38,6 +39,32 @@ type twoServers struct {
 	guestUser   string
 	item        int64
 	film        []byte
+	// heard is every request the host's peer listener received, as
+	// path?query, in order: what crossed the wire, not what was answered.
+	heard *requestLog
+}
+
+type requestLog struct {
+	mu   sync.Mutex
+	urls []string
+}
+
+func (l *requestLog) wrap(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		l.mu.Lock()
+		l.urls = append(l.urls, r.URL.RequestURI())
+		l.mu.Unlock()
+		next.ServeHTTP(w, r)
+	})
+}
+
+// take returns what was heard since the last take, and forgets it.
+func (l *requestLog) take() []string {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	out := l.urls
+	l.urls = nil
+	return out
 }
 
 func newTwoServers(t *testing.T) twoServers {
@@ -54,7 +81,8 @@ func newTwoServers(t *testing.T) twoServers {
 	if err != nil {
 		t.Fatal(err)
 	}
-	peerSrv := httptest.NewUnstartedServer(host.srvAPI.Handler())
+	heard := &requestLog{}
+	peerSrv := httptest.NewUnstartedServer(heard.wrap(host.srvAPI.Handler()))
 	peerSrv.TLS = cfg
 	peerSrv.StartTLS()
 	t.Cleanup(peerSrv.Close)
@@ -95,6 +123,11 @@ func newTwoServers(t *testing.T) twoServers {
 	if err := host.st.ReplaceRemotePeople(ctx, guestFP, []store.RemotePerson{{ID: gu.ID, Name: "Gerda"}}); err != nil {
 		t.Fatal(err)
 	}
+	// The host's person is listed to peers too: a grant from an account that
+	// is not reads to nobody (R04-8, the switch outranks the grants).
+	if err := host.st.SetVisibleToPeers(ctx, hu.ID, true); err != nil {
+		t.Fatal(err)
+	}
 	if err := host.st.GrantPresence(ctx, hu.ID, guestFP, gu.ID, time.Now()); err != nil {
 		t.Fatal(err)
 	}
@@ -103,7 +136,7 @@ func newTwoServers(t *testing.T) twoServers {
 	film := []byte("the bytes of a film nobody shared")
 	item := host.addFile(t, "blade runner.mkv", film)
 	return twoServers{host: host, guest: guest, hostFP: hostFP,
-		hostUser: hu.ID, guestUser: gu.ID, item: item, film: film}
+		hostUser: hu.ID, guestUser: gu.ID, item: item, film: film, heard: heard}
 }
 
 // guestCall is the guest's client talking to the guest's own server.

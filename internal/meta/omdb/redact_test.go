@@ -1,0 +1,48 @@
+package omdb
+
+import (
+	"context"
+	"errors"
+	"net/http"
+	"strings"
+	"testing"
+)
+
+type failingTransport struct{}
+
+func (failingTransport) RoundTrip(*http.Request) (*http.Response, error) {
+	return nil, errors.New("connection reset")
+}
+
+// R08-6: OMDb takes its key only in the query, so it must not reach the error.
+func TestNetworkErrorDoesNotCarryTheKey(t *testing.T) {
+	c := New("SECRET-OMDB-KEY",
+		WithBaseURL("https://omdb.example.invalid"),
+		WithHTTPClient(&http.Client{Transport: failingTransport{}}))
+	c.MaxRetries = 0
+
+	_, err := c.Ratings(context.Background(), "tt0133093")
+	if err == nil {
+		t.Fatal("expected an error")
+	}
+	if strings.Contains(err.Error(), "SECRET-OMDB-KEY") || strings.Contains(err.Error(), "apikey") {
+		t.Errorf("the key reached the error: %q", err)
+	}
+}
+
+// R08-8: an endless 200 is refused at the cap rather than read until timeout.
+func TestOversizedResponseIsRefused(t *testing.T) {
+	c := testClient(t, func(w http.ResponseWriter, r *http.Request) {
+		chunk := make([]byte, 1<<20)
+		for i := 0; i < 9; i++ {
+			if _, err := w.Write(chunk); err != nil {
+				return
+			}
+		}
+	})
+	c.MaxRetries = 0
+	_, err := c.Ratings(context.Background(), "tt0133093")
+	if err == nil || !strings.Contains(err.Error(), "larger than") {
+		t.Errorf("a 9 MiB answer was not refused at the cap: %v", err)
+	}
+}

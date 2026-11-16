@@ -143,6 +143,14 @@ func Check(form, raUser string) (url.Values, string, error) {
 	if err != nil {
 		return nil, "", errors.New("not a RetroAchievements request")
 	}
+	// RetroAchievements (PHP) uses the LAST value of a repeated key and Get
+	// reads the first, so a repeat would pass every check below and be read
+	// differently upstream. Refuse it outright.
+	for k, vs := range v {
+		if len(vs) > 1 {
+			return nil, "", fmt.Errorf("the request repeats %q", k)
+		}
+	}
 	kind := v.Get("r")
 	if !allowed(kind) {
 		return nil, "", fmt.Errorf("LANcast does not send %q requests", kind)

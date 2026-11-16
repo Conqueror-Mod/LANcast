@@ -55,6 +55,10 @@ func newRoomFixture(t *testing.T) roomFixture {
 
 func (f roomFixture) grant(t *testing.T) {
 	t.Helper()
+	// Listed to peers, or the grant reads to nobody (R04-8).
+	if err := f.h.st.SetVisibleToPeers(context.Background(), f.host, true); err != nil {
+		t.Fatal(err)
+	}
 	if err := f.h.st.GrantPresence(context.Background(), f.host, f.peerFP, georgiaPerson, time.Now()); err != nil {
 		t.Fatal(err)
 	}

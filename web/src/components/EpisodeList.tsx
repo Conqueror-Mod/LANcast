@@ -361,12 +361,18 @@ function EpisodeStill({
 
 // The air date as a date, in the viewer's own locale rather than an ISO string:
 // this is the one place a person reads it, and 1999-04-13 is a machine's idea of
-// a date. Built from local components for the reason every date here is.
+// a date.
+//
+// Read in UTC, not the local zone (R16-3). The server stores a calendar date as
+// midnight UTC (both providers parse "2006-01-02"), so this is a date, not an
+// instant: read locally it is the previous evening everywhere west of
+// Greenwich, and every episode in the Americas aired a day early.
 function airDate(unix: number): string {
   const d = new Date(unix * 1000);
   return d.toLocaleDateString(undefined, {
     year: "numeric",
     month: "short",
     day: "numeric",
+    timeZone: "UTC",
   });
 }

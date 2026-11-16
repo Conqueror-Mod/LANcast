@@ -24,6 +24,7 @@ type Store interface {
 	PendingEnrichment(ctx context.Context, limit int) ([]store.Item, error)
 	PendingEnrichmentFrom(ctx context.Context, limit, offset int) ([]store.Item, error)
 	PendingCount(ctx context.Context) (int, error)
+	ListItems(ctx context.Context, f store.ItemFilter) ([]store.Item, int, error)
 	GetLibrary(ctx context.Context, id int64) (*store.Library, error)
 	LockedFields(ctx context.Context, itemID int64) ([]string, error)
 	ParentIdentity(ctx context.Context, itemID int64) (provider, externalID string, ok bool, err error)
@@ -77,6 +78,9 @@ type Worker struct {
 	mu      sync.Mutex
 	running bool
 	stats   Stats
+
+	// sweepOnce runs sweepSeasonSidecars on the first Run of this process.
+	sweepOnce sync.Once
 }
 
 // Stats is a snapshot of enrichment progress.
@@ -148,6 +152,8 @@ func (w *Worker) Run(ctx context.Context) error {
 	w.running = true
 	w.stats = Stats{Running: true, UpdatedAt: time.Now().Unix()}
 	w.mu.Unlock()
+
+	w.sweepOnce.Do(func() { w.sweepSeasonSidecars(ctx) })
 
 	// Size the job up front so progress can be reported against something.
 	if total, err := w.st.PendingCount(ctx); err == nil {
@@ -447,6 +453,9 @@ func (w *Worker) applyRecords(ctx context.Context, item store.Item, kind meta.Ki
 	current := currentRecord(item)
 	merged := meta.Merge(current, lockedSet, locals, remotes)
 
+	// No DurationMS: the probe owns it (T-3). Writing merged's value back,
+	// even an unchanged one, would put a duration read before the probe
+	// finished over the one the probe has since saved.
 	upd := store.ItemMetadata{
 		Title:         merged.Fields.Title,
 		SortTitle:     merged.Fields.SortTitle,
@@ -455,7 +464,6 @@ func (w *Worker) applyRecords(ctx context.Context, item store.Item, kind meta.Ki
 		Rating:        merged.Fields.Rating,
 		ContentRating: merged.Fields.ContentRating,
 		ReleasedAt:    merged.Fields.ReleasedAt,
-		DurationMS:    merged.Fields.DurationMS,
 		Series:        merged.Fields.Series,
 		Season:        merged.Fields.Season,
 		Episode:       merged.Fields.Episode,

@@ -76,6 +76,10 @@ func newUnreachableFriend(t *testing.T) unreachableFriend {
 	if err := friend.st.SetVisibleToPeers(ctx, fu.ID, true); err != nil {
 		t.Fatal(err)
 	}
+	// And the host, whose grants read to nobody otherwise (R04-8).
+	if err := host.st.SetVisibleToPeers(ctx, hu.ID, true); err != nil {
+		t.Fatal(err)
+	}
 	host.srvAPI.presence.WatchingHere(hu.ID, "Blade Runner")
 	item := host.addFile(t, "blade runner.mkv", []byte("the bytes of a film"))
 	return unreachableFriend{
