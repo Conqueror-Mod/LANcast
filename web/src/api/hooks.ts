@@ -1405,7 +1405,14 @@ export function useDeleteItem(id: number) {
   return useMutation({
     mutationFn: (mode: "ignore" | "delete" | "forget") =>
       apiSend(`/api/items/${id}?mode=${mode}`, "DELETE"),
-    onSuccess: () => {
+    /*
+     * Settled, not success (T-8). A delete that removes some files and keeps
+     * the ones another program has open answers 409 not_deleted, and the rows
+     * whose files did go are gone all the same — so a failure here can still
+     * have changed every list below, and refreshing only on success left them
+     * on screen.
+     */
+    onSettled: () => {
       /*
        * "libraries" was missing outright, which is what left the nav reading
        * 1,212 beside a grid that had moved on to 1,209 after three files were
