@@ -606,3 +606,60 @@ func TestLoadDetailExposesFileNameNotPath(t *testing.T) {
 		t.Errorf("FileName %q leaks directory structure", it.FileName)
 	}
 }
+
+/*
+ * R07-6: a hand edit and its locks are one write. The locked-fields rule is the
+ * one this project was built around, so each half is made to fail in turn, by a
+ * trigger that refuses it, and the other half must not survive.
+ */
+func TestEditItemMetadataIsOneWrite(t *testing.T) {
+	ctx := context.Background()
+	st := newStore(t)
+	lib := mustLibrary(t, st)
+	id := seedItem(t, st, lib, `C:\m\a.mkv`)
+	title, year := "Typed By Hand", 1999
+
+	state := func() (string, []string) {
+		t.Helper()
+		it, err := st.GetItem(ctx, id, "local")
+		if err != nil {
+			t.Fatal(err)
+		}
+		locks, err := st.LockedFields(ctx, id)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return it.Title, locks
+	}
+
+	for _, tc := range []struct{ name, trigger string }{
+		{"the lock write fails", `CREATE TRIGGER refuse BEFORE INSERT ON item_lock
+			BEGIN SELECT RAISE(ABORT, 'injected lock failure'); END`},
+		{"the value write fails", `CREATE TRIGGER refuse BEFORE UPDATE ON media_item
+			BEGIN SELECT RAISE(ABORT, 'injected update failure'); END`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if _, err := st.db.ExecContext(ctx, tc.trigger); err != nil {
+				t.Fatal(err)
+			}
+			defer st.db.ExecContext(ctx, `DROP TRIGGER refuse`)
+			err := st.EditItemMetadata(ctx, id, ItemMetadata{Title: &title, Year: &year},
+				[]string{"title", "year"})
+			if err == nil {
+				t.Fatal("the edit reported success through an injected failure")
+			}
+			if got, locks := state(); got == title || len(locks) != 0 {
+				t.Errorf("half an edit survived: title %q, locks %v", got, locks)
+			}
+		})
+	}
+
+	// And with nothing refusing it, both halves land.
+	if err := st.EditItemMetadata(ctx, id, ItemMetadata{Title: &title, Year: &year},
+		[]string{"title", "year"}); err != nil {
+		t.Fatal(err)
+	}
+	if got, locks := state(); got != title || strings.Join(locks, ",") != "title,year" {
+		t.Errorf("after the edit: title %q, locks %v", got, locks)
+	}
+}

@@ -122,15 +122,11 @@ func (s *Server) patchItem(w http.ResponseWriter, r *http.Request) {
 		touched = append(touched, field)
 	}
 
-	if err := s.st.UpdateItemMetadata(r.Context(), id, upd); err != nil {
-		s.writeInternal(w, err, "update item")
+	// The values and their locks in one transaction: an edit saved without its
+	// lock is one the next provider refresh overwrites (R07-6).
+	if err := s.st.EditItemMetadata(r.Context(), id, upd, touched); err != nil {
+		s.writeInternal(w, err, "edit item")
 		return
-	}
-	for _, field := range touched {
-		if err := s.st.LockField(r.Context(), id, field); err != nil {
-			s.writeInternal(w, err, "lock field")
-			return
-		}
 	}
 
 	// An edit locks every field it touches, so this is not just a value change

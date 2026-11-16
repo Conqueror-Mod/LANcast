@@ -3,6 +3,7 @@ package api
 import (
 	"bytes"
 	"context"
+	"database/sql"
 	"image"
 	"image/color"
 	"image/jpeg"
@@ -619,5 +620,50 @@ func TestAnEditedComicIsNotInReview(t *testing.T) {
 	targets, err := h.st.ReparseTargets(ctx, lib.ID, true)
 	if err != nil || len(targets) != 0 {
 		t.Fatalf("re-parse targets in a comics library: %v %v", targets, err)
+	}
+}
+
+/*
+ * R07-6: an edit whose lock cannot be written is not saved at all.
+ *
+ * It was saved and left unlocked, under a 500, for the next provider refresh to
+ * overwrite. The lock write is made to fail by a trigger, created through a
+ * second connection to the same database file, as a busy or failing disk would.
+ */
+func TestPatchItemThatCannotLockSavesNothing(t *testing.T) {
+	h := newHarness(t)
+	id := h.addFile(t, "a.mkv", make([]byte, 16))
+	db, err := sql.Open("sqlite", filepath.Join(h.dataDir, "test.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	if _, err := db.Exec(`CREATE TRIGGER refuse BEFORE INSERT ON item_lock
+		BEGIN SELECT RAISE(ABORT, 'injected lock failure'); END`); err != nil {
+		t.Fatal(err)
+	}
+
+	resp := h.do(t, "PATCH", "/api/items/"+itoa(id), map[string]any{"title": "Typed By Hand"})
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusInternalServerError {
+		t.Errorf("status = %d, want 500", resp.StatusCode)
+	}
+	it, err := h.st.GetItem(context.Background(), id, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if it.Title == "Typed By Hand" {
+		t.Errorf("the edit was saved without its lock (locks %v): a refresh would overwrite it",
+			it.LockedFields)
+	}
+
+	// With the lock writable again, the same edit lands with its lock.
+	if _, err := db.Exec(`DROP TRIGGER refuse`); err != nil {
+		t.Fatal(err)
+	}
+	resp = h.do(t, "PATCH", "/api/items/"+itoa(id), map[string]any{"title": "Typed By Hand"})
+	decode(t, resp, it)
+	if it.Title != "Typed By Hand" || len(it.LockedFields) != 1 || it.LockedFields[0] != "title" {
+		t.Errorf("after the retry: title %q, locks %v", it.Title, it.LockedFields)
 	}
 }
