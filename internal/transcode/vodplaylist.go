@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"math"
 	"strings"
+
+	"lancast/internal/probe"
 )
 
 /*
@@ -88,13 +90,27 @@ func SegmentLength(fps float64) float64 {
 // it rather than listed on its own: the estimate is not frame-exact, and a
 // listed segment ffmpeg never writes would fail at the very end of the film
 // where a slightly long last segment costs nothing.
+//
+// The length is capped at probe.MaxDurationSeconds (R09-8): the playlist is
+// built in memory on every request, one entry per segment, so a length the
+// file merely claimed must not decide how much memory that is. The parser
+// already refuses such a length; this holds whatever the caller passes.
 func CompletePlaylist(mediaSeconds, segment float64, prefix string) string {
 	if segment <= 0 {
 		segment = SegmentSeconds
 	}
+	if !(mediaSeconds <= probe.MaxDurationSeconds) {
+		mediaSeconds = probe.MaxDurationSeconds // NaN and Inf too
+	}
 	n := int(math.Round(mediaSeconds / segment))
 	if n < 1 {
 		n = 1
+	}
+	// And the count itself, whatever the segment: never more entries than
+	// one-second segments over the longest believable file.
+	if n > probe.MaxDurationSeconds {
+		n = probe.MaxDurationSeconds
+		mediaSeconds = float64(n) * segment
 	}
 
 	var b strings.Builder

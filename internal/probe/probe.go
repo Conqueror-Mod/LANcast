@@ -525,9 +525,24 @@ func normalizeRate(rate string) string {
 	return strconv.FormatFloat(n/d, 'f', -1, 64)
 }
 
+/*
+ * MaxDurationSeconds is the longest a file is believed to be: seven days.
+ *
+ * A duration is read from the file, and a file can say anything. One whose
+ * container claimed 10^9 seconds was accepted as it stood, and the playlist
+ * written for a converted film lists one entry per segment, so it asked for
+ * about 1.7×10^8 of them on every request (R09-8). Seven days is longer than
+ * any recording or audiobook a library holds; past it the length is unknown,
+ * which every caller already handles.
+ */
+const MaxDurationSeconds = 7 * 24 * 60 * 60
+
+// secondsToMS reads one of ffprobe's durations. Anything that is not a
+// positive number of seconds up to MaxDurationSeconds is unknown (0) — NaN
+// and Inf included, which ParseFloat accepts.
 func secondsToMS(s string) int64 {
 	f, err := strconv.ParseFloat(strings.TrimSpace(s), 64)
-	if err != nil || f <= 0 {
+	if err != nil || !(f > 0) || f > MaxDurationSeconds {
 		return 0
 	}
 	return int64(f * 1000)

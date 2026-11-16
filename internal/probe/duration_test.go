@@ -172,3 +172,29 @@ func TestDurationIsZeroWhenNothingStatesOne(t *testing.T) {
 		t.Errorf("duration = %d, want 0", got)
 	}
 }
+
+/*
+ * A length nothing could be is unknown, not believed (R09-8).
+ *
+ * A container claiming 10^9 seconds was accepted as it stood, and the
+ * playlist for a converted film lists one entry per segment of it. Past
+ * MaxDurationSeconds — and for NaN and Inf, which ParseFloat accepts — the
+ * duration is unknown; a stream that states a believable one is still used.
+ */
+func TestAnAbsurdDurationIsUnknown(t *testing.T) {
+	for _, d := range []string{"1000000000", "604800.5", "inf", "NaN", "-5"} {
+		if got := durationOf(t, probeJSON(d, testStream{"video", "h264", ""})); got != 0 {
+			t.Errorf("container %s: duration = %d, want 0", d, got)
+		}
+	}
+	if got := durationOf(t, probeJSON("1000000000", testStream{"video", "h264", "5400.000000"})); got != 5400000 {
+		t.Errorf("an absurd container over a believable stream = %d, want the stream's", got)
+	}
+	// The ceiling itself, and a long audiobook, are believed.
+	if got := durationOf(t, probeJSON("604800", testStream{"audio", "aac", ""})); got != 604800000 {
+		t.Errorf("seven days = %d", got)
+	}
+	if got := durationOf(t, probeJSON("180000", testStream{"audio", "aac", ""})); got != 180000000 {
+		t.Errorf("a fifty-hour audiobook = %d", got)
+	}
+}
