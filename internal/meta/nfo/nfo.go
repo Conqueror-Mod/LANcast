@@ -50,6 +50,10 @@ func (s *Source) ID() string { return ID }
 // provider updates proceed. A file a human or another tool edited is
 // authoritative and outranks the provider.
 func (s *Source) Read(ctx context.Context, path string, kind meta.Kind) (*meta.Record, error) {
+	// A season has no sidecar of its own; see seasonHasNoSidecar.
+	if kind == meta.KindSeason {
+		return nil, nil
+	}
 	file, ok := findSidecar(path, kind)
 	if !ok {
 		return nil, nil
@@ -144,6 +148,9 @@ func (s *Source) Write(path string, kind meta.Kind, rec *meta.Record) error {
 	 * the filesystem.
 	 */
 	if IsSyntheticPath(path) {
+		return nil
+	}
+	if kind == meta.KindSeason {
 		return nil
 	}
 	target := sidecarPath(path, kind)
@@ -532,9 +539,30 @@ func IsSyntheticPath(path string) bool {
 	return strings.HasPrefix(path, "lancast:")
 }
 
+/*
+ * seasonHasNoSidecar: a season is neither read from nor written to a file.
+ *
+ * It used to share the show's branch here, so a season whose row path is its
+ * `Season 01` folder got `Season 01/tvshow.nfo` — and, with no season case in
+ * rootElement, a `<movie>` root (R08-5). Kodi and Jellyfin read `tvshow.nfo`
+ * as "this folder is a show", so every season folder became a show of its own
+ * in the tools LANcast is meant to coexist with.
+ *
+ * Writing `season.nfo` instead was the other option, and is not taken because
+ * Kodi does not read one: Kodi keeps what it knows about a season inside the
+ * show's `tvshow.nfo` (`<namedseason>`), and takes season numbers from the
+ * episode filenames. Only Jellyfin and Emby read `season.nfo`. A season's
+ * fields here are a name ("Season 1") and the show's own artwork and plot, so
+ * there is nothing worth a file that one of the three readers would ignore.
+ *
+ * Reading follows: a `tvshow.nfo` in a season folder describes a show, so
+ * reading it as the season would give the season the show's title.
+ */
+
 // sidecarPath is where LANcast writes. For shows, path is the show directory.
+// Seasons never reach it (see seasonHasNoSidecar above).
 func sidecarPath(path string, kind meta.Kind) string {
-	if kind == meta.KindShow || kind == meta.KindSeason {
+	if kind == meta.KindShow {
 		return filepath.Join(path, "tvshow.nfo")
 	}
 	return strings.TrimSuffix(path, filepath.Ext(path)) + ".nfo"
@@ -544,7 +572,7 @@ func sidecarPath(path string, kind meta.Kind) string {
 // tools use as well as our own.
 func findSidecar(path string, kind meta.Kind) (string, bool) {
 	var candidates []string
-	if kind == meta.KindShow || kind == meta.KindSeason {
+	if kind == meta.KindShow {
 		candidates = []string{filepath.Join(path, "tvshow.nfo")}
 	} else {
 		base := strings.TrimSuffix(path, filepath.Ext(path)) + ".nfo"
