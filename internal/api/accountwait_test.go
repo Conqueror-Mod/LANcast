@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"lancast/internal/auth"
 )
@@ -83,5 +84,35 @@ func TestTheWaitDoesNotRevealWhetherAnAccountExists(t *testing.T) {
 			t.Errorf("%q: status %d, want 429 — a wait for real accounts only "+
 				"would answer whether the account exists", name, code)
 		}
+	}
+}
+
+// A refused sign-in takes as long for a name that is nobody as for a real
+// account, so the timing does not sort a list of names into real and not real
+// (R01-7). On main the gap was 196 ms against 0.5 ms; this asks only that the
+// unknown name take at least a quarter as long, which a machine under load
+// still clears and the old shortcut could not.
+func TestASignInForNobodyTakesAsLongAsOne(t *testing.T) {
+	h := newHarness(t)
+	h.secure(t, "a good long password")
+	timeIt := func(user string) time.Duration {
+		best := time.Duration(1<<63 - 1)
+		for i := 0; i < 3; i++ {
+			start := time.Now()
+			resp := h.do(t, "POST", "/api/auth/login", map[string]any{"username": user, "password": "not the password"})
+			resp.Body.Close()
+			if resp.StatusCode != http.StatusUnauthorized {
+				t.Fatalf("%s: status %d", user, resp.StatusCode)
+			}
+			if d := time.Since(start); d < best {
+				best = d
+			}
+		}
+		return best
+	}
+	known, unknown := timeIt(testUser), timeIt("nobody-here")
+	t.Logf("existing account %v, unknown name %v", known, unknown)
+	if unknown < known/4 {
+		t.Errorf("an unknown name is answered in %v against %v for a real one", unknown, known)
 	}
 }

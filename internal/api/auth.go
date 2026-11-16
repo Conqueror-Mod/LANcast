@@ -766,8 +766,15 @@ func (s *Server) authLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// An unknown user and a wrong password are never distinguished in the
-	// response. err != nil short-circuits before the nil-user compare.
-	if err != nil || !auth.CheckPassword(u.PasswordHash, req.Password) {
+	// response, nor in how long it takes: a name that matches nobody is
+	// checked against a dummy hash at the same cost (R01-7).
+	var good bool
+	if err != nil {
+		good = auth.CheckNoAccount(req.Password)
+	} else {
+		good = auth.CheckPassword(u.PasswordHash, req.Password)
+	}
+	if !good {
 		/*
 		 * Logged, because a refusal nobody can see is a refusal nobody can
 		 * explain: somebody was turned away with the right password in mind

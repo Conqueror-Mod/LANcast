@@ -83,6 +83,25 @@ func CheckPassword(hash, password string) bool {
 	return bcrypt.CompareHashAndPassword([]byte(hash), []byte(password)) == nil
 }
 
+// noAccountHash is a hash of nothing anybody's password is, at the real cost,
+// made the first time a sign-in names nobody.
+var noAccountHash = sync.OnceValue(func() []byte {
+	h, err := bcrypt.GenerateFromPassword([]byte("lancast: no such account"), bcryptCost)
+	if err != nil {
+		panic(err) // a fixed short input at a fixed cost cannot fail
+	}
+	return h
+})
+
+// CheckNoAccount spends what CheckPassword would on a real account, and always
+// fails. A sign-in naming nobody calls it so that how long the refusal takes
+// does not say whether the account exists (R01-7): without it, an unknown name
+// was answered in half a millisecond and a real one in two hundred.
+func CheckNoAccount(password string) bool {
+	_ = bcrypt.CompareHashAndPassword(noAccountHash(), []byte(password))
+	return false
+}
+
 // NewToken returns a fresh session token and the hash to store against it.
 func NewToken() (token, hash string, err error) {
 	raw := make([]byte, 32)
