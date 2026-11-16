@@ -38,6 +38,8 @@ import (
 	"time"
 
 	"github.com/bodgit/sevenzip"
+
+	"lancast/internal/contain"
 )
 
 // Core is one emulator core and where its pinned build comes from.
@@ -182,24 +184,59 @@ func (c Core) HasBIOS(sysdir string) bool {
 func (c Core) Path(dir string) string { return filepath.Join(dir, c.Name, c.DLL) }
 
 /*
+ * OverridePath turns the name of a core a person chose into the file to load:
+ * a .dll directly in dir, the cores folder LANcast manages, and nowhere else.
+ *
+ * By name, not by path (R12-2). An override is set from the page, and a path
+ * from the page was a path to anything: \host\share\x.dll stats over SMB,
+ * and \host@SSL\share\x.dll over WebDAV from across the internet, and the
+ * window then handed it to LoadLibrary, whose DllMain runs before anything
+ * can check it is a core. So the name may hold no separator, no drive and no
+ * dot-segment; it is joined to dir, and the result must still lie inside dir
+ * once every link is followed (internal/contain), so a link dropped into the
+ * folder cannot point back out of it.
+ */
+func OverridePath(dir, name string) (string, error) {
+	name = strings.TrimSpace(name)
+	if name == "" || name == "." || name == ".." ||
+		strings.ContainsAny(name, `/\:`) || filepath.Base(name) != name ||
+		!strings.EqualFold(filepath.Ext(name), ".dll") {
+		return "", fmt.Errorf("choose a core by the name of its .dll in %s", dir)
+	}
+	p, err := contain.Within(dir, filepath.Join(dir, name))
+	if err != nil {
+		return "", fmt.Errorf("%s is not a core in %s", name, dir)
+	}
+	if st, err := os.Stat(p); err != nil || !st.Mode().IsRegular() {
+		return "", fmt.Errorf("there is no %s in %s", name, dir)
+	}
+	return p, nil
+}
+
+/*
  * Resolve finds the DLL that plays a console.
  *
  * An override wins: a person may point a console at a core they already
- * have (the ADR's advanced option). Otherwise the installed default, which
- * exists only once InstallAll has checked it — a partial install counts as
- * absent, and so does a DLL of the wrong size, which is what a build pinned
- * by an earlier release looks like after the pin moves.
+ * have (the ADR's advanced option), once it is in the cores folder, by its
+ * file name (OverridePath). Otherwise the installed default, which exists
+ * only once InstallAll has checked it — a partial install counts as absent,
+ * and so does a DLL of the wrong size, which is what a build pinned by an
+ * earlier release looks like after the pin moves.
+ *
+ * An override saved before R12-2 as a full path is refused here rather than
+ * honoured: Resolve is the gate, whatever wrote the file.
  */
 func Resolve(platform, dir string, overrides map[string]string) (string, Core, error) {
 	c, ok := For(platform)
 	if !ok {
 		return "", Core{}, fmt.Errorf("no core plays %q", platform)
 	}
-	if p := strings.TrimSpace(overrides[platform]); p != "" {
-		if st, err := os.Stat(p); err == nil && !st.IsDir() {
-			return p, c, nil
+	if name := strings.TrimSpace(overrides[platform]); name != "" {
+		p, err := OverridePath(dir, name)
+		if err != nil {
+			return "", c, fmt.Errorf("the core chosen for %s: %w", platform, err)
 		}
-		return "", c, fmt.Errorf("the core chosen for %s is not at %s", platform, p)
+		return p, c, nil
 	}
 	p := c.Path(dir)
 	if st, err := os.Stat(p); err == nil && !st.IsDir() && st.Size() > 0 && (c.SizeBytes == 0 || st.Size() == c.SizeBytes) {

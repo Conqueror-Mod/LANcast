@@ -118,6 +118,10 @@ func scanItemThen(sc interface{ Scan(...any) error }, extra ...any) (*Item, erro
 //
 // group narrows it to one kind of thing (profile-2-plan §4e); GroupAll is
 // everything, as before.
+//
+// A title in a library kept from the account is left out while it is hidden
+// (ADR 0084 §6), as the viewing log and the year review leave it out: the
+// account's own history must not show it what the library holds.
 func (s *Store) History(ctx context.Context, userID string, group HistoryGroup, limit, offset int) ([]HistoryEntry, error) {
 	if !group.Valid() {
 		return nil, fmt.Errorf("history: unknown group %q", group)
@@ -129,12 +133,16 @@ func (s *Store) History(ctx context.Context, userID string, group HistoryGroup, 
 		offset = 0
 	}
 	kinds, kargs := group.kindClause("mi.kind")
+	hid, err := s.hiddenClause(ctx, userID, "ps.item_id")
+	if err != nil {
+		return nil, fmt.Errorf("history: %w", err)
+	}
 	args := append([]any{userID}, kargs...)
 	rows, err := s.db.QueryContext(ctx, `SELECT `+itemColsMI+`,
 		    ps.position_ms, ps.watched, ps.updated_at
 		FROM media_item mi
 		JOIN playback_state ps ON ps.item_id = mi.id AND ps.user_id = ?
-		WHERE (ps.position_ms > 0 OR ps.watched = 1)`+kinds+`
+		WHERE (ps.position_ms > 0 OR ps.watched = 1)`+kinds+hid+`
 		ORDER BY ps.updated_at DESC, mi.id DESC
 		LIMIT ? OFFSET ?`, append(args, limit, offset)...)
 	if err != nil {
@@ -164,8 +172,19 @@ func (s *Store) History(ctx context.Context, userID string, group HistoryGroup, 
 }
 
 // ProfileStatistics totals the same rows the history lists.
+//
+// The same rows, so a title in a hidden library is not counted either (ADR
+// 0084 §6). The totals are broken down by kind with a first-played date, and
+// a count that moves when a library is hidden says the library holds
+// something of that kind; the year review leaves hidden titles out of its
+// totals for the same reason. The banked totals below are kept whole: they
+// were counted before any reset and no longer name an item or a library.
 func (s *Store) ProfileStatistics(ctx context.Context, userID string) (ProfileStats, error) {
 	st := ProfileStats{ByKind: []KindTotals{}}
+	hid, err := s.hiddenClause(ctx, userID, "ps.item_id")
+	if err != nil {
+		return st, fmt.Errorf("profile statistics: %w", err)
+	}
 	/*
 	 * Time watched counts every viewing, and the partial one on top.
 	 *
@@ -196,7 +215,7 @@ func (s *Store) ProfileStatistics(ctx context.Context, userID string) (ProfileSt
 		  MIN(ps.updated_at)
 		FROM playback_state ps
 		JOIN media_item mi ON mi.id = ps.item_id
-		WHERE ps.user_id = ? AND (ps.position_ms > 0 OR ps.watched = 1)
+		WHERE ps.user_id = ? AND (ps.position_ms > 0 OR ps.watched = 1)`+hid+`
 		GROUP BY mi.kind
 		ORDER BY 5 DESC, mi.kind`,
 		userID,
@@ -283,10 +302,17 @@ type PlayedItem struct {
  * Only titles finished at least twice. Everything finished once ties, and a
  * list of ties is a list of whatever happened to be watched lately, which is
  * History's job.
+ *
+ * A title in a hidden library is left out inside the ranking, not after it,
+ * so it neither shows nor takes a place a visible title would have had.
  */
 func (s *Store) MostPlayed(ctx context.Context, userID string, per int) ([]PlayedItem, error) {
 	if per <= 0 || per > 20 {
 		per = 5
+	}
+	hid, err := s.hiddenClause(ctx, userID, "ps.item_id")
+	if err != nil {
+		return nil, fmt.Errorf("most played: %w", err)
 	}
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT `+itemColsMI+`, ranked.watch_count
@@ -303,7 +329,7 @@ func (s *Store) MostPlayed(ctx context.Context, userID string, per int) ([]Playe
 		  FROM playback_state ps
 		  JOIN media_item m ON m.id = ps.item_id
 		  WHERE ps.user_id = ? AND ps.watch_count >= 2
-		    AND m.kind IN ('movie', 'episode', 'track', 'book', 'book_part')
+		    AND m.kind IN ('movie', 'episode', 'track', 'book', 'book_part')`+hid+`
 		) AS ranked
 		JOIN media_item mi ON mi.id = ranked.item_id
 		WHERE ranked.n <= ?

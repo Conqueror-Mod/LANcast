@@ -1,9 +1,17 @@
 package api
 
 import (
+	"context"
+	"io"
+	"log/slog"
+	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"testing"
+
+	"lancast/internal/config"
+	"lancast/internal/photo"
 )
 
 /*
@@ -118,5 +126,88 @@ func TestDebugLoggingIsPersisted(t *testing.T) {
 	}
 	if !h.settings.Get().DebugLogging {
 		t.Error("debug_logging did not reach the settings file")
+	}
+}
+
+// R07-2: credentials whose other half lives in another system survive a reset
+// too. A webhook's secret is in its receiver, the metrics token in a scraper,
+// the trusted proxies describe the network; none can be put back from here.
+func TestResetSettingsKeepsWhatOtherSystemsHold(t *testing.T) {
+	h := newHarness(t)
+	cur := h.settings.Get()
+	cur.Webhooks = []config.Webhook{{ID: "w1", URL: "https://hooks.example/x", Secret: "s3cret", Enabled: true}}
+	cur.MetricsTokenHash = "hash-of-token"
+	cur.MetricsTokenCreated = 1700000000
+	cur.TrustedProxies = []string{"192.0.2.10"}
+	cur.WriteNFO = true
+	if err := h.settings.Set(cur); err != nil {
+		t.Fatal(err)
+	}
+	if code := status(t, h.do(t, "POST", "/api/settings/reset", nil)); code != http.StatusOK {
+		t.Fatalf("reset = %d", code)
+	}
+	got := h.settings.Get()
+	if got.WriteNFO {
+		t.Error("behaviour did not reset (the control)")
+	}
+	if len(got.Webhooks) != 1 || got.Webhooks[0].Secret != "s3cret" {
+		t.Errorf("reset deleted webhooks: %+v", got.Webhooks)
+	}
+	if got.MetricsTokenHash != "hash-of-token" || got.MetricsTokenCreated != 1700000000 {
+		t.Error("reset deleted the metrics token; a scraper configured elsewhere starts getting 403s")
+	}
+	if len(got.TrustedProxies) != 1 || got.TrustedProxies[0] != "192.0.2.10" {
+		t.Errorf("reset deleted the trusted proxies: %v", got.TrustedProxies)
+	}
+}
+
+// R07-2: a reset that turns photo places off deletes what it read, as the
+// switch does when it is saved; otherwise "off" only means hidden.
+func TestResetSettingsForgetsPhotoPlacesLikeTheSwitch(t *testing.T) {
+	h := newHarness(t)
+	fx := newPlacesFixture(t, h)
+	h.srvAPI.locations = photo.NewLocationWorker(h.st,
+		func() bool { return h.settings.Get().PhotoPlaces }, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	h.srvAPI.placesSoon = func() {}
+	if code := status(t, h.do(t, "PUT", "/api/settings", map[string]any{"photo_places": true})); code != http.StatusOK {
+		t.Fatalf("turn on = %d", code)
+	}
+	if code := status(t, h.do(t, "POST", "/api/settings/reset", nil)); code != http.StatusOK {
+		t.Fatalf("reset = %d", code)
+	}
+	if h.settings.Get().PhotoPlaces {
+		t.Fatal("reset left photo places on")
+	}
+	var got placesBody
+	decode(t, h.do(t, "GET", "/api/libraries/"+strconv.FormatInt(fx.lib, 10)+"/places", nil), &got)
+	if len(got.Places) != 0 || got.Elsewhere != 0 || got.Unlocated != 0 || got.Unread != 4 {
+		t.Errorf("after a reset turned places off: %+v, want every photo unread again", got)
+	}
+}
+
+// R07-2 (R03-2 by another door): a reset that moves the optimized folder back
+// to the default re-queues each copy the default does not hold, rather than
+// offering copies it cannot serve.
+func TestResetSettingsRequeuesCopiesTheDefaultFolderLacks(t *testing.T) {
+	h := langHarness(t)
+	ctx := context.Background()
+	id := h.addFile(t, "uhd.mkv", []byte("original"))
+	h.probeAsHEVCWithTwoAudioTracks(t, id)
+	custom := filepath.Join(t.TempDir(), "optimized")
+	if err := os.MkdirAll(custom, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if code := status(t, h.authed(t, "PUT", "/api/settings", map[string]any{"optimized_dir": custom})); code != http.StatusOK {
+		t.Fatalf("set folder = %d", code)
+	}
+	readyCopy(t, h, id, "the copy")
+	if _, err := h.st.ReadyOptimized(ctx, id); err != nil {
+		t.Fatalf("control: copy not ready: %v", err)
+	}
+	if code := status(t, h.authed(t, "POST", "/api/settings/reset", nil)); code != http.StatusOK {
+		t.Fatalf("reset = %d", code)
+	}
+	if _, err := h.st.ReadyOptimized(ctx, id); err == nil {
+		t.Error("after a reset to the default folder the copy left in the old one is still marked ready")
 	}
 }

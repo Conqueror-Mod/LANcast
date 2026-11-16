@@ -65,7 +65,7 @@ func (s *Server) clearCache(w http.ResponseWriter, r *http.Request) {
 // resetSettings restores the documented defaults. Admin only.
 //
 // Credentials are deliberately *not* reset: the password hash, the provider API
-// keys, and the TLS certificate paths survive. Wiping the first would lock the
+// keys, the TLS certificate paths, the webhooks and the metrics token survive. Wiping the first would lock the
 // operator out of their own server, and wiping the others would break metadata
 // and HTTPS — none of which is what anybody means by "reset settings", and all
 // of which is unrecoverable from the server's side. What resets is the
@@ -96,6 +96,20 @@ func (s *Server) resetSettings(w http.ResponseWriter, r *http.Request) {
 	// discovered — not a preference, and re-discovering it is not something a
 	// reset can do.
 	next.FFmpegDir = prev.FFmpegDir
+	// Credentials other systems hold the other half of (R07-2). A webhook's
+	// secret is in the receiver's config, the metrics token in a scraper's,
+	// and neither can be put back from here: a reset that deleted them broke
+	// things outside LANcast without saying so.
+	next.Webhooks = prev.Webhooks
+	next.MetricsTokenHash = prev.MetricsTokenHash
+	next.MetricsTokenCreated = prev.MetricsTokenCreated
+	// Which proxies may name the client is a fact about this network. Lose it
+	// behind a proxy and every request looks like the proxy, which the
+	// sign-in throttle and the home-network checks both rely on.
+	next.TrustedProxies = prev.TrustedProxies
+	// Which account DLNA plays as is a choice about who sees what, not a
+	// behaviour; the switch itself resets, to off, which is the safe way.
+	next.DLNAAccount = prev.DLNAAccount
 
 	if err := s.settings.Set(next); err != nil {
 		s.writeInternal(w, err, "reset settings")
@@ -106,8 +120,11 @@ func (s *Server) resetSettings(w http.ResponseWriter, r *http.Request) {
 			"Reset settings to defaults: "+strings.Join(changed, ", "),
 			map[string]any{"fields": changed})
 	}
-	if s.rebuild != nil {
-		s.rebuild(next)
+	// Everything a save sets off when these fields move, a reset sets off
+	// too (R07-2).
+	if err := s.settingsChanged(r.Context(), prev, next); err != nil {
+		s.writeInternal(w, err, "apply settings")
+		return
 	}
 	s.getSettings(w, r)
 }

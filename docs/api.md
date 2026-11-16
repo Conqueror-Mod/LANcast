@@ -2529,6 +2529,12 @@ What one person has published — **finished titles only**, newest first.
 private and so is how much of it there is. From outside, "has not shared" and
 "has watched nothing" are the same answer, deliberately.
 
+**Filtered by the caller's limits, not the sharer's.** A title in a library
+kept from the caller, or above their content-rating ceiling
+([ADR 0084](adr/0084-a-library-can-be-kept-from-an-account.md)), is left out, and
+`limit` counts only what remains. Sharing publishes what somebody watched; it
+does not lift what the household keeps from the person reading it.
+
 Governed by [ADR 0035](adr/0035-who-may-see-whose-viewing.md): viewing is
 private by default and shared only by an explicit per-account opt-in. Resume
 positions are never shared — where somebody stopped is a different and more
@@ -3261,8 +3267,9 @@ Returns `503` without an API key, `429` when the daily quota is spent.
 ### `POST /api/items/{id}/subtitles/download`
 
 `{file_id, language, file_name}` → downloads and attaches the subtitle,
-returning its `key`. Files are written to the data directory, **never beside
-the media** — the same rule NFO writing follows.
+returning `{key, language, label}`: the new track's key, the language it was
+saved under, and what a track menu shows for it. Files are written to the data
+directory, **never beside the media** — the same rule NFO writing follows.
 
 `language` defaults to `en` and becomes part of the file's name, so it must be a
 language: a code or name the server recognises (`en`, `eng`, `English`) or a
@@ -4110,6 +4117,7 @@ library, and a server with films and music has no defensible default.
 ```
 
 Responds `200` with the new item, in the shape `GET /api/items/{id}` returns.
+`400` without a title, `404` if `library_id` names no library.
 
 #### `DELETE /api/playlists/{id}`
 
@@ -4136,6 +4144,13 @@ holds a track twice, not an error.
 
 `400` naming the id if any item does not exist, and nothing is written.
 
+The list is the one **the caller was shown**. An account kept from some entries
+(a hidden library, a rating above its ceiling) sees a shorter playlist than the
+one stored, and does not get to decide the entries it cannot see: each keeps
+its place, the caller's list fills the places it can see in order, anything
+left over goes on the end, and places left over are dropped. For an account
+that sees every entry this is exactly the list sent.
+
 #### `POST /api/playlists/{id}/entries`
 
 Appends to the end, in the order given. Same body, `204`. The one edit whose
@@ -4148,7 +4163,10 @@ Removes one entry. `204`, or `404` if there is no entry there.
 **By position, not by item id.** An id does not identify an entry in the one
 listing that may hold the same id twice. Positions are 0-based and stay dense,
 so a position is the index the client rendered; after a removal, everything
-below it has shifted up by one.
+below it has shifted up by one. It counts the entries **the caller was shown**:
+for an account kept from some of them, row 1 is the second entry it can see,
+whatever is stored between, and a row past the end of what it can see is a
+`404`.
 
 #### What playlist writes require
 
@@ -4196,8 +4214,17 @@ Admin only. The download is the slow half and the restart is the disruptive
 half, so they are separate calls: a client can stage an update while people are
 watching and restart when nobody is.
 
-Returns the staged version. Calling it with no update available is a no-op
-rather than an error — the check may simply have gone stale.
+**Starts the download and answers `202` at once, with no body.** A release is
+tens of megabytes and not something to hold a request open for. Follow it with
+`GET /api/update`: `downloading` carries the progress while it runs, and
+afterwards `staged` names the version ready to apply, or `download_error` says
+why nothing was staged. Calling it with no newer release available is not
+refused — the check may simply have gone stale — and ends with
+`download_error` saying so.
+
+`409` while a download is already running, `412 unverifiable` on a build that
+cannot verify a release signature (it will not install one), and `503` on a
+build with no updater.
 
 ### `POST /api/update/restart`
 
@@ -6035,10 +6062,19 @@ Restores the documented defaults. **Admin only.** Returns the settings, like
 `GET`.
 
 **Credentials and machine facts survive**: the password hash, the provider API
-keys, the TLS certificate paths, and the ffmpeg directory. Wiping the first
-would lock the operator out of their own server and wiping the others would
-break metadata and HTTPS — none of which is what anybody means by "reset
-settings", and none of which a reset can restore. What resets is behaviour.
+keys and OpenSubtitles login, the TLS certificate paths and public certificate,
+the ffmpeg directory, the webhooks with their secrets, the metrics token, the
+trusted proxies, and which account DLNA plays as. Wiping the first would lock
+the operator out of their own server; wiping the others would break metadata,
+HTTPS, or a receiver, scraper or proxy configured elsewhere — none of which is
+what anybody means by "reset settings", and none of which a reset can restore.
+What resets is behaviour (DLNA itself goes back to off).
+
+A reset has the same effects as saving the same changes with `PUT`: moving the
+optimized folder back to the default re-queues every copy the default folder
+does not hold, turning photo places off deletes every location read, music
+matching follows its switch at once, and a switch that a reset turns on starts
+its pass now.
 
 ### `GET /api/settings/public-certificate` · `PUT /api/settings/public-certificate`
 

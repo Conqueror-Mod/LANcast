@@ -1956,7 +1956,9 @@ export interface paths {
          * Restore the documented defaults
          * @description Administrators only. Returns the settings, like `GET`.
          *
-         *     **Credentials and machine facts survive**: the password hash, the provider API keys, the TLS certificate paths, and the ffmpeg directory. Wiping the first would lock the operator out of their own server and wiping the others would break metadata and HTTPS — none of which is what anybody means by "reset settings", and none of which a reset can restore. What resets is behaviour.
+         *     **Credentials and machine facts survive**: the password hash, the provider API keys and OpenSubtitles login, the TLS certificate paths and public certificate, the ffmpeg directory, the webhooks with their secrets, the metrics token, the trusted proxies, and which account DLNA plays as. Wiping the first would lock the operator out of their own server; wiping the others would break metadata, HTTPS, or a receiver, scraper or proxy configured elsewhere — none of which is what anybody means by "reset settings", and none of which a reset can restore. What resets is behaviour (DLNA itself goes back to off).
+         *
+         *     A reset has the same effects as saving the same changes with `PUT`: moving the optimized folder back to the default re-queues every copy the default folder does not hold, turning photo places off deletes every location read, music matching follows its switch at once, and a switch that a reset turns on starts its pass now.
          */
         post: operations["resetSettings"];
         delete?: never;
@@ -3291,7 +3293,7 @@ export interface paths {
          *
          *     **The download is the slow half and the restart is the disruptive half, so they are separate calls**: a client can stage an update while people are watching and restart when nobody is.
          *
-         *     Calling it with no update available is a **no-op rather than an error** — the check may simply have gone stale.
+         *     **Starts the download and answers at once** (`202`, no body): a release is tens of megabytes and not something to hold a request open for. Follow it with `GET /api/update`, whose `downloading` carries the progress while it runs; afterwards `staged` names the version ready to apply, or `download_error` says why nothing was staged. Calling it with no newer release available is not refused — the check may simply have gone stale — and ends with `download_error` saying so.
          */
         post: operations["downloadUpdate"];
         delete?: never;
@@ -3478,6 +3480,8 @@ export interface paths {
          *
          *     `400` naming the id if any item does not exist, and **nothing is written**.
          *
+         *     The list is the one **the caller was shown**. Entries kept from the caller (a hidden library, a rating above its ceiling) keep their places; the list sent fills the places the caller can see, in order, anything left over goes on the end, and places left over are dropped. For an account that sees every entry this is exactly the list sent.
+         *
          *     **A session, and no particular role.** The admin gate exists for filesystem access and account control; a playlist edit is neither, and the audit log records who made it. Playlists are server-wide (ADR 0030 leaves per-user ownership undecided), so any member may edit any playlist.
          *
          *     Every playlist write **locks `members`**, which is what stops the next scan re-importing the `.m3u` over the edit.
@@ -3505,7 +3509,7 @@ export interface paths {
             path: {
                 /** @description The playlist's item id. */
                 id: components["parameters"]["PlaylistId"];
-                /** @description **By position, not by item id.** An id does not identify an entry in the one listing that may hold the same id twice. Positions are 0-based and stay dense, so a position is the index the client rendered; after a removal everything below it has shifted up by one. */
+                /** @description **By position, not by item id.** An id does not identify an entry in the one listing that may hold the same id twice. Positions are 0-based and stay dense, so a position is the index the client rendered; after a removal everything below it has shifted up by one. It counts the entries **the caller was shown**: for an account kept from some of them, row 1 is the second entry it can see, and a row past the end of what it can see is a `404`. */
                 pos: number;
             };
             cookie?: never;
@@ -8787,10 +8791,6 @@ export interface components {
             /** Format: int64 */
             staged_at?: number;
         };
-        StagedUpdate: {
-            /** @description The version now staged, if any. */
-            staged?: string;
-        };
         /** @description A folder holding ffprobe that the server would not run tools from, and why, in words a person reads in Settings (R09-1). */
         MediaToolsRefusal: {
             directory: string;
@@ -9444,7 +9444,12 @@ export interface components {
             file_name?: string;
         };
         DownloadedSubtitle: {
+            /** @description The new track's key, `external-<id>`, as `GET /api/items/{id}/subtitles` lists it. */
             key: string;
+            /** @description The language it was saved under. */
+            language: string;
+            /** @description What a track menu shows for it. */
+            label: string;
         };
         /** @description A boundary detected on one item (ADR 0054). */
         Marker: {
@@ -12238,18 +12243,26 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Deleted. */
-            200: {
+            /** @description Deleted. No body. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            /** @description A scan is running for this library; wait for it to finish. */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Acknowledged"];
+                    "application/json": components["schemas"]["ErrorEnvelope"];
                 };
             };
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
-            404: components["responses"]["NotFound"];
         };
     };
     patchLibrary: {
@@ -12362,18 +12375,26 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Removed. */
-            200: {
+            /** @description Removed, with every item scanned under it. No body. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            /** @description This is the library's last location; delete the library instead. */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Acknowledged"];
+                    "application/json": components["schemas"]["ErrorEnvelope"];
                 };
             };
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
-            404: components["responses"]["NotFound"];
         };
     };
     patchLibraryRoot: {
@@ -12493,7 +12514,7 @@ export interface operations {
                 /** @description `unrated=1` restricts to what every content-rating ceiling hides for want of a rating: kinds a certificate could describe whose effective rating (their own, else their parent's or grandparent's) is missing or is not a label the ladder places. The list an administrator rates from by hand; kinds no certificate describes never appear in it. Any other value is ignored. */
                 unrated?: "1";
                 /**
-                 * @description `title` (default), `year`, `added`, `rating` (highest first, unrated last), `longest` / `shortest` (by running time), `track` (disc then track number), or `random` — a shuffle fixed by `seed`.
+                 * @description `title` (default), `year`, `added`, `rating` (highest first, unrated last), `longest` / `shortest` (by running time), `track` (disc then track number), `taken` (when a photograph was taken, newest first, falling back to when the file arrived), or `random` — a shuffle fixed by `seed`.
                  *
                  *     `longest` and `shortest` both sink anything with no running time to the bottom — NULL and zero alike, because zero is what a probe writes when it could not read a length, and a film of no minutes is not the shortest film. Containers carry no duration at all, so this is a film-library sort: elsewhere every row would tie and the answer would be the alphabet.
                  *
@@ -12510,6 +12531,10 @@ export interface operations {
                 tag?: number[];
                 /** @description `1` restricts to the calling account's favourites. Without `library_id` it reaches every level of every library, so a favourited album, episode or song is listed too; inside one library it filters the top-level grid like any other facet. */
                 favourite?: "1";
+                /** @description Open one photo timeline bucket: the photographs taken in this month, as `GET /api/libraries/{id}/timeline` names it (`2019-07`). Use with `sort=taken`. **Also excludes marked folders**, so the listing agrees with the bucket's count; that exclusion is derived here and is not itself a parameter. */
+                taken_month?: string;
+                /** @description `1` opens the timeline's undated bucket: photographs carrying no capture time at all. Excludes marked folders, as `taken_month` does. */
+                taken_undated?: "1";
             };
             header?: never;
             path?: never;
@@ -16931,17 +16956,42 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description The staged version, if one was staged. */
-            200: {
+            /** @description The download has started. No body; read progress and the outcome from `GET /api/update`. */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            /** @description A download is already running. */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["StagedUpdate"];
+                    "application/json": components["schemas"]["ErrorEnvelope"];
                 };
             };
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
+            /** @description `unverifiable`: this build cannot verify a release signature, so it will not install one. */
+            412: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description This build has no updater. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
         };
     };
     restartForUpdate: {
@@ -17099,6 +17149,7 @@ export interface operations {
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
         };
     };
     deletePlaylist: {
@@ -17206,7 +17257,7 @@ export interface operations {
             path: {
                 /** @description The playlist's item id. */
                 id: components["parameters"]["PlaylistId"];
-                /** @description **By position, not by item id.** An id does not identify an entry in the one listing that may hold the same id twice. Positions are 0-based and stay dense, so a position is the index the client rendered; after a removal everything below it has shifted up by one. */
+                /** @description **By position, not by item id.** An id does not identify an entry in the one listing that may hold the same id twice. Positions are 0-based and stay dense, so a position is the index the client rendered; after a removal everything below it has shifted up by one. It counts the entries **the caller was shown**: for an account kept from some of them, row 1 is the second entry it can see, and a row past the end of what it can see is a `404`. */
                 pos: number;
             };
             cookie?: never;

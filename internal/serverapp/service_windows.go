@@ -129,6 +129,13 @@ func (h *handler) Execute(_ []string, r <-chan svc.ChangeRequest, changes chan<-
 		// finds it done reads one descriptor and moves on.
 		r, perr := dataperm.Protect(h.dataDir)
 		dataperm.LogReport(h.log, h.dataDir, r, perr)
+		// The restart policy, re-applied so an install from before the
+		// failure-actions flag gets it from its first start after the update
+		// (R10-6). Best-effort: a policy that cannot be written is no reason
+		// not to serve.
+		if err := service.EnsureRecovery(); err != nil {
+			h.log.Warn("could not re-apply the service's restart policy", "error", err)
+		}
 		errc <- run(ctx, h.addr, h.dataDir, h.log)
 	}()
 
@@ -164,6 +171,11 @@ func (h *handler) Execute(_ []string, r <-chan svc.ChangeRequest, changes chan<-
 		case err := <-errc:
 			cancel()
 			if err != nil {
+				// Non-zero on purpose: with the failure-actions flag set
+				// (service.EnsureRecovery), a STOPPED with a non-zero exit
+				// code is what makes Windows apply the restart policy to a
+				// start that failed (R10-6). Zero would read as a clean stop
+				// and leave the server down.
 				h.log.Error("service exited with error", "error", err)
 				return false, 1
 			}

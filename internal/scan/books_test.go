@@ -264,4 +264,10 @@ func TestRescanRetitlesBookInAudioFolder(t *testing.T) {
 	if got := book(); got.Title != "My Name For It" {
 		t.Fatalf("a locked title was overwritten: %q", got.Title)
 	}
+	// And it sorts as itself: the lock on the title covers the sort title
+	// (R05-2). Asserting the title alone passed while the book sorted under
+	// its folder's name.
+	if got := book(); got.SortTitle != "my name for it" {
+		t.Fatalf("sort title %q under a locked title %q", got.SortTitle, got.Title)
+	}
 }

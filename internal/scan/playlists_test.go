@@ -2,11 +2,13 @@ package scan
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
+	"lancast/internal/playlist"
 	"lancast/internal/store"
 )
 
@@ -122,6 +124,74 @@ func TestARescanDoesNotUndoAnEditedPlaylist(t *testing.T) {
 	if len(entries) != 1 {
 		t.Fatalf("the rescan restored %d entries, undoing the edit — membership lock ignored",
 			len(entries))
+	}
+}
+
+// editMidImport is the store with a person's edit landing in the middle of an
+// import: after the file has been read and its lines resolved, before the
+// membership is written. That window is where the old check-then-write lost
+// edits (R08-4).
+type editMidImport struct {
+	*store.Store
+	t    *testing.T
+	keep []int64
+}
+
+func (e *editMidImport) EnsurePlaylist(ctx context.Context, libraryID int64, path, title, sortTitle string) (int64, error) {
+	id, err := e.Store.EnsurePlaylist(ctx, libraryID, path, title, sortTitle)
+	if err != nil {
+		return id, err
+	}
+	// What the API does for an edit: lock, then write.
+	if err := e.Store.LockField(ctx, id, membersLock); err != nil {
+		e.t.Fatal(err)
+	}
+	if err := e.Store.SetPlaylistEntries(ctx, id, e.keep); err != nil {
+		e.t.Fatal(err)
+	}
+	return id, nil
+}
+
+// An edit made while the scan is importing that playlist survives the import.
+func TestAnEditDuringAnImportSurvivesIt(t *testing.T) {
+	ctx := context.Background()
+	sc, st := newScanner(t)
+	lib, root := musicFixture(t, st)
+
+	writeFile(t, root, "a.mp3", 2048)
+	writeFile(t, root, "b.mp3", 2048)
+	m3u := writeM3U(t, root, "p.m3u", "a.mp3\nb.mp3\n")
+	scanAndWait(t, sc, lib)
+
+	pid, _ := st.ItemIDByPath(ctx, m3u)
+	first, _ := st.ItemIDByPath(ctx, filepath.Join(root, "a.mp3"))
+	if pid == 0 || first == 0 {
+		t.Fatalf("fixture not scanned (playlist %d, track %d)", pid, first)
+	}
+
+	_, err := playlist.ImportFile(ctx, &editMidImport{Store: st, t: t, keep: []int64{first}}, lib.ID, m3u)
+	if !errors.Is(err, store.ErrPlaylistLocked) {
+		t.Fatalf("ImportFile err = %v, want ErrPlaylistLocked", err)
+	}
+	entries, err := st.PlaylistEntries(ctx, pid)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 1 || entries[0].ID != first {
+		t.Fatalf("got %d entries, want the edit's one — the import overwrote an edit made during it",
+			len(entries))
+	}
+
+	// And the scan that meets the lock leaves the playlist alone without
+	// calling it a problem: being edited is not something to report.
+	p := scanAndWait(t, sc, lib)
+	for _, is := range p.Issues {
+		if strings.HasSuffix(is.Path, "p.m3u") {
+			t.Errorf("an edited playlist was reported as an issue: %+v", is)
+		}
+	}
+	if entries, _ := st.PlaylistEntries(ctx, pid); len(entries) != 1 {
+		t.Errorf("the rescan restored %d entries", len(entries))
 	}
 }
 

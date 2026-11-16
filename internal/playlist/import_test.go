@@ -31,7 +31,7 @@ func (f *fakeStore) EnsurePlaylist(_ context.Context, _ int64, path, title, _ st
 	return f.pid, nil
 }
 
-func (f *fakeStore) SetPlaylistEntries(_ context.Context, _ int64, ids []int64) error {
+func (f *fakeStore) ImportPlaylistEntries(_ context.Context, _ int64, ids []int64) error {
 	f.entries = ids
 	return nil
 }

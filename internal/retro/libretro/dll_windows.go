@@ -6,9 +6,13 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"path/filepath"
+	"strings"
 	"sync"
 	"syscall"
 	"unsafe"
+
+	"golang.org/x/sys/windows"
 )
 
 /*
@@ -176,12 +180,27 @@ var coreFuncs = []string{
 	"retro_load_game", "retro_unload_game", "retro_get_memory_data", "retro_get_memory_size",
 }
 
-// Open loads a core DLL by full path. It is not initialised until Init.
+/*
+ * Open loads a core DLL by full path. It is not initialised until Init.
+ *
+ * Loading runs the DLL's own code (DllMain) before anything here can ask
+ * whether it is a core, so where it loads from is the whole defence (R12-2).
+ * A path on another machine is refused outright: \host\share over SMB,
+ * \host@SSL\share over WebDAV, and the \?\ and \.\ device forms that can
+ * spell either. And the DLL's own dependencies are looked for beside it and
+ * in System32 only, never along PATH or in the working directory, so a core
+ * cannot be made to pull in a library planted somewhere else.
+ */
 func Open(path string) (Core, error) {
-	dll, err := syscall.LoadDLL(path)
+	if !filepath.IsAbs(path) || strings.HasPrefix(path, `\`) || strings.HasPrefix(path, `//`) {
+		return nil, fmt.Errorf("libretro: %s is not a core on this machine", path)
+	}
+	h, err := windows.LoadLibraryEx(path, 0,
+		windows.LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR|windows.LOAD_LIBRARY_SEARCH_SYSTEM32)
 	if err != nil {
 		return nil, fmt.Errorf("libretro: load %s: %w", path, err)
 	}
+	dll := &syscall.DLL{Name: path, Handle: syscall.Handle(h)}
 	c := &dllCore{dll: dll, procs: map[string]*syscall.Proc{}, strs: map[string]unsafe.Pointer{}}
 	for _, name := range coreFuncs {
 		p, err := dll.FindProc(name)

@@ -1661,15 +1661,11 @@
         "summary": "Delete a library and its rows",
         "description": "Administrators only. Removes the library's **records**. It does not touch the media on disk — the server never owns the files.",
         "responses": {
-          "200": {
-            "description": "Deleted.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Acknowledged"
-                }
-              }
-            }
+          "204": {
+            "description": "Deleted. No body."
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
           },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
@@ -1679,6 +1675,16 @@
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "description": "A scan is running for this library; wait for it to finish.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
           }
         }
       }
@@ -1826,15 +1832,11 @@
         "summary": "Remove a location from this library",
         "description": "Administrators only. Removes the rows that came from that location; the files are untouched.",
         "responses": {
-          "200": {
-            "description": "Removed.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Acknowledged"
-                }
-              }
-            }
+          "204": {
+            "description": "Removed, with every item scanned under it. No body."
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
           },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
@@ -1844,6 +1846,16 @@
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "description": "This is the library's last location; delete the library instead.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
           }
         }
       }
@@ -2153,7 +2165,7 @@
             "name": "sort",
             "in": "query",
             "required": false,
-            "description": "`title` (default), `year`, `added`, `rating` (highest first, unrated last), `longest` / `shortest` (by running time), `track` (disc then track number), or `random` — a shuffle fixed by `seed`.\n\n`longest` and `shortest` both sink anything with no running time to the bottom — NULL and zero alike, because zero is what a probe writes when it could not read a length, and a film of no minutes is not the shortest film. Containers carry no duration at all, so this is a film-library sort: elsewhere every row would tie and the answer would be the alphabet.\n\n**A container's children are not automatically in hierarchy order.** Episodes come back in season order only because they share their series' sort title and therefore tie, letting the order fall through. Tracks keep their own titles, so an album asked for without a sort comes back alphabetically — use `sort=track`.",
+            "description": "`title` (default), `year`, `added`, `rating` (highest first, unrated last), `longest` / `shortest` (by running time), `track` (disc then track number), `taken` (when a photograph was taken, newest first, falling back to when the file arrived), or `random` — a shuffle fixed by `seed`.\n\n`longest` and `shortest` both sink anything with no running time to the bottom — NULL and zero alike, because zero is what a probe writes when it could not read a length, and a film of no minutes is not the shortest film. Containers carry no duration at all, so this is a film-library sort: elsewhere every row would tie and the answer would be the alphabet.\n\n**A container's children are not automatically in hierarchy order.** Episodes come back in season order only because they share their series' sort title and therefore tie, letting the order fall through. Tracks keep their own titles, so an album asked for without a sort comes back alphabetically — use `sort=track`.",
             "schema": {
               "type": "string",
               "default": "title"
@@ -2213,6 +2225,28 @@
               ]
             },
             "description": "`1` restricts to the calling account's favourites. Without `library_id` it reaches every level of every library, so a favourited album, episode or song is listed too; inside one library it filters the top-level grid like any other facet."
+          },
+          {
+            "name": "taken_month",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "pattern": "^[0-9]{4}-[0-9]{2}$"
+            },
+            "description": "Open one photo timeline bucket: the photographs taken in this month, as `GET /api/libraries/{id}/timeline` names it (`2019-07`). Use with `sort=taken`. **Also excludes marked folders**, so the listing agrees with the bucket's count; that exclusion is derived here and is not itself a parameter."
+          },
+          {
+            "name": "taken_undated",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "1"
+              ]
+            },
+            "description": "`1` opens the timeline's undated bucket: photographs carrying no capture time at all. Excludes marked folders, as `taken_month` does."
           }
         ],
         "responses": {
@@ -5106,7 +5140,7 @@
           "settings"
         ],
         "summary": "Restore the documented defaults",
-        "description": "Administrators only. Returns the settings, like `GET`.\n\n**Credentials and machine facts survive**: the password hash, the provider API keys, the TLS certificate paths, and the ffmpeg directory. Wiping the first would lock the operator out of their own server and wiping the others would break metadata and HTTPS — none of which is what anybody means by \"reset settings\", and none of which a reset can restore. What resets is behaviour.",
+        "description": "Administrators only. Returns the settings, like `GET`.\n\n**Credentials and machine facts survive**: the password hash, the provider API keys and OpenSubtitles login, the TLS certificate paths and public certificate, the ffmpeg directory, the webhooks with their secrets, the metrics token, the trusted proxies, and which account DLNA plays as. Wiping the first would lock the operator out of their own server; wiping the others would break metadata, HTTPS, or a receiver, scraper or proxy configured elsewhere — none of which is what anybody means by \"reset settings\", and none of which a reset can restore. What resets is behaviour (DLNA itself goes back to off).\n\nA reset has the same effects as saving the same changes with `PUT`: moving the optimized folder back to the default re-queues every copy the default folder does not hold, turning photo places off deletes every location read, music matching follows its switch at once, and a switch that a reset turns on starts its pass now.",
         "responses": {
           "200": {
             "description": "The settings, back at their defaults.",
@@ -8020,23 +8054,46 @@
           "operations"
         ],
         "summary": "Stage the release the last check found, without applying it",
-        "description": "Administrators only.\n\n**The download is the slow half and the restart is the disruptive half, so they are separate calls**: a client can stage an update while people are watching and restart when nobody is.\n\nCalling it with no update available is a **no-op rather than an error** — the check may simply have gone stale.",
+        "description": "Administrators only.\n\n**The download is the slow half and the restart is the disruptive half, so they are separate calls**: a client can stage an update while people are watching and restart when nobody is.\n\n**Starts the download and answers at once** (`202`, no body): a release is tens of megabytes and not something to hold a request open for. Follow it with `GET /api/update`, whose `downloading` carries the progress while it runs; afterwards `staged` names the version ready to apply, or `download_error` says why nothing was staged. Calling it with no newer release available is not refused — the check may simply have gone stale — and ends with `download_error` saying so.",
         "responses": {
-          "200": {
-            "description": "The staged version, if one was staged.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/StagedUpdate"
-                }
-              }
-            }
+          "202": {
+            "description": "The download has started. No body; read progress and the outcome from `GET /api/update`."
           },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
           },
           "403": {
             "$ref": "#/components/responses/Forbidden"
+          },
+          "409": {
+            "description": "A download is already running.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "412": {
+            "description": "`unverifiable`: this build cannot verify a release signature, so it will not install one.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "This build has no updater.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
           }
         }
       }
@@ -8241,6 +8298,9 @@
           },
           "403": {
             "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
           }
         }
       }
@@ -8286,7 +8346,7 @@
           "playlists"
         ],
         "summary": "Replace the membership with exactly this list, in this order",
-        "description": "**Reorder, insert, and remove-several are all this call**: a playlist is an ordered sequence, and every one of those edits is the caller having decided the whole sequence.\n\n`400` naming the id if any item does not exist, and **nothing is written**.\n\n**A session, and no particular role.** The admin gate exists for filesystem access and account control; a playlist edit is neither, and the audit log records who made it. Playlists are server-wide (ADR 0030 leaves per-user ownership undecided), so any member may edit any playlist.\n\nEvery playlist write **locks `members`**, which is what stops the next scan re-importing the `.m3u` over the edit.",
+        "description": "**Reorder, insert, and remove-several are all this call**: a playlist is an ordered sequence, and every one of those edits is the caller having decided the whole sequence.\n\n`400` naming the id if any item does not exist, and **nothing is written**.\n\nThe list is the one **the caller was shown**. Entries kept from the caller (a hidden library, a rating above its ceiling) keep their places; the list sent fills the places the caller can see, in order, anything left over goes on the end, and places left over are dropped. For an account that sees every entry this is exactly the list sent.\n\n**A session, and no particular role.** The admin gate exists for filesystem access and account control; a playlist edit is neither, and the audit log records who made it. Playlists are server-wide (ADR 0030 leaves per-user ownership undecided), so any member may edit any playlist.\n\nEvery playlist write **locks `members`**, which is what stops the next scan re-importing the `.m3u` over the edit.",
         "requestBody": {
           "required": true,
           "content": {
@@ -8374,7 +8434,7 @@
           "name": "pos",
           "in": "path",
           "required": true,
-          "description": "**By position, not by item id.** An id does not identify an entry in the one listing that may hold the same id twice. Positions are 0-based and stay dense, so a position is the index the client rendered; after a removal everything below it has shifted up by one.",
+          "description": "**By position, not by item id.** An id does not identify an entry in the one listing that may hold the same id twice. Positions are 0-based and stay dense, so a position is the index the client rendered; after a removal everything below it has shifted up by one. It counts the entries **the caller was shown**: for an account kept from some of them, row 1 is the second entry it can see, and a row past the end of what it can see is a `404`.",
           "schema": {
             "type": "integer"
           }
@@ -20596,15 +20656,6 @@
           }
         }
       },
-      "StagedUpdate": {
-        "type": "object",
-        "properties": {
-          "staged": {
-            "type": "string",
-            "description": "The version now staged, if any."
-          }
-        }
-      },
       "MediaToolsRefusal": {
         "type": "object",
         "description": "A folder holding ffprobe that the server would not run tools from, and why, in words a person reads in Settings (R09-1).",
@@ -22461,11 +22512,22 @@
       "DownloadedSubtitle": {
         "type": "object",
         "required": [
-          "key"
+          "key",
+          "language",
+          "label"
         ],
         "properties": {
           "key": {
-            "type": "string"
+            "type": "string",
+            "description": "The new track's key, `external-<id>`, as `GET /api/items/{id}/subtitles` lists it."
+          },
+          "language": {
+            "type": "string",
+            "description": "The language it was saved under."
+          },
+          "label": {
+            "type": "string",
+            "description": "What a track menu shows for it."
           }
         }
       },
