@@ -327,6 +327,10 @@ interface PlaybackState {
 
   playing: boolean;
   loading: boolean;
+  /** The element is playing a stream the server converts (remux or
+   *  transcode), so a seek restarts the conversion instead of moving a clock,
+   *  and displayTime is the stream's offset plus the element's time. */
+  converting: boolean;
   displayTime: number;
   totalDuration: number;
   muted: boolean;
@@ -3072,6 +3076,7 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
     surface,
     playing,
     loading,
+    converting: transcoding.current,
     displayTime,
     totalDuration,
     muted,

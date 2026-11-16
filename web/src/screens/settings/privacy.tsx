@@ -9,7 +9,7 @@ import {
 } from "@/api/hooks";
 import { PlaybackWebhooksToggle } from "@/components/WebhookSettings";
 import { useSetPeerVisibility } from "@/api/hooks";
-import { errorMessage } from "@/lib/errors";
+import { asSentence, errorMessage } from "@/lib/errors";
 
 /*
  * Whether other people on this server can see what you have watched (ADR 0035).
@@ -26,6 +26,14 @@ import { errorMessage } from "@/lib/errors";
  * The account's own say over playback webhooks (ADR 0097). Read back from auth
  * status, as SharingToggle is, for the reason its comment gives.
  */
+/*
+ * What a refused privacy switch says: that it did not change, why, and that
+ * what is drawn is the server's answer and not the click.
+ */
+function refusedSwitch(err: unknown): string {
+  return `Not changed. ${asSentence(errorMessage(err))} The switch shows what the server still holds.`;
+}
+
 function WebhookConsent() {
   const set = useSetPlaybackWebhooks();
   const me = useCurrentUser();
@@ -41,10 +49,12 @@ function WebhookConsent() {
         on={pending ?? stored}
         onChange={(on) => {
           setPending(on);
-          set.mutate(on);
+          // Put back on a refused write, as SharingToggle does and for its
+          // reason (R15-2).
+          set.mutate(on, { onError: () => setPending(null) });
         }}
       />
-      {set.isError && <p className="set-error">{errorMessage(set.error)}</p>}
+      {set.isError && <p className="set-error">{refusedSwitch(set.error)}</p>}
     </section>
   );
 }
@@ -80,7 +90,15 @@ function SharingToggle() {
           checked={on}
           onChange={(e) => {
             setPending(e.target.checked);
-            set.mutate(e.target.checked);
+            /*
+             * A refused write puts the switch back (R15-2). It used to stay
+             * where it was clicked, because `pending` is only cleared when
+             * the stored value changes and a refusal changes nothing: the
+             * switch said "not sharing" while the server went on sharing.
+             * The hook refetches auth status on an error too, so what is
+             * drawn is what the server holds, not what it held at load.
+             */
+            set.mutate(e.target.checked, { onError: () => setPending(null) });
           }}
         />
         <span>
@@ -94,9 +112,7 @@ function SharingToggle() {
           </span>
         </span>
       </label>
-      {set.isError && (
-        <span className="set-error">{(set.error as Error).message}</span>
-      )}
+      {set.isError && <span className="set-error">{refusedSwitch(set.error)}</span>}
       <PeerVisibility />
     </section>
   );

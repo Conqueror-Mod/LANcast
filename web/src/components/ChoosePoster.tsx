@@ -1,6 +1,7 @@
 import { useSetCollectionPoster } from "@/api/hooks";
 import { artworkURL } from "@/api/client";
 import { useBackHandler } from "@/focus/FocusController";
+import { useDialogFocus } from "@/focus/useDialogFocus";
 import type { Item } from "@/api/types";
 import "./ChoosePoster.css";
 
@@ -29,6 +30,9 @@ export function ChoosePoster({
 }) {
   const set = useSetCollectionPoster(collection.id);
   useBackHandler(onClose);
+  // Reachable with a remote: registered, scoped, focused, and focus handed
+  // back on close (R16-1).
+  const dialogRef = useDialogFocus();
 
   // Only films that have one to lend. A member with no poster of its own is a
   // blank tile in a picker of pictures, and the server refuses it anyway.
@@ -52,6 +56,7 @@ export function ChoosePoster({
     <div className="chooseposter__overlay" onClick={onClose}>
       <div
         className="chooseposter"
+        ref={dialogRef}
         role="dialog"
         aria-label={`Choose a poster for ${collection.title}`}
         onClick={(e) => e.stopPropagation()}
