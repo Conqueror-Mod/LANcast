@@ -241,6 +241,17 @@ func (s *Server) deleteItem(w http.ResponseWriter, r *http.Request) {
 		 * sidecars, and the answer says so; every other file in the subtree
 		 * goes as asked, with its row.
 		 */
+		/*
+		 * Nothing may still be reading a file about to go. ffmpeg holds its
+		 * source open, Windows refuses to remove an open file, and a delete
+		 * during a conversion kept its row until the session was reaped up to
+		 * ten minutes later. StopItem returns once ffmpeg has exited.
+		 */
+		if s.trans != nil {
+			for _, rm := range removals {
+				s.trans.StopItem(rm.itemID)
+			}
+		}
 		kept := map[int64]bool{}
 		for _, rm := range removals {
 			if err := os.Remove(rm.video); err != nil && !os.IsNotExist(err) {

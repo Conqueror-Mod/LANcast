@@ -643,3 +643,30 @@ func copyToClient(w http.ResponseWriter, src io.Reader) (int64, error) {
 		}
 	}
 }
+
+/*
+ * leaveHLS ends the caller's own HLS encode for an item they have stopped
+ * watching (T-5).
+ *
+ * An HLS encode writes segments whether anybody reads them or not, so the ten
+ * minutes a paused film is allowed was ten minutes of a full encode for a
+ * viewer who had gone. The player says when it leaves — stop, another title,
+ * closing the page — and this is where it says it.
+ *
+ * Scoped exactly as segment access is, by s.streamOwner: a caller can end only
+ * what it could have read. A finished conversion is kept (transcode.Leave), and
+ * leaving something that was not encoding is success, since the caller asked
+ * for it not to be running and it is not. The idle timeout remains for a
+ * client that never says.
+ */
+func (s *Server) leaveHLS(w http.ResponseWriter, r *http.Request) {
+	id, ok := pathID(r)
+	if !ok {
+		writeError(w, http.StatusBadRequest, "bad_request", "invalid item id")
+		return
+	}
+	if s.trans != nil {
+		s.trans.Leave(s.streamOwner(r), id)
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
