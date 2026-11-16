@@ -1,6 +1,6 @@
 # ADR 0045 — Live presence between paired servers
 
-Date: 2026-08-19 · Status: accepted (amended 2026-09-27 and 2026-09-28 — see *Amendments*)
+Date: 2026-08-19 · Status: accepted (amended 2026-09-27, 2026-09-28 and 2026-11-16 — see *Amendments*)
 
 Amends [ADR 0035](0035-who-may-see-whose-viewing.md).
 
@@ -483,3 +483,18 @@ like the beginning of "who is watching my library". **It is not**, and §4 is
 what stops it: there is no record, so there is nothing to total up, and
 "how often is my library watched" remains unanswerable by construction. The
 request will arrive. The answer is still no.
+
+## Amendment — the visible-to-peers switch outranks a grant (2026-11-16)
+
+§2 makes a presence grant a person-by-person consent, and nothing here said how
+it ranks against the account's *visible to peers* switch. The code let a grant
+outlive the switch: somebody who turned visibility off to disappear from a
+paired server went on being reported as watching to every person they had
+granted (review finding R04-8).
+
+**The switch wins.** `ReadersOf` names an account only while its
+`visible_to_peers` is on. The grant rows are kept, so turning visibility back on
+restores exactly what was granted, with nothing to grant again. An opt-out that
+cannot take back what it gave is not an opt-out — ADR 0035's own test, applied
+to the two consents together. Decided by the owner on 2026-11-16 and fixed in
+#1148.
