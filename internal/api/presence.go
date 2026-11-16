@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"sort"
@@ -182,6 +183,11 @@ func (s *Server) refreshPeer(ctx context.Context, p store.Peer) error {
 	var body rosterBody
 	if err := s.callPeer(ctx, p, "/api/federation/roster", &body); err != nil {
 		return err
+	}
+	// The same checks a pushed roster passes (rosterpush.go): fetching it
+	// instead of being sent it is no reason to store whatever came back.
+	if err := checkRoster(body.People); err != nil {
+		return fmt.Errorf("peer %s roster: %w", p.Name, err)
 	}
 	// A roster pushed since this was asked for is fresher; keep it (ADR 0103).
 	if s.push.acceptAsOf(p.Fingerprint, body.AsOf) {
@@ -377,7 +383,11 @@ func (s *Server) callPeer(ctx context.Context, p store.Peer, path string, out an
 			lastErr = fmt.Errorf("peer answered %d", resp.StatusCode)
 			continue
 		}
-		err = json.NewDecoder(resp.Body).Decode(out)
+		// Bounded, as every other read on the peer path is (sendPeer, the
+		// playlist, a pushed roster). A peer that answers with an endless
+		// array is cut off at the cap with a decode error, not held in
+		// memory until the deadline.
+		err = json.NewDecoder(io.LimitReader(resp.Body, maxPeerJSON)).Decode(out)
 		resp.Body.Close()
 		if err != nil {
 			lastErr = err
@@ -575,6 +585,11 @@ func presenceTitle(it *store.Item) string {
 
 // peerDeadline caps one peer's whole turn — every address, both calls.
 const peerDeadline = 3 * time.Second
+
+// maxPeerJSON caps one JSON answer from a peer. The largest honest one is a
+// page of a peer's library, a few hundred items with their artwork paths,
+// which is well under a megabyte.
+const maxPeerJSON = 4 << 20
 
 // peerProbe bounds the address race inside a call, and peerStagger is how
 // long each address waits behind the one before it.
