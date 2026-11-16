@@ -195,7 +195,14 @@ func (s *Server) sendReport(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := report.Send(r.Context(), &http.Client{}, url, rep); err != nil {
-		s.log.Warn("problem report not sent", "error", err)
+		// report.Send already keeps the webhook's path out of its errors
+		// (R07-9). This is the second guard: whatever an error says, the
+		// webhook URL, which carries its token, is not written to the log.
+		logged := err.Error()
+		if url != "" {
+			logged = strings.ReplaceAll(logged, url, "<webhook>")
+		}
+		s.log.Warn("problem report not sent", "error", logged)
 		msg := "the report could not be sent; check the connection and try again, or copy it instead"
 		if errors.Is(err, report.ErrNoWebhook) {
 			msg = "this build of LANcast cannot send reports"

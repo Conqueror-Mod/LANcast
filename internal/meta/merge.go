@@ -26,22 +26,29 @@ func Merge(current Record, locked map[string]bool, locals, remotes []Record) Rec
 	pick(locked, FieldContentRating, &out.Fields.ContentRating, ordered, func(r Record) *string { return r.Fields.ContentRating })
 	pick(locked, FieldReleasedAt, &out.Fields.ReleasedAt, ordered, func(r Record) *int64 { return r.Fields.ReleasedAt })
 
-	// Duration is measured, not described, and this is the one field where a
-	// provider is answering a different question. TMDB's runtime is the
-	// theatrical one in whole minutes; the file is what a viewer actually
-	// plays, and across a 40-file sample of this library one in eight
-	// disagreed by more than 2%: The Book of Eli declared 118 minutes against
-	// a 110.2-minute file, Ghostbusters 117 against 133.7.
+	// Duration is measured, not described: the probe owns it, and no source
+	// supplies one. Not even when nothing has measured it yet (T-3).
 	//
-	// That corrupts every percentage computed from a duration, and the watched
-	// threshold worst of all, because it is a denominator. An overstated
-	// runtime puts 90% past the end of the file, so the item cannot be
-	// finished by watching it — which is exactly how it was reported.
+	// A provider's runtime answers a different question. TMDB's is the
+	// theatrical cut in whole minutes, and across a 40-file sample of this
+	// library one in eight disagreed with the file by more than 2%: The Book
+	// of Eli declared 118 minutes against a 110.2-minute file. A duration is
+	// the denominator of every percentage, the watched threshold included, so
+	// a wrong one means a film cannot be finished by watching it.
 	//
-	// So a source may supply a duration only when nothing has measured one.
-	// An NFO still carries a file ffprobe has not reached yet, and stops
-	// arguing with ffprobe the moment it has.
-	fill(locked, FieldDurationMS, &out.Fields.DurationMS, ordered, func(r Record) *int64 { return r.Fields.DurationMS })
+	// This used to let a source fill a duration nothing had measured, on the
+	// reasoning that an NFO could carry a file ffprobe had not reached yet.
+	// That gap is where the wrong values came from. Enrichment and probing run
+	// side by side on a new file, so enrichment saw "no duration", filled in
+	// the provider's runtime, and wrote it after the probe had saved the real
+	// one: 31 films in one library held whole-minute durations. Halloween II
+	// (2009) was first matched to a 16-minute short, took its runtime, and
+	// kept 960000 ms against a 7,145 s file after the match was corrected,
+	// because a filled value is never replaced. "Unknown" is shown as unknown,
+	// which is better than a number that is wrong.
+	//
+	// out.Fields.DurationMS stays as current had it, so a sidecar written from
+	// this record says what the probe measured. enrich does not write it back.
 	pick(locked, FieldSeries, &out.Fields.Series, ordered, func(r Record) *string { return r.Fields.Series })
 	pick(locked, FieldSeason, &out.Fields.Season, ordered, func(r Record) *int { return r.Fields.Season })
 	pick(locked, FieldEpisode, &out.Fields.Episode, ordered, func(r Record) *int { return r.Fields.Episode })
@@ -96,15 +103,6 @@ func pick[T any](locked map[string]bool, field string, dst **T, sources []Record
 			return
 		}
 	}
-}
-
-// fill is pick for a field the file itself owns: a source may offer a value
-// when there is none, and may never replace one that exists.
-func fill[T any](locked map[string]bool, field string, dst **T, sources []Record, get func(Record) *T) {
-	if *dst != nil {
-		return
-	}
-	pick(locked, field, dst, sources, get)
 }
 
 // LockedSet turns a slice of field names into the set Merge expects, ignoring
