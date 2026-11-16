@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"os"
 	"path/filepath"
 	"slices"
 	"sort"
@@ -251,22 +250,17 @@ func (s *Server) patchLibrary(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	if req.Name != nil {
-		name := strings.TrimSpace(*req.Name)
-		if name == "" {
-			writeError(w, http.StatusBadRequest, "bad_request", "name cannot be empty")
-			return
-		}
-		if name != lib.Name {
-			if err := s.st.RenameLibrary(r.Context(), id, name); err != nil {
-				s.writeInternal(w, err, "rename library")
-				return
-			}
-			s.audit(r, "library.update", "library", auditID(id),
-				"Renamed library "+lib.Name+" to "+name, nil)
-		}
+	/*
+	 * The name and path are checked here too, before anything is written: a
+	 * request that renamed the library and named a folder that is not there
+	 * renamed it, then answered 400 (R06-8). Only the UNIQUE conflict is left
+	 * to the write itself, since only the write can know it.
+	 */
+	if req.Name != nil && strings.TrimSpace(*req.Name) == "" {
+		writeError(w, http.StatusBadRequest, "bad_request", "name cannot be empty")
+		return
 	}
-
+	var newPath string
 	if req.Path != nil {
 		abs, err := filepath.Abs(strings.TrimSpace(*req.Path))
 		if err != nil {
@@ -274,29 +268,43 @@ func (s *Server) patchLibrary(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if abs != lib.Path {
-			// Checked before anything is rewritten: repointing a library at a
-			// folder that is not there would mark its whole contents missing on
-			// the next scan, which is a long way to travel for a typo.
-			info, err := os.Stat(abs)
-			if err != nil {
-				writeError(w, http.StatusBadRequest, "bad_request", "path does not exist or is unreadable")
+			// Repointing a library at a folder that is not there would mark its
+			// whole contents missing on the next scan, which is a long way to
+			// travel for a typo.
+			checked, msg := checkDirectory(abs)
+			if msg != "" {
+				writeError(w, http.StatusBadRequest, "bad_request", msg)
 				return
 			}
-			if !info.IsDir() {
-				writeError(w, http.StatusBadRequest, "bad_request", "path is not a directory")
+			newPath = checked
+		}
+	}
+
+	// The repoint goes first among the writes because it is the one that can
+	// still be refused (another library holds that path, which only the write
+	// can know), and a refused request must leave the name as it was.
+	if newPath != "" {
+		if err := s.st.RepointLibrary(r.Context(), id, lib.Path, newPath); err != nil {
+			if strings.Contains(err.Error(), "UNIQUE") {
+				writeError(w, http.StatusConflict, "conflict", "another library already uses that path")
 				return
 			}
-			if err := s.st.RepointLibrary(r.Context(), id, lib.Path, abs); err != nil {
-				if strings.Contains(err.Error(), "UNIQUE") {
-					writeError(w, http.StatusConflict, "conflict", "another library already uses that path")
-					return
-				}
-				s.writeInternal(w, err, "repoint library")
+			s.writeInternal(w, err, "repoint library")
+			return
+		}
+		s.audit(r, "library.update", "library", auditID(id),
+			"Moved library "+lib.Name+" from "+lib.Path+" to "+newPath,
+			map[string]any{"from": lib.Path, "to": newPath})
+	}
+
+	if req.Name != nil {
+		if name := strings.TrimSpace(*req.Name); name != lib.Name {
+			if err := s.st.RenameLibrary(r.Context(), id, name); err != nil {
+				s.writeInternal(w, err, "rename library")
 				return
 			}
 			s.audit(r, "library.update", "library", auditID(id),
-				"Moved library "+lib.Name+" from "+lib.Path+" to "+abs,
-				map[string]any{"from": lib.Path, "to": abs})
+				"Renamed library "+lib.Name+" to "+name, nil)
 		}
 	}
 
