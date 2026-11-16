@@ -4609,6 +4609,9 @@ pass outlives the request that started it.
 `400 wrong_kind` on a library that is not a picture library. `409 not_available`
 when the worker is missing or has no models, with the reason in the message —
 "not installed" and "no model" are different problems with different fixes.
+`409 already_running` when a face pass is already running, for this library
+or another: one pass runs at a time, and a second is refused when it is asked
+for rather than answered `started` and quietly dropped.
 
 The pass is incremental: a photograph already examined is skipped unless its
 file has changed. **Folders marked sensitive are never examined**, and marking

@@ -17742,7 +17742,7 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
-            /** @description `not_available` — the worker is missing or has no models, with the reason in the message. "Not installed" and "no model" are different problems with different fixes. */
+            /** @description `not_available` — the worker is missing or has no models, with the reason in the message. "Not installed" and "no model" are different problems with different fixes. `already_running` is a face pass already running, for this library or another. */
             409: {
                 headers: {
                     [name: string]: unknown;
