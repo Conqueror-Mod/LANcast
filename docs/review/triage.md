@@ -15,7 +15,7 @@ The tally of recommendations: **57 before 1.0** (56 S3s and T-3, most of them a 
 | ID | What | Decision |
 |---|---|---|
 | R01-4 (S2) | A session alone can mint an API key, and the key outlives a password change | **Ask for the password when minting a key**, as adding a passkey already does. This keeps ADR 0061's rule that a routine password change does not break the machine that copies photos. Also have an **administrator's password reset revoke that account's keys, and say so**, because that action means "this account was compromised". ADR 0061 needs an amendment. |
-| R04-3 (S2) | Restoring a backup brings back API keys and passkeys that were revoked | **Clear `api_key`, `passkey` and the used recovery-code state from the restored database, as sessions already are** (ADR 0058's own reasoning). A restore is rare and deliberate, every account still has its password, and re-issuing a key or re-adding a passkey costs a minute. The alternative is to keep them and list them in the restore result. That leaves a leaked key working until somebody reads the list. ADR 0058 needs an amendment. |
+| R04-3 (S2) | Restoring a backup brings back API keys and passkeys that were revoked | **Clear `api_key` and `passkey` from the restored database, as sessions already are** (ADR 0058's own reasoning). *Amended 2026-11-16:* recovery codes are **kept**. Only unused hashes are stored, so a restore cannot tell which were used after the backup, and clearing them all could lock a two-factor account out on another machine where the TOTP secret cannot be unsealed. The restore result tells two-factor accounts to regenerate their codes. A restore is rare and deliberate, every account still has its password, and re-issuing a key or re-adding a passkey costs a minute. The alternative is to keep them and list them in the restore result. That leaves a leaked key working until somebody reads the list. ADR 0058 needs an amendment. |
 | R04-8 (S3) | Turning "visible to peers" off leaves per-person presence grants working | **The switch wins**: `ReadersOf` requires `visible_to_peers = 1`. Somebody who flips the switch to disappear expects to disappear. The grants are kept, so turning visibility back on restores them. |
 
 ## Found after the ledgers
@@ -25,7 +25,7 @@ The tally of recommendations: **57 before 1.0** (56 S3s and T-3, most of them a 
 | R05-4 | A book part someone moved went back to the folder order on the next scan: `SetBookPart` overwrote a locked `episode` | S1 (a locked field overwritten) | **Done**, fixed in #1136 (its second commit). Recorded in R05.md. |
 | T-1 | A Quality or audio-track change made before playback moved reused the running HLS session | S2 | **Done**, #1144, proven on the service. |
 | T-2 | Odd frame rates listed too few segments, and a 1000 fps probe set a GOP of about 83 s (a #1093 regression, never released) | S2 | **Done**, #1145, proven on the service. |
-| T-3 | *Halloween II (2009)* is stored as 16 min (960000 ms), but its file is 7,145 s, so any encode lists 16 minutes and then stops | S2 | **Before 1.0: investigate.** The value is exactly 16:00, so it most likely came from metadata, not the probe. Find which writer set `duration_ms`. Only the probe should own it. Fold this into R09-8's duration sanity check. |
+| T-3 | *Halloween II (2009)* is stored as 16 min (960000 ms), but its file is 7,145 s, so any encode lists 16 minutes and then stops | S2 | **Fixed in #1149.** A wrong first match to a 16-minute short filled its runtime while the probe ran alongside it; correcting the match left the runtime. The probe is now the only writer of `duration_ms`. **31 films** hold provider runtimes from the same race and need a re-probe (T-6). |
 | T-4 | An AC3 film at Original in a browser waits about 2 min, because the server serves only a finished remux playlist | S3 | **After 1.0.** It's deliberate (WebView2 cannot play a growing playlist), but a browser could be served the growing one. That needs a client signal, so it's a 1.x item. Name it in the release notes' known issues. |
 
 ---
@@ -35,6 +35,8 @@ The tally of recommendations: **57 before 1.0** (56 S3s and T-3, most of them a 
 Grouped into fix waves by the files they touch, so the sessions can run in parallel without sharing a file. "Size" is rough: **XS** means a line or two, **S** under an hour, **M** a few hours.
 
 ### Wave A: auth and accounts (`internal/auth`, `api/auth.go`, `users.go`, `account.go`, `invites.go`, `passkeys.go`, `twofactor.go`, `loginpicker.go`, `netguard`, `store/user.go`)
+
+**Merged in #1153.**
 
 | ID | What | Size |
 |---|---|---|
@@ -57,6 +59,8 @@ Grouped into fix waves by the files they touch, so the sessions can run in paral
 
 ### Wave B: federation, DLNA, network (`api/guest*`, `presence.go`, `peerwatch.go`, `api/dlna.go`, `internal/dlna`, `serverapp/dlna.go`)
 
+**Merged in #1148.**
+
 | ID | What | Size |
 |---|---|---|
 | R02-4 | Accounts that opted out of peers are still named to every paired server → skip them | XS |
@@ -66,6 +70,8 @@ Grouped into fix waves by the files they touch, so the sessions can run in paral
 | R04-8 | As decided: the switch outranks the grants | XS |
 
 ### Wave C: library data and settings (`api/libraries.go`, `items.go`, `playlists.go`, `activity.go`, `meta.go`, `viewings.go`, `backups.go`, `faces.go`, `store/plugin.go`, `store/browsefilter.go`, `serverapp/main.go`)
+
+**Merged in #1152.**
 
 | ID | What | Size |
 |---|---|---|
@@ -81,9 +87,11 @@ Grouped into fix waves by the files they touch, so the sessions can run in paral
 | R05-3 | Removing a plugin can leave its credentials behind → one transaction | XS |
 | R08-7 | The artwork prune can delete images written during the walk → skip files newer than the snapshot | XS |
 | R10-10 | Shutdown closes the DB under unowned goroutines → one wait group | S |
-| R04-3 | As decided: clear keys, passkeys and used recovery codes on restore (ADR 0058 amendment) (`backup`, `serverapp`) | S |
+| R04-3 | As decided: clear keys and passkeys on restore, keep recovery codes (ADR 0058 amendment) (`backup`, `serverapp`) | S |
 
 ### Wave D: metadata and logs (`internal/meta`, `nfo`, `enrich`, `report`, `reportissue.go`)
+
+**Merged in #1149.**
 
 | ID | What | Size |
 |---|---|---|
@@ -95,6 +103,8 @@ Grouped into fix waves by the files they touch, so the sessions can run in paral
 
 ### Wave E: playback, server side (`internal/probe`, `transcode`, `subtitle`, `optimized.go`, `stream.go` and the other open-file sites, `romsaves.go`)
 
+**Merged in #1150.**
+
 | ID | What | Size |
 |---|---|---|
 | R03-3 | The optimized sweep deletes any `<digits>.mp4` in the folder → its own name pattern, and refuse a non-empty folder. *Deletes user files* | S |
@@ -105,6 +115,8 @@ Grouped into fix waves by the files they touch, so the sessions can run in paral
 | *Verify as the service:* | this wave touches `transcode`/`probe`, so it gets a swap kit | |
 
 ### Wave F: client (`web/src`, outside the files Wave A takes)
+
+**Merged in #1151.**
 
 | ID | What | Size |
 |---|---|---|
@@ -119,6 +131,8 @@ Grouped into fix waves by the files they touch, so the sessions can run in paral
 | R16-3 | Episode air dates show a day early west of Greenwich → `timeZone: "UTC"` | XS |
 
 ### Wave G: retro and Linux (`internal/retro/ra`, `internal/service`)
+
+**Merged in #1147.**
 
 | ID | What | Size |
 |---|---|---|
@@ -157,5 +171,18 @@ None recommended. Every S3 is either cheap enough to take before 1.0 or real eno
 ## After Chris's pass
 
 1. ~~Write each row's outcome into its ledger's `Triage:` line, and add R05-4 to R05.md.~~ Done 2026-11-16.
-2. Start the waves. A to G share no files, so up to seven sessions can run at once. Wave E is the only one that needs a swap sitting.
-3. Merge on green, one at a time for anything touching `dist`, then the run plan's S3 and S4 sessions, then cut v0.11.1.
+2. ~~Start the waves.~~ Done: all seven merged on 2026-11-16 (#1147–#1153). Wave E was proven on the installed service the same day.
+3. ~~Merge on green.~~ Done. Next: the follow-ups below that are marked before 1.0, then the run plan's S3 and S4 sessions, then cut v0.11.1.
+
+## Follow-ups found while fixing (2026-11-16)
+
+| ID | What | Recommendation |
+|---|---|---|
+| T-5 | An HLS conversion keeps encoding for up to 10 min after the viewer leaves. `IdleTimeout` assumes an abandoned session is blocked and free, which holds for a progressive stream but not for HLS, which writes segment files with no backpressure. Measured: The Fifth Element, 4K to 720p with TrueHD, reaped at `idle_seconds=614` after the viewer had switched to the window; the server felt sluggish meanwhile | **Before 1.0.** The player tells the server when it stops, and the server ends that session at once; an in-app delete also stops the title's sessions first. The idle timeout stays as the backstop for a tab that vanishes. |
+| T-6 | 31 films hold a provider runtime in `duration_ms` (T-3's race), so an encode of them lists the wrong length | **Before 1.0.** A migration that clears `probed_at` for those rows, plus a startup kick so the probe worker picks them up . |
+| T-7 | Deleting a file in Explorer while LANcast is *converting* it fails: ffmpeg opens its input without share-delete, and LANcast cannot change how ffmpeg opens files. R03-4's fix covers what LANcast reads itself | **Known limit.** T-5's stop-on-close removes most of it. Name it in the release notes. |
+| T-8 | `useDeleteItem` invalidates lists only `onSuccess`, so a partial delete of a show (409) leaves removed episodes on screen (found by wave E) | **Before 1.0**, XS: `onSettled`. |
+| T-9 | `startSemanticPass` answers "started" and then fails, the same shape as R07-10 (found by wave C) | **Before 1.0**, XS: 409 when a pass is running. |
+| T-10 | The Settings backup pane could show what a restore cleared (`api_keys_cleared`, `passkeys_cleared`, `two_factor_accounts`) (found by wave C) | **After 1.0.** The restore result already says it. |
+| T-11 | The scanner's own walk goroutines are not in R10-10's shutdown group (found by wave C) | **After 1.0.** The window is one statement, as R10-10 recorded. |
+| T-12 | One press of Play on a converted film started two HLS sessions and a progressive one within 0.6 s (Prozac Nation, 11:31:19) | **After 1.0**, with R09-9: the same unheld-slot race. |
