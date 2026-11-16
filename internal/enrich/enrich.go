@@ -453,6 +453,9 @@ func (w *Worker) applyRecords(ctx context.Context, item store.Item, kind meta.Ki
 	current := currentRecord(item)
 	merged := meta.Merge(current, lockedSet, locals, remotes)
 
+	// No DurationMS: the probe owns it (T-3). Writing merged's value back,
+	// even an unchanged one, would put a duration read before the probe
+	// finished over the one the probe has since saved.
 	upd := store.ItemMetadata{
 		Title:         merged.Fields.Title,
 		SortTitle:     merged.Fields.SortTitle,
@@ -461,7 +464,6 @@ func (w *Worker) applyRecords(ctx context.Context, item store.Item, kind meta.Ki
 		Rating:        merged.Fields.Rating,
 		ContentRating: merged.Fields.ContentRating,
 		ReleasedAt:    merged.Fields.ReleasedAt,
-		DurationMS:    merged.Fields.DurationMS,
 		Series:        merged.Fields.Series,
 		Season:        merged.Fields.Season,
 		Episode:       merged.Fields.Episode,
