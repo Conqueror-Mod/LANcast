@@ -250,6 +250,11 @@ func (s *Server) peerPresence(w http.ResponseWriter, r *http.Request) {
 		People    []map[string]any `json:"people"`
 	}
 
+	// Only a person this server lists to its peers is asked about by name.
+	// Asking for somebody who opted out tells every peer they exist and are
+	// here now, and the answer is always empty (see listedOnly).
+	listed := len(s.listedOnly(r.Context(), []string{me})) == 1
+
 	out := make([]peerOut, len(peers))
 	var wg sync.WaitGroup
 	for i, p := range peers {
@@ -267,7 +272,8 @@ func (s *Server) peerPresence(w http.ResponseWriter, r *http.Request) {
 			// The roster first: a grant can only name somebody already known
 			// to be on that server, so a peer whose people have never been
 			// fetched has nobody to grant anything to. Rate-limited inside.
-			if err := s.refreshPeer(r.Context(), p); err == nil {
+			refreshErr := s.refreshPeer(r.Context(), p)
+			if refreshErr == nil {
 				if refreshed, err := s.st.RemotePeople(r.Context(), p.Fingerprint); err == nil {
 					people = refreshed
 				}
@@ -280,8 +286,20 @@ func (s *Server) peerPresence(w http.ResponseWriter, r *http.Request) {
 				}
 			}
 
-			seen, err := s.askPeerPresence(r.Context(), p, me)
-			out[i].Reachable = err == nil
+			var seen []visible
+			if listed {
+				var err error
+				seen, err = s.askPeerPresence(r.Context(), p, me)
+				out[i].Reachable = err == nil
+			} else {
+				// Not asked, so reachability comes from the roster: fetched
+				// now, or recently enough that it was not re-asked, and the
+				// peer not marked silent since.
+				s.rosterMu.Lock()
+				_, down := s.peerDown[p.Fingerprint]
+				s.rosterMu.Unlock()
+				out[i].Reachable = refreshErr == nil && !down
+			}
 			out[i].ReachesUs = !out[i].Reachable && s.push.heardFrom(p.Fingerprint)
 
 			byID := map[string]visible{}
