@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -313,5 +314,38 @@ func TestAHiddenLibraryLeavesTheMembersOwnLists(t *testing.T) {
 	}
 	if again, _ := read(); again != before {
 		t.Errorf("after lifting = %+v, want %+v", again, before)
+	}
+}
+
+// R06-5: the all-libraries cast search (library 0, which libraryVisible cannot
+// guard) and the by-id name lookup keep to the caller's libraries.
+func TestCastSearchKeepsToTheCallersLibraries(t *testing.T) {
+	a := newAccessHarness(t)
+	ctx := context.Background()
+	if err := a.st.ReplaceCredits(ctx, a.privateFilm, "nfo",
+		[]store.Credit{{Name: "Aunt Zelda Private", Role: "actor"}}); err != nil {
+		t.Fatal(err)
+	}
+	people, err := a.st.SearchCast(ctx, 0, "zelda", "", 10, store.CastViewer{})
+	if err != nil || len(people) != 1 {
+		t.Fatalf("seed: %+v %v", people, err)
+	}
+	pid := fmt.Sprint(people[0].ID)
+	if code := status(t, a.hide(t, a.private)); code != http.StatusOK {
+		t.Fatalf("hide = %d", code)
+	}
+	body := func(resp *http.Response) string {
+		defer resp.Body.Close()
+		b, _ := io.ReadAll(resp.Body)
+		return string(b)
+	}
+	for _, path := range []string{"/api/libraries/0/cast?q=zelda", "/api/libraries/0/cast?id=" + pid} {
+		if got := body(a.doAs(t, a.member, "GET", path, nil)); strings.Contains(got, "Zelda") {
+			t.Errorf("member %s = %s", path, got)
+		}
+		// Control: the administrator, who is never limited, still finds her.
+		if got := body(a.authed(t, "GET", path, nil)); !strings.Contains(got, "Zelda") {
+			t.Errorf("control: admin %s = %s", path, got)
+		}
 	}
 }

@@ -326,6 +326,19 @@ func (s *Server) libraryCast(w http.ResponseWriter, r *http.Request) {
 		id = parsed
 	}
 	/*
+	 * The caller's limits, for both forms below.
+	 *
+	 * libraryVisible guards a real id and cannot see 0, so without these the
+	 * all-libraries search named people credited only in a library kept from
+	 * the caller, with counts that included what they may not open (R06-5).
+	 */
+	hidden, err := s.hiddenFor(r)
+	if err != nil {
+		s.writeInternal(w, err, "hidden libraries")
+		return
+	}
+	viewer := store.CastViewer{MaxContentRating: s.ceilingFor(r), HiddenLibraries: hidden}
+	/*
 	 * `id` resolves specific people instead of searching.
 	 *
 	 * Filter state lives in the URL, so a bookmarked `?person=12` arrives with
@@ -338,7 +351,7 @@ func (s *Server) libraryCast(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusBadRequest, "bad_request", "invalid id")
 			return
 		}
-		names, err := s.st.CastNames(r.Context(), ids)
+		names, err := s.st.CastNames(r.Context(), ids, viewer)
 		if err != nil {
 			s.writeInternal(w, err, "cast names")
 			return
@@ -365,7 +378,7 @@ func (s *Server) libraryCast(w http.ResponseWriter, r *http.Request) {
 	 * error page.
 	 */
 	people, err := s.st.SearchCast(r.Context(), id, strings.TrimSpace(r.URL.Query().Get("q")),
-		r.URL.Query().Get("role"), queryInt(r, "limit"))
+		r.URL.Query().Get("role"), queryInt(r, "limit"), viewer)
 	if err != nil {
 		s.writeInternal(w, err, "library cast")
 		return
