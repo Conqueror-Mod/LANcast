@@ -631,10 +631,17 @@ func (m *Manager) EnsureHLS(ctx context.Context, itemID int64, owner string, o O
 	 * lets the segment route refuse a session to anybody but its owner: a
 	 * session that two owners could be holding has no single owner to check.
 	 */
+	/*
+	 * And only for the same work: a viewer who changes Quality or the audio
+	 * track before the film has moved asks again at the same offset, and must
+	 * get what they asked for rather than the session already running (see
+	 * workKey). A mismatch falls through to supersedeHLS, as a seek does.
+	 */
+	want := workFor(o)
 	m.mu.Lock()
 	for _, s := range m.sessions {
 		if s.ItemID == itemID && s.Owner == owner && s.Output == HLS &&
-			sameOffset(s.StartAt, o.StartAt) {
+			sameOffset(s.StartAt, o.StartAt) && s.work == want {
 			s.Touch()
 			m.mu.Unlock()
 			return s, nil
@@ -678,6 +685,7 @@ func (m *Manager) EnsureHLS(ctx context.Context, itemID int64, owner string, o O
 		return nil, err
 	}
 	s.ID, s.ItemID, s.Owner = id, itemID, owner
+	s.work = want
 	s.MediaSeconds, s.SegmentLength, _ = completeFor(o)
 
 	m.mu.Lock()
