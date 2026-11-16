@@ -314,6 +314,15 @@ func run(ctx context.Context, addr, dataDir string, log *slog.Logger) error {
 	if err != nil {
 		return err
 	}
+	/*
+	 * Off Windows, on every start: the data directory becomes its owner's alone
+	 * before the database is opened. The Windows service does this in its own
+	 * start (service_windows.go), with an ACL that this mode stands in for.
+	 */
+	if runtime.GOOS != "windows" {
+		r, perr := dataperm.Protect(cfg.DataDir)
+		dataperm.LogReport(log, cfg.DataDir, r, perr)
+	}
 
 	settings, err := config.LoadSettings(cfg.DataDir)
 	if err != nil {

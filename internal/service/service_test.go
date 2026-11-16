@@ -49,7 +49,7 @@ func TestServiceArgsPinDataDir(t *testing.T) {
 
 func TestSystemdUnitQuotesArguments(t *testing.T) {
 	c := Config{DataDir: "/var/lib/my lancast", Addr: ":8080", ExePath: `/opt/lan"cast/lancastd`}
-	want := `ExecStart="/opt/lan\"cast/lancastd" -data "/var/lib/my lancast" -addr :8080`
+	want := `ExecStart="/opt/lan\"cast/lancastd" serve -data "/var/lib/my lancast" -addr :8080`
 	if unit := SystemdUnit(c); !strings.Contains(unit, want) {
 		t.Errorf("unit missing %q\n---\n%s", want, unit)
 	}
@@ -66,7 +66,8 @@ func TestSystemdUnitContents(t *testing.T) {
 
 	for _, want := range []string{
 		"Description=" + Description,
-		"ExecStart=/usr/bin/lancastd -data /var/lib/lancast -addr :8080",
+		// `serve`, or the unit runs the desktop launcher and never serves.
+		"ExecStart=/usr/bin/lancastd serve -data /var/lib/lancast -addr :8080",
 		"Restart=on-failure",
 		"WantedBy=multi-user.target",
 	} {
