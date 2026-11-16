@@ -6875,7 +6875,7 @@ written, so a backup file cannot sign anyone in.
     "safety_backup": "lancast-backup-20260903-164640.db",
     "applied_at": 1788460004, "ok": true,
     "schema_from": 39, "schema_to": 39,
-    "api_keys_cleared": 2, "passkeys_cleared": 1 }
+    "api_keys_cleared": 2, "passkeys_cleared": 1, "two_factor_accounts": 1 }
 }
 ```
 
@@ -6888,7 +6888,11 @@ database that was there. `api_keys_cleared` and `passkeys_cleared` are how many
 of each the restored backup held: a restore clears them, as it signs everyone
 out, so a key revoked or a passkey deleted since the backup cannot come back
 with it ([ADR 0058](adr/0058-a-backup-is-the-database.md), amended 2026-11-16).
-Each person issues keys and registers passkeys again; passwords are kept. The
+Each person issues keys and registers passkeys again; passwords are kept.
+Two-factor recovery codes are kept as well, because a restore cannot tell which
+were used after the backup and clearing them all can lock an account out;
+`two_factor_accounts` counts the accounts that should make new codes if they
+used any since the backup was taken. The
 restore is also recorded in the audit log of the restored database
 (`backup.restore`), saying who asked and where the previous database was kept.
 

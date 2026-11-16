@@ -427,6 +427,9 @@ func TestRestoreClearsAPIKeysAndPasskeys(t *testing.T) {
 	if _, err := src.AddPasskey(ctx, pk(u.ID, 1)); err != nil {
 		t.Fatal(err)
 	}
+	if err := src.EnableTwoFactor(ctx, u.ID, []byte("sealed"), []string{"code-a", "code-b"}, 1); err != nil {
+		t.Fatal(err)
+	}
 	snap := filepath.Join(dir, "backup.db")
 	if _, err := src.Snapshot(ctx, snap); err != nil {
 		t.Fatal(err)
@@ -450,6 +453,15 @@ func TestRestoreClearsAPIKeysAndPasskeys(t *testing.T) {
 	}
 	if pks, err := restored.PasskeysByUser(ctx, u.ID); err != nil || len(pks) != 0 {
 		t.Errorf("passkeys after restore = %d (%v)", len(pks), err)
+	}
+	// Recovery codes are kept, as decided: clearing them can lock a two-factor
+	// account out on a machine that cannot open the sealed secret. The account
+	// is counted so the result can tell it to make new ones.
+	if res.TwoFactorAccounts != 1 {
+		t.Errorf("two-factor accounts = %d, want 1", res.TwoFactorAccounts)
+	}
+	if tf, err := restored.TwoFactorFor(ctx, u.ID); err != nil || len(tf.Recovery) != 2 {
+		t.Errorf("recovery codes after restore = %v (%v), want both kept", tf.Recovery, err)
 	}
 	// The account and its password are what a restore keeps.
 	if got, err := restored.UserByID(ctx, u.ID); err != nil || got.Name != "Dana" {

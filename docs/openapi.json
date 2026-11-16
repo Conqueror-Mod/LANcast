@@ -21968,6 +21968,10 @@
           "passkeys_cleared": {
             "type": "integer",
             "description": "Passkeys the restored backup held, cleared for the same reason. Passwords are kept."
+          },
+          "two_factor_accounts": {
+            "type": "integer",
+            "description": "Accounts in the restored database that use two-factor sign-in. Their recovery codes are kept, so anyone who used one since the backup was taken should make new ones."
           }
         }
       },

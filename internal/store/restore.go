@@ -65,6 +65,16 @@ type Restore struct {
 	 */
 	APIKeysCleared  int `json:"api_keys_cleared"`
 	PasskeysCleared int `json:"passkeys_cleared"`
+	/*
+	 * TwoFactorAccounts is how many accounts in the restored database use
+	 * two-factor sign-in. Their recovery codes are kept: the store holds only
+	 * the unused codes' hashes, so a restore cannot tell which were spent after
+	 * the backup, and clearing them all can lock a two-factor account out on a
+	 * machine that cannot open the sealed secret (ADR 0058, amended
+	 * 2026-11-16). The cost is that a code used since the backup works again,
+	 * so these accounts are told to make new ones.
+	 */
+	TwoFactorAccounts int `json:"two_factor_accounts"`
 }
 
 // sidecars are the files SQLite keeps beside a database. They must travel with
@@ -154,6 +164,10 @@ func RestoreSnapshot(ctx context.Context, dbPath, snapshotPath string) (Restore,
 	}
 	restore.APIKeysCleared = keys
 	restore.PasskeysCleared = passkeys
+	if err := st.db.QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM user WHERE totp_secret IS NOT NULL`).Scan(&restore.TwoFactorAccounts); err != nil {
+		return undo(fmt.Errorf("restore: count two-factor accounts: %w", err))
+	}
 
 	restore.SessionsCleared = count
 	restore.SchemaVersionAfter = version

@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"lancast/internal/backup"
 	"lancast/internal/config"
 	"lancast/internal/desktop"
 	"lancast/internal/store"
@@ -135,6 +136,9 @@ Without -yes this reports what it would do and changes nothing.
 	// come back with an older backup.
 	fmt.Printf("the backup's API keys (%d) and passkeys (%d) were cleared; issue and register them again\n",
 		res.APIKeysCleared, res.PasskeysCleared)
+	if res.TwoFactorAccounts > 0 {
+		fmt.Println(backup.RecoveryCodesSentence(res.TwoFactorAccounts))
+	}
 	if res.SessionsCleared > 0 {
 		fmt.Printf("the backup itself carried %s, from before backups stopped keeping them; cleared\n",
 			plural(res.SessionsCleared, "session"))

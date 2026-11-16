@@ -67,6 +67,9 @@ type Outcome struct {
 	// Settings can say what has to be issued again.
 	APIKeysCleared  int `json:"api_keys_cleared"`
 	PasskeysCleared int `json:"passkeys_cleared"`
+	// TwoFactorAccounts use two-factor sign-in. Their recovery codes are kept,
+	// so any used since the backup work again until they make new ones.
+	TwoFactorAccounts int `json:"two_factor_accounts"`
 }
 
 func (d *Dir) pendingPath() string { return filepath.Join(d.path, pendingFile) }
@@ -190,6 +193,7 @@ func (d *Dir) ApplyPending(ctx context.Context, dbPath string, now time.Time) *O
 	out.SchemaTo = res.SchemaVersionAfter
 	out.APIKeysCleared = res.APIKeysCleared
 	out.PasskeysCleared = res.PasskeysCleared
+	out.TwoFactorAccounts = res.TwoFactorAccounts
 	d.writeResult(out)
 	return out
 }
@@ -276,10 +280,14 @@ func outcomeAudit(out *Outcome) store.AuditEvent {
 			ev.Summary += fmt.Sprintf(" (the database before it was kept as %s)", out.SafetyBackup)
 		}
 		ev.Summary += ". " + ClearedSentence(out.APIKeysCleared, out.PasskeysCleared)
+		if out.TwoFactorAccounts > 0 {
+			ev.Summary += ". " + RecoveryCodesSentence(out.TwoFactorAccounts)
+		}
 		detail["schema_from"] = out.SchemaFrom
 		detail["schema_to"] = out.SchemaTo
 		detail["api_keys_cleared"] = out.APIKeysCleared
 		detail["passkeys_cleared"] = out.PasskeysCleared
+		detail["two_factor_accounts"] = out.TwoFactorAccounts
 	} else {
 		ev.Summary = fmt.Sprintf("A restore of the backup %s did not take, so the database that was there was kept: %s",
 			out.Name, out.Error)
@@ -297,6 +305,14 @@ func outcomeAudit(out *Outcome) store.AuditEvent {
 func ClearedSentence(keys, passkeys int) string {
 	return fmt.Sprintf("Everyone is signed out, and the %s and %s the backup held were cleared; "+
 		"issue keys and register passkeys again", count(keys, "API key"), count(passkeys, "passkey"))
+}
+
+// RecoveryCodesSentence tells the accounts using two-factor sign-in what a
+// restore kept: their recovery codes, including any spent since the backup.
+func RecoveryCodesSentence(accounts int) string {
+	return fmt.Sprintf("Recovery codes are kept for the %s using two-factor sign-in; "+
+		"anyone who used a recovery code since this backup was taken should make new ones",
+		count(accounts, "account"))
 }
 
 func count(n int, what string) string {

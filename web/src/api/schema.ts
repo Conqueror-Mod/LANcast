@@ -9248,6 +9248,8 @@ export interface components {
             api_keys_cleared?: number;
             /** @description Passkeys the restored backup held, cleared for the same reason. Passwords are kept. */
             passkeys_cleared?: number;
+            /** @description Accounts in the restored database that use two-factor sign-in. Their recovery codes are kept, so anyone who used one since the backup was taken should make new ones. */
+            two_factor_accounts?: number;
         };
         RestoreStarted: {
             staged: components["schemas"]["RestorePending"];

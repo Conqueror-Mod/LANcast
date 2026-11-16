@@ -240,14 +240,14 @@ database it puts back, as it clears sessions.**
   copied into place by hand, without either, keeps them. Clearing them from
   every backup as well was not part of the decision, and would make a backup
   useless as a record of which keys existed.
-- **Used recovery codes: not cleared, and left open.** The decision named them
-  too. They are stored as one list of the *unused* codes' hashes per account,
-  so a restore cannot tell which were spent after the backup was taken — the
-  only way to clear "the used ones" is to clear them all. ADR 0100 keeps them
-  precisely so that a backup restored on another machine, where the sealed
-  authenticator secret cannot be opened, still has a way in; clearing them
-  there would leave a two-factor account, an administrator's included, with no
-  second factor that works. Left as they are until that trade is decided with
-  that in view. A recovery code is single-use and long, so one that comes back
-  is still only usable by the person who held it.
-
+- **Recovery codes are kept.** The decision first named used recovery codes
+  too, on the assumption that the used ones could be told apart. They cannot:
+  the store keeps only the hashes of the *unused* codes, one list per account,
+  so a restore cannot tell which were spent after the backup was taken, and
+  the only way to clear "the used ones" is to clear them all. That can lock a
+  two-factor account out, an administrator's included, when the restore lands
+  on a machine that cannot open the sealed authenticator secret, which is the
+  case recovery codes exist for (ADR 0100). So they are kept. The cost is that
+  a code used after the backup works again until its owner makes new ones, and
+  the restore's result (`two_factor_accounts`), its audit record and the
+  command say so to the accounts that use two-factor sign-in.
