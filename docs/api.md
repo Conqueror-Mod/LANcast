@@ -2934,7 +2934,10 @@ Removes a title. **Admin only.** `mode` is required:
 - `delete` — the files are removed from disk. Each is re-verified as contained
   within its library root first, so a bad row can never delete outside the
   library; if any path fails that check nothing is deleted (`500`). A file
-  already gone is not an error.
+  already gone is not an error. **A row goes only with its file**: a video
+  that cannot be removed (another program has it open, say) keeps its row and
+  its sidecars, and the answer is `409 not_deleted`; every other file in the
+  subtree goes as asked, with its row.
 - `forget` — the row goes and nothing else happens: no file is touched and **no
   path is ignored**. `409 not_missing` unless the item is already marked
   missing, and `409 location_unavailable` unless the title's library location

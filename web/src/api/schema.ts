@@ -12588,7 +12588,7 @@ export interface operations {
                  *
                  *     `ignore` — the files stay on disk; their paths are added to a per-library ignore list so a rescan never re-adds them. The non-destructive "stop tracking this".
                  *
-                 *     `delete` — the files are removed from disk. Each is re-verified as contained within its library root first, so a bad row can never delete outside the library; if any path fails that check **nothing is deleted**. A file already gone is not an error. Refused `403` when `allow_media_deletion` is off.
+                 *     `delete` — the files are removed from disk. Each is re-verified as contained within its library root first, so a bad row can never delete outside the library; if any path fails that check **nothing is deleted**. A file already gone is not an error. A video that cannot be removed keeps its row (`409 not_deleted`). Refused `403` when `allow_media_deletion` is off.
                  *
                  *     `forget` — the row goes and nothing else happens: no file is touched and **no path is ignored**.
                  */
@@ -12623,7 +12623,7 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             /**
-             * @description `not_missing` — a present file's row cannot be forgotten, because a rescan would re-add it anyway. Or `location_unavailable` — the title's library location could not be read at that moment.
+             * @description `not_deleted` — `mode=delete` could not remove some video files (another program may hold them open); those keep their rows and sidecars, and everything else in the subtree went. Or `not_missing` — a present file's row cannot be forgotten, because a rescan would re-add it anyway. Or `location_unavailable` — the title's library location could not be read at that moment.
              *
              *     The second is the one that matters. `missing` records that a walk did not find the file, which is equally true of every file on a drive that was asleep at the time. So the location is checked **at the moment of the request**: one that reads fine and does not hold the file is evidence the file has gone, where `missing` alone is only evidence that a walk did not see it.
              */

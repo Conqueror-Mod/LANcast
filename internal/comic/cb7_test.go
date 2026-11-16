@@ -178,7 +178,7 @@ func TestTheShelfHoldsTwo(t *testing.T) {
 }
 
 // A .cb7 on the shelf does not stop its owner deleting or replacing it, which
-// on Windows os.Open would (openShared).
+// on Windows os.Open would (sharedopen.Open).
 func TestAHeldCB7CanStillBeDeleted(t *testing.T) {
 	p := copyFixture(t, t.TempDir(), "held.cb7")
 	b, err := OpenBook(p)

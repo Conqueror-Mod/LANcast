@@ -3,10 +3,10 @@ package api
 import (
 	"fmt"
 	"net/http"
-	"os"
 	"path/filepath"
 	"strings"
 
+	"lancast/internal/sharedopen"
 	"lancast/internal/store"
 )
 
@@ -51,7 +51,7 @@ func (s *Server) download(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	f, err := os.Open(path)
+	f, err := sharedopen.Open(path)
 	if err != nil {
 		writeError(w, http.StatusServiceUnavailable, "unavailable", "file is missing from disk")
 		return

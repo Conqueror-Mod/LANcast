@@ -15,6 +15,7 @@ import (
 
 	"lancast/internal/optimize"
 	"lancast/internal/probe"
+	"lancast/internal/sharedopen"
 	"lancast/internal/store"
 	"lancast/internal/transcode"
 )
@@ -430,7 +431,7 @@ func (s *Server) serveOptimized(w http.ResponseWriter, r *http.Request, it *stor
 		writeError(w, http.StatusNotFound, "not_found", "this title has no optimized copy")
 		return
 	}
-	f, err := os.Open(path)
+	f, err := sharedopen.Open(path)
 	if err != nil {
 		writeError(w, http.StatusServiceUnavailable, "unavailable", "the optimized copy is missing from disk")
 		return

@@ -9,6 +9,8 @@ import (
 	"time"
 
 	"github.com/bodgit/sevenzip"
+
+	"lancast/internal/sharedopen"
 )
 
 /*
@@ -51,7 +53,7 @@ type cb7Archive struct {
 	size int64
 
 	mu     sync.Mutex
-	f      *os.File // opened so its owner can still delete it (openShared)
+	f      *os.File // opened so its owner can still delete it (sharedopen.Open)
 	r      *sevenzip.Reader
 	files  []*sevenzip.File // in stored order
 	pages  []int            // page n is files[pages[n]]
@@ -182,7 +184,7 @@ func (s *cb7Shelf) closeIfIdleLocked(a *cb7Archive) {
 }
 
 func openArchive(path string, info os.FileInfo) (*cb7Archive, error) {
-	f, err := openShared(path)
+	f, err := sharedopen.Open(path)
 	if err != nil {
 		return nil, fmt.Errorf("comic: %w", err)
 	}

@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"lancast/internal/artwork"
+	"lancast/internal/sharedopen"
 )
 
 // browserRenderable are the picture formats a browser will display if handed
@@ -61,7 +62,7 @@ func (s *Server) photo(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	f, err := os.Open(path)
+	f, err := sharedopen.Open(path)
 	if err != nil {
 		writeError(w, http.StatusServiceUnavailable, "unavailable", "file is missing from disk")
 		return

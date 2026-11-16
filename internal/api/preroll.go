@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"lancast/internal/media"
+	"lancast/internal/sharedopen"
 )
 
 /*
@@ -113,7 +114,7 @@ func (s *Server) streamPreroll(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, "not_found", "no such clip")
 		return
 	}
-	f, err := os.Open(path)
+	f, err := sharedopen.Open(path)
 	if err != nil {
 		writeError(w, http.StatusNotFound, "not_found", "no such clip")
 		return

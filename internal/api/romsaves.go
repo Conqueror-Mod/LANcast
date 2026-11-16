@@ -11,6 +11,7 @@ import (
 
 	"lancast/internal/retro/romhash"
 	"lancast/internal/retro/saves"
+	"lancast/internal/sharedopen"
 	"lancast/internal/store"
 )
 
@@ -127,7 +128,7 @@ func (s *Server) streamGameFile(w http.ResponseWriter, r *http.Request) {
 		if relName(dir, f) != want {
 			continue
 		}
-		fh, err := os.Open(f)
+		fh, err := sharedopen.Open(f)
 		if err != nil {
 			writeError(w, http.StatusServiceUnavailable, "unavailable", "file is missing from disk")
 			return
