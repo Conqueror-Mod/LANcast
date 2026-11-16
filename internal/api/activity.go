@@ -3,6 +3,7 @@ package api
 import (
 	"fmt"
 	"net/http"
+	"slices"
 	"strconv"
 
 	"lancast/internal/coverart"
@@ -81,9 +82,32 @@ func (s *Server) activity(w http.ResponseWriter, r *http.Request) {
 		s.writeInternal(w, err, "list libraries")
 		return
 	}
+	/*
+	 * Open to every signed-in account, so it tells each one only what it may
+	 * know (R07-5). A member is not shown a scan of a library kept from them
+	 * (its name and id are what GET /api/libraries hides), nor any scan's
+	 * error, which is the walk's own message and can carry a filesystem path.
+	 * Conversions are the caller's own, as GET /api/transcode/sessions has it.
+	 * An administrator sees everything, as before.
+	 */
+	admin := s.callerIsAdmin(r)
+	var hidden []int64
+	if !admin {
+		if hidden, err = s.hiddenFor(r); err != nil {
+			s.writeInternal(w, err, "hidden libraries")
+			return
+		}
+	}
 	snap := snapshot{}
 	for _, lib := range libs {
-		snap.scans = append(snap.scans, scanSnapshot{lib.Name, s.scanner.Status(lib.ID)})
+		if slices.Contains(hidden, lib.ID) {
+			continue
+		}
+		progress := s.scanner.Status(lib.ID)
+		if !admin {
+			progress.Error = ""
+		}
+		snap.scans = append(snap.scans, scanSnapshot{lib.Name, progress})
 	}
 	if s.worker != nil {
 		snap.enrich = s.worker.Stats()
@@ -111,6 +135,16 @@ func (s *Server) activity(w http.ResponseWriter, r *http.Request) {
 	}
 	if s.trans != nil {
 		snap.sessions = s.trans.Sessions()
+		if !admin {
+			owner := s.streamOwner(r)
+			mine := snap.sessions[:0:0]
+			for _, si := range snap.sessions {
+				if si.Owner == owner {
+					mine = append(mine, si)
+				}
+			}
+			snap.sessions = mine
+		}
 	}
 	if s.updates != nil {
 		snap.update = s.updates.State()

@@ -2,8 +2,10 @@ package api
 
 import (
 	"context"
+	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -111,4 +113,46 @@ func TestPatchingALibraryThatIsNotThere(t *testing.T) {
 	h := newHarness(t)
 	wantError(t, h.do(t, "PATCH", "/api/libraries/99999",
 		map[string]any{"name": "Ghost"}), 404, "not_found")
+}
+
+// R06-8: an edit that is refused writes nothing. A rename sent with a path that
+// is not there was applied, and then the request answered 400.
+func TestARefusedLibraryEditChangesNothing(t *testing.T) {
+	h := newHarness(t)
+	before, err := h.st.GetLibrary(context.Background(), h.lib.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, body := range []map[string]any{
+		{"name": "Films", "path": filepath.Join(t.TempDir(), "typo")},
+		{"name": "", "path": t.TempDir()},
+	} {
+		resp := h.do(t, "PATCH", "/api/libraries/"+itoa(h.lib.ID), body)
+		resp.Body.Close()
+		if resp.StatusCode != 400 {
+			t.Errorf("%v answered %d, want 400", body, resp.StatusCode)
+		}
+		after, err := h.st.GetLibrary(context.Background(), h.lib.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if after.Name != before.Name || after.Path != before.Path {
+			t.Errorf("%v was refused but left name %q path %q (was %q, %q)",
+				body, after.Name, after.Path, before.Name, before.Path)
+		}
+	}
+}
+
+// R06-9: the refusal of an unknown kind names every kind there is.
+func TestABadKindNamesEveryKind(t *testing.T) {
+	h := newHarness(t)
+	resp := h.do(t, "POST", "/api/libraries",
+		map[string]any{"name": "X", "kind": "film", "path": t.TempDir()})
+	defer resp.Body.Close()
+	b, _ := io.ReadAll(resp.Body)
+	for k := range validKinds {
+		if !strings.Contains(string(b), k) {
+			t.Errorf("the refusal %s does not name %q", b, k)
+		}
+	}
 }

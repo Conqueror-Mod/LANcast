@@ -62,6 +62,14 @@ type Outcome struct {
 	// after migrating forward. Equal when nothing was migrated.
 	SchemaFrom int `json:"schema_from,omitempty"`
 	SchemaTo   int `json:"schema_to,omitempty"`
+	// APIKeysCleared and PasskeysCleared are the credentials the backup
+	// carried and the restore removed (ADR 0058, amended 2026-11-16), so
+	// Settings can say what has to be issued again.
+	APIKeysCleared  int `json:"api_keys_cleared"`
+	PasskeysCleared int `json:"passkeys_cleared"`
+	// TwoFactorAccounts use two-factor sign-in. Their recovery codes are kept,
+	// so any used since the backup work again until they make new ones.
+	TwoFactorAccounts int `json:"two_factor_accounts"`
 }
 
 func (d *Dir) pendingPath() string { return filepath.Join(d.path, pendingFile) }
@@ -183,6 +191,9 @@ func (d *Dir) ApplyPending(ctx context.Context, dbPath string, now time.Time) *O
 	out.OK = true
 	out.SchemaFrom = res.Snapshot.SchemaVersion
 	out.SchemaTo = res.SchemaVersionAfter
+	out.APIKeysCleared = res.APIKeysCleared
+	out.PasskeysCleared = res.PasskeysCleared
+	out.TwoFactorAccounts = res.TwoFactorAccounts
 	d.writeResult(out)
 	return out
 }
@@ -223,4 +234,90 @@ func (d *Dir) Staged() *Pending {
 		return nil
 	}
 	return &p
+}
+
+/*
+ * RecordOutcome writes a staged restore into the audit log of the database it
+ * produced (R07-8).
+ *
+ * The request that asked for it audits into the database being replaced, so
+ * after the restart the record survived only in the safety backup, and the
+ * log an administrator reads afterwards said nothing about a restore having
+ * happened, who asked, or where the previous state went. Called once the
+ * store is open, after ApplyPending. A failed restore is recorded too, in the
+ * database that stayed, because "somebody tried to put this back and it did
+ * not take" belongs in the same history.
+ *
+ * Who asked is known by name only: the marker carries the name, and the
+ * account behind it may not exist in a database from before it was made.
+ */
+func RecordOutcome(ctx context.Context, st *store.Store, out *Outcome) error {
+	if out == nil {
+		return nil
+	}
+	return st.AppendAudit(ctx, outcomeAudit(out))
+}
+
+// outcomeAudit is the audit event for a restore's outcome.
+func outcomeAudit(out *Outcome) store.AuditEvent {
+	ev := store.AuditEvent{
+		At:         out.AppliedAt,
+		ActorName:  out.RequestedBy,
+		Action:     "backup.restore",
+		TargetKind: "backup",
+		TargetID:   out.Name,
+	}
+	if ev.ActorName == "" {
+		ev.ActorName = "unknown"
+	}
+	detail := map[string]any{"ok": out.OK}
+	if out.SafetyBackup != "" {
+		detail["safety_backup"] = out.SafetyBackup
+	}
+	if out.OK {
+		ev.Summary = fmt.Sprintf("Restored the backup %s", out.Name)
+		if out.SafetyBackup != "" {
+			ev.Summary += fmt.Sprintf(" (the database before it was kept as %s)", out.SafetyBackup)
+		}
+		ev.Summary += ". " + ClearedSentence(out.APIKeysCleared, out.PasskeysCleared)
+		if out.TwoFactorAccounts > 0 {
+			ev.Summary += ". " + RecoveryCodesSentence(out.TwoFactorAccounts)
+		}
+		detail["schema_from"] = out.SchemaFrom
+		detail["schema_to"] = out.SchemaTo
+		detail["api_keys_cleared"] = out.APIKeysCleared
+		detail["passkeys_cleared"] = out.PasskeysCleared
+		detail["two_factor_accounts"] = out.TwoFactorAccounts
+	} else {
+		ev.Summary = fmt.Sprintf("A restore of the backup %s did not take, so the database that was there was kept: %s",
+			out.Name, out.Error)
+		detail["error"] = out.Error
+	}
+	if b, err := json.Marshal(detail); err == nil {
+		ev.Detail = string(b)
+	}
+	return ev
+}
+
+// ClearedSentence says what a restore removed besides sessions, for the audit
+// log and the restore command: always said, even at zero, because "were API
+// keys and passkeys kept?" is the question somebody restoring will have.
+func ClearedSentence(keys, passkeys int) string {
+	return fmt.Sprintf("Everyone is signed out, and the %s and %s the backup held were cleared; "+
+		"issue keys and register passkeys again", count(keys, "API key"), count(passkeys, "passkey"))
+}
+
+// RecoveryCodesSentence tells the accounts using two-factor sign-in what a
+// restore kept: their recovery codes, including any spent since the backup.
+func RecoveryCodesSentence(accounts int) string {
+	return fmt.Sprintf("Recovery codes are kept for the %s using two-factor sign-in; "+
+		"anyone who used a recovery code since this backup was taken should make new ones",
+		count(accounts, "account"))
+}
+
+func count(n int, what string) string {
+	if n == 1 {
+		return "1 " + what
+	}
+	return fmt.Sprintf("%d %ss", n, what)
 }

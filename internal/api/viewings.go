@@ -58,7 +58,7 @@ func (s *Server) exportViewings(w http.ResponseWriter, r *http.Request) {
 		s.writeInternal(w, err, "export viewings")
 		return
 	}
-	stamp := time.Now().UTC().Format("2006-01-02")
+	stamp := exportFileDate(time.Now())
 	// Never cached: it is one person's history, and a shared cache holding it
 	// would be the leak the rest of this file is careful to avoid.
 	w.Header().Set("Cache-Control", "no-store")
@@ -185,4 +185,16 @@ func traktHistory(vs []store.Viewing) traktExport {
 		}
 	}
 	return out
+}
+
+/*
+ * exportFileDate is the date in the export's file name: the server's own
+ * calendar day, the one the person filing the download is living in (R06-7).
+ *
+ * It was the UTC date, so every US evening saved tomorrow's file. The year
+ * review and On this day already use the local calendar on purpose; the rows
+ * inside the file keep full UTC timestamps, which is right for data.
+ */
+func exportFileDate(now time.Time) string {
+	return now.Format("2006-01-02")
 }

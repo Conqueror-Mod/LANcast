@@ -6,6 +6,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -265,5 +266,56 @@ func TestARestoreTheGuardAcceptsIsApplied(t *testing.T) {
 	}
 	if got := libraryNames(t, db); len(got) != 1 || got[0] != "Planted" {
 		t.Fatalf("after restore the database holds %v", got)
+	}
+}
+
+// R07-8: the restore is recorded in the database it produced, naming who asked
+// and where the previous database was kept. Before, the only record was in the
+// database the restore replaced.
+func TestARestoreIsAuditedInTheRestoredDatabase(t *testing.T) {
+	ctx := context.Background()
+	dataDir := t.TempDir()
+	d := New(dataDir)
+	db := liveWith(t, dataDir, "Before")
+	name := NewName(time.Now().Add(-time.Hour))
+	snapshotOf(t, d, db, name)
+	if err := d.Stage(Pending{Name: name, RequestedBy: "dana", RequestedAt: 1, SafetyBackup: "safety.db"}); err != nil {
+		t.Fatal(err)
+	}
+	out := d.ApplyPending(ctx, db, time.Unix(100, 0))
+	if out == nil || !out.OK {
+		t.Fatalf("outcome = %+v", out)
+	}
+
+	st, err := store.Open(db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	if err := RecordOutcome(ctx, st, out); err != nil {
+		t.Fatal(err)
+	}
+	events, _, err := st.ListAudit(ctx, store.AuditFilter{Action: "backup.restore"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(events) != 1 {
+		t.Fatalf("restore audit events = %+v, want one", events)
+	}
+	ev := events[0]
+	if ev.ActorName != "dana" || ev.TargetID != name || ev.At != 100 ||
+		!strings.Contains(ev.Summary, "safety.db") || !strings.Contains(ev.Detail, "safety.db") {
+		t.Errorf("event = %+v", ev)
+	}
+
+	// R04-3: and it says what credentials were cleared.
+	if !strings.Contains(ev.Summary, "0 API keys and 0 passkeys") {
+		t.Errorf("summary does not say what was cleared: %q", ev.Summary)
+	}
+
+	// A failed one is recorded too, as a failure.
+	ev = outcomeAudit(&Outcome{Pending: Pending{Name: "x.db"}, Error: "boom"})
+	if !strings.Contains(ev.Summary, "did not take") || !strings.Contains(ev.Detail, "boom") || ev.ActorName == "" {
+		t.Errorf("failure event = %+v", ev)
 	}
 }

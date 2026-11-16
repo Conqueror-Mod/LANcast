@@ -9244,6 +9244,12 @@ export interface components {
             schema_from?: number;
             /** @description The revision after migrating forward; equal to schema_from when nothing was migrated. */
             schema_to?: number;
+            /** @description API keys the restored backup held, cleared by the restore so a revoked key cannot come back with it (ADR 0058, amended). */
+            api_keys_cleared?: number;
+            /** @description Passkeys the restored backup held, cleared for the same reason. Passwords are kept. */
+            passkeys_cleared?: number;
+            /** @description Accounts in the restored database that use two-factor sign-in. Their recovery codes are kept, so anyone who used one since the backup was taken should make new ones. */
+            two_factor_accounts?: number;
         };
         RestoreStarted: {
             staged: components["schemas"]["RestorePending"];
@@ -16575,7 +16581,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Every running or failed task. */
+            /** @description Every running or failed task the caller may know of. An account that is not an administrator is not shown scans of libraries kept from it, nor any scan's `error`, and sees only its own `transcode` tasks. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -17199,7 +17205,7 @@ export interface operations {
                 };
                 content?: never;
             };
-            /** @description An item id does not exist; the message names it. */
+            /** @description An item id does not exist, or names an item the caller may not see (answered alike, so the refusal says nothing about what exists); the message names it. */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -17236,7 +17242,7 @@ export interface operations {
                 };
                 content?: never;
             };
-            /** @description An item id does not exist; the message names it. */
+            /** @description An item id does not exist, or names an item the caller may not see (answered alike, so the refusal says nothing about what exists); the message names it. */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -17742,7 +17748,7 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
-            /** @description `not_available` — the worker is missing or has no models, with the reason in the message. "Not installed" and "no model" are different problems with different fixes. */
+            /** @description `not_available` — the worker is missing or has no models, with the reason in the message. "Not installed" and "no model" are different problems with different fixes. `already_running` is a face pass already running, for this library or another. */
             409: {
                 headers: {
                     [name: string]: unknown;

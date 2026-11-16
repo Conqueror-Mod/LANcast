@@ -180,7 +180,7 @@ func TestCastFilterAndSearch(t *testing.T) {
 	ctx := context.Background()
 	lib, _, sd, _ := seedLibrary(t, st)
 
-	people, err := st.SearchCast(ctx, lib, "ada", "", 10)
+	people, err := st.SearchCast(ctx, lib, "ada", "", 10, CastViewer{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -209,7 +209,7 @@ func TestCastSearchMatchesASurname(t *testing.T) {
 	ctx := context.Background()
 	lib, _, _, _ := seedLibrary(t, st)
 
-	people, err := st.SearchCast(ctx, lib, "vance", "", 10)
+	people, err := st.SearchCast(ctx, lib, "vance", "", 10, CastViewer{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -263,7 +263,7 @@ func TestActorAndDirectorAreSeparateQuestions(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	people, err := st.SearchCast(ctx, lib, "ada", "", 10)
+	people, err := st.SearchCast(ctx, lib, "ada", "", 10, CastViewer{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -309,7 +309,7 @@ func TestCastSearchScopesToARole(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	directors, err := st.SearchCast(ctx, lib, "", "director", 10)
+	directors, err := st.SearchCast(ctx, lib, "", "director", 10, CastViewer{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -317,7 +317,7 @@ func TestCastSearchScopesToARole(t *testing.T) {
 		t.Fatalf("directors = %+v, want only Bo Reyes", directors)
 	}
 
-	actors, err := st.SearchCast(ctx, lib, "", "actor", 10)
+	actors, err := st.SearchCast(ctx, lib, "", "actor", 10, CastViewer{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -480,7 +480,7 @@ func TestCastSearchCombinesANameWithARole(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	actors, err := st.SearchCast(ctx, lib, "bo", "actor", 10)
+	actors, err := st.SearchCast(ctx, lib, "bo", "actor", 10, CastViewer{})
 	if err != nil {
 		t.Fatalf("searching actors by name: %v", err)
 	}
@@ -489,7 +489,7 @@ func TestCastSearchCombinesANameWithARole(t *testing.T) {
 	}
 
 	// And the role still narrows: the director called Bo must not appear above.
-	directors, err := st.SearchCast(ctx, lib, "bo", "director", 10)
+	directors, err := st.SearchCast(ctx, lib, "bo", "director", 10, CastViewer{})
 	if err != nil {
 		t.Fatalf("searching directors by name: %v", err)
 	}
@@ -510,7 +510,7 @@ func TestCastSearchMatchesInsideAName(t *testing.T) {
 	}
 	// "niro" is inside the surname. The old prefix-or-word rule found nobody,
 	// which is most of what "actor search is very limited" meant.
-	got, err := st.SearchCast(ctx, lib, "niro", "actor", 10)
+	got, err := st.SearchCast(ctx, lib, "niro", "actor", 10, CastViewer{})
 	if err != nil || len(got) != 1 || got[0].Name != "Robert De Niro" {
 		t.Fatalf("got %+v err %v, want Robert De Niro", got, err)
 	}
@@ -533,7 +533,7 @@ func TestCastSearchTreatsWildcardsAsText(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, q := range []string{"%", "_"} {
-		got, err := st.SearchCast(ctx, lib, q, "actor", 10)
+		got, err := st.SearchCast(ctx, lib, q, "actor", 10, CastViewer{})
 		if err != nil {
 			t.Fatalf("%q: %v", q, err)
 		}
@@ -556,12 +556,12 @@ func TestCastSearchAcrossEveryLibrary(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	all, err := st.SearchCast(ctx, 0, "cruz", "actor", 10)
+	all, err := st.SearchCast(ctx, 0, "cruz", "actor", 10, CastViewer{})
 	if err != nil || len(all) != 1 {
 		t.Fatalf("all-libraries search got %+v err %v", all, err)
 	}
 	// And the scoped form still scopes.
-	none, err := st.SearchCast(ctx, lib+9999, "cruz", "actor", 10)
+	none, err := st.SearchCast(ctx, lib+9999, "cruz", "actor", 10, CastViewer{})
 	if err != nil || len(none) != 0 {
 		t.Fatalf("a different library returned %+v err %v", none, err)
 	}

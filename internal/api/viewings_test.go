@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"strings"
 	"testing"
+	"time"
 
 	"lancast/internal/store"
 )
@@ -109,5 +110,15 @@ func TestTheTraktShapeLeavesOutBooksAndComics(t *testing.T) {
 	}
 	if got.Skipped != 0 {
 		t.Errorf("skipped = %d; a book is not an episode Trakt could not place", got.Skipped)
+	}
+}
+
+// R06-7: the export is named by the server's calendar day, not UTC's. Nine in
+// the evening in New York is already tomorrow in UTC.
+func TestExportFileDateIsTheLocalDay(t *testing.T) {
+	ny := time.FixedZone("EST", -5*3600)
+	evening := time.Date(2026, 11, 16, 21, 0, 0, 0, ny)
+	if got := exportFileDate(evening); got != "2026-11-16" {
+		t.Errorf("export dated %s at 21:00 local on 2026-11-16", got)
 	}
 }

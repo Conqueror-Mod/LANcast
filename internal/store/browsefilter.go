@@ -111,7 +111,7 @@ type CastMember struct {
  * same number of films must not swap places between requests, or a list that
  * is re-fetched as you type appears to shuffle itself.
  */
-func (s *Store) SearchCast(ctx context.Context, libraryID int64, query, role string, limit int) ([]CastMember, error) {
+func (s *Store) SearchCast(ctx context.Context, libraryID int64, query, role string, limit int, viewer CastViewer) ([]CastMember, error) {
 	if limit <= 0 || limit > 200 {
 		limit = 50
 	}
@@ -132,7 +132,7 @@ func (s *Store) SearchCast(ctx context.Context, libraryID int64, query, role str
 	where := ""
 	scope := ""
 	if libraryID > 0 {
-		scope = ` AND m.library_id = ?`
+		scope = ` AND media_item.library_id = ?`
 		args = append(args, libraryID)
 	}
 	if role != "" {
@@ -166,14 +166,23 @@ func (s *Store) SearchCast(ctx context.Context, libraryID int64, query, role str
 		where += ` AND p.name LIKE ? ESCAPE '\'`
 		args = append(args, "%"+like(query)+"%")
 	}
+	limits, limitArgs := viewer.predicate()
+	args = append(args, limitArgs...)
 	args = append(args, limit)
 
+	/*
+	 * The join is on `media_item` unaliased because the viewer's limits are the
+	 * same predicates ListItems uses, and they name the table. Applying them
+	 * here is what makes the count beside each name a count of things the
+	 * caller could open, and the all-libraries search (library 0, which no
+	 * per-library guard can see) keep to the caller's libraries (R06-5).
+	 */
 	rows, err := s.db.QueryContext(ctx, `
-		SELECT p.id, p.name, MIN(c.role), COUNT(DISTINCT m.id) AS items
+		SELECT p.id, p.name, MIN(c.role), COUNT(DISTINCT media_item.id) AS items
 		FROM person p
 		JOIN credit c ON c.person_id = p.id
-		JOIN media_item m ON m.id = c.item_id
-		WHERE m.missing = 0`+scope+where+`
+		JOIN media_item ON media_item.id = c.item_id
+		WHERE media_item.missing = 0`+scope+where+limits+`
 		GROUP BY p.id, p.name
 		ORDER BY items DESC, p.name
 		LIMIT ?`, args...)
@@ -193,9 +202,42 @@ func (s *Store) SearchCast(ctx context.Context, libraryID int64, query, role str
 	return out, rows.Err()
 }
 
+/*
+ * CastViewer is the limits of the account a cast search answers: its rating
+ * ceiling and the libraries kept from it. The zero value is no limit, which is
+ * an administrator or the unsecured loopback server.
+ *
+ * A person is a fact about the items they are credited in, so a person
+ * credited only in things the caller may not open is, to that caller, nobody.
+ */
+type CastViewer struct {
+	MaxContentRating string
+	HiddenLibraries  []int64
+}
+
+// predicate is the viewer's limits over `media_item`, as ListItems applies
+// them: the ceiling, then the hidden libraries.
+func (v CastViewer) predicate() (string, []any) {
+	var where string
+	var args []any
+	if pred, a := ceilingPredicate(v.MaxContentRating); pred != "" {
+		where += pred
+		args = append(args, a...)
+	}
+	if pred, a := hiddenPredicate(v.HiddenLibraries); pred != "" {
+		where += pred
+		args = append(args, a...)
+	}
+	return where, args
+}
+
 // CastNames resolves person ids to names, for showing an active filter as a
 // pill without the client having to hold a lookup table it did not fetch.
-func (s *Store) CastNames(ctx context.Context, ids []int64) (map[int64]string, error) {
+//
+// Under a viewer's limits, a person is named only when they are credited in at
+// least one item the viewer could open; anyone else is left out exactly as a
+// deleted person is (R06-5).
+func (s *Store) CastNames(ctx context.Context, ids []int64, viewer CastViewer) (map[int64]string, error) {
 	out := map[int64]string{}
 	if len(ids) == 0 {
 		return out, nil
@@ -204,8 +246,14 @@ func (s *Store) CastNames(ctx context.Context, ids []int64) (map[int64]string, e
 	for i, id := range ids {
 		args[i] = id
 	}
-	rows, err := s.db.QueryContext(ctx,
-		`SELECT id, name FROM person WHERE id IN (`+placeholders(len(ids))+`)`, args...)
+	query := `SELECT id, name FROM person WHERE id IN (` + placeholders(len(ids)) + `)`
+	if limits, limitArgs := viewer.predicate(); limits != "" {
+		query += ` AND EXISTS (SELECT 1 FROM credit c
+			JOIN media_item ON media_item.id = c.item_id
+			WHERE c.person_id = person.id AND media_item.missing = 0` + limits + `)`
+		args = append(args, limitArgs...)
+	}
+	rows, err := s.db.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("cast names: %w", err)
 	}

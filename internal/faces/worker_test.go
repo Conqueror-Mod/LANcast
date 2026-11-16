@@ -3,6 +3,7 @@ package faces
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"log/slog"
 	"sync"
@@ -264,5 +265,35 @@ func TestAMissingToolExplainsItself(t *testing.T) {
 	}
 	if c.Reason == "" {
 		t.Error("reported unavailable without saying why")
+	}
+}
+
+// R07-10: a second pass is refused when it is asked for, not afterwards in a
+// goroutine whose error only reached the log while the caller was told
+// "started". The claim is released when the pass ends.
+func TestStartRefusesASecondPassAtOnce(t *testing.T) {
+	w := quietWorker(&fakeStore{})
+	if !w.claim() {
+		t.Fatal("a fresh worker could not be claimed")
+	}
+	if err := w.Start(context.Background(), 1, func(error) {}); !errors.Is(err, ErrAlreadyRunning) {
+		t.Fatalf("Start during a pass = %v, want ErrAlreadyRunning", err)
+	}
+	if err := w.Run(context.Background(), 1); !errors.Is(err, ErrAlreadyRunning) {
+		t.Fatalf("Run during a pass = %v, want ErrAlreadyRunning", err)
+	}
+
+	// Released, a pass starts; this one ends at once (the tool is not ready),
+	// and its end releases the claim again.
+	w.mu.Lock()
+	w.running = false
+	w.mu.Unlock()
+	done := make(chan error, 1)
+	if err := w.Start(context.Background(), 1, func(err error) { done <- err }); err != nil {
+		t.Fatalf("Start on an idle worker = %v", err)
+	}
+	<-done
+	if w.Stats().Running || !w.claim() {
+		t.Error("a finished pass left the worker claimed")
 	}
 }

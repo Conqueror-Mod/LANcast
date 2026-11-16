@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 /*
@@ -48,7 +49,7 @@ func TestAnOrphanGoesEvenWithNoLimit(t *testing.T) {
 	write(t, root, live, SizeOriginal, 100)
 	write(t, root, dead, SizeOriginal, 100)
 
-	rep, err := Prune(root, map[string]bool{live: true}, 0)
+	rep, err := Prune(root, map[string]bool{live: true}, everythingSettled, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -74,7 +75,7 @@ func TestALiveOriginalIsNeverDeleted(t *testing.T) {
 	write(t, root, a, SizeOriginal, 1000)
 	write(t, root, b, SizeOriginal, 1000)
 
-	rep, err := Prune(root, map[string]bool{a: true, b: true}, 10)
+	rep, err := Prune(root, map[string]bool{a: true, b: true}, everythingSettled, 10)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -96,7 +97,7 @@ func TestDerivedSizesGoBeforeOriginals(t *testing.T) {
 	write(t, root, h, SizeThumb, 100)
 	write(t, root, h, SizePoster, 100)
 
-	if _, err := Prune(root, map[string]bool{h: true}, 500); err != nil {
+	if _, err := Prune(root, map[string]bool{h: true}, everythingSettled, 500); err != nil {
 		t.Fatal(err)
 	}
 	if !exists(root, h, SizeOriginal) {
@@ -113,7 +114,7 @@ func TestNothingIsTouchedWhenTheCacheIsUnderTheLimit(t *testing.T) {
 	write(t, root, h, SizeOriginal, 100)
 	write(t, root, h, SizeThumb, 50)
 
-	rep, err := Prune(root, map[string]bool{h: true}, 10_000)
+	rep, err := Prune(root, map[string]bool{h: true}, everythingSettled, 10_000)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -132,7 +133,7 @@ func TestANilLiveSetIsRefused(t *testing.T) {
 	h := hashOf(7)
 	write(t, root, h, SizeOriginal, 100)
 
-	if _, err := Prune(root, nil, 0); err == nil {
+	if _, err := Prune(root, nil, everythingSettled, 0); err == nil {
 		t.Error("a nil live set was accepted")
 	}
 	if !exists(root, h, SizeOriginal) {
@@ -148,7 +149,7 @@ func TestSomethingThatIsNotArtworkIsLeftAlone(t *testing.T) {
 	if err := os.WriteFile(stray, []byte("mine"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := Prune(root, map[string]bool{}, 0); err != nil {
+	if _, err := Prune(root, map[string]bool{}, everythingSettled, 0); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := os.Stat(stray); err != nil {
@@ -168,5 +169,40 @@ func TestTotalBytesCountsWhatIsThere(t *testing.T) {
 	}
 	if got != 500 {
 		t.Errorf("TotalBytes = %d, want 500", got)
+	}
+}
+
+// everythingSettled treats every file as older than the read of the live set,
+// which is what the tests above, about what an orphan is, need.
+var everythingSettled = time.Now().Add(24 * time.Hour)
+
+// R08-7: a file written after the live set was read is not yet known to be an
+// orphan, whatever the set says, and is left alone; one older is removed.
+func TestPruneLeavesWhatWasWrittenDuringTheWalk(t *testing.T) {
+	root := t.TempDir()
+	old := strings.Repeat("a", 64)
+	fresh := strings.Repeat("b", 64)
+	write(t, root, old, SizeOriginal, 100)
+	write(t, root, fresh, SizeOriginal, 100)
+	settled := time.Now().Add(-time.Minute)
+	oldFile := filepath.Join(root, old[:2], old, string(SizeOriginal)+".jpg")
+	if err := os.Chtimes(oldFile, settled.Add(-time.Hour), settled.Add(-time.Hour)); err != nil {
+		t.Fatal(err)
+	}
+
+	// Neither is referenced: the old one is an orphan, the fresh one's row
+	// has simply not been written yet.
+	rep, err := Prune(root, map[string]bool{}, settled, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rep.OrphanFiles != 1 {
+		t.Errorf("removed %d orphans, want 1", rep.OrphanFiles)
+	}
+	if _, err := os.Stat(oldFile); !os.IsNotExist(err) {
+		t.Errorf("the old orphan survived: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(root, fresh[:2], fresh, string(SizeOriginal)+".jpg")); err != nil {
+		t.Errorf("a file written after the live set was read was deleted: %v", err)
 	}
 }

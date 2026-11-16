@@ -79,6 +79,48 @@ type ItemMetadata struct {
 // UpdateItemMetadata writes resolved metadata and stamps metadata_updated_at,
 // which is what removes the item from the enrichment queue.
 func (s *Store) UpdateItemMetadata(ctx context.Context, itemID int64, m ItemMetadata) error {
+	q, args := metadataUpdate(itemID, m)
+	if _, err := s.db.ExecContext(ctx, q, args...); err != nil {
+		return fmt.Errorf("update item metadata: %w", err)
+	}
+	return nil
+}
+
+/*
+ * EditItemMetadata is a hand edit: the new values and the locks on the fields
+ * it touched, in one transaction (R07-6).
+ *
+ * They were two writes. If the lock write failed (SQLITE_BUSY past the
+ * timeout, say), or a provider merge landed between the two, the edit was
+ * saved unlocked, and the next refresh overwrote what a person typed. That is
+ * the locked-fields rule losing, so the two now stand or fall together: a
+ * failure anywhere leaves neither the values nor the locks.
+ */
+func (s *Store) EditItemMetadata(ctx context.Context, itemID int64, m ItemMetadata, lock []string) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("edit item metadata: %w", err)
+	}
+	defer tx.Rollback()
+
+	q, args := metadataUpdate(itemID, m)
+	if _, err := tx.ExecContext(ctx, q, args...); err != nil {
+		return fmt.Errorf("edit item metadata: %w", err)
+	}
+	for _, field := range lock {
+		if _, err := tx.ExecContext(ctx,
+			`INSERT OR IGNORE INTO item_lock (item_id, field) VALUES (?, ?)`, itemID, field); err != nil {
+			return fmt.Errorf("lock field %q: %w", field, err)
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("edit item metadata: %w", err)
+	}
+	return nil
+}
+
+// metadataUpdate is the UPDATE that writes m's non-nil fields to one item.
+func metadataUpdate(itemID int64, m ItemMetadata) (string, []any) {
 	set := []string{"metadata_updated_at = ?"}
 	args := []any{time.Now().Unix()}
 
@@ -108,11 +150,7 @@ func (s *Store) UpdateItemMetadata(ctx context.Context, itemID int64, m ItemMeta
 
 	q := `UPDATE media_item SET ` + join(set, ", ") + `, updated_at = ? WHERE id = ?`
 	args = append(args, time.Now().Unix(), itemID)
-
-	if _, err := s.db.ExecContext(ctx, q, args...); err != nil {
-		return fmt.Errorf("update item metadata: %w", err)
-	}
-	return nil
+	return q, args
 }
 
 // SetMatch records a confirmed identity. A locked match is never re-scored or

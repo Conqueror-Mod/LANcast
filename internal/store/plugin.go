@@ -119,19 +119,33 @@ func (s *Store) SetPluginEnabled(ctx context.Context, name string, enabled bool)
 
 // RemovePlugin forgets an installed plugin. The caller removes its unpacked
 // files; this drops the record.
+//
+// Its credentials go with it, in the same transaction. A stored key outliving
+// the plugin it was obtained for is a credential nobody can see, in a table
+// nobody would think to look in, waiting to be handed to whatever installs
+// under that name next. As two statements, a failure of the second left
+// exactly that, and a retry answered ErrNotFound because the plugin was
+// already gone, so nothing ever cleared it (R05-3).
 func (s *Store) RemovePlugin(ctx context.Context, name string) error {
-	res, err := s.db.ExecContext(ctx, `DELETE FROM installed_plugin WHERE name = ?`, name)
+	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("remove plugin: %w", err)
 	}
-	// Its credentials go with it. A stored key outliving the plugin it was
-	// obtained for is a credential nobody can see, in a table nobody would
-	// think to look in, waiting to be handed to whatever installs under that
-	// name next.
-	if _, err := s.db.ExecContext(ctx, `DELETE FROM plugin_secret WHERE plugin = ?`, name); err != nil {
+	defer tx.Rollback()
+	res, err := tx.ExecContext(ctx, `DELETE FROM installed_plugin WHERE name = ?`, name)
+	if err != nil {
+		return fmt.Errorf("remove plugin: %w", err)
+	}
+	if _, err := tx.ExecContext(ctx, `DELETE FROM plugin_secret WHERE plugin = ?`, name); err != nil {
 		return fmt.Errorf("remove plugin secrets: %w", err)
 	}
-	return notFoundIfZero(res)
+	if err := notFoundIfZero(res); err != nil {
+		return err
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("remove plugin: %w", err)
+	}
+	return nil
 }
 
 // notFoundIfZero maps "no rows affected" to ErrNotFound, so callers can tell a

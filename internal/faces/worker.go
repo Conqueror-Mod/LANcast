@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"os/exec"
@@ -153,15 +154,46 @@ func (w *Worker) Stats() Stats {
  * duplicate every embedding in it.
  */
 func (w *Worker) Run(ctx context.Context, libraryID int64) error {
+	if !w.claim() {
+		return ErrAlreadyRunning
+	}
+	return w.run(ctx, libraryID)
+}
+
+// ErrAlreadyRunning is the answer to a second pass while one runs.
+var ErrAlreadyRunning = errors.New("a face pass is already running")
+
+/*
+ * Start claims the worker now and runs the pass in the background, handing its
+ * result to done.
+ *
+ * The claim is made before Start returns, so a caller can tell the person who
+ * asked whether their pass started. Run in a goroutine could not: the refusal
+ * arrived after the HTTP answer had already said "started", and went only to
+ * the log, where it read as a fault (R07-10).
+ */
+func (w *Worker) Start(ctx context.Context, libraryID int64, done func(error)) error {
+	if !w.claim() {
+		return ErrAlreadyRunning
+	}
+	go func() { done(w.run(ctx, libraryID)) }()
+	return nil
+}
+
+// claim marks the worker running, or reports that it already was.
+func (w *Worker) claim() bool {
 	w.mu.Lock()
+	defer w.mu.Unlock()
 	if w.running {
-		w.mu.Unlock()
-		return fmt.Errorf("a face pass is already running")
+		return false
 	}
 	w.running = true
 	w.stats = Stats{Running: true, UpdatedAt: time.Now().Unix()}
-	w.mu.Unlock()
+	return true
+}
 
+// run is one pass on a claimed worker, releasing the claim when it ends.
+func (w *Worker) run(ctx context.Context, libraryID int64) error {
 	defer func() {
 		w.mu.Lock()
 		w.running = false

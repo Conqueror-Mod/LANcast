@@ -3794,6 +3794,12 @@ answers the question without that knowledge, in one shape:
   add new values; a client that does not recognise one still has a title and a
   progress pair, which is the point of normalizing.
 - `id` is stable for the task's lifetime, so a list can be keyed by it.
+- **Each account is told what it may know.** Any signed-in account may ask,
+  so an account that is not an administrator is not shown a scan of a library
+  kept from it, is never shown a scan's `error` (the walk's own message, which
+  can name a filesystem path; the `state` still says `failed`), and sees only
+  its own `transcode` tasks, as `GET /api/transcode` has it. An
+  administrator sees everything.
 - A `transcode` task titles itself **"Remuxing for playback"** when the streams
   are being copied into a different container and **"Transcoding for playback"**
   only when something is genuinely re-encoded. The two differ by an order of
@@ -4117,7 +4123,8 @@ library, and a server with films and music has no defensible default.
 ```
 
 Responds `200` with the new item, in the shape `GET /api/items/{id}` returns.
-`400` without a title, `404` if `library_id` names no library.
+`400` without a title, `404` if `library_id` names no library or one kept
+from the caller — the two are answered alike.
 
 #### `DELETE /api/playlists/{id}`
 
@@ -4142,7 +4149,9 @@ ordered sequence, and every one of those edits is the caller having decided the
 whole sequence. Repeats are kept — sending the same id twice is a playlist that
 holds a track twice, not an error.
 
-`400` naming the id if any item does not exist, and nothing is written.
+`400` naming the id if any item does not exist or is one the caller may not see
+(a hidden library, a rating above their ceiling), and nothing is written. The
+two are answered alike, so the refusal says nothing about which ids exist.
 
 The list is the one **the caller was shown**. An account kept from some entries
 (a hidden library, a rating above its ceiling) sees a shorter playlist than the
@@ -4600,6 +4609,9 @@ pass outlives the request that started it.
 `400 wrong_kind` on a library that is not a picture library. `409 not_available`
 when the worker is missing or has no models, with the reason in the message —
 "not installed" and "no model" are different problems with different fixes.
+`409 already_running` when a face pass is already running, for this library
+or another: one pass runs at a time, and a second is refused when it is asked
+for rather than answered `started` and quietly dropped.
 
 The pass is incremental: a photograph already examined is skipped unless its
 file has changed. **Folders marked sensitive are never examined**, and marking
@@ -6862,7 +6874,8 @@ written, so a backup file cannot sign anyone in.
     "requested_by": "dana", "requested_at": 1788460000,
     "safety_backup": "lancast-backup-20260903-164640.db",
     "applied_at": 1788460004, "ok": true,
-    "schema_from": 39, "schema_to": 39 }
+    "schema_from": 39, "schema_to": 39,
+    "api_keys_cleared": 2, "passkeys_cleared": 1, "two_factor_accounts": 1 }
 }
 ```
 
@@ -6871,7 +6884,17 @@ true when it runs as a service, or as a process the relaunch helper can start
 again. `staged` is a restore waiting for that restart, or `null`.
 `last_restore` is what the most recent restore from Settings did, or `null`;
 when `ok` is `false`, `error` says why, and the server started with the
-database that was there.
+database that was there. `api_keys_cleared` and `passkeys_cleared` are how many
+of each the restored backup held: a restore clears them, as it signs everyone
+out, so a key revoked or a passkey deleted since the backup cannot come back
+with it ([ADR 0058](adr/0058-a-backup-is-the-database.md), amended 2026-11-16).
+Each person issues keys and registers passkeys again; passwords are kept.
+Two-factor recovery codes are kept as well, because a restore cannot tell which
+were used after the backup and clearing them all can lock an account out;
+`two_factor_accounts` counts the accounts that should make new codes if they
+used any since the backup was taken. The
+restore is also recorded in the audit log of the restored database
+(`backup.restore`), saying who asked and where the previous database was kept.
 
 Newest first. A server that has never taken one answers `backups: []` — not an
 error.

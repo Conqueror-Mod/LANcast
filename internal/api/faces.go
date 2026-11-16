@@ -3,8 +3,11 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"strconv"
+
+	"lancast/internal/faces"
 )
 
 /*
@@ -74,11 +77,22 @@ func (s *Server) startFacePass(w http.ResponseWriter, r *http.Request) {
 	 * navigated away — which is exactly what somebody does after pressing a
 	 * button that says the work will take a while.
 	 */
-	go func() {
-		if err := s.facesW.Run(context.Background(), id); err != nil {
+	err = s.facesW.Start(context.Background(), id, func(err error) {
+		if err != nil {
 			s.log.Error("face pass", "library", id, "error", err)
 		}
-	}()
+	})
+	if errors.Is(err, faces.ErrAlreadyRunning) {
+		// Said, not swallowed: answering "started" for a pass that never ran
+		// told the administrator a second library was being grouped (R07-10).
+		writeError(w, http.StatusConflict, "already_running",
+			"a face pass is already running; start this one when it finishes")
+		return
+	}
+	if err != nil {
+		s.writeInternal(w, err, "start face pass")
+		return
+	}
 
 	s.audit(r, "library.faces", "library", auditID(id),
 		"started grouping faces in "+lib.Name, nil)

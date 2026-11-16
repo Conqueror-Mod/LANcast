@@ -202,3 +202,36 @@ func TestDeletePluginSecretIsIdempotent(t *testing.T) {
 		t.Errorf("deleting an unset secret failed: %v", err)
 	}
 }
+
+// R05-3: the plugin and its credentials go in one write. A failure deleting
+// the secrets leaves the plugin installed, so the removal can be retried and
+// the credential is never orphaned under a name the next install could take.
+func TestRemovePluginNeverOrphansItsSecrets(t *testing.T) {
+	ctx := context.Background()
+	st := newStore(t)
+	installFor(t, st, "example", "example_key")
+	if err := st.SetPluginSecret(ctx, "example", "example_key", "hunter2"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.db.ExecContext(ctx, `CREATE TRIGGER refuse BEFORE DELETE ON plugin_secret
+		BEGIN SELECT RAISE(ABORT, 'injected failure'); END`); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.RemovePlugin(ctx, "example"); err == nil {
+		t.Fatal("the removal reported success through an injected failure")
+	}
+	if _, err := st.GetInstalledPlugin(ctx, "example"); err != nil {
+		t.Fatalf("the plugin is gone while its secret stays: %v", err)
+	}
+
+	// The retry, once the fault clears, removes both.
+	if _, err := st.db.ExecContext(ctx, `DROP TRIGGER refuse`); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.RemovePlugin(ctx, "example"); err != nil {
+		t.Fatalf("retry: %v", err)
+	}
+	if _, ok, _ := st.PluginSecret(ctx, "example", "example_key"); ok {
+		t.Error("the credential outlived the plugin it belonged to")
+	}
+}
