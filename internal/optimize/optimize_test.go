@@ -82,3 +82,35 @@ func TestTheFolderMayNotBeInsideALibrary(t *testing.T) {
 		t.Error("a sibling sharing the name prefix was refused")
 	}
 }
+
+// Only a name the worker writes is a copy (R03-3): the sweep deletes what
+// this accepts, so a person's own file must never parse.
+func TestOnlyACopysOwnNameIsACopy(t *testing.T) {
+	for _, c := range []struct {
+		name string
+		id   int64
+		part bool
+	}{
+		{FileName(7), 7, false},
+		{FileName(1917) + PartSuffix, 1917, true},
+	} {
+		id, part, ok := ParseFileName(c.name)
+		if !ok || id != c.id || part != c.part {
+			t.Errorf("%s = %d %v %v, want %d %v", c.name, id, part, ok, c.id, c.part)
+		}
+	}
+	for _, name := range []string{
+		"300.mp4", "1917.mp4", "0001.mp4", "12.mp4.bak", "12.mp4.part",
+		"lancast-optimized-0.mp4", "lancast-optimized-05.mp4", "lancast-optimized-+5.mp4",
+		"lancast-optimized-5.mp4.bak", "lancast-optimized-5.mkv", "lancast-optimized-.mp4",
+		"LANCAST-OPTIMIZED-5.MP4", "x" + FileName(5), FileName(5) + ".part.part",
+		"lancast-optimized-99999999999999999999.mp4",
+	} {
+		if id, _, ok := ParseFileName(name); ok {
+			t.Errorf("%q was taken for the copy of %d", name, id)
+		}
+	}
+	if FileName(5) == LegacyFileName(5) {
+		t.Error("the new name is the old one")
+	}
+}

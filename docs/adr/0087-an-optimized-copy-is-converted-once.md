@@ -55,7 +55,11 @@ It touches four existing rules, which is why it needs an ADR:
    - Copies live in `optimized_dir`, which defaults to `optimized` in the data
      folder. A folder inside any library location is refused, so a scan can
      never pick a copy up as media.
-   - Each copy is named by its item id, `<id>.mp4`.
+   - Each copy is named by its item id, `lancast-optimized-<id>.mp4`.
+     (Amended by R03-3: it was `<id>.mp4`, and the sweep took any
+     `300.mp4` a person kept in the folder for a copy and deleted it. Old
+     copies are renamed where a ready row vouches for them; a newly chosen
+     folder must be empty or hold only copies.)
    - Every path is re-verified to sit inside the folder before it is opened,
      as for every file route (CLAUDE.md).
 5. **Under a size limit, waiting rather than deleting** (Chris's decision).

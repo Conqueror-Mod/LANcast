@@ -10,8 +10,8 @@
 package optimize
 
 import (
-	"fmt"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"lancast/internal/probe"
@@ -43,8 +43,49 @@ var Profile = probe.Profile{
 	MaxAudioChannels: 2,
 }
 
+/*
+ * A copy's name in the optimized folder (R03-3).
+ *
+ * The folder is the one place this feature deletes files by itself, so the
+ * name is how the sweep knows a file is a copy, and it has to be a name no
+ * person gives a file. It used to be `<id>.mp4`, matched with a prefix scan:
+ * a `300.mp4` or `1917.mp4` that somebody kept in the folder was taken for a
+ * copy of title 300 or 1917 and deleted within thirty seconds, and
+ * `12.mp4.bak` deleted `12.mp4`.
+ */
+const filePrefix = "lancast-optimized-"
+
 // FileName is the copy's name in the optimized folder.
-func FileName(itemID int64) string { return fmt.Sprintf("%d.mp4", itemID) }
+func FileName(itemID int64) string { return filePrefix + strconv.FormatInt(itemID, 10) + ".mp4" }
+
+// PartSuffix marks a copy still being written.
+const PartSuffix = ".part"
+
+// LegacyFileName is the name copies had before R03-3. Nothing matches it by
+// pattern any more: an old copy is recognised only where a ready row proves
+// LANcast wrote it, and renamed to FileName.
+func LegacyFileName(itemID int64) string { return strconv.FormatInt(itemID, 10) + ".mp4" }
+
+// ParseFileName is the item id a name in the optimized folder belongs to, and
+// whether it is a copy still being written. ok only for exactly FileName(id)
+// or FileName(id)+PartSuffix with id > 0, so anything else in the folder is
+// never taken for a copy.
+func ParseFileName(name string) (itemID int64, part bool, ok bool) {
+	base, part := strings.CutSuffix(name, PartSuffix)
+	digits, found := strings.CutPrefix(base, filePrefix)
+	if !found {
+		return 0, false, false
+	}
+	digits, found = strings.CutSuffix(digits, ".mp4")
+	if !found {
+		return 0, false, false
+	}
+	id, err := strconv.ParseInt(digits, 10, 64)
+	if err != nil || id <= 0 || FileName(id) != base {
+		return 0, false, false // "+5", "05" and the like are not names it writes
+	}
+	return id, part, true
+}
 
 // EstimateBytes is how big a copy of this length will be at the preset's
 // rate: what the limit is checked against before a conversion starts. An

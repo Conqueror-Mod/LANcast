@@ -18377,7 +18377,7 @@
           },
           "optimized_dir": {
             "type": "string",
-            "description": "Where optimized copies live (ADR 0087). Empty is `optimized` in the data folder. Must be a full path and not inside any library."
+            "description": "Where optimized copies live (ADR 0087). Empty is `optimized` in the data folder. Must be a full path and not inside any library, and a newly chosen folder must be empty or hold only copies (`lancast-optimized-<id>.mp4`), since the server deletes copies nothing needs."
           },
           "optimized_limit_gb": {
             "type": "integer",

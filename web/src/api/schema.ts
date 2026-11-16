@@ -7825,7 +7825,7 @@ export interface components {
             dlna_account?: string;
             /** @description The name TVs list. Empty means "LANcast". */
             dlna_name?: string;
-            /** @description Where optimized copies live (ADR 0087). Empty is `optimized` in the data folder. Must be a full path and not inside any library. */
+            /** @description Where optimized copies live (ADR 0087). Empty is `optimized` in the data folder. Must be a full path and not inside any library, and a newly chosen folder must be empty or hold only copies (`lancast-optimized-<id>.mp4`), since the server deletes copies nothing needs. */
             optimized_dir?: string;
             /** @description The size limit for optimized copies, in GB. At the limit new requests wait; nothing is deleted. 200 by default. */
             optimized_limit_gb: number;
