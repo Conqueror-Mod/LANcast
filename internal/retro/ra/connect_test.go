@@ -201,3 +201,17 @@ func TestUserAgentShape(t *testing.T) {
 		}
 	}
 }
+
+// PHP reads the last value of a repeated key; Check used to read the first.
+func TestCheckRefusesRepeatedKeys(t *testing.T) {
+	for _, f := range []string{
+		"r=ping&r=submitlbentry&u=Chrisdemo&t=lancast",
+		"r=awardachievement&u=Chrisdemo&h=0&h=1&a=1&t=lancast",
+		"r=ping&u=Chrisdemo&u=Someoneelse&t=lancast",
+		"r=ping&u=Chrisdemo&p=&p=x&t=lancast",
+	} {
+		if _, _, err := Check(f, "Chrisdemo"); err == nil {
+			t.Errorf("Check let through a repeated key: %s", f)
+		}
+	}
+}

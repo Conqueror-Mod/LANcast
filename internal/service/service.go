@@ -79,6 +79,18 @@ func (c Config) ServiceArgs() []string {
 	return []string{"service", "run", "-data", c.DataDir, "-addr", c.Addr}
 }
 
+// systemdArg quotes one ExecStart argument the systemd way: an argument with
+// nothing special in it is left as it is; otherwise it is wrapped in double
+// quotes with \ and " escaped. systemd also expands % specifiers and $
+// variables in ExecStart, so those are doubled.
+func systemdArg(s string) string {
+	s = strings.NewReplacer("%", "%%", "$", "$$").Replace(s)
+	if s != "" && !strings.ContainsAny(s, " \t\r\n\"'\\;") {
+		return s
+	}
+	return `"` + strings.NewReplacer(`\`, `\\`, `"`, `\"`).Replace(s) + `"`
+}
+
 // SystemdUnit renders the systemd unit for the config. Kept pure so its content
 // is asserted in tests without touching /etc or systemctl. If an ffmpeg dir is
 // recorded it is prepended to PATH, so the existing exec.LookPath finds ffmpeg
@@ -87,7 +99,7 @@ func SystemdUnit(c Config) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "[Unit]\nDescription=%s\nAfter=network-online.target\nWants=network-online.target\n\n", Description)
 	b.WriteString("[Service]\nType=simple\n")
-	fmt.Fprintf(&b, "ExecStart=%s -data %s -addr %s\n", c.ExePath, c.DataDir, c.Addr)
+	fmt.Fprintf(&b, "ExecStart=%s -data %s -addr %s\n", systemdArg(c.ExePath), systemdArg(c.DataDir), systemdArg(c.Addr))
 	if c.FFmpegDir != "" {
 		fmt.Fprintf(&b, "Environment=PATH=%s:/usr/local/bin:/usr/bin:/bin\n", c.FFmpegDir)
 	}
