@@ -175,3 +175,55 @@ func TestValidBasedOn(t *testing.T) {
 		}
 	}
 }
+
+// A save whose record cannot be written is undone (R03-5): the current save
+// and the previous copy are both the ones they were, and nothing is left
+// beside them.
+func TestAFailedRecordPutsTheSlotBack(t *testing.T) {
+	f := Files{Dir: t.TempDir()}
+	f.Write("u_1", 7, "sram", strings.NewReader("old"))
+	f.Write("u_1", 7, "sram", strings.NewReader("current"))
+	refused := errors.New("database busy")
+	_, err := f.WriteIfRecorded("u_1", 7, "sram", "", strings.NewReader("new"),
+		func(w Written) error {
+			// The record sees the new bytes in place.
+			if got := read(t, f, "sram", false); got != "new" {
+				t.Errorf("at record time current = %q", got)
+			}
+			return refused
+		})
+	if !errors.Is(err, refused) {
+		t.Fatalf("err = %v", err)
+	}
+	if read(t, f, "sram", false) != "current" || read(t, f, "sram", true) != "old" {
+		t.Errorf("after an undo: current %q, previous %q",
+			read(t, f, "sram", false), read(t, f, "sram", true))
+	}
+	entries, _ := os.ReadDir(filepath.Dir(f.path("u_1", 7, "sram", false)))
+	if len(entries) != 2 {
+		t.Errorf("left beside the saves: %v", entries)
+	}
+
+	// A first save undone leaves the slot empty, as it was.
+	_, err = f.WriteIfRecorded("u_1", 8, "sram", "", strings.NewReader("first"),
+		func(Written) error { return refused })
+	if !errors.Is(err, refused) {
+		t.Fatalf("err = %v", err)
+	}
+	if _, err := f.Open("u_1", 8, "sram", false); !errors.Is(err, os.ErrNotExist) {
+		t.Errorf("an undone first save is still there: %v", err)
+	}
+
+	// And a record that succeeds keeps the rotation, with nothing held back.
+	if _, err := f.WriteIfRecorded("u_1", 7, "sram", "", strings.NewReader("newer"),
+		func(Written) error { return nil }); err != nil {
+		t.Fatal(err)
+	}
+	if read(t, f, "sram", false) != "newer" || read(t, f, "sram", true) != "current" {
+		t.Error("a recorded save did not rotate")
+	}
+	entries, _ = os.ReadDir(filepath.Dir(f.path("u_1", 7, "sram", false)))
+	if len(entries) != 2 {
+		t.Errorf("left beside the saves: %v", entries)
+	}
+}

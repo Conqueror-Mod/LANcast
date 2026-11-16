@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"errors"
 	"io"
 	"net/http"
@@ -258,7 +259,30 @@ func (s *Server) putSave(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	user := s.userID(r)
-	written, err := s.saveFiles().WriteIf(user, it.ID, slot, basedOn, http.MaxBytesReader(w, r.Body, saves.MaxBytes+1))
+	/*
+	 * The row is written as part of the write, and on a context the request
+	 * cannot cancel (R03-5). On the request's own context a player that
+	 * closed its connection after sending the body — a save on exit — failed
+	 * the row after the files had rotated: a first save sat on disk with no
+	 * row, so the slot answered 404 and the game started without it, and a
+	 * later one was served under a row describing the bytes before it. Now
+	 * the row is not abandoned with the request, and if it still cannot be
+	 * written the files are put back as they were.
+	 */
+	rowCtx, cancel := context.WithTimeout(context.WithoutCancel(r.Context()), 30*time.Second)
+	defer cancel()
+	now := time.Now().Unix()
+	_, err := s.saveFiles().WriteIfRecorded(user, it.ID, slot, basedOn,
+		http.MaxBytesReader(w, r.Body, saves.MaxBytes+1),
+		func(written saves.Written) error {
+			sv := store.ROMSave{
+				Slot: slot, SizeBytes: written.Size, SHA256: written.SHA256, UpdatedAt: now,
+			}
+			if saves.IsState(slot) {
+				sv.Core, sv.CoreVersion = core, ver
+			}
+			return s.st.PutROMSave(rowCtx, user, it.ID, sv)
+		})
 	if errors.Is(err, saves.ErrConflict) {
 		writeError(w, http.StatusConflict, "conflict",
 			"the save on the server changed since this one was loaded")
@@ -277,17 +301,7 @@ func (s *Server) putSave(w http.ResponseWriter, r *http.Request) {
 		s.writeInternal(w, err, "write save")
 		return
 	}
-	sv := store.ROMSave{
-		Slot: slot, SizeBytes: written.Size, SHA256: written.SHA256, UpdatedAt: time.Now().Unix(),
-	}
-	if saves.IsState(slot) {
-		sv.Core, sv.CoreVersion = core, ver
-	}
-	if err := s.st.PutROMSave(r.Context(), user, it.ID, sv); err != nil {
-		s.writeInternal(w, err, "record save")
-		return
-	}
-	got, err := s.st.GetROMSave(r.Context(), user, it.ID, slot)
+	got, err := s.st.GetROMSave(rowCtx, user, it.ID, slot)
 	if err != nil {
 		s.writeInternal(w, err, "read save")
 		return
