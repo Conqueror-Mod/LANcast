@@ -5,6 +5,8 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+
+	"lancast/internal/probe"
 )
 
 // The length ffmpeg actually wrote, on a real 4K encode at 23.976fps: 49 of 49
@@ -151,5 +153,22 @@ func TestListedMatchesWholeNamesOnly(t *testing.T) {
 	}
 	if Listed(playlist, "seg0000") {
 		t.Error("a fragment of a name matched")
+	}
+}
+
+// A length no file could have does not decide how big the playlist is
+// (R09-8): 10^9 seconds asked for ~1.7×10^8 entries, several gigabytes, on
+// every request. Capped at probe.MaxDurationSeconds, and NaN with it.
+func TestACompletePlaylistIsCappedWhateverItIsTold(t *testing.T) {
+	limit := int(math.Round(float64(probe.MaxDurationSeconds)/6.006)) + 1
+	for _, media := range []float64{1e9, math.Inf(1), math.NaN()} {
+		p := CompletePlaylist(media, 6.006, "")
+		if n := strings.Count(p, "#EXTINF:"); n > limit {
+			t.Errorf("media %v: %d segments, want at most %d", media, n, limit)
+		}
+	}
+	// And whatever the segment.
+	if n := strings.Count(CompletePlaylist(1e9, 1e-6, ""), "#EXTINF:"); n > probe.MaxDurationSeconds {
+		t.Errorf("a tiny segment listed %d entries", n)
 	}
 }

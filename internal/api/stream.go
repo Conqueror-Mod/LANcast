@@ -3,10 +3,10 @@ package api
 import (
 	"mime"
 	"net/http"
-	"os"
 	"path/filepath"
 
 	"lancast/internal/contain"
+	"lancast/internal/sharedopen"
 	"lancast/internal/store"
 )
 
@@ -94,7 +94,7 @@ func (s *Server) serveItemFile(w http.ResponseWriter, r *http.Request, it *store
 		return
 	}
 
-	f, err := os.Open(path)
+	f, err := sharedopen.Open(path)
 	if err != nil {
 		writeError(w, http.StatusServiceUnavailable, "unavailable", "file is missing from disk")
 		return

@@ -198,7 +198,12 @@ func (s *Server) deleteItem(w http.ResponseWriter, r *http.Request) {
 		// delete is avoided.
 		// Expand each video to itself plus its companion files (subtitles, nfo,
 		// artwork), so a delete does not leave leftovers behind.
-		abs := make([]string, 0, len(files)*2)
+		type removal struct {
+			itemID int64
+			video  string
+			extras []string // sidecars: subtitles, nfo, artwork
+		}
+		removals := make([]removal, 0, len(files))
 		for _, ft := range files {
 			// Resolved per file, against the location that file was scanned
 			// under. A sidecar sits beside its video, so it is checked against
@@ -210,20 +215,65 @@ func (s *Server) deleteItem(w http.ResponseWriter, r *http.Request) {
 				writeError(w, http.StatusInternalServerError, "internal", "a file could not be resolved to a library location; nothing was deleted")
 				return
 			}
-			for _, f := range append([]string{ft.path}, associatedSidecars(ft.path)...) {
+			rm := removal{itemID: ft.itemID}
+			for i, f := range append([]string{ft.path}, associatedSidecars(ft.path)...) {
 				a, err := containedEntry(root.Path, f)
 				if err != nil {
 					s.log.Error("delete containment check failed", "item", ft.itemID, "path", f, "error", err)
 					writeError(w, http.StatusInternalServerError, "internal", "a file path escaped its library; nothing was deleted")
 					return
 				}
-				abs = append(abs, a)
+				if i == 0 {
+					rm.video = a
+				} else {
+					rm.extras = append(rm.extras, a)
+				}
+			}
+			removals = append(removals, rm)
+		}
+		/*
+		 * A row goes only with its file (R03-4).
+		 *
+		 * This used to log a failed remove and drop the row anyway, so a film
+		 * that another program held open lost its entry, stayed on disk, and
+		 * came back at the next scan as a stranger: no progress, no edits, no
+		 * locks. Now a video that cannot be removed keeps its row, and its
+		 * sidecars, and the answer says so; every other file in the subtree
+		 * goes as asked, with its row.
+		 */
+		kept := map[int64]bool{}
+		for _, rm := range removals {
+			if err := os.Remove(rm.video); err != nil && !os.IsNotExist(err) {
+				s.log.Warn("delete file failed; its row is kept", "item", rm.itemID, "path", rm.video, "error", err)
+				kept[rm.itemID] = true
+				continue
+			}
+			for _, a := range rm.extras {
+				if err := os.Remove(a); err != nil && !os.IsNotExist(err) {
+					s.log.Warn("delete sidecar failed", "path", a, "error", err)
+				}
 			}
 		}
-		for _, a := range abs {
-			if err := os.Remove(a); err != nil && !os.IsNotExist(err) {
-				s.log.Warn("delete file failed", "path", a, "error", err)
+		if len(kept) > 0 {
+			// The file rows whose files did go are removed; the containers
+			// above them stay, since something they hold is still on disk.
+			var gone []int64
+			for _, ft := range files {
+				if !kept[ft.itemID] {
+					gone = append(gone, ft.itemID)
+				}
 			}
+			if err := s.st.DeleteItems(r.Context(), gone); err != nil {
+				s.writeInternal(w, err, "delete items")
+				return
+			}
+			s.audit(r, "item.delete", "item", auditID(id),
+				fmt.Sprintf("Deleted from disk %q in part: %d file(s) could not be removed and were kept", it.Title, len(kept)),
+				map[string]any{"mode": mode, "kind": it.Kind, "rows": len(gone), "files": len(files) - len(kept), "kept": len(kept)})
+			writeError(w, http.StatusConflict, "not_deleted", fmt.Sprintf(
+				"%d of %d file(s) could not be deleted, perhaps because another program has them open; those stay in the library",
+				len(kept), len(files)))
+			return
 		}
 	} else if mode == "ignore" {
 		// Ignoring records paths, not locations: the list is library-scoped and

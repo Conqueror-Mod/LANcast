@@ -9,12 +9,12 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"strings"
 	"sync"
 	"time"
 
 	"lancast/internal/optimize"
 	"lancast/internal/probe"
+	"lancast/internal/sharedopen"
 	"lancast/internal/store"
 	"lancast/internal/transcode"
 )
@@ -91,10 +91,53 @@ func (s *Server) checkOptimizedDir(ctx context.Context, dir string) string {
 	if optimize.Inside(dir, roots) {
 		return "optimized_dir may not be inside a library, or a scan would take the copies for new films"
 	}
+	// A folder being chosen must hold nothing but copies (R03-3). The sweep
+	// deletes copies no row accounts for and leaves every other name alone,
+	// but a folder of somebody's own videos is still no place for a process
+	// that deletes files by itself. Copies carried across by hand are
+	// welcome, and the folder already in use is not re-litigated.
+	if filepath.Clean(dir) != filepath.Clean(s.settings.Get().OptimizedDir) {
+		entries, err := os.ReadDir(dir)
+		if err != nil && !errors.Is(err, fs.ErrNotExist) {
+			return "the server could not read that folder"
+		}
+		for _, e := range entries {
+			if _, _, ok := optimize.ParseFileName(e.Name()); !ok {
+				return "optimized_dir must be an empty folder (or hold only LANcast's optimized copies), " +
+					"because the server deletes the copies nothing needs any more; " + e.Name() + " is in it"
+			}
+		}
+	}
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return "the server could not create that folder"
 	}
 	return ""
+}
+
+/*
+ * adoptLegacyCopy renames a copy written under the old name, <id>.mp4, to the
+ * name copies have now (R03-3). Only for a ready row: that row is the proof
+ * LANcast wrote the file, which a name like 300.mp4 never is on its own. A
+ * legacy name with no ready row is left exactly where it is, never deleted.
+ */
+func (s *Server) adoptLegacyCopy(itemID int64) {
+	path, err := s.optimizedPath(itemID)
+	if err != nil {
+		return
+	}
+	if _, err := os.Lstat(path); err == nil {
+		return // already there under its own name
+	}
+	old := filepath.Join(filepath.Dir(path), optimize.LegacyFileName(itemID))
+	info, err := os.Lstat(old)
+	if err != nil || !info.Mode().IsRegular() {
+		return
+	}
+	if err := os.Rename(old, path); err != nil {
+		s.log.Warn("optimized: could not rename a copy to its new name", "item", itemID, "from", old, "error", err)
+		return
+	}
+	s.log.Info("optimized: renamed a copy to its new name", "item", itemID, "file", filepath.Base(path))
 }
 
 func (s *Server) optimizedLimit() int64 {
@@ -314,23 +357,34 @@ func (s *Server) sweepOptimized(ctx context.Context) {
 	if err != nil {
 		return
 	}
+	// Copies from before R03-3 take their new name first, so the ones a row
+	// vouches for keep working.
+	if all, err := s.st.ListOptimized(ctx); err == nil {
+		for _, v := range all {
+			if v.State == store.OptimizedReady {
+				s.adoptLegacyCopy(v.ItemID)
+			}
+		}
+	}
 	cur := s.optimized()
 	cur.mu.Lock()
 	converting := cur.current
 	cur.mu.Unlock()
 	for _, e := range entries {
-		var id int64
 		name := e.Name()
-		if _, err := fmt.Sscanf(name, "%d.mp4", &id); err != nil || id <= 0 {
-			continue // not ours; leave anything else in the folder alone
+		// Exactly a name the worker writes, or it is not ours: anything else
+		// in the folder is left alone, whatever it looks like (R03-3).
+		id, part, ok := optimize.ParseFileName(name)
+		if !ok {
+			continue
 		}
-		if ids[id] || (id == converting && strings.HasSuffix(name, ".part")) {
+		if ids[id] || (id == converting && part) {
 			continue
 		}
 		if path, err := s.optimizedPath(id); err == nil {
 			target := path
-			if strings.HasSuffix(name, ".part") {
-				target = path + ".part"
+			if part {
+				target = path + optimize.PartSuffix
 			}
 			if os.Remove(target) == nil {
 				s.log.Info("optimized: removed a copy nothing holds", "file", name)
@@ -373,6 +427,7 @@ func (s *Server) optimizedOnDisk(ctx context.Context, itemID int64) bool {
 	if err != nil {
 		return false
 	}
+	s.adoptLegacyCopy(itemID) // only ever called for a ready copy
 	info, err := os.Stat(path)
 	if err == nil {
 		return info.Mode().IsRegular()
@@ -430,7 +485,7 @@ func (s *Server) serveOptimized(w http.ResponseWriter, r *http.Request, it *stor
 		writeError(w, http.StatusNotFound, "not_found", "this title has no optimized copy")
 		return
 	}
-	f, err := os.Open(path)
+	f, err := sharedopen.Open(path)
 	if err != nil {
 		writeError(w, http.StatusServiceUnavailable, "unavailable", "the optimized copy is missing from disk")
 		return

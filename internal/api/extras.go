@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"lancast/internal/media"
+	"lancast/internal/sharedopen"
 )
 
 /*
@@ -215,7 +216,7 @@ func (s *Server) streamExtra(w http.ResponseWriter, r *http.Request) {
 		if x.Key != key {
 			continue
 		}
-		f, err := os.Open(x.path)
+		f, err := sharedopen.Open(x.path)
 		if err != nil {
 			writeError(w, http.StatusNotFound, "not_found", "no such extra")
 			return

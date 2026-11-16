@@ -5,12 +5,12 @@ import (
 	"fmt"
 	"net"
 	"net/http"
-	"os"
 	"strconv"
 	"strings"
 
 	"lancast/internal/artwork"
 	"lancast/internal/dlna"
+	"lancast/internal/sharedopen"
 	"lancast/internal/store"
 )
 
@@ -373,7 +373,7 @@ func (s *Server) dlnaMedia(w http.ResponseWriter, r *http.Request, account strin
 		http.NotFound(w, r)
 		return
 	}
-	f, err := os.Open(path)
+	f, err := sharedopen.Open(path)
 	if err != nil {
 		http.NotFound(w, r)
 		return

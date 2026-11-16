@@ -147,6 +147,19 @@ func (f Files) Write(userID string, itemID int64, slot string, r io.Reader) (Wri
  * file is what the write would rotate away.
  */
 func (f Files) WriteIf(userID string, itemID int64, slot, basedOn string, r io.Reader) (Written, error) {
+	return f.WriteIfRecorded(userID, itemID, slot, basedOn, r, nil)
+}
+
+/*
+ * WriteIfRecorded is WriteIf with the caller's record of the save made part
+ * of it (R03-5). record runs once the new bytes are in place, still inside
+ * the swap; if it fails, the slot is put back exactly as it was — the current
+ * save, and the previous copy the write had rotated away — and its error is
+ * returned. So a save is never on disk without its row, and a row never
+ * describes bytes other than the ones served under it. A nil record is
+ * WriteIf.
+ */
+func (f Files) WriteIfRecorded(userID string, itemID int64, slot, basedOn string, r io.Reader, record func(Written) error) (Written, error) {
 	if !ValidSlot(slot) {
 		return Written{}, fmt.Errorf("invalid slot %q", slot)
 	}
@@ -195,18 +208,56 @@ func (f Files) WriteIf(userID string, itemID int64, slot, basedOn string, r io.R
 	}
 
 	prev := f.path(userID, itemID, slot, true)
+	// The previous copy is set aside rather than overwritten while the write
+	// can still be undone, so an undo gives it back too.
+	held := ""
+	if record != nil {
+		if _, err := os.Stat(prev); err == nil {
+			held = prev + ".undo"
+			if err := os.Rename(prev, held); err != nil {
+				return Written{}, err
+			}
+		}
+	}
+	restoreHeld := func() {
+		if held != "" {
+			os.Rename(held, prev)
+		}
+	}
+	hadCur := false
 	if _, err := os.Stat(cur); err == nil {
+		hadCur = true
 		if err := os.Rename(cur, prev); err != nil {
+			restoreHeld()
 			return Written{}, err
 		}
 	}
 	if err := os.Rename(tmp.Name(), cur); err != nil {
 		// Put the previous save back rather than leave the slot empty.
-		os.Rename(prev, cur)
+		if hadCur {
+			os.Rename(prev, cur)
+		}
+		restoreHeld()
 		return Written{}, err
 	}
 	ok = true
-	return Written{Size: n, SHA256: hex.EncodeToString(h.Sum(nil))}, nil
+	w := Written{Size: n, SHA256: hex.EncodeToString(h.Sum(nil))}
+	if record != nil {
+		if err := record(w); err != nil {
+			// Undo: the new bytes go, the save they replaced is current
+			// again, and the previous copy is the one it was.
+			os.Remove(cur)
+			if hadCur {
+				os.Rename(prev, cur)
+			}
+			restoreHeld()
+			return Written{}, err
+		}
+		if held != "" {
+			os.Remove(held)
+		}
+	}
+	return w, nil
 }
 
 // fileSHA256 is the hex SHA-256 of the file at p, or NoSave when there is none.

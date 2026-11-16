@@ -26,19 +26,29 @@ type Extractor struct {
 	bin   string
 	cache string
 
-	// Timeout bounds one extraction. A damaged track can otherwise hang.
+	// Timeout bounds one extraction of a small file. A damaged track can
+	// otherwise hang. A big file is given longer (extractTimeout), because
+	// extracting a track reads the whole container.
 	Timeout time.Duration
 
-	mu       sync.Mutex
-	inFlight map[string]*sync.Mutex
+	mu   sync.Mutex
+	jobs map[string]*job // in flight, by cache path
+}
+
+// job is one extraction running in the background, shared by every request
+// that wants its result while it runs.
+type job struct {
+	done chan struct{}
+	body []byte
+	err  error
 }
 
 // NewExtractor builds an extractor caching under dir.
 func NewExtractor(dir string) *Extractor {
 	e := &Extractor{
-		cache:    dir,
-		Timeout:  60 * time.Second,
-		inFlight: map[string]*sync.Mutex{},
+		cache:   dir,
+		Timeout: 60 * time.Second,
+		jobs:    map[string]*job{},
 	}
 	if bin, err := exec.LookPath("ffmpeg"); err == nil {
 		e.bin = bin
@@ -60,7 +70,11 @@ func (e *Extractor) Embedded(ctx context.Context, videoPath string, streamIndex 
 	}
 
 	return e.cached(ctx, videoPath, "embedded-"+strconv.Itoa(streamIndex), func(ctx context.Context) ([]byte, error) {
-		ctx, cancel := context.WithTimeout(ctx, e.Timeout)
+		var size int64
+		if info, err := os.Stat(videoPath); err == nil {
+			size = info.Size()
+		}
+		ctx, cancel := context.WithTimeout(ctx, extractTimeout(e.Timeout, size))
 		defer cancel()
 
 		cmd := exec.CommandContext(ctx, e.bin,
@@ -159,6 +173,15 @@ func (e *Extractor) Sidecar(ctx context.Context, path, format string) ([]byte, e
 // under the same name, must not keep serving the conversion of the file that
 // used to be there. Each source keeps one entry, so replacing a file does not
 // leave the old conversion behind for ever.
+//
+// produce runs in the background, detached from the request that started it
+// (R09-11). Extracting a track from a 50 GB remux reads all 50 GB, which is
+// minutes; tied to the request, a player that gave up — or the old flat
+// 60-second limit — killed it every time, nothing was cached, and the next
+// attempt started again from nothing, so that film never had subtitles. Now a
+// request that stops waiting leaves the extraction running, and it lands in
+// the cache for the next one. Requests that arrive meanwhile wait on the same
+// job rather than starting another ffmpeg.
 func (e *Extractor) cached(ctx context.Context, source, variant string, produce func(context.Context) ([]byte, error)) ([]byte, error) {
 	info, err := os.Stat(source)
 	if err != nil {
@@ -175,40 +198,79 @@ func (e *Extractor) cached(ctx context.Context, source, variant string, produce 
 		return body, nil
 	}
 
-	// One extraction per source at a time; concurrent requests for the same
-	// track would otherwise each spawn ffmpeg. The lock is per source, not per
-	// version, so the lock table grows no faster than it did before.
-	lock := e.lockFor(key)
-	lock.Lock()
-	defer lock.Unlock()
-
-	if body, err := os.ReadFile(path); err == nil && len(body) > 0 {
-		return body, nil
-	}
-
-	body, err := produce(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	if err := os.MkdirAll(dir, 0o755); err == nil {
-		tmp, tmpErr := os.CreateTemp(dir, ".tmp-*")
-		if tmpErr == nil {
-			name := tmp.Name()
-			_, writeErr := tmp.Write(body)
-			tmp.Close()
-			if writeErr == nil {
-				// A cache write failure must not fail the request; the caller
-				// already has the bytes.
-				if os.Rename(name, path) == nil {
-					pruneOtherVersions(dir, key, path)
-				}
-			} else {
-				os.Remove(name)
-			}
+	e.mu.Lock()
+	j, running := e.jobs[path]
+	if !running {
+		// Looked at again under the lock: a job that finished since the
+		// read above has written the file and left the table.
+		if body, err := os.ReadFile(path); err == nil && len(body) > 0 {
+			e.mu.Unlock()
+			return body, nil
 		}
+		j = &job{done: make(chan struct{})}
+		e.jobs[path] = j
+		go e.run(context.WithoutCancel(ctx), j, dir, key, path, produce)
 	}
-	return body, nil
+	e.mu.Unlock()
+
+	select {
+	case <-j.done:
+		return j.body, j.err
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
+}
+
+// run is one background extraction: produce, store, then leave the table, in
+// that order, so a request that misses the table finds the file.
+func (e *Extractor) run(ctx context.Context, j *job, dir, key, path string, produce func(context.Context) ([]byte, error)) {
+	defer close(j.done)
+	j.body, j.err = produce(ctx)
+	if j.err == nil {
+		storeConversion(dir, key, path, j.body)
+	}
+	e.mu.Lock()
+	delete(e.jobs, path)
+	e.mu.Unlock()
+}
+
+// storeConversion writes one conversion to the cache. A failure is not an error: the
+// caller already has the bytes.
+func storeConversion(dir, key, path string, body []byte) {
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return
+	}
+	tmp, err := os.CreateTemp(dir, ".tmp-*")
+	if err != nil {
+		return
+	}
+	name := tmp.Name()
+	_, writeErr := tmp.Write(body)
+	tmp.Close()
+	if writeErr != nil {
+		os.Remove(name)
+		return
+	}
+	if os.Rename(name, path) == nil {
+		pruneOtherVersions(dir, key, path)
+	} else {
+		os.Remove(name)
+	}
+}
+
+// extractMinRate is the slowest read a big file is allowed: 10 MB/s, well
+// under a spinning disk or a gigabit share. A track that takes longer than its
+// file's size at this rate is taken to be hung.
+const extractMinRate = 10 << 20
+
+// extractTimeout is how long one extraction of a file this size may run: the
+// base for a small file, longer for one whose whole container takes longer
+// than that to read (R09-11). A 50 GB remux gets about 85 minutes.
+func extractTimeout(base time.Duration, size int64) time.Duration {
+	if byRate := time.Duration(size/extractMinRate) * time.Second; byRate > base {
+		return byRate
+	}
+	return base
 }
 
 // versionStamp names one version of a source file. Size catches most
@@ -229,17 +291,6 @@ func pruneOtherVersions(dir, key, keep string) {
 			_ = os.Remove(m)
 		}
 	}
-}
-
-func (e *Extractor) lockFor(key string) *sync.Mutex {
-	e.mu.Lock()
-	defer e.mu.Unlock()
-	if l, ok := e.inFlight[key]; ok {
-		return l
-	}
-	l := &sync.Mutex{}
-	e.inFlight[key] = l
-	return l
 }
 
 // cacheKey derives a stable filename prefix from a source path and a variant.
