@@ -1907,6 +1907,12 @@ func resolveSecret(stored string, s config.Settings, name string) string {
  * never deleted. A cap that could remove one would turn a disk-space setting
  * into missing posters.
  */
+// artworkSettleMargin is how old an unreferenced artwork file must be before
+// the prune may call it an orphan: longer than any gap between a writer
+// caching a file and recording its row. The prune is daily, so an orphan
+// younger than this waits one more day.
+const artworkSettleMargin = time.Hour
+
 func pruneArtwork(ctx context.Context, st *store.Store,
 	settings *config.SettingsStore, dir string, log *slog.Logger) {
 
@@ -1925,6 +1931,12 @@ func pruneArtwork(ctx context.Context, st *store.Store,
 		return
 	}
 
+	/*
+	 * Taken before the set is read, less a margin: a writer puts the file
+	 * first and its row afterwards, sometimes a whole download later, so a
+	 * recent file missing from `live` may simply not be recorded yet (R08-7).
+	 */
+	settled := time.Now().Add(-artworkSettleMargin)
 	live, err := st.ReferencedArtworkHashes(ctx)
 	if err != nil {
 		/*
@@ -1939,7 +1951,7 @@ func pruneArtwork(ctx context.Context, st *store.Store,
 	}
 
 	cap := int64(settings.Get().ArtworkCacheMB) << 20
-	rep, err := artwork.Prune(dir, live, cap)
+	rep, err := artwork.Prune(dir, live, settled, cap)
 	if err != nil {
 		log.Error("artwork prune", "error", err)
 		return

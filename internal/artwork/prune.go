@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"time"
 )
 
 /*
@@ -67,6 +68,8 @@ type entry struct {
 	// better and is not dependable: Windows disables last-access updates by
 	// default, so atime is often the creation time wearing a disguise.
 	modified int64
+	// modTime is the same moment at full precision, for the orphan guard.
+	modTime time.Time
 }
 
 /*
@@ -80,8 +83,16 @@ type entry struct {
  * maxBytes of 0 means no limit, and in that state orphans are *still* removed:
  * they are waste under any policy, and the recoverable-order rule means doing
  * so can never cost a visible poster.
+ *
+ * `settled` guards the other side of reading `live` once: every writer puts a
+ * file in the cache first and records its row afterwards, so a poster written
+ * while this walks, or just before `live` was read, is not in `live` yet and
+ * looked like an orphan. Only a file last modified before `settled` may be
+ * removed as one (R08-7). The caller takes it before reading `live`, less a
+ * margin for the gap between a writer's file and its row; a real orphan that
+ * new is caught by the next pass.
  */
-func Prune(root string, live map[string]bool, maxBytes int64) (Report, error) {
+func Prune(root string, live map[string]bool, settled time.Time, maxBytes int64) (Report, error) {
 	var rep Report
 	if root == "" {
 		return rep, nil
@@ -105,6 +116,11 @@ func Prune(root string, live map[string]bool, maxBytes int64) (Report, error) {
 	for _, e := range entries {
 		if live[e.hash] {
 			kept = append(kept, e)
+			continue
+		}
+		if !e.modTime.Before(settled) {
+			// Possibly written after `live` was read: not known to be an
+			// orphan, so neither removed nor counted against the limit.
 			continue
 		}
 		if err := os.Remove(e.path); err != nil {
@@ -186,7 +202,7 @@ func scanCache(root string) ([]entry, error) {
 		}
 		out = append(out, entry{
 			path: path, hash: hash, size: size,
-			bytes: info.Size(), modified: info.ModTime().Unix(),
+			bytes: info.Size(), modified: info.ModTime().Unix(), modTime: info.ModTime(),
 		})
 		return nil
 	})
