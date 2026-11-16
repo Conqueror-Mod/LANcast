@@ -12,6 +12,7 @@ import (
 	"io"
 	"mime/multipart"
 	"net/http"
+	neturl "net/url"
 	"os"
 	"strings"
 	"time"
@@ -161,12 +162,12 @@ func Send(ctx context.Context, client *http.Client, url string, r Report) error 
 	defer cancel()
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, &buf)
 	if err != nil {
-		return fmt.Errorf("report: %w", err)
+		return fmt.Errorf("report: %w", hostOnly(err))
 	}
 	req.Header.Set("Content-Type", mw.FormDataContentType())
 	resp, err := client.Do(req)
 	if err != nil {
-		return fmt.Errorf("report: %w", err)
+		return fmt.Errorf("report: %w", hostOnly(err))
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode/100 != 2 {
@@ -174,4 +175,25 @@ func Send(ctx context.Context, client *http.Client, url string, r Report) error 
 		return fmt.Errorf("report: the destination answered %d: %s", resp.StatusCode, strings.TrimSpace(string(msg)))
 	}
 	return nil
+}
+
+/*
+ * hostOnly drops the webhook's path from a transport error (R07-9).
+ *
+ * A failed client.Do is a *url.Error, whose text is `Post "<url>": <cause>`,
+ * and a Discord webhook's path is its id and token. The handler logs this
+ * error, the log is readable through GET /api/logs, and a later report can
+ * attach it, so the token would travel. The host is enough to say where the
+ * report was going; the cause stays wrapped for errors.Is.
+ */
+func hostOnly(err error) error {
+	var ue *neturl.Error
+	if !errors.As(err, &ue) {
+		return err
+	}
+	host := "the webhook"
+	if u, perr := neturl.Parse(ue.URL); perr == nil && u.Host != "" {
+		host = u.Host
+	}
+	return fmt.Errorf("%s %s: %w", ue.Op, host, ue.Err)
 }
