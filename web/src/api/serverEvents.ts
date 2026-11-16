@@ -149,7 +149,8 @@ const REOPEN_MS = 15_000;
  * Mounted once, inside the signed-in app (App.tsx), so a signed-out window
  * holds no stream and a sign-in opens one.
  *
- * **Every reconnect refetches everything on screen** (ADR 0079 §4). Events sent
+ * **Every reconnect refetches everything on screen** (ADR 0079 §4), and marks
+ * everything cached stale for its next mount. Events sent
  * while the stream was down are gone, and that includes the gap while a
  * minimised window was frozen, so one refetch on the way back is the price of
  * never being stale for ever. The first open is not a reconnect: the screen
@@ -185,7 +186,11 @@ export function useServerEvents() {
       source = es;
       es.addEventListener("changed", onChanged as EventListener);
       es.onopen = () => {
-        if (opened) void qc.invalidateQueries({ type: "active" });
+        // Everything, not just what is mounted (R13-7): the default
+        // refetchType still refetches only active queries, but a cached
+        // screen is marked stale too, so it refetches when it is next opened
+        // rather than serving a pre-gap answer inside its staleTime.
+        if (opened) void qc.invalidateQueries();
         opened = true;
       };
       es.onerror = () => {

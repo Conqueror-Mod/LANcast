@@ -164,7 +164,20 @@ describe("the event stream", () => {
     es.open();
     es.fail(false); // dropped; the browser retries by itself
     es.open();
-    expect(invalidated()).toEqual([{ type: "active" }]);
+    expect(invalidated()).toEqual([undefined]);
+  });
+
+  /*
+   * R13-7. A screen that is cached but not mounted, still inside its
+   * staleTime, would otherwise be served its pre-gap answer when next opened.
+   */
+  it("marks cached screens stale when it reconnects, not just mounted ones", async () => {
+    qc.setQueryData(["memories", 12], []);
+    const es = await mount();
+    es.open();
+    es.fail(false);
+    es.open();
+    expect(qc.getQueryState(["memories", 12])?.isInvalidated).toBe(true);
   });
 
   /*
