@@ -693,13 +693,14 @@ func (c *Client) doWithRetry(ctx context.Context, endpoint string) ([]byte, erro
 
 		req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
 		if err != nil {
-			return nil, err
+			return nil, meta.RedactURLError(err)
 		}
 		req.Header.Set("Accept", "application/json")
 
 		resp, err := c.http.Do(req)
 		if err != nil {
-			lastErr = err
+			// The endpoint carries the API key in its query (R08-6).
+			lastErr = meta.RedactURLError(err)
 		} else {
 			body, readErr := io.ReadAll(resp.Body)
 			resp.Body.Close()
