@@ -173,6 +173,10 @@ type Throttle struct {
 	attempts map[string]*window
 	Max      int
 	Window   time.Duration
+	// Cap bounds how many addresses are remembered (R01-9). Every address that
+	// tries a password gets an entry, and only a success used to remove one,
+	// so a server on the internet kept every scanner until it restarted.
+	Cap int
 }
 
 type window struct {
@@ -189,6 +193,7 @@ func NewThrottle() *Throttle {
 		attempts: map[string]*window{},
 		Max:      10,
 		Window:   5 * time.Minute,
+		Cap:      10000,
 	}
 }
 
@@ -200,6 +205,9 @@ func (t *Throttle) Allow(key string) bool {
 	now := time.Now()
 	w, ok := t.attempts[key]
 	if !ok || now.After(w.reset) {
+		if !ok {
+			t.makeRoom(now)
+		}
 		t.attempts[key] = &window{count: 1, reset: now.Add(t.Window)}
 		return true
 	}
@@ -208,6 +216,37 @@ func (t *Throttle) Allow(key string) bool {
 	}
 	w.count++
 	return true
+}
+
+/*
+ * makeRoom keeps the map under Cap before a new address is added. Called with
+ * mu held.
+ *
+ * Expired windows go first: they would be replaced on their address's next
+ * attempt anyway. If that is not enough, the window with the fewest attempts
+ * goes, as AccountBackoff.makeRoom does and for its reason: somebody spraying
+ * from a whole /64 leaves thousands of addresses on one attempt each, and
+ * evicting by age instead would let the spray push out the address that is
+ * actually over its limit, and so reset it.
+ */
+func (t *Throttle) makeRoom(now time.Time) {
+	if t.Cap <= 0 || len(t.attempts) < t.Cap {
+		return
+	}
+	for k, w := range t.attempts {
+		if now.After(w.reset) {
+			delete(t.attempts, k)
+		}
+	}
+	for len(t.attempts) >= t.Cap {
+		victim, least := "", 0
+		for k, w := range t.attempts {
+			if victim == "" || w.count < least {
+				victim, least = k, w.count
+			}
+		}
+		delete(t.attempts, victim)
+	}
 }
 
 // Blocked reports whether key has used up its window, without counting an

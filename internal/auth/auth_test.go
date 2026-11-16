@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -270,5 +271,40 @@ func TestBlockedDoesNotCount(t *testing.T) {
 	}
 	if th.Blocked("b") {
 		t.Fatal("another key is blocked")
+	}
+}
+
+// The throttle no longer remembers every address for ever: past Cap, expired
+// windows are swept, then the least-used goes, and an address over its limit
+// outlives a spray of one-attempt addresses (R01-9).
+func TestTheThrottleIsBounded(t *testing.T) {
+	th := NewThrottle()
+	th.Cap = 50
+	th.Max = 3
+	for i := 0; i < 3; i++ {
+		th.Allow("attacker")
+	}
+	for i := 0; i < 1000; i++ {
+		th.Allow(fmt.Sprintf("spray-%d", i))
+	}
+	if n := len(th.attempts); n > th.Cap {
+		t.Fatalf("%d addresses remembered, cap %d", n, th.Cap)
+	}
+	if th.Allow("attacker") {
+		t.Fatal("the spray evicted the address that was over its limit")
+	}
+
+	// Expired windows are swept before anything live is evicted.
+	th2 := NewThrottle()
+	th2.Cap = 10
+	th2.Window = time.Millisecond
+	for i := 0; i < 10; i++ {
+		th2.Allow(fmt.Sprintf("old-%d", i))
+	}
+	time.Sleep(5 * time.Millisecond)
+	th2.Window = time.Hour
+	th2.Allow("new")
+	if n := len(th2.attempts); n != 1 {
+		t.Fatalf("%d entries after a sweep, want 1", n)
 	}
 }
