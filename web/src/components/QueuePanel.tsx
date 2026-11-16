@@ -43,6 +43,13 @@ interface PanelProps {
   inline?: boolean;
   ids: number[];
   currentID: number;
+  /**
+   * Where in `ids` the playing item is, or -1 for nowhere (it came off the
+   * hand-queued lane). The id alone cannot say: a playlist may hold the same
+   * track twice, and marking by id lit both copies and centred the window on
+   * the first (R16-2). Left out, the first copy of `currentID` is taken.
+   */
+  currentAt?: number;
   onPick: (id: number, at: number) => void;
   /**
    * Items queued by hand, which play before the queue resumes.
@@ -65,7 +72,15 @@ const NO_LANE: number[] = [];
  * defeat any memo. The wrapper keeps the latest in a ref and gives the list
  * callbacks that never change, so the list re-renders only for what it shows.
  */
-export function QueuePanel({ ids, currentID, onPick, upNext = NO_LANE, onDrop, inline = false }: PanelProps) {
+export function QueuePanel({
+  ids,
+  currentID,
+  currentAt,
+  onPick,
+  upNext = NO_LANE,
+  onDrop,
+  inline = false,
+}: PanelProps) {
   const pickRef = useRef(onPick);
   pickRef.current = onPick;
   const dropRef = useRef(onDrop);
@@ -76,6 +91,7 @@ export function QueuePanel({ ids, currentID, onPick, upNext = NO_LANE, onDrop, i
     <QueueList
       ids={ids}
       currentID={currentID}
+      at={currentAt === undefined || (currentAt >= 0 && ids[currentAt] !== currentID) ? ids.indexOf(currentID) : currentAt}
       upNext={upNext}
       inline={inline}
       onPick={pick}
@@ -94,6 +110,7 @@ export function initialWindow(length: number, at: number): [number, number] {
 const QueueList = memo(function QueueList({
   ids,
   currentID,
+  at,
   onPick,
   upNext,
   onDrop,
@@ -101,6 +118,8 @@ const QueueList = memo(function QueueList({
 }: {
   ids: number[];
   currentID: number;
+  /** The playing row's position in `ids`, or -1. */
+  at: number;
   onPick: (id: number, at: number) => void;
   upNext: number[];
   onDrop?: (at: number) => void;
@@ -122,7 +141,6 @@ const QueueList = memo(function QueueList({
   const currentRow = useRef<HTMLButtonElement>(null);
   const panel = useRef<HTMLDivElement>(null);
   const sight = useRowSight(panel);
-  const at = ids.indexOf(currentID);
 
   const [win, setWin] = useState<{ ids: number[]; range: [number, number] }>(() => ({
     ids,
@@ -184,7 +202,8 @@ const QueueList = memo(function QueueList({
     const row = currentRow.current;
     if (!box || !row) return;
     box.scrollTop += row.getBoundingClientRect().top - box.getBoundingClientRect().top;
-  }, [inline, currentID]);
+    // `at` too: the second copy of the track playing is a new row to follow to.
+  }, [inline, currentID, at]);
 
   const shown = ids.slice(from, to);
   return (
@@ -230,15 +249,19 @@ const QueueList = memo(function QueueList({
           const i = from + k;
           return (
             <QueueRow
-              key={id}
+              // Position as well as id, as the lane above does: two rows can
+              // carry the same track, and React given one key twice may drop
+              // or reuse the wrong row — a list that silently shortens.
+              key={`${id}@${i}`}
               id={id}
               position={i + 1}
               // The row's position, not just its id: two rows in a playlist can
               // carry the same track, and only the position says which was
               // pressed.
               at={i}
-              current={id === currentID}
-              rowRef={id === currentID ? currentRow : undefined}
+              // By position: marking by id lit every copy of a repeated track.
+              current={i === at}
+              rowRef={i === at ? currentRow : undefined}
               onPick={onPick}
             />
           );

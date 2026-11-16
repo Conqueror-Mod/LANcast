@@ -167,6 +167,30 @@ describe("the episode list", () => {
     expect(host.textContent).toContain("Fry is cryogenically frozen.");
   });
 
+  /*
+   * R16-3. The server stores an air date as midnight UTC. Read in the local
+   * zone, 13 April 1999 was "Apr 12" anywhere west of Greenwich. Node takes a
+   * new TZ at run time, so the viewer is put in New York for this one.
+   */
+  it("shows the air date as the date it aired, west of Greenwich too", () => {
+    const was = process.env.TZ;
+    process.env.TZ = "America/New_York";
+    try {
+      render([episode({ released_at: Date.UTC(1999, 3, 13) / 1000 })]);
+      const expected = new Date(Date.UTC(1999, 3, 13)).toLocaleDateString(undefined, {
+        year: "numeric",
+        month: "short",
+        day: "numeric",
+        timeZone: "UTC",
+      });
+      expect(expected).toMatch(/13/);
+      expect(host.querySelector(".eprow__meta")?.textContent).toContain(expected);
+    } finally {
+      if (was === undefined) delete process.env.TZ;
+      else process.env.TZ = was;
+    }
+  });
+
   // An untouched season should not be a wall of empty bars.
   it("draws no progress bar on an episode nobody has started", () => {
     render([episode()]);

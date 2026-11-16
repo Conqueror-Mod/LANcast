@@ -102,6 +102,12 @@ export function TogetherPanel({ onClose }: { onClose: () => void }) {
         </div>
       )}
 
+      {t.session && t.reconnecting && (
+        <p className="together__note" role="status">
+          Reconnecting…
+        </p>
+      )}
+
       {t.error && (
         <p className="together__error" role="alert">
           {t.error}

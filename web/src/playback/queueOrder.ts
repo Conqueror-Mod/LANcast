@@ -40,8 +40,17 @@ export function shuffledStartingWith(
   current: number,
   rand: () => number = Math.random,
 ): number[] {
-  const rest = shuffled(queue.filter((id) => id !== current), rand);
-  return queue.includes(current) ? [current, ...rest] : rest;
+  /*
+   * One copy of it, not every copy. A playlist may hold the same track twice
+   * (ADR 0030), and filtering out every entry equal to `current` before
+   * putting one back turned [5, 7, 5, 9] into [5, 7, 9]: the second play was
+   * gone and the queue count one short (R14-5). Which copy is taken does not
+   * matter — they are the same track, and the rest is shuffled anyway.
+   */
+  const at = queue.indexOf(current);
+  if (at < 0) return shuffled(queue, rand);
+  const rest = shuffled([...queue.slice(0, at), ...queue.slice(at + 1)], rand);
+  return [current, ...rest];
 }
 
 export type RepeatMode = "off" | "all" | "one";

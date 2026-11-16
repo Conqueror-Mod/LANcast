@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router";
 import {
   useCreatePlaylist,
@@ -136,15 +136,42 @@ function TitlePrompt({
   confirmLabel,
   onConfirm,
   onCancel,
+  busy = false,
+  error = null,
 }: {
   label: string;
   initial: string;
   confirmLabel: string;
   onConfirm: (value: string) => void;
   onCancel: () => void;
+  /**
+   * The write is in flight. The prompt stays open until it succeeds, so
+   * without this a double-click or Enter pressed twice sent it twice: two
+   * playlists with one name, the first left behind (R15-4).
+   */
+  busy?: boolean;
+  /** Why the last attempt failed, drawn under the field. It used to say
+   *  nothing: the prompt just stayed where it was. */
+  error?: string | null;
 }) {
   const [value, setValue] = useState(initial);
   useBackHandler(onCancel);
+  /*
+   * `busy` arrives a render after the press: the mutation's state reaches
+   * React on the next tick, and two presses inside one tick both saw it false.
+   * So a press is remembered here at once, and forgotten when the write is no
+   * longer in flight — succeeded, failed, or never started.
+   */
+  const sent = useRef(false);
+  useEffect(() => {
+    if (!busy) sent.current = false;
+  }, [busy, error]);
+  const confirm = () => {
+    const title = value.trim();
+    if (!title || busy || sent.current) return;
+    sent.current = true;
+    onConfirm(title);
+  };
   return (
     <div className="pl-prompt__overlay" onClick={onCancel}>
       <div
@@ -161,18 +188,23 @@ function TitlePrompt({
           aria-label={label}
           onChange={(e) => setValue(e.target.value)}
           onKeyDown={(e) => {
-            if (e.key === "Enter" && value.trim()) onConfirm(value.trim());
+            if (e.key === "Enter") confirm();
             if (e.key === "Escape") onCancel();
           }}
         />
+        {error && (
+          <p className="pl-prompt__error" role="alert">
+            {error}
+          </p>
+        )}
         <div className="pl-prompt__row">
           <button className="pl-prompt__cancel" onClick={onCancel}>
             Cancel
           </button>
           <button
             className="pl-prompt__ok"
-            disabled={value.trim() === ""}
-            onClick={() => onConfirm(value.trim())}
+            disabled={value.trim() === "" || busy}
+            onClick={confirm}
           >
             {confirmLabel}
           </button>
@@ -197,6 +229,8 @@ function RenameTile({
       confirmLabel="Rename"
       onCancel={onDone}
       onConfirm={(title) => rename.mutate(title, { onSuccess: onDone })}
+      busy={rename.isPending}
+      error={rename.error ? `Could not rename it: ${rename.error.message}` : null}
     />
   );
 }
@@ -320,7 +354,13 @@ export function Playlists() {
           label="New playlist"
           initial=""
           confirmLabel="Create"
-          onCancel={() => setCreating(false)}
+          onCancel={() => {
+            // A failure from the last time the prompt was open is not news.
+            create.reset();
+            setCreating(false);
+          }}
+          busy={create.isPending}
+          error={create.error ? `Could not create it: ${create.error.message}` : null}
           onConfirm={(title) =>
             create.mutate(
               { title, library_id: libraryID },

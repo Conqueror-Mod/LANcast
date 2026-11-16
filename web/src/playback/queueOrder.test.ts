@@ -102,6 +102,20 @@ describe("shuffledStartingWith", () => {
     expect(differed).toBeGreaterThan(90);
   });
 
+  /*
+   * R14-5. A playlist may hold the same track twice (ADR 0030). Every copy of
+   * the playing id used to be filtered out and one put back, so the second
+   * play of 5 was gone and the count one short.
+   */
+  it("keeps the other copies of a repeated playing track", () => {
+    for (let run = 0; run < 50; run++) {
+      const out = shuffledStartingWith([5, 7, 5, 9], 5);
+      expect(out[0]).toBe(5);
+      expect(out).toHaveLength(4);
+      expect([...out].sort((a, b) => a - b)).toEqual([5, 5, 7, 9]);
+    }
+  });
+
   it("handles a current item that is not in the queue", () => {
     const out = shuffledStartingWith(seq(5), 99);
     expect(out.length).toBe(5);

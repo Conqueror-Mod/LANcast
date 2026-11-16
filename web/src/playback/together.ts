@@ -20,6 +20,12 @@ import { peerRoomURL } from "./peerSource";
  */
 
 const POLL_MS = 2000;
+/*
+ * Failed polls in a row before the room is said to be reconnecting. One is a
+ * Wi-Fi blip or a busy moment and not worth a word; three is six seconds of
+ * silence, which somebody watching would notice.
+ */
+const RECONNECTING_AFTER = 3;
 const REPORT_MS = 3000;
 /*
  * A follower on another server polls faster, and the host reports a pause or
@@ -95,6 +101,8 @@ export interface TogetherControls {
   receivedAt: number;
   isHost: boolean;
   error: string | null;
+  /** Several polls in a row have failed and the room is being retried. */
+  reconnecting: boolean;
   start: (itemID: number, positionMS: number) => Promise<TogetherSession | null>;
   join: (id: string) => Promise<TogetherSession | null>;
   leave: () => Promise<void>;
@@ -138,9 +146,13 @@ export function useTogether(userID: string | undefined): TogetherControls {
   // torn down and rebuilt every time the session object changes — which is
   // every two seconds, and would restart the interval each time.
   const idRef = useRef<string | null>(null);
+  const failures = useRef(0);
+  const [reconnecting, setReconnecting] = useState(false);
 
   const stop = useCallback(() => {
     idRef.current = null;
+    failures.current = 0;
+    setReconnecting(false);
     setSession(null);
   }, [setSession]);
 
@@ -200,15 +212,31 @@ export function useTogether(userID: string | undefined): TogetherControls {
       if (!id) return;
       try {
         const next = await apiGet<TogetherSession>(`/api/together/${id}`);
-        if (!cancelled) setSession(next);
-      } catch {
-        // A 404 means the room ended — the host left, or went quiet. Stopping
-        // is the honest response: there is nothing left to follow, and
-        // retrying would poll a room that no longer exists forever.
-        if (!cancelled) {
+        if (cancelled) return;
+        failures.current = 0;
+        setReconnecting(false);
+        setSession(next);
+      } catch (e) {
+        if (cancelled) return;
+        /*
+         * A 404 means the room ended — the host left, or went quiet — and a
+         * 403 that this person is no longer in it. Stopping is the honest
+         * response to those: there is nothing left to follow, and retrying
+         * would poll a room that no longer exists forever.
+         *
+         * Anything else is not an ending (R14-6). A Wi-Fi blip, a 500, or a
+         * poll racing a server restart used to end the room for this window:
+         * a follower dropped out of a room still running, and a host stopped
+         * reporting so it went stale for everyone. Those keep polling, and say
+         * so after a few in a row.
+         */
+        if (e instanceof ApiFailure && (e.status === 404 || e.status === 403)) {
           setError("That session has ended.");
           stop();
+          return;
         }
+        failures.current++;
+        if (failures.current >= RECONNECTING_AFTER) setReconnecting(true);
       }
     };
 
@@ -231,6 +259,7 @@ export function useTogether(userID: string | undefined): TogetherControls {
     receivedAt,
     isHost: !!session && !!userID && session.host_id === userID,
     error,
+    reconnecting,
     start,
     join,
     leave,

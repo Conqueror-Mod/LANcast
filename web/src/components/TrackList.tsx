@@ -79,6 +79,7 @@ type PlaylistRowEdits = {
 
 function TrackRow({
   track,
+  at,
   queue,
   albumArtist,
   showNumbers,
@@ -90,6 +91,12 @@ function TrackRow({
   album,
 }: {
   track: Item;
+  /**
+   * The row's position in the queue it plays. A playlist may hold the same
+   * track twice, and the id alone started the queue from the first copy, so
+   * pressing the second replayed everything between them (R16-6).
+   */
+  at: number;
   queue: string;
   /**
    * The queue as ids, handed over in history state rather than ?queue=. Set
@@ -113,8 +120,8 @@ function TrackRow({
   const navigate = useNavigate();
   const play = () =>
     stateQueue
-      ? navigate(`/watch/${track.id}`, { state: { queue: stateQueue } })
-      : navigate(`/watch/${track.id}?queue=${queue}`);
+      ? navigate(`/watch/${track.id}`, { state: { queue: stateQueue, at } })
+      : navigate(`/watch/${track.id}?queue=${queue}`, { state: { at } });
   const [menuAt, setMenuAt] = useState<MenuPoint | null>(null);
   const [byKey, setByKey] = useState(false);
   const openedFrom = useRef<HTMLElement | null>(null);
@@ -451,6 +458,9 @@ export function TrackList({
                 // sequence that only changes when the whole thing is replaced.
                 key={`${track.id}@${i}`}
                 track={track}
+                // Grouped by disc, i counts within the disc; the queue is the
+                // whole list, and indexOf on the object finds this very row.
+                at={oneSequence ? i : tracks.indexOf(track)}
                 queue={queue}
                 albumArtist={albumArtist}
                 showNumbers={showNumbers}

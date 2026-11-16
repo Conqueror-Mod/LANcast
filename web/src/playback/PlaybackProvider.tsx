@@ -354,6 +354,11 @@ interface PlaybackState {
    *  same array as `queue` when it is off. Anything *showing* the queue must
    *  use this, or it describes an order that is not going to happen. */
   playOrder: number[];
+  /** Where in `playOrder` the playing item is, or -1 when it is not playing
+   *  from the queue (a hand-queued track, or nothing). A position, because a
+   *  playlist may hold the same track twice and only the position says which
+   *  copy this is (R16-2). */
+  playPos: number;
   /** Whether there is anything to move to in each direction. */
   hasNext: boolean;
   hasPrev: boolean;
@@ -362,7 +367,9 @@ interface PlaybackState {
    *  replays rather than advances. */
   nextItemID: number | null;
 
-  play: (id: number, queue: number[], fromStart?: boolean) => void;
+  /** `at` is where in `queue` the pressed entry is, when the caller knows:
+   *  the only way to tell two copies of one track apart (R16-6). */
+  play: (id: number, queue: number[], fromStart?: boolean, at?: number) => void;
   stop: () => void;
   togglePlay: () => void;
   seekTo: (t: number) => void;
@@ -1041,7 +1048,7 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
   // every list on screen.
   const finishedShown = useRef<number | null>(null);
   const saveProgress = useCallback(
-    (force = false, at?: number) => {
+    (force = false, at?: number, keepalive = false) => {
       const now = Date.now();
       if (!force && now - lastSaved.current < 5000) return;
       lastSaved.current = now;
@@ -1129,10 +1136,15 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
        */
       const done = totalDuration ? pos / totalDuration > 0.92 : false;
       if (!done && pos * 1000 < startedFloorMs(totalDuration * 1000)) return;
-      void apiSend(`/api/items/${itemID}/progress`, "PUT", {
-        position_ms: Math.floor(pos * 1000),
-        watched: done,
-      })
+      void apiSend(
+        `/api/items/${itemID}/progress`,
+        "PUT",
+        {
+          position_ms: Math.floor(pos * 1000),
+          watched: done,
+        },
+        { keepalive },
+      )
         .then(() => {
           /*
            * Finishing something changes what the page behind the player
@@ -1157,7 +1169,12 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
   const saveRef = useRef(saveProgress);
   saveRef.current = saveProgress;
   useEffect(() => {
-    const onHide = () => saveRef.current(true);
+    /*
+     * keepalive, as BookPlayer's own pagehide write has: a browser cancels an
+     * ordinary request from a page being unloaded, so closing a tab dropped
+     * this write and resume came back up to five seconds early (R14-7).
+     */
+    const onHide = () => saveRef.current(true, undefined, true);
     window.addEventListener("pagehide", onHide);
     return () => {
       window.removeEventListener("pagehide", onHide);
@@ -1182,7 +1199,7 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
    * once and to nothing else.
    */
   const fromStartFor = useRef(0);
-  const play = useCallback((id: number, q: number[], fromStart = false) => {
+  const play = useCallback((id: number, q: number[], fromStart = false, at?: number) => {
     const resuming = playingRef.current === id;
     // Pressing play on something starts a listening session: it fades in
     // (lib/taper.ts). Re-entering the player for what is playing does not.
@@ -1211,10 +1228,12 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
       }
       return next;
     });
-    // A new entry into the player has no opinion about position. Clearing it
-    // makes the next read fall back to finding the item, rather than trusting
-    // an index left over from a different queue.
-    setPos(-1);
+    // A new entry into the player has no opinion about position, unless the
+    // caller said which entry was pressed. Clearing it makes the next read
+    // fall back to finding the item (the first copy), rather than trusting an
+    // index left over from a different queue. A position that does not hold
+    // this id is ignored for the same reason.
+    setPos(at != null && at >= 0 && q[at] === id ? at : -1);
   }, []);
 
   const stop = useCallback(() => {
@@ -3092,6 +3111,7 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
     repeat,
     queue,
     playOrder: order,
+    playPos: offPiste ? -1 : idxInOrder,
     hasNext,
     hasPrev,
     play,

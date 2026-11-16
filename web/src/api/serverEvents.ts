@@ -16,6 +16,41 @@ import { useQueryClient, type QueryClient } from "@tanstack/react-query";
  */
 
 /*
+ * What a finished scan, enrichment or location pass can change. **One list for
+ * both refresh paths**: the `items` event below and the activity poll's
+ * finished-work edge in hooks.ts. They were two lists that were meant to be the
+ * same and had drifted, so a collection's page, a playlist, a search, the photo
+ * timeline, the duplicates view and "On this day" all kept a film the scan had
+ * just marked missing (R13-6).
+ *
+ * Each is a top-level key of its own, so nothing else here reaches it: a list
+ * that a scan can change and is missing from here is stale until it remounts.
+ */
+export const workFinishedKeys: readonly string[] = [
+  "libraries",
+  "items",
+  // A location pass is seconds long, so it usually finishes between polls.
+  "places",
+  "item",
+  "facets",
+  "recently-added",
+  "continue",
+  "review",
+  "children",
+  "recent-photos",
+  // A title whose file went missing leaves the watchlist until it returns.
+  "watchlist",
+  // Its own top-level keys, each a list a missing or retitled row changes.
+  "collection-members",
+  "item-collections",
+  "playlist-entries",
+  "search",
+  "timeline",
+  "duplicates",
+  "memories",
+];
+
+/*
  * What each topic makes stale. **The one place a screen opts in.**
  *
  * A new query whose data the server can change by itself needs a row here, and
@@ -33,19 +68,13 @@ export const topicKeys: Record<string, readonly (readonly string[])[]> = {
    * it happens to be polling for, at 8 s while idle, so a sub-second scan
    * started from another window slipped past it. The event does not.
    */
-  items: [
-    ["items"],
-    ["item"],
-    ["children"],
-    ["facets"],
-    ["places"],
-    ["review"],
-    ["recently-added"],
-    ["continue"],
-    ["recent-photos"],
-    // A rescan can mark a listed title missing, which takes it off the list.
-    ["watchlist"],
-  ],
+  /*
+   * The same list the activity poll refreshes when it sees a job end
+   * (`workFinishedKeys` in hooks.ts reads it from here). That poll only catches
+   * an end it happens to be polling for, at 8 s while idle, so a sub-second
+   * scan started from another window slipped past it. The event does not.
+   */
+  items: workFinishedKeys.map((k) => [k]),
   // The schedule writes and rotates backups with nobody pressing anything.
   backups: [["backups"]],
   // Another of this person's windows offered itself, left, or changed what
@@ -120,7 +149,8 @@ const REOPEN_MS = 15_000;
  * Mounted once, inside the signed-in app (App.tsx), so a signed-out window
  * holds no stream and a sign-in opens one.
  *
- * **Every reconnect refetches everything on screen** (ADR 0079 §4). Events sent
+ * **Every reconnect refetches everything on screen** (ADR 0079 §4), and marks
+ * everything cached stale for its next mount. Events sent
  * while the stream was down are gone, and that includes the gap while a
  * minimised window was frozen, so one refetch on the way back is the price of
  * never being stale for ever. The first open is not a reconnect: the screen
@@ -156,7 +186,11 @@ export function useServerEvents() {
       source = es;
       es.addEventListener("changed", onChanged as EventListener);
       es.onopen = () => {
-        if (opened) void qc.invalidateQueries({ type: "active" });
+        // Everything, not just what is mounted (R13-7): the default
+        // refetchType still refetches only active queries, but a cached
+        // screen is marked stale too, so it refetches when it is next opened
+        // rather than serving a pre-gap answer inside its staleTime.
+        if (opened) void qc.invalidateQueries();
         opened = true;
       };
       es.onerror = () => {

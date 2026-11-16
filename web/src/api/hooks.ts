@@ -8,6 +8,7 @@ import {
   type QueryClient,
 } from "@tanstack/react-query";
 import { ApiFailure, apiGet, apiPost, apiSend, apiUpload } from "./client";
+import { workFinishedKeys } from "./serverEvents";
 import type { PreviewSheets } from "@/lib/previews";
 import { addPasskey, signInWithPasskey } from "@/lib/webauthn";
 import type {
@@ -940,20 +941,10 @@ function useBackgroundLibraryJob(path: (libraryID: number) => string) {
  * the row was already missing = 1 in the database, and the client was reading
  * its own cache.
  */
-const workFinishedKeys = [
-  "libraries",
-  "items",
-  // A location pass is seconds long, so it usually finishes between polls.
-  "places",
-  "item",
-  "facets",
-  "recently-added",
-  "continue",
-  "review",
-  "children",
-  // A title whose file went missing leaves the watchlist until it returns.
-  "watchlist",
-];
+/*
+ * The list itself lives in serverEvents.ts, shared with the `items` topic so
+ * the two refresh paths cannot drift apart again (R13-6).
+ */
 
 export function useStartScan() {
   return useBackgroundLibraryJob((id) => `/api/libraries/${id}/scan`);

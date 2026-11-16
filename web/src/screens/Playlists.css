@@ -207,6 +207,13 @@
   color: var(--text-faint);
 }
 
+/* The same muted red the sign-in screen uses for a refusal (Auth.css). */
+.pl-prompt__error {
+  margin: 0;
+  font-size: 12px;
+  color: #e08a7a;
+}
+
 .pl-prompt__input {
   padding: 10px 12px;
   border-radius: var(--radius-tile, 8px);
