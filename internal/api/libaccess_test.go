@@ -9,7 +9,9 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
+	"lancast/internal/scan"
 	"lancast/internal/store"
 )
 
@@ -410,5 +412,76 @@ func TestPlaylistWritesKeepToTheCallersLibraries(t *testing.T) {
 	}
 	if code := status(t, a.doAs(t, a.member, "POST", path, map[string]any{"item_ids": []int64{a.openFilm}})); code != http.StatusNoContent {
 		t.Errorf("control: member add visible = %d", code)
+	}
+}
+
+// R07-5: the activity feed, open to every account, tells a member nothing about
+// a library kept from them and no scan's error, and shows only their own
+// conversions. The administrator still sees everything.
+func TestActivityKeepsToWhatTheCallerMayKnow(t *testing.T) {
+	a := newAccessHarness(t)
+	ctx := context.Background()
+	// A second, visible library, so the member has a failed scan of their own.
+	brokenDir := t.TempDir()
+	broken, err := a.st.CreateLibrary(ctx, "Broken", "movie", brokenDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	private, err := a.st.GetLibrary(ctx, a.private)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, lib := range []*store.Library{private, broken} {
+		if err := os.RemoveAll(lib.Path); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := a.srvAPI.scanner.Start(*lib); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, id := range []int64{private.ID, broken.ID} {
+		deadline := time.Now().Add(15 * time.Second)
+		for a.srvAPI.scanner.Status(id).State != scan.StateFailed {
+			if time.Now().After(deadline) {
+				t.Fatalf("library %d: scan state %v", id, a.srvAPI.scanner.Status(id).State)
+			}
+			time.Sleep(10 * time.Millisecond)
+		}
+	}
+	if code := status(t, a.hide(t, a.private)); code != http.StatusOK {
+		t.Fatalf("hide = %d", code)
+	}
+
+	read := func(resp *http.Response) []Activity {
+		var body struct {
+			Tasks []Activity `json:"tasks"`
+		}
+		decode(t, resp, &body)
+		return body.Tasks
+	}
+	scans := func(tasks []Activity) map[int64]Activity {
+		out := map[int64]Activity{}
+		for _, task := range tasks {
+			if task.Kind == "scan" {
+				out[task.LibraryID] = task
+			}
+		}
+		return out
+	}
+
+	member := scans(read(a.doAs(t, a.member, "GET", "/api/activity", nil)))
+	if task, ok := member[a.private]; ok {
+		t.Errorf("member is shown the hidden library's scan: %+v", task)
+	}
+	if task, ok := member[broken.ID]; !ok || task.State != "failed" || task.Error != "" {
+		t.Errorf("member's view of a visible failed scan = %+v (present %v); want failed, no error", task, ok)
+	}
+
+	admin := scans(read(a.authed(t, "GET", "/api/activity", nil)))
+	if task, ok := admin[a.private]; !ok || task.Error == "" {
+		t.Errorf("control: admin's view of the hidden library's scan = %+v (present %v)", task, ok)
+	}
+	if task := admin[broken.ID]; task.Error == "" {
+		t.Errorf("control: admin is not shown the error: %+v", task)
 	}
 }

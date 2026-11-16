@@ -16575,7 +16575,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Every running or failed task. */
+            /** @description Every running or failed task the caller may know of. An account that is not an administrator is not shown scans of libraries kept from it, nor any scan's `error`, and sees only its own `transcode` tasks. */
             200: {
                 headers: {
                     [name: string]: unknown;

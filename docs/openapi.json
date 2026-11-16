@@ -7507,7 +7507,7 @@
         "summary": "What the server is doing right now",
         "responses": {
           "200": {
-            "description": "Every running or failed task.",
+            "description": "Every running or failed task the caller may know of. An account that is not an administrator is not shown scans of libraries kept from it, nor any scan's `error`, and sees only its own `transcode` tasks.",
             "content": {
               "application/json": {
                 "schema": {

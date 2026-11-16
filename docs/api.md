@@ -3794,6 +3794,12 @@ answers the question without that knowledge, in one shape:
   add new values; a client that does not recognise one still has a title and a
   progress pair, which is the point of normalizing.
 - `id` is stable for the task's lifetime, so a list can be keyed by it.
+- **Each account is told what it may know.** Any signed-in account may ask,
+  so an account that is not an administrator is not shown a scan of a library
+  kept from it, is never shown a scan's `error` (the walk's own message, which
+  can name a filesystem path; the `state` still says `failed`), and sees only
+  its own `transcode` tasks, as `GET /api/transcode` has it. An
+  administrator sees everything.
 - A `transcode` task titles itself **"Remuxing for playback"** when the streams
   are being copied into a different container and **"Transcoding for playback"**
   only when something is genuinely re-encoded. The two differ by an order of
