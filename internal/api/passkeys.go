@@ -253,11 +253,6 @@ func (s *Server) passkeyRegisterOptions(w http.ResponseWriter, r *http.Request) 
 		s.passkeyUnavailable(w)
 		return
 	}
-	key := auth.ClientKey(r)
-	if !s.throttle.Allow(key) {
-		writeError(w, http.StatusTooManyRequests, "too_many_requests", "too many attempts; wait a few minutes")
-		return
-	}
 	var req struct {
 		Current string `json:"current_password"`
 	}
@@ -265,28 +260,11 @@ func (s *Server) passkeyRegisterOptions(w http.ResponseWriter, r *http.Request) 
 		writeError(w, http.StatusBadRequest, "bad_request", "malformed JSON body")
 		return
 	}
-	u, err := s.st.UserByID(r.Context(), sess.UserID)
-	if err != nil {
-		s.writeInternal(w, err, "load user")
+	u, ok := s.confirmPassword(w, r, sess.UserID, req.Current,
+		http.StatusUnauthorized, "unauthorized", "current password is incorrect")
+	if !ok {
 		return
 	}
-	s.throttle.Attribute(key, u.Name)
-	inside := auth.InsideNetwork(r)
-	if !inside {
-		if ok, _ := s.accountWait.Allow(u.Name); !ok {
-			writeError(w, http.StatusTooManyRequests, "too_many_requests", "too many attempts; wait a few minutes")
-			return
-		}
-	}
-	if !auth.CheckPassword(u.PasswordHash, req.Current) {
-		if !inside {
-			s.accountWait.Fail(u.Name)
-		}
-		writeError(w, http.StatusUnauthorized, "unauthorized", "current password is incorrect")
-		return
-	}
-	s.throttle.Reset(key, u.Name)
-	s.accountWait.Reset(u.Name)
 
 	existing, err := s.st.PasskeysByUser(r.Context(), u.ID)
 	if err != nil {

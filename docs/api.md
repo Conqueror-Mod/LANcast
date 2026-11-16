@@ -2694,7 +2694,8 @@ codes are the way in**, which is what they are for.
 | `DELETE /api/users/{id}/two-factor` | Administrators: take it off somebody else's account → `204` |
 
 Setup, turning it off and new codes ask for the password, on the sign-in
-throttle; a wrong one is `403`. Every route here that changes two-factor wants
+throttle **and** the per-account wait that sign-in applies from outside the
+house, as changing the password and adding a passkey do; a wrong one is `403`. Every route here that changes two-factor wants
 a signed-in session: an **API key is refused** with `403`, as it is for
 managing keys, since a key that could set the second factor could lock its own
 owner out. `GET /api/users` marks an account

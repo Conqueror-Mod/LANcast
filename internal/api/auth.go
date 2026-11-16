@@ -862,13 +862,6 @@ func (s *Server) authChangePassword(w http.ResponseWriter, r *http.Request) {
 	 * budget by asking on a different route. A correct answer clears it, below,
 	 * exactly as a successful login does.
 	 */
-	key := auth.ClientKey(r)
-	if !s.throttle.Allow(key) {
-		writeError(w, http.StatusTooManyRequests, "too_many_requests",
-			"too many attempts; wait a few minutes")
-		return
-	}
-
 	var req struct {
 		Current string `json:"current_password"`
 		New     string `json:"new_password"`
@@ -877,35 +870,14 @@ func (s *Server) authChangePassword(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "bad_request", "malformed JSON body")
 		return
 	}
-
-	u, err := s.st.UserByID(r.Context(), sess.UserID)
-	if err != nil {
-		s.writeInternal(w, err, "load user")
+	// Both throttles, and a correct answer clears this account's share of
+	// them, exactly as a successful login does (confirmPassword).
+	u, ok := s.confirmPassword(w, r, sess.UserID, req.Current,
+		http.StatusUnauthorized, "unauthorized", "current password is incorrect")
+	if !ok {
 		return
 	}
-	s.throttle.Attribute(key, u.Name)
-	// The same per-account wait as login, for the reason the per-address
-	// counter is shared: a stolen session must not be a fresh budget for
-	// learning the password from many addresses.
-	inside := auth.InsideNetwork(r)
-	if !inside {
-		if ok, _ := s.accountWait.Allow(u.Name); !ok {
-			writeError(w, http.StatusTooManyRequests, "too_many_requests",
-				"too many attempts; wait a few minutes")
-			return
-		}
-	}
-	if !auth.CheckPassword(u.PasswordHash, req.Current) {
-		if !inside {
-			s.accountWait.Fail(u.Name)
-		}
-		writeError(w, http.StatusUnauthorized, "unauthorized", "current password is incorrect")
-		return
-	}
-	// Knowing the current password is the same proof a login gives, so it earns
-	// the same clean slate, for this account's attempts only.
-	s.throttle.Reset(key, u.Name)
-	s.accountWait.Reset(u.Name)
+	key := auth.ClientKey(r)
 
 	hash, err := auth.HashPassword(req.New)
 	if auth.PasswordRefused(err) {
