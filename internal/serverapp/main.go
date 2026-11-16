@@ -364,7 +364,8 @@ func run(ctx context.Context, addr, dataDir string, log *slog.Logger) error {
 	if serviceManaged {
 		backups.WithGuard(mediatools.ServiceGuard())
 	}
-	if out := backups.ApplyPending(ctx, cfg.DBPath(), time.Now()); out != nil {
+	restored := backups.ApplyPending(ctx, cfg.DBPath(), time.Now())
+	if out := restored; out != nil {
 		if out.OK {
 			log.Info("backup restored", "name", out.Name, "requested_by", out.RequestedBy,
 				"schema_from", out.SchemaFrom, "schema_to", out.SchemaTo, "kept_first", out.SafetyBackup)
@@ -381,6 +382,12 @@ func run(ctx context.Context, addr, dataDir string, log *slog.Logger) error {
 		return err
 	}
 	defer st.Close()
+
+	// The restore's audit record, in the database it produced: the one the
+	// request wrote went with the database it replaced (R07-8).
+	if err := backup.RecordOutcome(ctx, st, restored); err != nil {
+		log.Warn("the restore could not be recorded in the audit log", "error", err)
+	}
 
 	version, err := st.SchemaVersion()
 	if err != nil {

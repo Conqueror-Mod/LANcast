@@ -369,9 +369,11 @@ func (s *Server) restoreBackup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// Audited before the restart, into the database being replaced: that is
-	// the record of the decision, and it travels in the safety backup too.
+	// the record of the decision, and it travels in the safety backup. The
+	// restore itself is recorded again after the restart, in the database it
+	// produces (backup.RecordOutcome), so the log read afterwards has it too.
 	s.audit(r, "backup.restore", "backup", name,
-		fmt.Sprintf("Restored the backup %s (the database before it was kept as %s)", name, safety.Name),
+		fmt.Sprintf("Asked to restore the backup %s (the database before it was kept as %s)", name, safety.Name),
 		map[string]any{"safety_backup": safety.Name})
 	if err := s.restartSelf(); err != nil {
 		// Nothing will apply it, so it must not wait for some later restart

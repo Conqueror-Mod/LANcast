@@ -224,3 +224,59 @@ func (d *Dir) Staged() *Pending {
 	}
 	return &p
 }
+
+/*
+ * RecordOutcome writes a staged restore into the audit log of the database it
+ * produced (R07-8).
+ *
+ * The request that asked for it audits into the database being replaced, so
+ * after the restart the record survived only in the safety backup, and the
+ * log an administrator reads afterwards said nothing about a restore having
+ * happened, who asked, or where the previous state went. Called once the
+ * store is open, after ApplyPending. A failed restore is recorded too, in the
+ * database that stayed, because "somebody tried to put this back and it did
+ * not take" belongs in the same history.
+ *
+ * Who asked is known by name only: the marker carries the name, and the
+ * account behind it may not exist in a database from before it was made.
+ */
+func RecordOutcome(ctx context.Context, st *store.Store, out *Outcome) error {
+	if out == nil {
+		return nil
+	}
+	return st.AppendAudit(ctx, outcomeAudit(out))
+}
+
+// outcomeAudit is the audit event for a restore's outcome.
+func outcomeAudit(out *Outcome) store.AuditEvent {
+	ev := store.AuditEvent{
+		At:         out.AppliedAt,
+		ActorName:  out.RequestedBy,
+		Action:     "backup.restore",
+		TargetKind: "backup",
+		TargetID:   out.Name,
+	}
+	if ev.ActorName == "" {
+		ev.ActorName = "unknown"
+	}
+	detail := map[string]any{"ok": out.OK}
+	if out.SafetyBackup != "" {
+		detail["safety_backup"] = out.SafetyBackup
+	}
+	if out.OK {
+		ev.Summary = fmt.Sprintf("Restored the backup %s", out.Name)
+		if out.SafetyBackup != "" {
+			ev.Summary += fmt.Sprintf(" (the database before it was kept as %s)", out.SafetyBackup)
+		}
+		detail["schema_from"] = out.SchemaFrom
+		detail["schema_to"] = out.SchemaTo
+	} else {
+		ev.Summary = fmt.Sprintf("A restore of the backup %s did not take, so the database that was there was kept: %s",
+			out.Name, out.Error)
+		detail["error"] = out.Error
+	}
+	if b, err := json.Marshal(detail); err == nil {
+		ev.Detail = string(b)
+	}
+	return ev
+}
