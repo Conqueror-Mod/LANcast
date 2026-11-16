@@ -57,8 +57,12 @@ you compiled yourself cannot send one; it offers to copy the report instead.
 - **Ratings from OMDb**, only if an administrator enters an OMDb key: the
   IMDb ids of films and shows, for IMDb, Rotten Tomatoes and Metacritic
   ratings.
-- **Media tools.** ffmpeg is downloaded from GitHub when an administrator
-  presses the button, after being told what it is and its licence.
+- **Media tools.** On Windows, ffmpeg is downloaded from GitHub when an
+  administrator asks: by leaving the box ticked on the form that creates the
+  first account (it is ticked by default, and says what it fetches, from where,
+  its size and its licence), or by pressing **Download ffmpeg** in Settings
+  later. Untick the box and nothing is fetched. Linux servers never download
+  it; you install your distribution's package.
 - **Face recognition models**, the same way: from GitHub and Hugging Face,
   when an administrator asks. Faces are then found and matched on your
   server; no picture leaves it.
@@ -120,8 +124,9 @@ in Settings, under Connected accounts. It's per person and off until then.
   themselves; it is off for everyone until they do, and it is never stored.
 - **Webhooks**, if an administrator adds any: the events they chose are sent
   to the addresses they entered, signed, and to nobody else.
-- **Live TV**, if set up: channel lists, guides and streams come from the
-  addresses an administrator entered.
+- **Live TV** is off in 1.0 and contacts nothing. Turned back on by hand
+  (`"live_tv": true` in `config.json`), channel lists, guides and streams come
+  from the addresses an administrator entered.
 - **Plugins** can't use the network unless their manifest asks for it and
   an administrator installs them. Even then, they can only reach the hosts
   they named.
@@ -130,7 +135,10 @@ in Settings, under Connected accounts. It's per person and off until then.
 
 The desktop app, phones and browsers talk to your server and nothing else,
 apart from the trailers above and the desktop app's own cores. DLNA, which lets TVs on your network find
-LANcast, is off by default. Logs and backups stay in the server's data folder.
+LANcast, is off by default. Logs and backups stay in the server's data folder;
+on a Windows service that folder is readable only by SYSTEM and
+Administrators, so other accounts on the same PC cannot read the database,
+the logs or the keys in it.
 
 The Windows desktop app draws its window with Microsoft's WebView2 runtime.
 That runtime is part of Windows and is covered by Microsoft's own privacy
