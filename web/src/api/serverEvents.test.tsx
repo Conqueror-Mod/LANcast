@@ -2,7 +2,13 @@ import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { ServerEvents, topicKeys, invalidateTopics, onTopic } from "./serverEvents";
+import {
+  ServerEvents,
+  topicKeys,
+  invalidateTopics,
+  onTopic,
+  workFinishedKeys,
+} from "./serverEvents";
 
 /*
  * The client half of ADR 0079: a topic on the stream makes the right queries
@@ -192,6 +198,33 @@ describe("the event stream", () => {
     invalidateTopics(qc, ["items"]);
     for (const key of [["item"], ["children"], ["facets"], ["review"]])
       expect(invalidated()).toContainEqual({ queryKey: key });
+  });
+
+  /*
+   * R13-6. Each of these is a top-level key of its own, so no prefix in the
+   * old list reached it, and a scan that marked a film missing left it listed
+   * on that screen.
+   */
+  it("reaches every list a scan can change when items change", () => {
+    const keys = [
+      ["collection-members", 4],
+      ["item-collections", 9],
+      ["playlist-entries", 3],
+      ["search", "alien"],
+      ["timeline", 2],
+      ["duplicates", 2, "near"],
+      ["memories", 12],
+      ["recent-photos"],
+    ];
+    for (const key of keys) qc.setQueryData(key, []);
+    invalidateTopics(qc, ["items"]);
+    for (const key of keys)
+      expect(qc.getQueryState(key)?.isInvalidated, JSON.stringify(key)).toBe(true);
+  });
+
+  // The activity poll's finished-work edge refreshes this same list.
+  it("shares one list with the activity poll", () => {
+    expect(topicKeys.items).toEqual(workFinishedKeys.map((k) => [k]));
   });
 
   it("every topic the server publishes has a row", () => {
