@@ -365,6 +365,19 @@ func (s *Store) DeleteUser(ctx context.Context, id string) error {
 	return tx.Commit()
 }
 
+// DeleteUserAPIKeys revokes every API key an account holds, and says how many.
+// For an administrator's password reset, which is the "this account was
+// compromised" action (R01-4): a key minted while it was compromised must not
+// outlive the remedy.
+func (s *Store) DeleteUserAPIKeys(ctx context.Context, userID string) (int64, error) {
+	res, err := s.db.ExecContext(ctx, `DELETE FROM api_key WHERE user_id = ?`, userID)
+	if err != nil {
+		return 0, fmt.Errorf("revoke api keys: %w", err)
+	}
+	n, _ := res.RowsAffected()
+	return n, nil
+}
+
 // DeleteUserSessions logs one user out everywhere without touching other users.
 func (s *Store) DeleteUserSessions(ctx context.Context, id string) error {
 	_, err := s.db.ExecContext(ctx, `DELETE FROM session WHERE user_id = ?`, id)

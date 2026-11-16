@@ -24,7 +24,7 @@ import (
  * made it — but because a key that can mint keys is a key that cannot be
  * revoked by revoking it. Somebody who takes a stolen key can make a second one
  * and keep it after the first is deleted, which turns a bounded mistake into a
- * permanent one. Minting requires the password-backed credential.
+ * permanent one. Minting requires a session and the account's password.
  */
 
 // maxKeyName keeps a name to something a list can display. Nothing depends on
@@ -58,7 +58,8 @@ func (s *Server) createAPIKey(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var body struct {
-		Name string `json:"name"`
+		Name     string `json:"name"`
+		Password string `json:"current_password"`
 	}
 	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 4<<10)).Decode(&body); err != nil {
 		writeError(w, http.StatusBadRequest, "bad_request", "could not read the request")
@@ -74,6 +75,19 @@ func (s *Server) createAPIKey(w http.ResponseWriter, r *http.Request) {
 	}
 	if len(name) > maxKeyName {
 		name = name[:maxKeyName]
+	}
+	/*
+	 * The password, as adding a passkey asks for it (R01-4, ADR 0061 amended
+	 * 2026-11-16). A key outlives every session, which is what it is for, so
+	 * a session somebody left open, or a stolen cookie, must not be enough to
+	 * turn into one: the remedy for a compromise is to change the password and
+	 * end every session, and a key minted from the borrowed session went on
+	 * reading the library afterwards. Both throttles apply (confirmPassword).
+	 */
+	sess, _ := sessionFromContext(r)
+	if _, ok := s.confirmPassword(w, r, sess.UserID, body.Password,
+		http.StatusForbidden, "forbidden", "that password is not right"); !ok {
+		return
 	}
 
 	token, hash, err := auth.NewToken()

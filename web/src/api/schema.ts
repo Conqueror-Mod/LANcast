@@ -2956,7 +2956,7 @@ export interface paths {
         put?: never;
         /**
          * Reset another account's password
-         * @description Administrators only. Revokes that account's sessions. Audited as `user.password_reset`.
+         * @description Administrators only. Revokes that account's sessions **and its API keys**: this is the action for an account that was compromised (ADR 0061, amended 2026-11-16). Audited as `user.password_reset`, with the number of keys revoked.
          *
          *     Distinct from `POST /api/auth/password`, which changes your **own** and requires the current one.
          */
@@ -4788,7 +4788,7 @@ export interface paths {
         put?: never;
         /**
          * Mint an API key
-         * @description Returns the secret **once**. Requires a **session**; an API key is refused with `403`. A key that could mint keys could not be revoked by revoking it — whoever held a stolen one would make a second and keep it — so revocation is only the end of the story if minting needs the credential a person types.
+         * @description Returns the secret **once**. Requires a **session** and the account's **password**, as adding a passkey does; a missing or wrong password is `403`, on the sign-in throttle and the per-account wait. An API key is refused with `403`. A key that could mint keys could not be revoked by revoking it — whoever held a stolen one would make a second and keep it — so revocation is only the end of the story if minting needs the credential a person types.
          */
         post: operations["createAPIKey"];
         delete?: never;
@@ -16485,12 +16485,16 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Reset. No body. */
-            204: {
+            /** @description Reset, and how many of the account's API keys were revoked with it. */
+            200: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": {
+                        api_keys_revoked: number;
+                    };
+                };
             };
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
@@ -19174,6 +19178,8 @@ export interface operations {
                 "application/json": {
                     /** @description Required rather than defaulted, so the key can be told apart later. Trimmed to 64 characters. */
                     name: string;
+                    /** @description The account's password. A key outlives every session, so a session alone is not enough to make one (ADR 0061, amended 2026-11-16). */
+                    current_password: string;
                 };
             };
         };
@@ -19197,8 +19203,17 @@ export interface operations {
                 };
             };
             401: components["responses"]["Unauthorized"];
-            /** @description `forbidden` — the caller authenticated with an API key. */
+            /** @description `forbidden` — the caller authenticated with an API key, or the password is missing or wrong. */
             403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description `too_many_requests` — too many password attempts from this address, or at this account from outside the home network. */
+            429: {
                 headers: {
                     [name: string]: unknown;
                 };

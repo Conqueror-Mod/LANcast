@@ -668,7 +668,7 @@ delete, `match`, item `refresh`); `GET`/`PUT /api/settings`; and all of
 **What a hidden library does** (ADR 0084). It is the same kind of limit as the ceiling and is enforced in the same places: the library leaves the account's `GET /api/libraries`, every listing, and every route that turns an id into an item or bytes, which answer `404`. Every `/api/libraries/{id}/` route answers `404` for it, exactly as for a library that does not exist. A **deny list**: an account nobody narrowed sees everything, and a library added later is visible to everyone until somebody narrows them. Administrators are never restricted. What a paired server may see is decided by its share and is unaffected.
 | `DELETE /api/users/{id}` | Removes the account, its sessions, and its watch state. `409` if it is the last admin |
 | `DELETE /api/users/{id}/picture` | Clears that account's uploaded picture → `204`, whether or not it had one. `404` for no such account. Audited as `user.picture.clear` when there was one ([ADR 0121](adr/0121-a-picture-of-your-own.md) §5) |
-| `POST /api/users/{id}/password` | `{new_password}` → resets that user's password and revokes their sessions |
+| `POST /api/users/{id}/password` | `{new_password}` → `200 {api_keys_revoked}`: resets that user's password, revokes their sessions **and their API keys**, and says how many keys went. Before 1.0 this answered `204` and kept the keys |
 | `GET /api/users/{id}/libraries` | `{hidden: [libraryID], applies}` — which libraries this account cannot see ([ADR 0084](adr/0084-a-library-can-be-kept-from-an-account.md)). Empty is the default: every library. `applies` is `false` for an administrator, who is never restricted; the rows are kept, so a demotion puts them back |
 | `PUT /api/users/{id}/libraries` | `{hidden: [libraryID]}` → replaces the set and answers as `GET`. `hidden` is required (`400` without it, rather than lifting everything), and an id that is not a library is `400`. Audited as `user.libraries` |
 
@@ -6566,11 +6566,16 @@ refused on every write it makes. A request that carries a cookie keeps both CSRF
 defences exactly as before — presenting an unusable `Authorization` header does
 **not** turn them off.
 
-**Changing a password does not revoke keys.** It deletes every session,
+**Changing your own password does not revoke keys.** It deletes every session,
 including the caller's own, and that is deliberate — but rotating a password
 should not silently break a machine that has been running for a year. A
 suspected theft is handled by revoking deliberately, which is what the list and
-its `last_used` column are for.
+its `last_used` column are for. **An administrator's reset does revoke them**
+(`POST /api/users/{id}/password` answers how many): that is the "this account
+was compromised" action, and it ends every way in. Since a key can only be
+minted with the password, a key that survives your own change was made by
+somebody who knew it
+([ADR 0061](adr/0061-an-api-key-is-not-a-session.md), amended 2026-11-16).
 
 **A key does not make its owner appear online.** A script polling every minute is
 not a person being present.
@@ -6592,7 +6597,12 @@ Requires a session.
 
 ### `POST /api/keys`
 
-Mint a key. `{ "name": "backup script" }`. Requires a session.
+Mint a key. `{ "name": "backup script", "current_password": "…" }`. Requires a
+session **and the account's password**, as adding a passkey does: a key
+outlives every session, so a session somebody left open must not be enough to
+make one. A missing or wrong password is `403 forbidden`, on the sign-in
+throttle and the per-account wait (`429` past them). An API key is refused
+with `403` before the password is looked at.
 
 ```json
 { "key": { "id": "9f3c…", "name": "backup script",

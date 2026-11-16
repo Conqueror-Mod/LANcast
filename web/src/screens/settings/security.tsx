@@ -86,6 +86,7 @@ function APIKeysPanel() {
   const create = useCreateAPIKey();
   const revoke = useRevokeAPIKey();
   const [name, setName] = useState("");
+  const [password, setPassword] = useState("");
   const [fresh, setFresh] = useState<{ name: string; secret: string } | null>(
     null,
   );
@@ -106,13 +107,17 @@ function APIKeysPanel() {
         onSubmit={(e) => {
           e.preventDefault();
           const wanted = name.trim();
-          if (!wanted) return;
-          create.mutate(wanted, {
-            onSuccess: (r) => {
-              setFresh({ name: r.key.name, secret: r.secret });
-              setName("");
+          if (!wanted || !password) return;
+          create.mutate(
+            { name: wanted, current_password: password },
+            {
+              onSuccess: (r) => {
+                setFresh({ name: r.key.name, secret: r.secret });
+                setName("");
+                setPassword("");
+              },
             },
-          });
+          );
         }}
       >
         <input
@@ -123,10 +128,22 @@ function APIKeysPanel() {
           onChange={(e) => setName(e.target.value)}
           maxLength={64}
         />
+        {/*
+          The password, because a key outlives every session: somebody at a
+          window left signed in must not be able to make one (ADR 0061).
+        */}
+        <input
+          className="set-input"
+          type="password"
+          placeholder="Your password"
+          autoComplete="current-password"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+        />
         <button
           className="set-btn"
           type="submit"
-          disabled={create.isPending || name.trim().length === 0}
+          disabled={create.isPending || name.trim().length === 0 || !password}
         >
           {create.isPending ? "Creating…" : "Create a key"}
         </button>

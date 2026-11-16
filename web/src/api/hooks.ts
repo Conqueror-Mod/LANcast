@@ -2845,8 +2845,11 @@ export function useAPIKeys(enabled = true) {
 export function useCreateAPIKey() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (name: string) =>
-      apiPost<{ key: APIKey; secret: string }>("/api/keys", { name }),
+    // The password is asked for as adding a passkey asks for it: a key
+    // outlives every session, so a session alone must not make one (ADR 0061,
+    // amended 2026-11-16).
+    mutationFn: (args: { name: string; current_password: string }) =>
+      apiPost<{ key: APIKey; secret: string }>("/api/keys", args),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["api-keys"] }),
   });
 }

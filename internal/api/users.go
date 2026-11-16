@@ -172,13 +172,33 @@ func (s *Server) resetUserPassword(w http.ResponseWriter, r *http.Request) {
 		s.writeInternal(w, err, "revoke sessions")
 		return
 	}
+	/*
+	 * And their API keys (R01-4, ADR 0061 amended 2026-11-16). A routine change
+	 * of your own password keeps them, so the machine that copies photographs
+	 * does not break; an administrator's reset is the "this account was
+	 * compromised" action, and a key somebody minted while it was compromised
+	 * must not outlive it. Said in the answer and the audit, so whoever has to
+	 * hand out new keys knows how many.
+	 */
+	keys, err := s.st.DeleteUserAPIKeys(r.Context(), id)
+	if err != nil {
+		s.writeInternal(w, err, "revoke api keys")
+		return
+	}
 	// An admin setting someone else's password is the single most
 	// impersonation-shaped act the API allows, so it is recorded whoever does it.
 	name := id
 	if u, err := s.st.UserByID(r.Context(), id); err == nil {
 		name = u.Name
 	}
-	s.audit(r, "user.password_reset", "user", id,
-		fmt.Sprintf("Reset the password for %q and signed them out everywhere", name), nil)
-	w.WriteHeader(http.StatusNoContent)
+	summary := fmt.Sprintf("Reset the password for %q and signed them out everywhere", name)
+	switch keys {
+	case 0:
+	case 1:
+		summary += "; revoked their API key"
+	default:
+		summary += fmt.Sprintf("; revoked their %d API keys", keys)
+	}
+	s.audit(r, "user.password_reset", "user", id, summary, map[string]any{"api_keys_revoked": keys})
+	writeJSON(w, http.StatusOK, map[string]any{"api_keys_revoked": keys})
 }

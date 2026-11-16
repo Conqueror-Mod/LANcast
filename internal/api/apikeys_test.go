@@ -92,7 +92,7 @@ func errorMessage(t *testing.T, resp *http.Response) string {
 // session path still works.
 func mint(t *testing.T, h *harness, name string) (secret, id string) {
 	t.Helper()
-	resp := h.authed(t, "POST", "/api/keys", map[string]any{"name": name})
+	resp := h.authed(t, "POST", "/api/keys", map[string]any{"name": name, "current_password": h.password})
 	if resp.StatusCode != http.StatusCreated {
 		defer resp.Body.Close()
 		t.Fatalf("create key: status = %d, want 201", resp.StatusCode)
@@ -294,9 +294,100 @@ func TestTheSecretIsNeverListed(t *testing.T) {
 func TestAKeyMustBeNamed(t *testing.T) {
 	h := newHarness(t)
 	h.secure(t, "a long enough password")
-	resp := h.authed(t, "POST", "/api/keys", map[string]any{"name": "   "})
+	resp := h.authed(t, "POST", "/api/keys", map[string]any{"name": "   ", "current_password": h.password})
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusBadRequest {
 		t.Errorf("status = %d, want 400", resp.StatusCode)
+	}
+}
+
+/*
+ * Minting a key asks for the password, and an administrator's reset revokes
+ * the account's keys (R01-4, ADR 0061 amended 2026-11-16).
+ *
+ * A key outlives every session by design. On main a session alone could mint
+ * one, so a borrowed window or a stolen cookie became a credential that
+ * survived the remedy: the password changed, every session ended, and the key
+ * went on reading the library.
+ */
+func TestMintingAKeyNeedsThePassword(t *testing.T) {
+	h := newHarness(t)
+	h.secure(t, "a long enough password")
+	for _, body := range []map[string]any{
+		{"name": "no password asked"},
+		{"name": "wrong password", "current_password": "not it"},
+	} {
+		resp := h.authed(t, "POST", "/api/keys", body)
+		resp.Body.Close()
+		if resp.StatusCode != http.StatusForbidden {
+			t.Fatalf("%v: status %d, want 403", body["name"], resp.StatusCode)
+		}
+	}
+	var list struct {
+		Keys []any `json:"keys"`
+	}
+	decode(t, h.authed(t, "GET", "/api/keys", nil), &list)
+	if len(list.Keys) != 0 {
+		t.Fatalf("%d keys minted without the password", len(list.Keys))
+	}
+	mint(t, h, "with the password")
+}
+
+func TestAnAdminResetRevokesTheAccountsKeys(t *testing.T) {
+	h := newHarness(t)
+	h.secure(t, "a long enough password")
+	member := h.addMember(t, "member", "the member's password")
+	resp := h.doAs(t, member, "POST", "/api/keys", map[string]any{
+		"name": "member's script", "current_password": "the member's password"})
+	var made struct {
+		Secret string `json:"secret"`
+	}
+	decode(t, resp, &made)
+	if made.Secret == "" {
+		t.Fatal("the member could not mint a key")
+	}
+	var users struct {
+		Users []map[string]any `json:"users"`
+	}
+	decode(t, h.authed(t, "GET", "/api/users", nil), &users)
+	var id string
+	for _, u := range users.Users {
+		if u["name"] == "member" {
+			id, _ = u["id"].(string)
+		}
+	}
+
+	resp = h.authed(t, "POST", "/api/users/"+id+"/password", map[string]any{"new_password": "a fresh password"})
+	var reset struct {
+		Revoked *int `json:"api_keys_revoked"`
+	}
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("reset: %d", resp.StatusCode)
+	}
+	decode(t, resp, &reset)
+	if reset.Revoked == nil || *reset.Revoked != 1 {
+		t.Fatalf("the reset did not say it revoked one key: %+v", reset.Revoked)
+	}
+	r := h.doKey(t, "GET", "/api/libraries", made.Secret, nil)
+	r.Body.Close()
+	if r.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("the key outlived the reset: %d", r.StatusCode)
+	}
+}
+
+// A routine change of your own password still keeps your keys: that half of
+// ADR 0061 stands.
+func TestChangingYourOwnPasswordKeepsYourKeys(t *testing.T) {
+	h := newHarness(t)
+	h.secure(t, "a long enough password")
+	key, _ := mint(t, h, "photo copier")
+	resp := h.authed(t, "POST", "/api/auth/password", map[string]any{
+		"current_password": "a long enough password", "new_password": "a brand new password"})
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusNoContent {
+		t.Fatal(resp.StatusCode)
+	}
+	if r := h.doKey(t, "GET", "/api/libraries", key, nil); r.StatusCode != http.StatusOK {
+		t.Fatalf("a routine password change revoked a key: %d", r.StatusCode)
 	}
 }

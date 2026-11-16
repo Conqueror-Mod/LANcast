@@ -25,6 +25,7 @@ func (h *harness) secure(t *testing.T, password string) *http.Client {
 		t.Fatalf("setup failed: %d %s", resp.StatusCode, body)
 	}
 
+	h.password = password
 	jar := h.srv.Client()
 	for _, c := range resp.Cookies() {
 		if c.Name == auth.CookieName {
