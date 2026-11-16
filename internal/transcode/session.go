@@ -50,6 +50,10 @@ type Session struct {
 	MediaSeconds  float64
 	SegmentLength float64
 
+	// work is what this session was asked to make; EnsureHLS reuses it only
+	// for the same work (see workKey).
+	work workKey
+
 	cmd    *exec.Cmd
 	cancel context.CancelFunc
 	stderr *ringBuffer
