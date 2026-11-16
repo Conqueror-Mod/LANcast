@@ -304,6 +304,12 @@ const shutdownGrace = 5 * time.Second
 var serviceManaged bool
 
 func run(ctx context.Context, addr, dataDir string, log *slog.Logger) error {
+	// Cancelled on every way out, not only by a signal: the update-finishing
+	// exit and a failed listener stop the long-lived loops too, which are then
+	// waited for before the store closes (R10-10).
+	ctx, cancelRun := context.WithCancel(ctx)
+	defer cancelRun()
+
 	cfg, err := config.Resolve(addr, dataDir)
 	if err != nil {
 		return err
@@ -645,6 +651,22 @@ func run(ctx context.Context, addr, dataDir string, log *slog.Logger) error {
 	// mid-query keeps the file open until that query returns, and closing the
 	// store underneath one is how a clean exit leaves a locked database behind.
 	var workers sync.WaitGroup
+	/*
+	 * spawn runs a long-lived loop in the same group (R10-10).
+	 *
+	 * The periodic scan, prune and backup, the optimizer, the unlock queue and
+	 * the rest ran on ctx and were cancelled at shutdown, but nothing waited for
+	 * them, so one mid-statement met `sql: database is closed` when the store
+	 * closed under it. Everything that outlives startup goes through here or
+	 * through workers directly.
+	 */
+	spawn := func(f func()) {
+		workers.Add(1)
+		go func() {
+			defer workers.Done()
+			f()
+		}()
+	}
 
 	enrichSoon := func() {
 		if !settings.Get().AutoEnrich {
@@ -953,7 +975,7 @@ func run(ctx context.Context, addr, dataDir string, log *slog.Logger) error {
 	// Webhooks (ADR 0097): reads its list from settings on every event, and
 	// sends nothing while that list is empty, which is the default.
 	hooks := webhook.New(func() []config.Webhook { return settings.Get().Webhooks }, api.Version, log)
-	go hooks.Run(ctx)
+	spawn(func() { hooks.Run(ctx) })
 
 	apiSrv := api.New(api.Deps{
 		Webhooks: hooks,
@@ -1066,16 +1088,16 @@ func run(ctx context.Context, addr, dataDir string, log *slog.Logger) error {
 	}
 
 	// Periodic library scans, when the operator has asked for them.
-	go periodicScan(ctx, st, scanner, settings, log)
+	spawn(func() { periodicScan(ctx, st, scanner, settings, log) })
 
 	// Guides go stale by themselves; libraries do not. Always on, and not a
 	// setting, because a server with no channel sources does no work here.
-	go periodicGuideRefresh(ctx, apiSrv, board)
+	spawn(func() { periodicGuideRefresh(ctx, apiSrv, board) })
 
 	// Paired servers are asked by the server, on one schedule, rather than by
 	// whichever pages happen to be open (ADR 0079 §5). This is also what makes
 	// a pairing mutual without anybody opening People.
-	go apiSrv.WatchPeers(ctx)
+	spawn(func() { apiSrv.WatchPeers(ctx) })
 
 	// The dashboard's minute-by-minute history (ADR 0106). In the workers
 	// group so its last save finishes before the process exits, and on
@@ -1088,11 +1110,11 @@ func run(ctx context.Context, addr, dataDir string, log *slog.Logger) error {
 	}()
 
 	// Records whose relevance is their age, dropped once a day.
-	go periodicPrune(ctx, st, settings, filepath.Join(cfg.DataDir, "artwork"), log, board)
+	spawn(func() { periodicPrune(ctx, st, settings, filepath.Join(cfg.DataDir, "artwork"), log, board) })
 
 	// A backup on the schedule Settings › Backup & storage sets, weekly unless
 	// somebody changed it.
-	go periodicBackup(ctx, apiSrv, settings, board)
+	spawn(func() { periodicBackup(ctx, apiSrv, settings, board) })
 
 	// DLNA, when switched on, answering as the account Settings names
 	// (ADR 0086). Started and stopped from Settings without a restart.
@@ -1120,13 +1142,13 @@ func run(ctx context.Context, addr, dataDir string, log *slog.Logger) error {
 	if serviceManaged && runtime.GOOS == "windows" {
 		apiSrv.SetPortChanger(servicePortChanger{dataDir: cfg.DataDir})
 	}
-	go runDLNA(ctx, dlnaSup, apiSrv, st, settings, ident, lanBound, log)
+	spawn(func() { runDLNA(ctx, dlnaSup, apiSrv, st, settings, ident, lanBound, log) })
 
 	// Optimized copies, one at a time, behind live playback (ADR 0087).
-	go apiSrv.RunOptimizer(ctx)
+	spawn(func() { apiSrv.RunOptimizer(ctx) })
 
 	// Unlocks kept while RetroAchievements could not be reached (ADR 0112).
-	go apiSrv.RunRetroUnlockQueue(ctx)
+	spawn(func() { apiSrv.RunRetroUnlockQueue(ctx) })
 
 	// Clears leftover scratch from a previous run and starts reaping idle
 	// sessions. A closed browser tab does not tell the server it has gone.
@@ -1137,7 +1159,7 @@ func run(ctx context.Context, addr, dataDir string, log *slog.Logger) error {
 	// encoders the machine cannot run. Done in the background so a slow or
 	// wedged GPU driver delays transcoding rather than startup.
 	if trans.Available() {
-		go trans.DetectHardware(ctx, settings.Get().HardwareEncoder)
+		spawn(func() { trans.DetectHardware(ctx, settings.Get().HardwareEncoder) })
 	}
 
 	// Pick up anything left pending from a previous run. Music joins the
@@ -1337,7 +1359,7 @@ func run(ctx context.Context, addr, dataDir string, log *slog.Logger) error {
 				defer extra.Close()
 			}
 			publicCert.Configure(api.PublicCertConfig(settings.Get()))
-			go publicCert.Run(ctx)
+			spawn(func() { publicCert.Run(ctx) })
 			apiSrv.SetPublicCert(publicCert)
 		}
 	} else {
@@ -1349,9 +1371,12 @@ func run(ctx context.Context, addr, dataDir string, log *slog.Logger) error {
 		}()
 	}
 
+	// A listener that fails after start goes down the same road as a stop:
+	// returning straight away closed the store under every worker (R10-10).
+	var serveErr error
 	select {
-	case err := <-errc:
-		return err
+	case serveErr = <-errc:
+		log.Error("listener failed; shutting down", "error", serveErr)
 	case <-ctx.Done():
 		log.Info("shutting down")
 	case <-quit:
@@ -1361,6 +1386,7 @@ func run(ctx context.Context, addr, dataDir string, log *slog.Logger) error {
 		log.Info("shutting down to finish an update")
 	}
 
+	cancelRun()
 	cancelEnrich()
 	waitForWorkers(&workers, log)
 
@@ -1406,6 +1432,10 @@ func run(ctx context.Context, addr, dataDir string, log *slog.Logger) error {
 	}
 	if redirectSrv != nil {
 		_ = redirectSrv.Close()
+	}
+	if serveErr != nil {
+		// A failed listener is not a moment to swap binaries.
+		return serveErr
 	}
 	// Last thing, once nothing is serving and the workers are done. The files
 	// being replaced may include this process's own executable, which is why
