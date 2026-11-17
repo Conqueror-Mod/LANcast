@@ -276,6 +276,8 @@ breadth, and it is listed in the [Feature backlog](#feature-backlog).
 
 ## What is left
 
+**First on the 1.x roadmap: a Roku app**, planned in [roku-plan.md](roku-plan.md) (proposed 2026-11-17). Its step 0 runs spikes on the theater Roku before anything is built.
+
 *Everything on this list is unbuilt or unwatched. The detail behind each line
 is in the [Feature backlog](#feature-backlog) entry it names.*
 
