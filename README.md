@@ -4,7 +4,7 @@ A self-hosted media server and library service. Plex's streamlined
 functionality, Kodi's customizability and versatility, and neither one's
 compromises.
 
-> **Status: v0.11.3 · M0–M4 built and released; scope frozen for 1.0.** Point it at a folder and it
+> **Status: v1.0.0 · the first stable release.** Point it at a folder and it
 > scans, identifies, and plays — direct play, remux, or transcode, with working
 > seek and resume and hardware encoding. Films, TV, **music**, **pictures**,
 > **comics** and **audiobooks** are all first-class. Real metadata, artwork, ratings, subtitles,
@@ -15,8 +15,9 @@ compromises.
 > server that can update itself. Corrections you make are locked and survive
 > rescans.
 >
-> [docs/roadmap.md](docs/roadmap.md) is the honest ledger — every release, what
-> shipped, and what was *not* looked at before it shipped.
+> [docs/roadmap.md](docs/roadmap.md) is the honest ledger: what is left, and
+> what was *not* looked at before it shipped. Every release before 1.0 is in
+> [docs/history.md](docs/history.md).
 
 **Runs on:** Windows 10 and 11 (x64), as an app with its own window and as a
 Windows service; Linux on amd64, as a systemd service you reach from a browser.
