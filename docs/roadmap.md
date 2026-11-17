@@ -142,12 +142,29 @@ produced v0.9.65 and v0.9.66, and since v0.9.83 an intro skips itself
 cannot see: jsdom performs no layout and no media, and nothing in Go runs as
 session 0.
 
-- The **denial reset row** on Settings → Display: its wiring is tested, its
-  appearance has never been looked at.
 - The **MSE live path**, which is moot while Chromium plays HLS natively, and
   parked with the rest of live TV.
-- **Skip credits on a film the server converts**, in a browser. Direct play
-  through the desktop client was watched on Skyfall (v0.9.49).
+
+**Watched on 2026-11-16**, against the installed service (ledger rows 1 and 9
+of the [1.0 plan](v1-plan.md)):
+
+- **MusicBrainz albums**, read from a copy of the live database: 2,696 albums
+  matched, 85 locked by hand, 82 unmatched and 1 held for review. That 83 is
+  the Review badge's count exactly. No wrong match turned up in a random 15
+  matched albums. The unmatched ones are albums MusicBrainz cannot know: tags
+  that file an artist's loose tracks under an album called "Singles", "Unknown
+  album (12/17/2011…)", self-released 2025 tracks, a magazine compilation, and
+  a misspelt artist. The one in review is "Unknown Album" by "Unknown Artist",
+  which is right to hold back. Artists: 1,300 matched, 65 unmatched.
+- **The denial reset row** on Settings → Display is laid out properly, and its
+  summary updates when a codec is turned off.
+- **The remux path**: with Matroska turned off in a browser, an H.264 + AAC
+  `.mkv` played. The server's decision was `remux` ("matroska container is not
+  supported, but both codecs are"), with both streams copied. With Matroska
+  on, the same file plays directly.
+- **Skip credits on a film the server converts**: at 480p, "Skip credits"
+  appeared once the credits had started, and pressing it jumped to the end and
+  the end-of-film screen.
 
 **Watched by 2026-10-07**, in the installed build: the **HLS file fallback**
 as the service (#589/#590), the **Up Next** card, launching **GOG, EA and Xbox
@@ -292,10 +309,6 @@ step 6, which is now native HLS against MSE, and
 is watching that keeps running.
 
 **Built, not yet watched working.**
-- **MusicBrainz albums** (ADR 0115): the first pass over the real library has
-  run as the service since v0.10.4, and its results have not been looked at.
-  Measured beforehand on 300 random albums of it (285 matched, 7 review, 8
-  unmatched) and over the test library in a dev build (202 of 218 matched).
 - **Audiobooks** (ADR 0116) heard with sound, and as the installed service.
 - **A friend's join request over a full-screen film** (v0.10.6): never seen
   live, since it needs a friend's server to send one.
@@ -304,10 +317,11 @@ is watching that keeps running.
   and an invite link opened on a phone
   ([ADR 0104](adr/0104-a-friend-is-invited-by-a-link-that-works-once.md)),
   both shipped in v0.9.98 and proven only in the two-server harness.
-- **Extras** (#950), the one piece of the second unattended batch not seen
-  working: an MKV extra played in the desktop window. Chapters, pre-roll,
-  two-factor sign-in and the comics reader (CBZ and PDF) all passed as the
-  installed service on 2026-10-27.
+- **Extras** (#950), **labelled, not watched**: the real library holds no
+  extras at all (checked 2026-11-16), so an MKV extra in the desktop window
+  is proven by the tests alone. Chapters, pre-roll, two-factor sign-in and the
+  comics reader (CBZ and PDF) all passed as the installed service on
+  2026-10-27.
 - Watch Together and live updates between two servers on **different
   networks**, and the follower side of Watch Together on one server. Tried
   across networks on 2026-11-07 with Georgia's server behind NAT (v0.10.6):
@@ -318,8 +332,6 @@ is watching that keeps running.
 - Now Playing and the visualizers **in the desktop window** and on the TV with
   a pad, synced lyrics on a real track, and the v0.9.93 MilkDrop fixes on the
   phone that found them.
-- Skip credits on a film the server converts, in a browser; the denial reset
-  row's appearance; the remux path on a client that claims no Matroska.
 - From v0.9.96: trusted proxies behind a **real** Caddy or nginx, metrics in a
   real Prometheus, and webhooks into a real Home Assistant. All five were
   checked as the installed service before release (restore through

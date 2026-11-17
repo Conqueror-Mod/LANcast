@@ -26,8 +26,11 @@ Start all six at once. None of them depends on another.
 
 Run these **with the driving skill**. They are unattended, but they use the installed service on Aither, one at a time and after S2's kit is decided:
 
-- **D1 ledger 1:** MusicBrainz states, read from a copy of the live database (WAL + shm). This is mostly done already: review is down to 83.
-- **D2 ledger 3, 6, 9:** an MKV extra in the window; the follower side of Watch Together on one server (two windows); skip credits on a converted film in a browser, the remux path, and the denial reset row.
+- **D1 ledger 1:** MusicBrainz states, read from a copy of the live database (WAL + shm). This is mostly done already: review is down to 83. **Done 2026-11-16:** watched, see the roadmap. The 83 is 1 uncertain album and 82 that MusicBrainz cannot know.
+- **D2 ledger 3, 6, 9:** an MKV extra in the window; the follower side of Watch Together on one server (two windows); skip credits on a converted film in a browser, the remux path, and the denial reset row. **2026-11-16:**
+  - Row 9 is watched.
+  - Row 3 is labelled: the real library has no extras.
+  - Row 6 connected, but slowly and unreliably, with the guest about 2 s behind. It is open until the log is read.
 - **D3 Sandbox install** (§3D.1): a `.wsb` with a logon command that runs `LANcast-Setup-0.11.0.exe`, then first run, the ffmpeg fetch, an account, a library and a film. The installer's finish page is the one screen that crashed before (v0.9.29), so a screenshot of it is required evidence.
 
 End of week 1: merge S1–S5 (and S2's code, if it passes as the service), then cut **v0.11.1** as the first real candidate.
