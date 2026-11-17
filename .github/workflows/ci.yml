@@ -93,10 +93,18 @@ jobs:
           # reruns of a docs-only PR (2026-11-17). A real crash always writes
           # its input and says "Failing input written to"; that, or any other
           # failure, still fails the job. A bare deadline is a warning.
+          #
+          # -fuzzminimizetime 1s: by default the fuzzer spends up to 60 s
+          # shrinking every new input it finds, and counts none of those runs.
+          # PDFs are costly to re-parse, so comic/pdf FuzzIndex spent nearly
+          # all its 20 s minimizing and ran ~16 inputs per job. From an empty
+          # cache, 1 s took it from 51,903 inputs and 2 new to 489,740 and 348
+          # (2026-11-17). A crash still fails; its saved input is just less
+          # shrunk.
           while read -r pkg target; do
             echo "::group::$pkg $target"
             out=$(mktemp)
-            if go test "$pkg" -run '^$' -fuzz "^${target}\$" -fuzztime 20s 2>&1 | tee "$out"; test "${PIPESTATUS[0]}" -eq 0; then
+            if go test "$pkg" -run '^$' -fuzz "^${target}\$" -fuzztime 20s -fuzzminimizetime 1s 2>&1 | tee "$out"; test "${PIPESTATUS[0]}" -eq 0; then
               :
             elif grep -q 'context deadline exceeded' "$out" \
               && ! grep -q 'Failing input written to' "$out" \
