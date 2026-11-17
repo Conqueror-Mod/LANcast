@@ -152,9 +152,22 @@ export function BookProvider({ children }: { children: ReactNode }) {
     setSleepLeft(null);
   }, []);
 
+  /*
+   * Set when the timer runs out with the file already at its end. Chromium
+   * pauses an element that reaches its end, then sends the last timeupdate
+   * (the chapter's end exactly), then "ended": the timer fires on that
+   * timeupdate with nothing left to pause, and "ended" would otherwise load the
+   * next part and play it (2026-11-17, seen in the pane). The flag tells
+   * "ended" to load the next part without playing.
+   */
+  const sleptAtEnd = useRef(false);
+
   /** The timer has run out: pause, which saves the place, then tidy up. */
   const fireSleep = useCallback(() => {
     const a = bookAudio();
+    if (a.ended || (Number.isFinite(a.duration) && a.currentTime >= a.duration - 0.05)) {
+      sleptAtEnd.current = true;
+    }
     if (!a.paused) a.pause();
     endSleep();
   }, [endSleep]);
@@ -254,9 +267,12 @@ export function BookProvider({ children }: { children: ReactNode }) {
          * not playing, so pressing play goes on from the next chapter.
          */
         const t = sleepRef.current;
-        if (t?.kind === "chapter" && i.parts[next].start_ms >= t.endMs) {
+        const slept = sleptAtEnd.current;
+        sleptAtEnd.current = false;
+        if (slept || (t?.kind === "chapter" && i.parts[next].start_ms >= t.endMs)) {
           loadAt(i.parts[next].start_ms, false);
-          fireSleepRef.current();
+          if (sleepRef.current) fireSleepRef.current();
+          sleptAtEnd.current = false;
           save({ settle: true });
           return;
         }

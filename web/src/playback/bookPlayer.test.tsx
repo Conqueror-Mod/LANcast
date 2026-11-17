@@ -25,6 +25,8 @@ const BOOK = 7;
 class FakeAudio extends EventTarget {
   src = "";
   currentTime = 0;
+  duration = NaN;
+  ended = false;
   paused = true;
   playbackRate = 1;
   volume = 1;
@@ -304,6 +306,29 @@ describe("the sleep timer", () => {
       position_ms: 10 * MIN,
       watched: false,
     });
+  });
+
+  it("stops at a chapter that ends with its file, in Chromium's order", async () => {
+    // Seen in the pane on 2026-11-17: the element pauses itself at its end,
+    // then the last timeupdate lands exactly on the end, then "ended".
+    await playFrom(5 * MIN);
+    act(() => player!.setSleep("chapter"));
+    audio.duration = 600;
+    act(() => {
+      audio.paused = true;
+      audio.dispatchEvent(new Event("pause"));
+    });
+    act(() => audio.at(600)); // the timer fires here, with nothing to pause
+    act(() => {
+      audio.ended = true;
+      audio.dispatchEvent(new Event("ended"));
+    });
+    audio.ended = false;
+    act(() => audio.at(0));
+    act(() => audio.ready());
+    expect(audio.paused).toBe(true);
+    expect(player!.sleep).toBeNull();
+    expect(audio.src).toBe("/api/stream/12");
   });
 
   it("follows a skip into another chapter to that chapter's end", async () => {
