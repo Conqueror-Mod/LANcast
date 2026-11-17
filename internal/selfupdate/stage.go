@@ -279,6 +279,21 @@ func Apply(dataDir, installDir string, newer func(version string) bool) (Manifes
 		if !existed {
 			added = append(added, target)
 		}
+		/*
+		 * The install folder's permissions, not staging's. A rename keeps the
+		 * descriptor the file had in the data directory, which is SYSTEM and
+		 * Administrators only, and the window and tray then cannot run it
+		 * (inherit_windows.go). A file that cannot be given them is not
+		 * installed: an update that leaves the app unable to start is worse
+		 * than none.
+		 */
+		if err := inheritFromParent(target); err != nil {
+			if existed {
+				_ = os.Remove(target)
+			}
+			rollback()
+			return m, fmt.Errorf("selfupdate: giving %s the install folder's permissions: %w", name, err)
+		}
 		// Once more where it landed. Between the check above and this move the
 		// staged file is reachable through the data directory; here it is in a
 		// folder only an administrator can write, so what this reads is what

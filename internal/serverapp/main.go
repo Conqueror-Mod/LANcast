@@ -901,6 +901,23 @@ func run(ctx context.Context, addr, dataDir string, log *slog.Logger) error {
 		if n := selfupdate.CleanupOld(filepath.Dir(exe)); n > 0 {
 			log.Info("removed the previous version", "files", n)
 		}
+		/*
+		 * As the service, the program files an update moved in get the
+		 * install folder's permissions back. 0.11.1's updater left them
+		 * readable by SYSTEM and Administrators only, so the window and tray
+		 * could not start; the update is applied by the version being left,
+		 * so only this start can mend it (selfupdate/repair.go).
+		 */
+		if serviceManaged {
+			repaired, errs := selfupdate.RepairPermissions(filepath.Dir(exe))
+			if len(repaired) > 0 {
+				log.Info("program files given the install folder's permissions again", "files", repaired)
+			}
+			for _, err := range errs {
+				log.Warn("could not repair a program file's permissions; the window may not start",
+					"error", err, "hint", `run icacls "C:\Program Files\LANcast\*" /reset from an elevated shell`)
+			}
+		}
 	}
 
 	/*
