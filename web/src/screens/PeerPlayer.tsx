@@ -5,6 +5,7 @@ import { apiGet, apiSend } from "@/api/client";
 import type { Marker, MediaStream, SubtitleTrack } from "@/api/types";
 import { activeCues, parseVTT, type Cue } from "@/playback/nativeTracks";
 import { filePath, isUnsupportedSource } from "@/playback/fileTransport";
+import { seeksInPlace } from "@/playback/inPlaceSeek";
 import { mediaCapability, HLS_MIME } from "@/lib/liveTransport";
 import {
   peerItemURL,
@@ -326,7 +327,7 @@ export function PeerPlayer() {
     // rather than giving way to "Asking their server…".
     placeholderData: keepPreviousData,
     queryFn: ({ signal }) =>
-      apiGet<{ decision: { method: string; reason: string } }>(
+      apiGet<{ decision: { method: string; reason: string; video_action?: string } }>(
         asMember(peerPlaybackURL(fingerprint, itemID, audioIndex), member),
         signal,
       ),
@@ -554,6 +555,9 @@ export function PeerPlayer() {
    */
   const lastSeek = useRef(0);
   const convertingRef = useRef(false);
+  // Whether a seek to a time (seconds) would restart the conversion; set on
+  // every render below, once the stream it asks about exists.
+  const restartsRef = useRef<(target: number) => boolean>(() => convertingRef.current);
   /*
    * Whether the stream has played since the last seek, and the lead that
    * seek used. A converted stream is not moved again until it has started;
@@ -590,10 +594,14 @@ export function PeerPlayer() {
     if (!member || !el || !sess) return;
     const expected = expectedPosition(sess, room.receivedAt, Date.now());
     const now = Date.now();
+    // Converted, for these rules, means the seek would restart the far
+    // server's conversion. One that stays inside a finished remux lands at
+    // once, so it is judged like direct play (see TogetherProvider).
+    const restarts = restartsRef.current(expected / 1000);
     const far = followerShouldSeek(
       atRef.current * 1000,
       expected,
-      convertingRef.current,
+      restarts,
       now - lastSeek.current,
       startedSinceSeek.current,
     );
@@ -603,16 +611,16 @@ export function PeerPlayer() {
       followerShouldCorrect(
         atRef.current * 1000,
         expected,
-        convertingRef.current,
+        restarts,
         now - playingSince.current,
         corrections.current,
       );
     if (far || close) {
       if (close) corrections.current++;
       lastSeek.current = now;
-      startedSinceSeek.current = false;
-      leadUsed.current = convertingRef.current ? leadMS.current : 0;
-      seekRef.current?.(followerSeekTarget(expected, convertingRef.current, leadUsed.current) / 1000);
+      startedSinceSeek.current = !restarts;
+      leadUsed.current = restarts ? leadMS.current : 0;
+      seekRef.current?.(followerSeekTarget(expected, restarts, leadUsed.current) / 1000);
     }
     if (sess.paused && !el.paused) el.pause();
     if (!sess.paused && el.paused) resume(el);
@@ -650,6 +658,15 @@ export function PeerPlayer() {
 
   const path = filePath(playback.data.decision.method, hlsUsable);
   const converting = path !== "direct";
+  const videoAction = playback.data.decision.video_action;
+  // What seeksInPlace needs to know about the stream playing now.
+  const inPlace = (el: HTMLVideoElement, target: number) => ({
+    path,
+    videoAction,
+    offset,
+    duration: el.duration,
+    target,
+  });
   const src = asMember(peerSourceURL(fingerprint, itemID, path, offset, audioIndex), member);
 
   // What the film is at, and how long it is. See the offset and probed
@@ -675,6 +692,13 @@ export function PeerPlayer() {
     const target = Math.max(0, total > 0 ? Math.min(to, total) : to);
     if (!converting) {
       el.currentTime = target;
+      return;
+    }
+    // Unless their server has already finished the remux and the target is
+    // inside it: then the segments exist and the element can simply move
+    // (see inPlaceSeek.ts), instead of their server remuxing it all again.
+    if (seeksInPlace(inPlace(el, target))) {
+      el.currentTime = target - offset;
       return;
     }
     setOffset(target);
@@ -706,6 +730,8 @@ export function PeerPlayer() {
 
   // Kept current for the effects above, which run before either exists.
   seekRef.current = seek;
+  restartsRef.current = (target: number) =>
+    converting && !(video && seeksInPlace(inPlace(video, target)));
   atRef.current = at;
   convertingRef.current = converting;
 
