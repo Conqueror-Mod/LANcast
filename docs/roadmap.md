@@ -173,6 +173,26 @@ of the [1.0 plan](v1-plan.md)):
   took one remux of 22 s and then stayed in sync for over two minutes with no
   restart, and a deliberate leave and rejoin did the same.
 
+**Watched on 2026-11-17**, the sound and couch sitting (ledger rows 2, 7 and 8),
+against the installed service:
+
+- **Audiobooks with sound**, across a chapter change, with the sleep timer's
+  fade. One fault was found and fixed in the same sitting. "End of chapter"
+  never stopped at a chapter that is its own file. Chromium pauses the element
+  at its end, then sends the last timeupdate, then `ended`. The timer fired with
+  nothing left to pause and cleared itself, and `ended` played on into the next
+  chapter. The sleep menu's choices were also drawn white on white. Both were
+  fixed and retested working.
+- **Retro**: a pad on the TV and the touch controls on a real phone both
+  passed. The phone showed a steady stutter, which is noted and not yet
+  diagnosed. **Game Boy, Game Boy Color and Master System are labelled**: there
+  are no dumps for them in the library.
+- **Now Playing** in the desktop window, and the MilkDrop presets on the phone
+  (smooth, no lag), passed. **Labelled:** a pad does not drive the visualizers,
+  because LANcast reads a gamepad only in the retro player, and pad navigation
+  outside games is after 1.0. **Synced lyrics** are labelled too, since there
+  are no `.lrc` files in the library.
+
 **Watched by 2026-10-07**, in the installed build: the **HLS file fallback**
 as the service (#589/#590), the **Up Next** card, launching **GOG, EA and Xbox
 app** games, and **media keys** with Win+Shift+Arrow to the TV.
@@ -316,7 +336,6 @@ step 6, which is now native HLS against MSE, and
 is watching that keeps running.
 
 **Built, not yet watched working.**
-- **Audiobooks** (ADR 0116) heard with sound, and as the installed service.
 - **A friend's join request over a full-screen film** (v0.10.6): never seen
   live, since it needs a friend's server to send one.
 - **A friend on another network** for roster push
@@ -334,11 +353,6 @@ is watching that keeps running.
   across networks on 2026-11-07 with Georgia's server behind NAT (v0.10.6):
   friends' posters passed, and the eight-minute start it found was fixed in
   v0.10.7 (#1024). A retest with both servers at v0.10.7 or later is owed.
-- Retro: **Game Boy, Game Boy Color and Master System** on real dumps, a pad
-  on the TV, and the touch controls on a real phone.
-- Now Playing and the visualizers **in the desktop window** and on the TV with
-  a pad, synced lyrics on a real track, and the v0.9.93 MilkDrop fixes on the
-  phone that found them.
 - From v0.9.96: trusted proxies behind a **real** Caddy or nginx, metrics in a
   real Prometheus, and webhooks into a real Home Assistant. All five were
   checked as the installed service before release (restore through
