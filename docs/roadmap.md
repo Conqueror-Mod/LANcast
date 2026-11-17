@@ -193,6 +193,22 @@ against the installed service:
   outside games is after 1.0. **Synced lyrics** are labelled too, since there
   are no `.lrc` files in the library.
 
+**Watched on 2026-11-17**, the evening with a friend on another network (ledger
+rows 4 and 5), with both servers at v0.11.3:
+
+- **Watch Together across networks.** A film that plays directly stayed about
+  0.5 s apart between the two viewers, and pause and play answered at once. A
+  film converted for the guest (an AC3 episode) took 44 s to connect, against
+  22 s on one network, and then stayed within 5 s with no restart. That is
+  inside the 8 s a guest is allowed while the conversion runs. A phone on
+  cellular joined as a third viewer, the first session with three. A deliberate
+  leave and rejoin passed. **Labelled:** the friend hosting, since their
+  network is not set up to be reached.
+- **Roster push from another network** (ADR 0103) passed: the friend's change
+  showed on this side without a refresh.
+- **A friend's join request over a full-screen film** (v0.10.6) passed.
+- **An invite link opened on a phone on cellular** (ADR 0104) passed.
+
 **Watched by 2026-10-07**, in the installed build: the **HLS file fallback**
 as the service (#589/#590), the **Up Next** card, launching **GOG, EA and Xbox
 app** games, and **media keys** with Win+Shift+Arrow to the TV.
@@ -336,23 +352,11 @@ step 6, which is now native HLS against MSE, and
 is watching that keeps running.
 
 **Built, not yet watched working.**
-- **A friend's join request over a full-screen film** (v0.10.6): never seen
-  live, since it needs a friend's server to send one.
-- **A friend on another network** for roster push
-  ([ADR 0103](adr/0103-a-friend-who-cannot-be-reached-says-who-is-there.md))
-  and an invite link opened on a phone
-  ([ADR 0104](adr/0104-a-friend-is-invited-by-a-link-that-works-once.md)),
-  both shipped in v0.9.98 and proven only in the two-server harness.
 - **Extras** (#950), **labelled, not watched**: the real library holds no
   extras at all (checked 2026-11-16), so an MKV extra in the desktop window
   is proven by the tests alone. Chapters, pre-roll, two-factor sign-in and the
   comics reader (CBZ and PDF) all passed as the installed service on
   2026-10-27.
-- Watch Together and live updates between two servers on **different
-  networks**. Tried
-  across networks on 2026-11-07 with Georgia's server behind NAT (v0.10.6):
-  friends' posters passed, and the eight-minute start it found was fixed in
-  v0.10.7 (#1024). A retest with both servers at v0.10.7 or later is owed.
 - From v0.9.96: trusted proxies behind a **real** Caddy or nginx, metrics in a
   real Prometheus, and webhooks into a real Home Assistant. All five were
   checked as the installed service before release (restore through

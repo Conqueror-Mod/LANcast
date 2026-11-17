@@ -48,6 +48,8 @@ End of week 1: merge S1–S5 (and S2's code, if it passes as the service), then 
 
    *Done 2026-11-17* (see the roadmap). The sleep timer's fault was fixed and retested. GB, GBC and Master System are labelled (no dumps), as are the pad on the visualizers and synced lyrics (no `.lrc`). The phone's retro stutter (GBA, Motorola Edge 2025) is noted, not diagnosed.
 2. **Georgia evening (about 1 h):** ledger 4–5. This is the most valuable single check. It covers Watch Together across networks at v0.11.x, roster push, a join request over a full-screen film, and an invite link on a phone.
+
+   *Done 2026-11-17 at v0.11.3* (see the roadmap). All passed. A converted film took 44 s to connect across networks and then held within 5 s. The friend hosting is labelled, since their network is not set up to be reached.
 3. **Open faults (§3C), whenever they happen:** if music stalls on the phone or a sign-in is refused at the public name, copy the log *at once*. If neither comes back by week 2, both go into the notes as *reported once, not reproduced*.
 
 The update from 0.9.79 (§3D.2) can be a fourth sitting, or an agent can do it in Sandbox alongside D3. Prefer Sandbox.
