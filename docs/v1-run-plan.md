@@ -70,6 +70,21 @@ Follow §6 of v1-plan exactly, against the candidate built from the frozen commi
 
 Chris's part in week 2 is one sitting: playing the paths in step 5 and looking at the installer screenshot. Agents do everything else.
 
+### The acceptance run, 2026-11-17: passed
+
+Frozen commit `4e008dd9`. Between v0.11.3 and that commit, only CI config, README and docs changed, so the code is v0.11.3's byte for byte. The run therefore used **v0.11.3's published, signed artifacts, which carry the built-in metadata keys**, rather than a local build stamped 1.0.0. A local build has neither the keys nor the signature, so it would have tested less of what ships. The 1.0.0 tag adds only its version and its notes.
+
+| Step | Result |
+|---|---|
+| 1. Candidate | v0.11.3's artifacts, code identical to `4e008dd9` (see above) |
+| 2. Suites on `4e008dd9` | `go build ./...` passes, `go test ./...` passes in all 101 packages, and the client suite passes 2,525 of 2,525 |
+| 3. Clean install | Passed, with the installer in Windows Sandbox. The finish page, the service as LocalSystem with restart on failure, the data folder closed to Users, setup with the ffmpeg download, a 14-item scan, HEVC 1080p to 480p over HLS, an ordinary account starting the app, and 0 errors in the log |
+| 4. Update | From 0.9.79: struck, decided 2026-11-16. Pre-1.0 installs update by running the installer. From 0.11.x: the real in-app update 0.11.1 → 0.11.2 was proven in D3, and 0.x → 1.0 counting as newer is unit-tested (S1). The in-app update to 1.0.0 is checked on Aither once 1.0.0 is published |
+| 5. Linux amd64 | Passed. The published archive under WSL2 systemd, following install.md exactly, with no workaround: the unit runs `serve`, the data dir is `700 root`, a 12-film scan, h264 to 854×480 + aac over HLS, and 0 errors in the journal |
+| 6. Aither, as the service | Passed. Direct (*The 40-Year-Old Virgin*), remux (*District 9* in a browser with Matroska off: copy and copy), and a transcode (*The Fifth Element*, 4K HEVC HDR with TrueHD down to 1080p on `h264_nvenc`). Also a song, an audiobook, a comic, a photo, a retro game and Watch Together. `lancastd.log` has 0 `level=ERROR` and 0 `ffmpeg reported errors` |
+
+What is left is step 7, the release itself.
+
 ## After 1.0 (not before)
 
 - **Sealed secrets: XChaCha20-Poly1305 over AES-256-GCM is not needed.** AES-GCM with random 96-bit nonces is safe far beyond the few hundred seals a server ever makes. If it changes in 1.x, the only reason would be uniformity, and it needs a version byte on every sealed value plus a re-seal migration.
