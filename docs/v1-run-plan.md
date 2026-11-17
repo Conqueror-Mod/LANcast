@@ -45,6 +45,8 @@ End of week 1: merge S1–S5 (and S2's code, if it passes as the service), then 
    - ledger 2: an audiobook across a chapter change, with the sleep-timer fade;
    - ledger 7: GB/GBC dumps, the pad on the TV, touch on the phone (Master System stays labelled unless a dump turns up);
    - ledger 8: Now Playing on desktop and TV, synced lyrics, MilkDrop on the phone.
+
+   *Done 2026-11-17* (see the roadmap). The sleep timer's fault was fixed and retested. GB, GBC and Master System are labelled (no dumps), as are the pad on the visualizers and synced lyrics (no `.lrc`). The phone's retro stutter (GBA, Motorola Edge 2025) is noted, not diagnosed.
 2. **Georgia evening (about 1 h):** ledger 4–5. This is the most valuable single check. It covers Watch Together across networks at v0.11.x, roster push, a join request over a full-screen film, and an invite link on a phone.
 3. **Open faults (§3C), whenever they happen:** if music stalls on the phone or a sign-in is refused at the public name, copy the log *at once*. If neither comes back by week 2, both go into the notes as *reported once, not reproduced*.
 
@@ -71,4 +73,5 @@ Chris's part in week 2 is one sitting: playing the paths in step 5 and looking a
 - **Sealed secrets: XChaCha20-Poly1305 over AES-256-GCM is not needed.** AES-GCM with random 96-bit nonces is safe far beyond the few hundred seals a server ever makes. If it changes in 1.x, the only reason would be uniformity, and it needs a version byte on every sealed value plus a re-seal migration.
 - **Passwords: argon2id over bcrypt-12** is the defensible 1.1 change. It's memory-hard, and it migrates transparently by rehashing at the next sign-in.
 - ffmpeg's lower privileges, if S2 costs them over budget.
+- **A pad that navigates the app outside games**: menus, Now Playing and the visualizers. Today only the retro player reads a gamepad (found in sitting 1, 2026-11-17).
 - **Hybrid identity signatures (Ed25519 + ML-DSA)** once Go's standard library ships ML-DSA. This needs an ADR, because the server identity (ADR 0044) is never regenerated. X-Wing was considered and declined (2026-11-12): TLS already does hybrid key exchange, and LANcast has no other place that needs to agree a key.

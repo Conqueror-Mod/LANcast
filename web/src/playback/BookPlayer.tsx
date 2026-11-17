@@ -152,9 +152,22 @@ export function BookProvider({ children }: { children: ReactNode }) {
     setSleepLeft(null);
   }, []);
 
+  /*
+   * Set when the timer runs out with the file already at its end. Chromium
+   * pauses an element that reaches its end, then sends the last timeupdate
+   * (the chapter's end exactly), then "ended": the timer fires on that
+   * timeupdate with nothing left to pause, and "ended" would otherwise load the
+   * next part and play it (2026-11-17, seen in the pane). The flag tells
+   * "ended" to load the next part without playing.
+   */
+  const sleptAtEnd = useRef(false);
+
   /** The timer has run out: pause, which saves the place, then tidy up. */
   const fireSleep = useCallback(() => {
     const a = bookAudio();
+    if (a.ended || (Number.isFinite(a.duration) && a.currentTime >= a.duration - 0.05)) {
+      sleptAtEnd.current = true;
+    }
     if (!a.paused) a.pause();
     endSleep();
   }, [endSleep]);
@@ -243,6 +256,26 @@ export function BookProvider({ children }: { children: ReactNode }) {
       if (!i) return;
       const next = partRef.current + 1;
       if (next < i.parts.length) {
+        /*
+         * A chapter that is its own file ends here, and the sleep timer may
+         * be waiting for exactly this place. It has to be honoured now,
+         * before the next part loads. The browser's last timeupdate falls
+         * short of the end, and the next one comes from the load itself (the
+         * clock reset to 0), while the element is paused mid-load: firing
+         * then paused nothing and the autoplay below carried on into the next
+         * chapter (2026-11-17). So stop here, with the next part loaded and
+         * not playing, so pressing play goes on from the next chapter.
+         */
+        const t = sleepRef.current;
+        const slept = sleptAtEnd.current;
+        sleptAtEnd.current = false;
+        if (slept || (t?.kind === "chapter" && i.parts[next].start_ms >= t.endMs)) {
+          loadAt(i.parts[next].start_ms, false);
+          if (sleepRef.current) fireSleepRef.current();
+          sleptAtEnd.current = false;
+          save({ settle: true });
+          return;
+        }
         // The next part, from its start: one book, not the next item.
         loadAt(i.parts[next].start_ms, true);
         return;

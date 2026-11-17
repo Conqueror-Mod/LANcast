@@ -25,6 +25,8 @@ const BOOK = 7;
 class FakeAudio extends EventTarget {
   src = "";
   currentTime = 0;
+  duration = NaN;
+  ended = false;
   paused = true;
   playbackRate = 1;
   volume = 1;
@@ -271,6 +273,62 @@ describe("the sleep timer", () => {
       position_ms: 10 * MIN,
       watched: false,
     });
+  });
+
+  /*
+   * A chapter that is its own file ends at the file's end, and a browser's
+   * last timeupdate falls short of that end and is followed by `ended`. The
+   * test above stops on a timeupdate at exactly 10:00, which a real element
+   * never sends. The real order loaded the next part with autoplay; its first
+   * timeupdate fired the timer while the element was still loading, so there
+   * was nothing to pause, the timer was cleared, and the new part then started
+   * playing. Seen as "End of chapter never activated" (2026-11-17).
+   */
+  it("stops at a chapter that ends with its file, as a browser plays it", async () => {
+    await playFrom(5 * MIN);
+    act(() => player!.setSleep("chapter"));
+    act(() => audio.at(9 * 60 + 59.8)); // the last timeupdate, short of the end
+    expect(audio.paused).toBe(false);
+    act(() => {
+      audio.paused = true; // an element that has ended is paused
+      audio.dispatchEvent(new Event("ended"));
+    });
+    // Loading a new source resets the clock to 0 and says so with a
+    // timeupdate, before the new part's header has arrived.
+    act(() => audio.at(0));
+    act(() => audio.ready()); // the next part's header arrives
+    act(() => audio.at(0.25));
+    expect(audio.paused).toBe(true);
+    expect(player!.sleep).toBeNull();
+    // Ready at the next chapter, so pressing play goes on from there.
+    expect(audio.src).toBe("/api/stream/12");
+    expect(writes.filter((w) => w.url.endsWith("/progress")).at(-1)!.body).toEqual({
+      position_ms: 10 * MIN,
+      watched: false,
+    });
+  });
+
+  it("stops at a chapter that ends with its file, in Chromium's order", async () => {
+    // Seen in the pane on 2026-11-17: the element pauses itself at its end,
+    // then the last timeupdate lands exactly on the end, then "ended".
+    await playFrom(5 * MIN);
+    act(() => player!.setSleep("chapter"));
+    audio.duration = 600;
+    act(() => {
+      audio.paused = true;
+      audio.dispatchEvent(new Event("pause"));
+    });
+    act(() => audio.at(600)); // the timer fires here, with nothing to pause
+    act(() => {
+      audio.ended = true;
+      audio.dispatchEvent(new Event("ended"));
+    });
+    audio.ended = false;
+    act(() => audio.at(0));
+    act(() => audio.ready());
+    expect(audio.paused).toBe(true);
+    expect(player!.sleep).toBeNull();
+    expect(audio.src).toBe("/api/stream/12");
   });
 
   it("follows a skip into another chapter to that chapter's end", async () => {
