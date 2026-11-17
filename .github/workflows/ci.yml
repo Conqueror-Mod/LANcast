@@ -87,9 +87,25 @@ jobs:
       - name: fuzz each parser
         run: |
           set -e
+          # Go's fuzzer can report its own -fuzztime deadline as a failure,
+          # "context deadline exceeded", when a worker is mid-input as the
+          # time runs out. It struck a different target on each of three
+          # reruns of a docs-only PR (2026-11-17). A real crash always writes
+          # its input and says "Failing input written to"; that, or any other
+          # failure, still fails the job. A bare deadline is a warning.
           while read -r pkg target; do
             echo "::group::$pkg $target"
-            go test "$pkg" -run '^$' -fuzz "^${target}\$" -fuzztime 20s
+            out=$(mktemp)
+            if go test "$pkg" -run '^$' -fuzz "^${target}\$" -fuzztime 20s 2>&1 | tee "$out"; test "${PIPESTATUS[0]}" -eq 0; then
+              :
+            elif grep -q 'context deadline exceeded' "$out" \
+              && ! grep -q 'Failing input written to' "$out" \
+              && [ "$(grep -c -- '--- FAIL' "$out")" -eq 1 ]; then
+              echo "::warning::$pkg $target: fuzzer hit its own deadline with no failing input"
+            else
+              echo "::endgroup::"
+              exit 1
+            fi
             echo "::endgroup::"
           done <<'TARGETS'
           ./internal/subtitle FuzzSRTToVTT
