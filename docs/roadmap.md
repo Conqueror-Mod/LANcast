@@ -322,8 +322,14 @@ is watching that keeps running.
   is proven by the tests alone. Chapters, pre-roll, two-factor sign-in and the
   comics reader (CBZ and PDF) all passed as the installed service on
   2026-10-27.
+- The follower side of Watch Together on one server: **watched 2026-11-16,
+  and it found a fault**. A browser guest on an AC3 episode restarted its
+  converted stream four times before it settled. Every follower seek asks for a
+  new conversion, even when the target is already inside the finished playlist,
+  and each new conversion waits about 25 s for the remux. The fix is owed
+  before 1.0.
 - Watch Together and live updates between two servers on **different
-  networks**, and the follower side of Watch Together on one server. Tried
+  networks**. Tried
   across networks on 2026-11-07 with Georgia's server behind NAT (v0.10.6):
   friends' posters passed, and the eight-minute start it found was fixed in
   v0.10.7 (#1024). A retest with both servers at v0.10.7 or later is owed.

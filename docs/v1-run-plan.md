@@ -30,7 +30,11 @@ Run these **with the driving skill**. They are unattended, but they use the inst
 - **D2 ledger 3, 6, 9:** an MKV extra in the window; the follower side of Watch Together on one server (two windows); skip credits on a converted film in a browser, the remux path, and the denial reset row. **2026-11-16:**
   - Row 9 is watched.
   - Row 3 is labelled: the real library has no extras.
-  - Row 6 connected, but slowly and unreliably, with the guest about 2 s behind. It is open until the log is read.
+  - Row 6 was watched and **found a fault**. A browser guest on an AC3 episode (video copied, audio converted) restarted its stream four times in 90 s before it settled about 2 s behind:
+    - Every follower seek re-requests the conversion, even inside a playlist that is already complete.
+    - Each restart waits for the rest of the file to be remuxed (24–25 s here) before the playlist is served.
+    - The follower aims at most 20 s ahead, so on a film, where a start takes about 60 s, it may never settle.
+    - The fix is owed before 1.0: seek inside the element when the target is within a complete converted playlist.
 - **D3 Sandbox install** (§3D.1): a `.wsb` with a logon command that runs `LANcast-Setup-0.11.0.exe`, then first run, the ffmpeg fetch, an account, a library and a film. The installer's finish page is the one screen that crashed before (v0.9.29), so a screenshot of it is required evidence.
 
 End of week 1: merge S1–S5 (and S2's code, if it passes as the service), then cut **v0.11.1** as the first real candidate.
