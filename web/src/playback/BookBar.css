@@ -165,6 +165,14 @@
 .book-bar__speed select:focus-visible {
   box-shadow: 0 0 0 2px var(--gold);
 }
+/* The open list is drawn by the OS on its own background and does not inherit
+   the bar, so the options get a dark one explicitly, as the player's settings
+   panel does (PlaybackSettings.css). Without it a light Windows theme drew the
+   sleep timer's choices white on white (2026-11-17). */
+.book-bar__speed select option {
+  background: #0b1020;
+  color: var(--text-primary);
+}
 
 /* The sleep timer shares the speed menu's look. While one runs its border
    brightens and the time left sits beside it; gold stays for focus alone. */

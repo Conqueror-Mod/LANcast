@@ -243,6 +243,23 @@ export function BookProvider({ children }: { children: ReactNode }) {
       if (!i) return;
       const next = partRef.current + 1;
       if (next < i.parts.length) {
+        /*
+         * A chapter that is its own file ends here, and the sleep timer may
+         * be waiting for exactly this place. It has to be honoured now,
+         * before the next part loads. The browser's last timeupdate falls
+         * short of the end, and the next one comes from the load itself (the
+         * clock reset to 0), while the element is paused mid-load: firing
+         * then paused nothing and the autoplay below carried on into the next
+         * chapter (2026-11-17). So stop here, with the next part loaded and
+         * not playing, so pressing play goes on from the next chapter.
+         */
+        const t = sleepRef.current;
+        if (t?.kind === "chapter" && i.parts[next].start_ms >= t.endMs) {
+          loadAt(i.parts[next].start_ms, false);
+          fireSleepRef.current();
+          save({ settle: true });
+          return;
+        }
         // The next part, from its start: one book, not the next item.
         loadAt(i.parts[next].start_ms, true);
         return;
