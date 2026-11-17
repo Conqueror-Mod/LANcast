@@ -184,8 +184,8 @@ against the installed service:
   chapter. The sleep menu's choices were also drawn white on white. Both were
   fixed and retested working.
 - **Retro**: a pad on the TV and the touch controls on a real phone both
-  passed. The phone showed a steady stutter, which is noted and not yet
-  diagnosed. **Game Boy, Game Boy Color and Master System are labelled**: there
+  passed. The phone showed a steady stutter (Kirby and the Amazing Mirror, GBA, on a Motorola Edge
+  2025), which is noted and not yet diagnosed. **Game Boy, Game Boy Color and Master System are labelled**: there
   are no dumps for them in the library.
 - **Now Playing** in the desktop window, and the MilkDrop presets on the phone
   (smooth, no lag), passed. **Labelled:** a pad does not drive the visualizers,
