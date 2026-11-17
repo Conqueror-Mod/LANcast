@@ -34,7 +34,7 @@ Run these **with the driving skill**. They are unattended, but they use the inst
     - Every follower seek re-requests the conversion, even inside a playlist that is already complete.
     - Each restart waits for the rest of the file to be remuxed (24–25 s here) before the playlist is served.
     - The follower aims at most 20 s ahead, so on a film, where a start takes about 60 s, it may never settle.
-    - The fix is owed before 1.0: seek inside the element when the target is within a complete converted playlist.
+    - **Fixed in #1166** (a seek inside a finished remux moves the element's clock). On the service, the same join took one remux of 22 s, then stayed in sync with no restart. Row 6 is watched.
 - **D3 Sandbox install** (§3D.1): a `.wsb` with a logon command that runs `LANcast-Setup-0.11.0.exe`, then first run, the ffmpeg fetch, an account, a library and a film. The installer's finish page is the one screen that crashed before (v0.9.29), so a screenshot of it is required evidence.
 
 End of week 1: merge S1–S5 (and S2's code, if it passes as the service), then cut **v0.11.1** as the first real candidate.

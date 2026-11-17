@@ -165,6 +165,13 @@ of the [1.0 plan](v1-plan.md)):
 - **Skip credits on a film the server converts**: at 480p, "Skip credits"
   appeared once the credits had started, and pressing it jumped to the end and
   the end-of-film screen.
+- **The follower side of Watch Together on one server** (ledger row 6). The
+  first attempt found a fault. A browser guest on an AC3 episode restarted its
+  converted stream four times in 90 s. Every follower seek asked for a new
+  conversion, even when the target was already inside the finished remux, and
+  each new conversion waited about 25 s. After the fix (#1166), the same join
+  took one remux of 22 s and then stayed in sync for over two minutes with no
+  restart, and a deliberate leave and rejoin did the same.
 
 **Watched by 2026-10-07**, in the installed build: the **HLS file fallback**
 as the service (#589/#590), the **Up Next** card, launching **GOG, EA and Xbox
@@ -322,12 +329,6 @@ is watching that keeps running.
   is proven by the tests alone. Chapters, pre-roll, two-factor sign-in and the
   comics reader (CBZ and PDF) all passed as the installed service on
   2026-10-27.
-- The follower side of Watch Together on one server: **watched 2026-11-16,
-  and it found a fault**. A browser guest on an AC3 episode restarted its
-  converted stream four times before it settled. Every follower seek asks for a
-  new conversion, even when the target is already inside the finished playlist,
-  and each new conversion waits about 25 s for the remux. The fix is owed
-  before 1.0.
 - Watch Together and live updates between two servers on **different
   networks**. Tried
   across networks on 2026-11-07 with Georgia's server behind NAT (v0.10.6):
