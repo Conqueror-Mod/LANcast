@@ -136,9 +136,14 @@ export function TogetherProvider({ children }: { children: ReactNode }) {
     // Never steer a different film to this room's position.
     if (pb.itemID !== t.session.item_id) return;
     const now = Date.now();
-    const converting = !!pb.converting;
     const local = pb.displayTime * 1000;
     const expected = expectedPosition(t.session, t.receivedAt, now);
+    // Converted, for these rules, means a seek here would restart the
+    // conversion. Inside a finished remux it moves the element's clock and
+    // lands at once, so it is judged like direct play: the narrow tolerance,
+    // no wait for a picture, no lead. Before this, every catch-up seek threw
+    // away a finished remux and waited ~25 s for another (ledger row 6).
+    const converting = !!pb.converting && pb.seekRestarts(expected / 1000);
     const far = followerShouldSeek(
       local,
       expected,

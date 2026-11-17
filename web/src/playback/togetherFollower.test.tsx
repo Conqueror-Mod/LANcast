@@ -27,17 +27,21 @@ const player = {
   playing: true,
   loading: false,
   converting: true,
+  // The stream is a finished remux the seek target is inside (inPlaceSeek.ts).
+  inPlace: false,
 };
 const seeks: number[] = [];
 vi.mock("@/playback/PlaybackProvider", () => ({
   usePlayback: () => ({
     ...player,
+    seekRestarts: () => player.converting && !player.inPlace,
     seekTo: (t: number) => {
       seeks.push(t);
       // A converted seek: the offset moves to the target and nothing plays
-      // until the new conversion's first frame.
+      // until the new conversion's first frame. One inside a finished remux
+      // just moves the clock.
       player.displayTime = t;
-      if (player.converting) player.loading = true;
+      if (player.converting && !player.inPlace) player.loading = true;
     },
     togglePlay: () => {
       player.playing = !player.playing;
@@ -81,7 +85,7 @@ beforeEach(() => {
   root = createRoot(host);
   seeks.length = 0;
   clock = 1_000_000;
-  Object.assign(player, { displayTime: 0, playing: true, loading: false, converting: true });
+  Object.assign(player, { displayTime: 0, playing: true, loading: false, converting: true, inPlace: false });
   vi.spyOn(Date, "now").mockImplementation(() => clock);
   vi.stubGlobal(
     "fetch",
@@ -179,5 +183,66 @@ describe("a converted follower in a room here", () => {
     player.displayTime = 70;
     await poll(132_000);
     expect(seeks.length).toBeGreaterThan(1);
+  });
+});
+
+/*
+ * Ledger row 6 (2026-11-16): a browser guest on an AC3 episode, video copied
+ * and audio converted. The first stream took ~25 s to start (the server
+ * finishes the remux before serving the playlist) and landed about 20 s
+ * behind; every catch-up seek then threw that finished remux away for another
+ * 25 s start, four times in ninety seconds.
+ */
+describe("a follower inside a finished remux", () => {
+  // Joins, waits out a 24-second start, and lands the picture at the seek
+  // target while the host has moved on: the moment row 6 went wrong.
+  async function landedBehind() {
+    await joinRoom();
+    expect(seeks).toHaveLength(1);
+    const landedAt = seeks[0];
+    for (let i = 1; i <= 12; i++) await poll(100_000 + i * 2000); // 24 s of start-up
+    player.loading = false;
+    player.displayTime = landedAt;
+    player.inPlace = true; // the remux is finished and covers the rest
+    return landedAt;
+  }
+
+  it("catches up with one seek to where the host is, without a lead", async () => {
+    await landedBehind();
+    // The first poll after the picture lands finds it about 20 s behind.
+    await poll(126_000);
+    expect(seeks).toHaveLength(2);
+    // Where the host is, not ahead of it: an in-place seek lands at once.
+    expect(seeks[1]).toBeCloseTo(126, 0);
+    await poll(128_000);
+    expect(seeks).toHaveLength(2);
+  });
+
+  it("stays put once caught up, as direct play would", async () => {
+    await landedBehind();
+    let hostMS = 126_000;
+    await poll(hostMS);
+    await poll((hostMS += 2000));
+    const after = seeks.length;
+    for (let i = 0; i < 15; i++) {
+      hostMS += 2000;
+      player.displayTime = hostMS / 1000 - 0.3;
+      await poll(hostMS);
+    }
+    expect(seeks).toHaveLength(after);
+  });
+
+  it("is held to the direct-play tolerance, not the converted one", async () => {
+    await landedBehind();
+    let hostMS = 126_000;
+    await poll(hostMS);
+    await poll((hostMS += 2000));
+    const after = seeks.length;
+    // Four seconds behind: inside the 8 s converted tolerance, outside 1.5 s.
+    hostMS += 6000;
+    clock += 4000;
+    player.displayTime = hostMS / 1000 - 4;
+    await poll(hostMS);
+    expect(seeks.length).toBe(after + 1);
   });
 });

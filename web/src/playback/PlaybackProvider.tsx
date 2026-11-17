@@ -48,6 +48,7 @@ import { usePrefs, qualityQuery, getPrefs, setPrefs, STAGES, stageTier, resolveM
 import { resumePointAfterFailure } from "./resumePoint";
 import { applyCueVars } from "./cueVars";
 import { refusedNote } from "./transcodeRefused";
+import { seeksInPlace } from "./inPlaceSeek";
 import {
   noteHLSIncident,
   noteHLSPlaylistServed,
@@ -332,6 +333,10 @@ interface PlaybackState {
    *  transcode), so a seek restarts the conversion instead of moving a clock,
    *  and displayTime is the stream's offset plus the element's time. */
   converting: boolean;
+  /** Whether a seek to this time (seconds) would restart the conversion.
+   *  False on direct play, and on a finished remux the target is inside of
+   *  (see inPlaceSeek.ts). */
+  seekRestarts: (target: number) => boolean;
   displayTime: number;
   totalDuration: number;
   muted: boolean;
@@ -2504,6 +2509,27 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
   }, [item]);
 
   // ---- seeking --------------------------------------------------------------
+  // What seeksInPlace needs to know about the stream playing now. Read before
+  // a seek changes anything: the path and offset are the current stream's.
+  const inPlace = (v: { duration: number }, target: number) => ({
+    path: chosenPath.current,
+    videoAction: decision.current.video_action,
+    offset: offset.current,
+    duration: v.duration,
+    target,
+  });
+  /*
+   * Whether a seek to `target` would restart the conversion, for a Watch
+   * Together follower deciding how to seek. A seek that stays in place lands
+   * at once, like direct play, so it needs none of the converted-stream
+   * patience (the wide tolerance, waiting for the picture, aiming ahead).
+   */
+  const seekRestarts = useCallback((target: number) => {
+    if (!transcoding.current) return false;
+    const v = media();
+    return !v || !seeksInPlace(inPlace(v, target));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const seekWith = useCallback(
     (target: number, attended: boolean) => {
       const v = media();
@@ -2512,7 +2538,11 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
       // player is doing it on its own account (rollOn).
       if (attended) noteAttention();
       const t = Math.max(0, Math.min(target, totalDuration || target));
-      if (transcoding.current) {
+      if (transcoding.current && seeksInPlace(inPlace(v, t))) {
+        // Inside a finished remux: the segments are already on the server, so
+        // move the element's clock and keep the stream (see inPlaceSeek.ts).
+        v.currentTime = t - offset.current;
+      } else if (transcoding.current) {
         offset.current = t;
         setSubOffset(t);
         setCurrent(0);
@@ -3130,6 +3160,7 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
     playing,
     loading,
     converting: transcoding.current,
+    seekRestarts,
     displayTime,
     totalDuration,
     muted,
