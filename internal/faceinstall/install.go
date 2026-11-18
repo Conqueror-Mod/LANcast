@@ -100,22 +100,36 @@ var models = []Asset{
 }
 
 /*
- * The runtime, which is a 76MB download for a 16MB library.
+ * The runtime, which is a 148MB download for a 16MB library.
  *
- * Wasteful, and taken anyway: this is the archive Microsoft publishes and
+ * Wasteful, and taken anyway: this is the package Microsoft publishes and
  * signs, and repackaging it somewhere smaller would mean asking people to trust
- * a copy rather than the original. The extra sixty megabytes cross the wire
- * once.
+ * a copy rather than the original. The extra megabytes cross the wire once.
+ *
+ * WHY NUGET AND NOT GITHUB
+ *
+ * Until 1.0 this was the win-x64 zip from Microsoft's GitHub release. In
+ * November 2026 the microsoft/onnxruntime repository stopped resolving on
+ * GitHub, release assets included, and every new install failed with a 404
+ * while every existing one carried on. The same build is
+ * published as the Microsoft.ML.OnnxRuntime NuGet package on api.nuget.org,
+ * which Microsoft runs, and nuget.org keeps package versions immutable, so the
+ * digest below cannot be moved under us the way a release asset can be
+ * deleted. The DLL inside is Authenticode-signed by Microsoft Corporation and
+ * reports version 1.29.0.20260811 (commit 2e2543f), the same release as before.
+ *
+ * The package carries every platform, which is why it is twice the size of the
+ * zip it replaces; only the win-x64 library is extracted.
  */
 var runtimeWindowsAMD64 = Asset{
 	Name: "onnxruntime.dll",
-	URL: "https://github.com/microsoft/onnxruntime/releases/download/" +
-		"v1.29.0/onnxruntime-win-x64-1.29.0.zip",
-	SHA256:         "c9b4b7086b529ad814f428c1bad028e20a25d7dc0699836775faace4ab5b78b2",
-	SizeBytes:      79645520,
-	ExtractFromZip: "lib/onnxruntime.dll",
+	URL: "https://api.nuget.org/v3-flatcontainer/microsoft.ml.onnxruntime/" +
+		"1.29.0/microsoft.ml.onnxruntime.1.29.0.nupkg",
+	SHA256:         "4557021fec4da3924e2e12ff44b1cc50b176de0d2c5c7daa89ab11c208b3a454",
+	SizeBytes:      155008437,
+	ExtractFromZip: "runtimes/win-x64/native/onnxruntime.dll",
 	Licence:        "MIT",
-	LicenceURL:     "https://github.com/microsoft/onnxruntime/blob/main/LICENSE",
+	LicenceURL:     "https://www.nuget.org/packages/Microsoft.ML.OnnxRuntime/1.29.0/License",
 }
 
 /*
@@ -140,7 +154,7 @@ var runtimeWindowsAMD64 = Asset{
  *
  * The runtime is the same onnxruntime.dll the face models need. Whichever
  * feature is installed first pays for it, and `Missing` keeps the second from
- * fetching 76MB it already has.
+ * fetching 148MB it already has.
  */
 const clipCommit = "19a057a0fb927cf239541300e74237cd56c7ffe2"
 
@@ -438,10 +452,13 @@ func place(tmp, dst string, a Asset) error {
 	want := path.Base(a.ExtractFromZip)
 	for _, f := range zr.File {
 		/*
-		 * Matched on the base name, because the archive's top directory carries
-		 * a version — `onnxruntime-win-x64-1.29.0/lib/onnxruntime.dll` — and
-		 * pinning the whole path would mean this line and the URL above both
-		 * having to change together, which is one of them being forgotten.
+		 * Matched on the base name and then the suffix, because an archive's
+		 * top directory may carry a version — the GitHub zip this replaced had
+		 * `onnxruntime-win-x64-1.29.0/lib/onnxruntime.dll` — and pinning the
+		 * whole path would mean this line and the URL above both having to
+		 * change together, which is one of them being forgotten. The suffix is
+		 * what tells `win-x64/native/onnxruntime.dll` from the other platforms'
+		 * copies sitting beside it in the NuGet package.
 		 *
 		 * A zip entry's name is attacker-controlled in general; here the
 		 * archive's bytes have already been checked against a pinned digest, so
@@ -478,7 +495,7 @@ func place(tmp, dst string, a Asset) error {
 	return fmt.Errorf("%s not found in the archive", a.ExtractFromZip)
 }
 
-// Timeout guards a stalled connection without capping a slow one: a 76MB
+// Timeout guards a stalled connection without capping a slow one: a 148MB
 // download on a poor line is normal, and a socket that has said nothing for a
 // minute is not.
 const StallTimeout = 60 * time.Second

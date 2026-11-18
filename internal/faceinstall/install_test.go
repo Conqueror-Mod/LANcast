@@ -148,6 +148,72 @@ func TestTheRuntimeIsExtractedFromItsArchive(t *testing.T) {
 	}
 }
 
+/*
+ * The runtime now comes from Microsoft's NuGet package, which holds a copy of
+ * onnxruntime.dll for every platform. Only the win-x64 one may be taken: the
+ * arm64 build has the same base name and would fail to load on an x64 server
+ * with an error about a bad image, not about the wrong download. The decoys
+ * come first in the archive so a first-match-by-name would choose one of them.
+ */
+func TestThePinnedRuntimeIsTakenFromTheWin64FolderOfTheNuGetPackage(t *testing.T) {
+	var buf bytes.Buffer
+	zw := zip.NewWriter(&buf)
+	for _, e := range []struct{ name, body string }{
+		{"runtimes/win-arm64/native/onnxruntime.dll", "arm64"},
+		{"runtimes/win-x86/native/onnxruntime.dll", "x86"},
+		{"runtimes/win-x64/native/onnxruntime.dll", "MZ x64"},
+		{"runtimes/linux-x64/native/libonnxruntime.so", "elf"},
+	} {
+		f, err := zw.Create(e.name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		_, _ = f.Write([]byte(e.body))
+	}
+	if err := zw.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	srv := serve(t, buf.Bytes())
+	dir := t.TempDir()
+	a := runtimeWindowsAMD64
+	a.URL, a.SHA256, a.SizeBytes = srv.URL, digest(buf.Bytes()), int64(buf.Len())
+	if err := Install(context.Background(), []Asset{a}, dir, nil); err != nil {
+		t.Fatal(err)
+	}
+	got, err := os.ReadFile(filepath.Join(dir, "onnxruntime.dll"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(got) != "MZ x64" {
+		t.Errorf("extracted %q, want the win-x64 library", got)
+	}
+}
+
+/*
+ * The pins against the real internet, on request only.
+ *
+ * Every test above serves its own bytes on purpose, and that is how 1.0 shipped
+ * pinned to a GitHub release that later disappeared: nothing in the suite
+ * could notice. This fetches every pinned face asset, checks its digest, and
+ * extracts the runtime. It is opt-in because it downloads about 190MB:
+ *
+ *	$env:LANCAST_CHECK_PINS = "1"; go test ./internal/faceinstall -run Pinned -v
+ */
+func TestPinnedFaceAssetsStillDownloadAndVerify(t *testing.T) {
+	if os.Getenv("LANCAST_CHECK_PINS") == "" {
+		t.Skip("set LANCAST_CHECK_PINS=1 to fetch the real pinned assets")
+	}
+	all := append(append([]Asset{}, models...), runtimeWindowsAMD64)
+	dir := t.TempDir()
+	if err := Install(context.Background(), all, dir, nil); err != nil {
+		t.Fatal(err)
+	}
+	if !Installed(dir) {
+		t.Error("everything downloaded but Installed still says no")
+	}
+}
+
 // Progress is reported against the total of everything, not per file: somebody
 // watching wants to know when it will finish, not which of three files is in
 // flight.
