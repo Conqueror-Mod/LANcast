@@ -1,6 +1,6 @@
 # ADR 0125 — A TV pairs by code, and a Roku is sent segments it can hear
 
-Date: 2026-11-18 · Status: **proposed**
+Date: 2026-11-18 · Status: **accepted** 2026-11-18
 
 The plan is [roku-plan.md](../roku-plan.md), step 1. Step 0's spikes ran on a
 Roku TV on 2026-11-17, and their results are recorded in the plan. This ADR
