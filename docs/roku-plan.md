@@ -1,6 +1,6 @@
 # Roku app — plan
 
-**Status: proposed, 2026-11-17.** The first item on the 1.x roadmap. Nothing here is built, and nothing gets built until step 0's spikes have run on a real Roku.
+**Status: proposed, 2026-11-17; step 0b and 0c run the same day.** The first item on the 1.x roadmap. Nothing here is built, and nothing gets built until step 0's spikes have run on a real Roku.
 
 ## What it is
 
@@ -57,6 +57,49 @@ Both changes go in `docs/api.md` and `docs/openapi.json` in the same commit, as 
 
   The self-signed case is the open question. The app has to trust a certificate it learns at pairing, the way the desktop window and paired servers pin the server's key ([security.md](security.md), ADR 0124). If Roku cannot do that for its video player, LAN use needs either the public name or a certificate the TV already trusts. That changes the design, which is why it goes first.
 - **c. Ask the Roku what it decodes** (H.264 and HEVC profiles and levels, AC3, EAC3, DTS, AAC), and write down the answers. They become the `roku` floor.
+
+### Step 0 results (2026-11-17, a 55" Roku Select Series 4K TV, 55R4AX, Roku OS 16.0.4)
+
+**0b. Playback, through a throwaway sideloaded app with a `Bearer` key:**
+
+| Test | Picture | Sound |
+| --- | --- | --- |
+| Public name, the file played directly | yes, 2 s to the first picture | yes |
+| Public name, transcode (HLS) | yes, 5 s | **no** |
+| Public name, remux (HLS) | yes, 8 s | **no** |
+| LAN, pinned certificate, direct and transcode | yes, 0–1 s | direct yes, transcode **no** |
+| LAN, Roku's own CAs only | refused: `SSL peer certificate … was not OK` | — |
+
+- **TLS on the LAN is solved by pinning.** The video player trusts LANcast's self-signed certificate when the app hands it that certificate (`setCertificatesFile`). It refuses the same server without it, so the check is real. Pairing can carry the certificate, as the desktop window's pin does. Seeking worked on every path.
+- **HLS sound is the fault, and it is the packaging.** A lab of the same 90 s clip (H.264 + AAC) packaged four ways:
+
+  | Packaging | Sound |
+  | --- | --- |
+  | fMP4, audio and video in the same segments, no master playlist (**what LANcast serves**) | no |
+  | the same, with a master playlist naming the codecs | no |
+  | MPEG-TS, audio and video together | yes |
+  | fMP4 with audio as a separate rendition (`EXT-X-MEDIA`) | yes |
+
+  A master playlist wrapped around LANcast's real transcode was silent too. **This Roku does not play audio interleaved in fMP4 HLS segments.** For a Roku, the server has to send MPEG-TS segments or separate fMP4 audio. Choosing between them is the ADR's first decision. Separate audio is the more modern of the two, and it also gives the player its own audio-track list. MPEG-TS is the smaller change, but HEVC in TS is less certain.
+
+**0c. What the device says it decodes** (`roDeviceInfo`):
+- **Video:** H.264 High up to level **4.1**, but not 5.1 and not High 10. HEVC Main and **Main 10** (in MP4 and MKV). MPEG-2.
+- **Audio:** AAC, MP3, AC3, EAC3, FLAC, ALAC, Opus, Vorbis and LPCM, but **not DTS or TrueHD**.
+- **Not yet known:** VP9 and AV1. They were asked about in the wrong containers, so ask again before the profile is written.
+
+This is the `roku` floor's first draft: wider than `browser` on HEVC and Dolby audio, and narrower than `tv` on DTS, TrueHD and H.264 5.1.
+
+**0a. Roku Media Player over LANcast's DLNA server** (discovered without help; DLNA always sends the file as it is):
+
+| File | Result |
+|---|---|
+| MP4, H.264 + AAC stereo | Plays with sound |
+| MKV, HEVC + **DTS** 5.1 by default (also TrueHD and AC3 tracks) | Picture, **no sound**, as expected with no DTS decoder. DLNA cannot choose the AC3 track. |
+| MKV, H.264 + **AAC** stereo, one audio track | Picture, **no sound**. The decoder list does not explain this one. |
+
+In all three, seeking works, but playback **stays paused after a seek** until Play is pressed.
+
+What this means: DLNA is a stopgap at best, not a substitute for the app. It cannot transcode or choose a track, and it loses the sound even on a file whose codecs the TV says it decodes. The silent AAC-in-MKV file is still unexplained. Before the `roku` profile marks MKV as direct-playable, play that file directly in the sideloaded app; until that passes, treat MKV as remux.
 
 **1. ADR** — the Roku app, device pairing and the `roku` profile, decided with step 0's results in hand. It also covers where the app lives: proposed is `clients/roku/` in this repository, so an API change and the client that needs it land in one PR.
 
