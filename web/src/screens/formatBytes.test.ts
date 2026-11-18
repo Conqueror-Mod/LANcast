@@ -16,7 +16,7 @@ import { formatBytes } from "@/lib/format";
 
 const YUNET = 232589; // face_detection_yunet_2023mar.onnx
 const SFACE = 38696353; // face_recognition_sface_2021dec.onnx
-const RUNTIME = 79645520; // onnxruntime-win-x64-1.29.0.zip
+const RUNTIME = 155008437; // microsoft.ml.onnxruntime.1.29.0.nupkg
 
 describe("sizes on the consent list", () => {
   // The reported fault.
@@ -26,11 +26,11 @@ describe("sizes on the consent list", () => {
 
   it("still reports the large assets in megabytes", () => {
     expect(formatBytes(SFACE)).toBe("37 MB");
-    expect(formatBytes(RUNTIME)).toBe("76 MB");
+    expect(formatBytes(RUNTIME)).toBe("148 MB");
   });
 
   it("reports the total the three of them come to", () => {
-    expect(formatBytes(YUNET + SFACE + RUNTIME)).toBe("113 MB");
+    expect(formatBytes(YUNET + SFACE + RUNTIME)).toBe("185 MB");
   });
 
   /*

@@ -30,8 +30,8 @@ import (
  * before anything is fetched.
  *
  * `bytes_total` is what is actually *missing*, not what the set weighs. The
- * runtime is 76MB and both features need it, so a household that installed face
- * grouping last week is told this costs 600MB rather than 680 — and the number
+ * runtime is 148MB and both features need it, so a household that installed face
+ * grouping last week is told this costs 580MB rather than 730 — and the number
  * they are shown is the number the progress bar will count to.
  */
 func (s *Server) semanticModels(w http.ResponseWriter, r *http.Request) {
