@@ -89,7 +89,17 @@ Both changes go in `docs/api.md` and `docs/openapi.json` in the same commit, as 
 
 This is the `roku` floor's first draft: wider than `browser` on HEVC and Dolby audio, and narrower than `tv` on DTS, TrueHD and H.264 5.1.
 
-**0a (Roku Media Player over DLNA)** has not been run yet.
+**0a. Roku Media Player over LANcast's DLNA server** (discovered without help; DLNA always sends the file as it is):
+
+| File | Result |
+|---|---|
+| MP4, H.264 + AAC stereo | Plays with sound |
+| MKV, HEVC + **DTS** 5.1 by default (also TrueHD and AC3 tracks) | Picture, **no sound**, as expected with no DTS decoder. DLNA cannot choose the AC3 track. |
+| MKV, H.264 + **AAC** stereo, one audio track | Picture, **no sound**. The decoder list does not explain this one. |
+
+In all three, seeking works, but playback **stays paused after a seek** until Play is pressed.
+
+What this means: DLNA is a stopgap at best, not a substitute for the app. It cannot transcode or choose a track, and it loses the sound even on a file whose codecs the TV says it decodes. The silent AAC-in-MKV file is still unexplained. Before the `roku` profile marks MKV as direct-playable, play that file directly in the sideloaded app; until that passes, treat MKV as remux.
 
 **1. ADR** — the Roku app, device pairing and the `roku` profile, decided with step 0's results in hand. It also covers where the app lives: proposed is `clients/roku/` in this repository, so an API change and the client that needs it land in one PR.
 
