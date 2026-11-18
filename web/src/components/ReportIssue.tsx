@@ -133,6 +133,39 @@ export function ReportIssue({ version, onClose }: { version?: string; onClose: (
     if (added.length > 0) setPictures((now) => [...now, ...added].slice(0, MAX_PICTURES));
   };
 
+  /*
+   * Paste screenshot: the clipboard read on a press, not on Ctrl+V.
+   *
+   * Pasting into the form already worked, and nobody could find it. A snip
+   * from Win+Shift+S is never saved anywhere, so the only button on screen,
+   * "Add pictures", opened a file picker with nothing in it to pick — and the
+   * desktop window has no right-click menu in a release build, so there was no
+   * Paste to see either. This makes the clipboard a button.
+   *
+   * Only offered where the browser can read pictures off the clipboard at all.
+   * The desktop window allows it outright; a browser may ask first.
+   */
+  const canReadClipboard = typeof navigator !== "undefined" && typeof navigator.clipboard?.read === "function";
+  const pasteFromClipboard = async () => {
+    setPictureError(null);
+    let found: Blob[];
+    try {
+      found = [];
+      for (const item of await navigator.clipboard.read()) {
+        const type = item.types.find((t) => t.startsWith("image/"));
+        if (type) found.push(await item.getType(type));
+      }
+    } catch {
+      setPictureError("The clipboard couldn't be read here. Click in the form and press Ctrl+V instead.");
+      return;
+    }
+    if (found.length === 0) {
+      setPictureError("There's no picture on the clipboard. Take one with Win+Shift+S, then press Paste screenshot.");
+      return;
+    }
+    await addPictures(found);
+  };
+
   const removePicture = (id: number) => {
     const gone = pictures.find((p) => p.id === id);
     if (gone) forget(gone.url);
@@ -278,14 +311,26 @@ export function ReportIssue({ version, onClose }: { version?: string; onClose: (
         <div className="report__pictures">
           <div className="report__pictures-head">
             <span>Pictures (optional)</span>
-            <button
-              type="button"
-              className="report__link"
-              disabled={pictures.length >= MAX_PICTURES}
-              onClick={() => fileInput.current?.click()}
-            >
-              Add pictures
-            </button>
+            <span className="report__picture-actions">
+              {canReadClipboard && (
+                <button
+                  type="button"
+                  className="report__link"
+                  disabled={pictures.length >= MAX_PICTURES}
+                  onClick={() => void pasteFromClipboard()}
+                >
+                  Paste screenshot
+                </button>
+              )}
+              <button
+                type="button"
+                className="report__link"
+                disabled={pictures.length >= MAX_PICTURES}
+                onClick={() => fileInput.current?.click()}
+              >
+                Add pictures
+              </button>
+            </span>
             <input
               ref={fileInput}
               type="file"
@@ -316,7 +361,7 @@ export function ReportIssue({ version, onClose }: { version?: string; onClose: (
               ))}
             </ul>
           ) : (
-            <p className="report__note">Up to four. You can also paste a screenshot here.</p>
+            <p className="report__note">Up to four. Ctrl+V anywhere in this form pastes a screenshot too.</p>
           )}
           {pictureError && <p className="addpl__error">{pictureError}</p>}
         </div>

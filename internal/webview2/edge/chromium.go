@@ -308,10 +308,17 @@ func (e *Chromium) SetGlobalPermission(state CoreWebView2PermissionState) {
 }
 
 func (e *Chromium) PermissionRequested(_ *ICoreWebView2, args *iCoreWebView2PermissionRequestedEventArgs) uintptr {
+	/*
+	 * GetPermissionKind writes through its second argument, so it takes the
+	 * address. This passed uintptr(kind) — the value 0, a null out-pointer — so
+	 * kind stayed "unknown", no entry in e.permissions ever matched, and the
+	 * clipboard-read grant the window sets was never applied: every request
+	 * fell through to WebView2's default handling.
+	 */
 	var kind CoreWebView2PermissionKind
 	_, _, _ = args.vtbl.GetPermissionKind.Call(
 		uintptr(unsafe.Pointer(args)),
-		uintptr(kind),
+		uintptr(unsafe.Pointer(&kind)),
 	)
 	var result CoreWebView2PermissionState
 	if e.globalPermission != nil {

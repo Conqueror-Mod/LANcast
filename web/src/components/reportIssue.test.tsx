@@ -188,6 +188,59 @@ describe("pictures with a report", () => {
     expect(thumbs()).toBe(1);
   });
 
+  /*
+   * Paste screenshot (2026-11-17). Ctrl+V worked and could not be found: a snip
+   * from Win+Shift+S is never saved, so the file picker had nothing to offer.
+   */
+  const clipboardHolding = (items: { types: string[]; blob?: Blob }[]) =>
+    vi.stubGlobal("navigator", {
+      ...navigator,
+      clipboard: {
+        read: vi.fn(async () =>
+          items.map((i) => ({ types: i.types, getType: async () => i.blob ?? new Blob() })),
+        ),
+      },
+    });
+
+  it("attaches the screenshot on the clipboard when Paste screenshot is pressed", async () => {
+    clipboardHolding([{ types: ["text/plain"] }, { types: ["image/png"], blob: png("snip") }]);
+    await mount();
+    await act(async () => button("Paste screenshot")!.click());
+    await settle();
+    expect(thumbs()).toBe(1);
+    await act(async () => type(host.querySelector("textarea")!, "Menu off screen"));
+    await act(async () => button("Send")!.click());
+    await settle();
+    expect(posted).toEqual([expect.objectContaining({ images: [btoa("snip")] })]);
+  });
+
+  it("says so when the clipboard holds no picture", async () => {
+    clipboardHolding([{ types: ["text/plain"] }]);
+    await mount();
+    await act(async () => button("Paste screenshot")!.click());
+    await settle();
+    expect(thumbs()).toBe(0);
+    expect(host.textContent).toContain("no picture on the clipboard");
+  });
+
+  it("points to Ctrl+V when the clipboard cannot be read", async () => {
+    vi.stubGlobal("navigator", {
+      ...navigator,
+      clipboard: { read: vi.fn(async () => Promise.reject(new DOMException("denied", "NotAllowedError"))) },
+    });
+    await mount();
+    await act(async () => button("Paste screenshot")!.click());
+    await settle();
+    expect(host.textContent).toContain("press Ctrl+V instead");
+  });
+
+  it("offers no Paste screenshot where the clipboard cannot hold pictures", async () => {
+    vi.stubGlobal("navigator", { ...navigator, clipboard: { writeText: vi.fn() } });
+    await mount();
+    expect(button("Paste screenshot")).toBeUndefined();
+    expect(button("Add pictures")).toBeDefined();
+  });
+
   it("sends no pictures when none were added", async () => {
     await mount();
     await act(async () => type(host.querySelector("textarea")!, "x"));
