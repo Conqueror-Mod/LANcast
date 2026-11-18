@@ -93,6 +93,12 @@
   font-size: 13px;
   color: var(--text-secondary);
 }
+.report__picture-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+  justify-content: flex-end;
+}
 .report__link:disabled {
   opacity: 0.45;
   cursor: default;
