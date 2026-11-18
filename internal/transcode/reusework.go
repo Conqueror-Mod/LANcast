@@ -29,6 +29,7 @@ type workKey struct {
 	targetVideoBitRate int64
 	tonemapHDR         bool
 	audioIndex         int
+	segments           string
 }
 
 func workFor(o Options) workKey {
@@ -42,5 +43,6 @@ func workFor(o Options) workKey {
 		targetVideoBitRate: d.TargetVideoBitRate,
 		tonemapHDR:         d.TonemapHDR,
 		audioIndex:         o.AudioIndex,
+		segments:           d.Segments,
 	}
 }

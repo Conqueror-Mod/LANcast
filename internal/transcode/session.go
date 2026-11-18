@@ -50,6 +50,10 @@ type Session struct {
 	MediaSeconds  float64
 	SegmentLength float64
 
+	// Segments is the segment format this session writes (ADR 0125), which
+	// the server-written playlist has to name its files by.
+	Segments string
+
 	// work is what this session was asked to make; EnsureHLS reuses it only
 	// for the same work (see workKey).
 	work workKey

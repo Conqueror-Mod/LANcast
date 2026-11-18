@@ -113,7 +113,7 @@ func (s *Server) hlsPlaylist(w http.ResponseWriter, r *http.Request) {
 	var body string
 	complete := sess.Complete()
 	if complete {
-		body = transcode.CompletePlaylist(sess.MediaSeconds, sess.SegmentLength, prefix)
+		body = transcode.CompletePlaylist(sess.MediaSeconds, sess.SegmentLength, prefix, sess.Segments)
 	} else {
 		/*
 		 * A copied video track cannot be listed in advance, but a remux is fast
@@ -295,6 +295,8 @@ func (s *Server) serveHLSSegment(w http.ResponseWriter, r *http.Request, mayRead
 
 	if strings.HasSuffix(name, ".mp4") {
 		w.Header().Set("Content-Type", "video/mp4")
+	} else if strings.HasSuffix(name, ".ts") {
+		w.Header().Set("Content-Type", "video/mp2t")
 	} else {
 		w.Header().Set("Content-Type", "video/iso.segment")
 	}
@@ -548,10 +550,14 @@ func validSegmentName(name string) bool {
 	if name == "init.mp4" {
 		return true
 	}
-	if !strings.HasPrefix(name, "seg") || !strings.HasSuffix(name, ".m4s") {
+	ext := ".m4s"
+	if strings.HasSuffix(name, ".ts") {
+		ext = ".ts" // MPEG-TS segments, for a Roku (ADR 0125)
+	}
+	if !strings.HasPrefix(name, "seg") || !strings.HasSuffix(name, ext) {
 		return false
 	}
-	digits := strings.TrimSuffix(strings.TrimPrefix(name, "seg"), ".m4s")
+	digits := strings.TrimSuffix(strings.TrimPrefix(name, "seg"), ext)
 	if digits == "" || len(digits) > 8 {
 		return false
 	}

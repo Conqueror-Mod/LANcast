@@ -84,6 +84,15 @@ func SegmentLength(fps float64) float64 {
 	return gops * g / fps
 }
 
+// SegmentExt is the file extension of a segment in this format (see
+// probe.Decision.Segments): ".ts" for MPEG-TS, ".m4s" for fragmented MP4.
+func SegmentExt(segments string) string {
+	if segments == probe.SegmentsMPEGTS {
+		return ".ts"
+	}
+	return ".m4s"
+}
+
 // CompletePlaylist lists every segment of a media length, marked finished.
 //
 // A final sliver shorter than half a segment is folded into the segment before
@@ -95,7 +104,7 @@ func SegmentLength(fps float64) float64 {
 // built in memory on every request, one entry per segment, so a length the
 // file merely claimed must not decide how much memory that is. The parser
 // already refuses such a length; this holds whatever the caller passes.
-func CompletePlaylist(mediaSeconds, segment float64, prefix string) string {
+func CompletePlaylist(mediaSeconds, segment float64, prefix, segments string) string {
 	if segment <= 0 {
 		segment = SegmentSeconds
 	}
@@ -122,13 +131,17 @@ func CompletePlaylist(mediaSeconds, segment float64, prefix string) string {
 	b.WriteString("#EXT-X-MEDIA-SEQUENCE:0\n")
 	b.WriteString("#EXT-X-PLAYLIST-TYPE:VOD\n")
 	b.WriteString("#EXT-X-INDEPENDENT-SEGMENTS\n")
-	fmt.Fprintf(&b, "#EXT-X-MAP:URI=\"%sinit.mp4\"\n", prefix)
+	// MPEG-TS has no init segment: every segment carries its own tables.
+	if segments != probe.SegmentsMPEGTS {
+		fmt.Fprintf(&b, "#EXT-X-MAP:URI=\"%sinit.mp4\"\n", prefix)
+	}
+	ext := SegmentExt(segments)
 	for i := 0; i < n; i++ {
 		d := segment
 		if i == n-1 {
 			d = last
 		}
-		fmt.Fprintf(&b, "#EXTINF:%.6f,\n%sseg%05d.m4s\n", d, prefix, i)
+		fmt.Fprintf(&b, "#EXTINF:%.6f,\n%sseg%05d%s\n", d, prefix, i, ext)
 	}
 	b.WriteString("#EXT-X-ENDLIST\n")
 	return b.String()

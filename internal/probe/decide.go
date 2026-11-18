@@ -103,6 +103,17 @@ type Decision struct {
 	 * the misdescribed file this flag exists to prevent.
 	 */
 	TonemapHDR bool `json:"tonemap_hdr,omitempty"`
+
+	/*
+	 * Segments is the HLS segment format: empty for fragmented MP4, which
+	 * every client but one gets, or "mpegts" (ADR 0125).
+	 *
+	 * Copied from the profile onto every decision that is not direct play,
+	 * for the reason the fields above ride here: ffmpeg is built from the
+	 * decision, and the session that serves the playlist has to know which
+	 * kind of segment it is listing.
+	 */
+	Segments string `json:"segments,omitempty"`
 }
 
 /*
@@ -167,7 +178,33 @@ type Profile struct {
 	 * asked for by name.
 	 */
 	Claims []string `json:"claims,omitempty"`
+
+	/*
+	 * MaxH264Level is the highest H.264 level this client decodes, "" for no
+	 * ceiling. A frame above it is not direct-played, and an encode for it is
+	 * scaled to fit (ADR 0125).
+	 *
+	 * Only `roku` sets it. A Roku answers H.264 High at 4.1 and refuses 5.1,
+	 * so a 1080p60 or 4K H.264 file it is handed whole decodes to nothing.
+	 */
+	MaxH264Level string `json:"max_h264_level,omitempty"`
+
+	/*
+	 * Segments is the HLS segment format this client needs, "" for fragmented
+	 * MP4 or "mpegts".
+	 *
+	 * Only `roku` asks for MPEG-TS. A Roku plays the picture of fMP4 segments
+	 * that carry audio and video together and none of the sound, which a lab
+	 * of one clip packaged four ways showed was the packaging and nothing else
+	 * (roku-plan.md, step 0). A property of the device, so it lives on the
+	 * profile and not in a query parameter every client would have to get
+	 * right.
+	 */
+	Segments string `json:"segments,omitempty"`
 }
+
+// SegmentsMPEGTS is the one segment format besides fragmented MP4.
+const SegmentsMPEGTS = "mpegts"
 
 // BrowserProfile is what a modern desktop browser reliably plays.
 //
@@ -259,6 +296,31 @@ func TVProfile() Profile {
 	}
 }
 
+/*
+ * RokuProfile is a Roku TV or stick running the LANcast app (ADR 0125).
+ *
+ * The floor is what every current Roku plays, and the app widens it with what
+ * it asks the device about (`hevc`, `hevc10`) through the same claims every
+ * client uses. Measured on a Roku TV in roku-plan.md step 0: H.264 High to
+ * level 4.1, AAC, MP3, AC3, EAC3, FLAC, ALAC and LPCM, and no DTS or TrueHD at
+ * all.
+ *
+ * Matroska is left out until a Matroska file has played with sound directly in
+ * the app; one played silent through Roku Media Player, which the decoder list
+ * does not explain. A remux costs a few percent of one core, and silence is a
+ * film nobody can watch.
+ */
+func RokuProfile() Profile {
+	return Profile{
+		Name:         "roku",
+		Containers:   []string{"mp4", "mov", "mpegts", "mp3", "flac", "wav", "aac"},
+		VideoCodecs:  []string{"h264", "mpeg2video"},
+		AudioCodecs:  []string{"aac", "mp3", "ac3", "eac3", "flac", "alac", "pcm_s16le", "pcm_u8"},
+		MaxH264Level: "4.1",
+		Segments:     SegmentsMPEGTS,
+	}
+}
+
 // ProfileByName resolves a client profile. An unknown or empty name falls back
 // to the conservative browser profile: guessing generously on behalf of a
 // client we cannot identify is how black rectangles happen.
@@ -270,6 +332,8 @@ func ProfileByName(name string) Profile {
 		return TVProfile()
 	case "native":
 		return NativeProfile()
+	case "roku":
+		return RokuProfile()
 	default:
 		return BrowserProfile()
 	}
@@ -530,6 +594,19 @@ func DecideTrack(r *Result, p Profile, audioIndex int) Decision {
 		audioCopyable = false
 		audioMuxWhy = fmt.Sprintf("audio codec %s cannot be carried in MP4", audio.Codec)
 	}
+	// A client sent MPEG-TS segments needs the stream to fit that box as well.
+	// Both checks, not just this one: the same decision serves the
+	// progressive route, which is MP4.
+	if p.Segments == SegmentsMPEGTS {
+		if videoCopyable && !tsCarriesVideo(video) {
+			videoCopyable = false
+			videoMuxWhy = fmt.Sprintf("video codec %s cannot be carried in MPEG-TS", video.Codec)
+		}
+		if audioCopyable && !tsCarriesAudio(audio) {
+			audioCopyable = false
+			audioMuxWhy = fmt.Sprintf("audio codec %s cannot be carried in MPEG-TS", audio.Codec)
+		}
+	}
 
 	switch {
 	case videoCopyable && audioCopyable:
@@ -548,7 +625,7 @@ func DecideTrack(r *Result, p Profile, audioIndex int) Decision {
 			Method:      Remux,
 			Reason:      reason,
 			VideoAction: "copy", AudioAction: "copy", TargetFormat: "mp4",
-			AudioOnly: audioOnly,
+			AudioOnly: audioOnly, Segments: p.Segments,
 		}
 
 	case videoCopyable:
@@ -556,7 +633,7 @@ func DecideTrack(r *Result, p Profile, audioIndex int) Decision {
 		return Decision{
 			Method: Transcode, Reason: audioMuxWhy,
 			VideoAction: "copy", AudioAction: "encode", TargetFormat: "mp4",
-			AudioOnly: audioOnly,
+			AudioOnly: audioOnly, Segments: p.Segments,
 		}
 
 	default:
@@ -574,6 +651,7 @@ func DecideTrack(r *Result, p Profile, audioIndex int) Decision {
 		d := Decision{
 			Method: Transcode, Reason: reason,
 			VideoAction: "encode", AudioAction: audioAction, TargetFormat: "mp4",
+			Segments: p.Segments,
 		}
 		// A ceiling only becomes a target when the source is actually above it.
 		// Carrying it down unconditionally would tell ffmpeg to scale a 720p
@@ -597,6 +675,17 @@ func DecideTrack(r *Result, p Profile, audioIndex int) Decision {
 
 			if p.MaxHeight > 0 && video.Height > p.MaxHeight {
 				d.TargetHeight = p.MaxHeight
+			}
+			// Every encode is H.264, so a client with a level ceiling needs
+			// the output to fit it, whatever forced the encode. Lower wins.
+			if p.MaxH264Level != "" {
+				w, h := video.Width, video.Height
+				if d.TargetHeight > 0 && h > 0 {
+					w, h = w*d.TargetHeight/h, d.TargetHeight
+				}
+				if fit := HeightForH264Level(w, h, d.SourceFrameRate, p.MaxH264Level); fit > 0 {
+					d.TargetHeight = fit
+				}
 			}
 			if p.MaxVideoBitRate > 0 &&
 				(video.BitRate == 0 || video.BitRate > p.MaxVideoBitRate) {
@@ -663,6 +752,34 @@ func mp4CarriesAudio(s *Stream, p Profile) bool {
 		return p.Allows("flacmp4")
 	case "opus":
 		return p.Allows("opusmp4")
+	}
+	return false
+}
+
+/*
+ * tsCarriesVideo and tsCarriesAudio are what MPEG-TS segments can hold
+ * (ADR 0125). Narrower than MP4 on audio: FLAC, Opus and ALAC have no mapping
+ * into TS that ffmpeg writes, so a remux for a TS client re-encodes them,
+ * where the MP4 path would have kept the lossless.
+ */
+func tsCarriesVideo(s *Stream) bool {
+	if s == nil {
+		return true
+	}
+	switch strings.ToLower(s.Codec) {
+	case "h264", "hevc", "mpeg2video":
+		return true
+	}
+	return false
+}
+
+func tsCarriesAudio(s *Stream) bool {
+	if s == nil {
+		return true
+	}
+	switch strings.ToLower(s.Codec) {
+	case "aac", "mp3", "ac3", "eac3":
+		return true
 	}
 	return false
 }
@@ -751,6 +868,13 @@ func videoCompatible(s *Stream, p Profile, rate bitRate) (bool, string) {
 	 * `probably` for `avc1.6e0033`, and High 10 is most of an anime library —
 	 * a full video re-encode, every time, on files it can play.
 	 */
+	if p.MaxH264Level != "" && strings.EqualFold(s.Codec, "h264") {
+		fps, _ := strconv.ParseFloat(s.FrameRate, 64)
+		if !FitsH264Level(s.Width, s.Height, fps, p.MaxH264Level) {
+			return false, fmt.Sprintf("H.264 at %dx%d needs level %s, above the %s this client decodes",
+				s.Width, s.Height, H264Level(s.Width, s.Height, fps), p.MaxH264Level)
+		}
+	}
 	if !p.PlaysEverything && strings.EqualFold(s.Codec, "h264") && isTenBit(s) && !p.Allows("high10") {
 		return false, "10-bit H.264 needs a decoder this client did not claim"
 	}

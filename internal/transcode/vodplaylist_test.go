@@ -85,7 +85,7 @@ func TestSegmentLengthWithoutAFrameRate(t *testing.T) {
 }
 
 func TestACompletePlaylistIsFinishedAndSaysSo(t *testing.T) {
-	p := CompletePlaylist(60, 6, "/api/stream/7/hls/abc/")
+	p := CompletePlaylist(60, 6, "/api/stream/7/hls/abc/", "")
 	for _, want := range []string{
 		"#EXT-X-PLAYLIST-TYPE:VOD",
 		"#EXT-X-ENDLIST",
@@ -110,7 +110,7 @@ func TestACompletePlaylistIsFinishedAndSaysSo(t *testing.T) {
 // the listed durations must add up to it however the last segment falls.
 func TestACompletePlaylistAddsUpToTheMedia(t *testing.T) {
 	for _, total := range []float64{6230.568, 61.2, 63.5, 2, 6.006} {
-		p := CompletePlaylist(total, 6.006, "")
+		p := CompletePlaylist(total, 6.006, "", "")
 		sum, n := 0.0, 0
 		for _, line := range strings.Split(p, "\n") {
 			if rest, ok := strings.CutPrefix(line, "#EXTINF:"); ok {
@@ -134,7 +134,7 @@ func TestACompletePlaylistAddsUpToTheMedia(t *testing.T) {
  * slightly long last segment costs nothing.
  */
 func TestASliverAtTheEndIsFoldedIntoTheLastSegment(t *testing.T) {
-	p := CompletePlaylist(60.4, 6, "")
+	p := CompletePlaylist(60.4, 6, "", "")
 	if strings.Contains(p, "seg00010") {
 		t.Errorf("0.4s left over was listed as its own segment:\n%s", p)
 	}
@@ -162,13 +162,28 @@ func TestListedMatchesWholeNamesOnly(t *testing.T) {
 func TestACompletePlaylistIsCappedWhateverItIsTold(t *testing.T) {
 	limit := int(math.Round(float64(probe.MaxDurationSeconds)/6.006)) + 1
 	for _, media := range []float64{1e9, math.Inf(1), math.NaN()} {
-		p := CompletePlaylist(media, 6.006, "")
+		p := CompletePlaylist(media, 6.006, "", "")
 		if n := strings.Count(p, "#EXTINF:"); n > limit {
 			t.Errorf("media %v: %d segments, want at most %d", media, n, limit)
 		}
 	}
 	// And whatever the segment.
-	if n := strings.Count(CompletePlaylist(1e9, 1e-6, ""), "#EXTINF:"); n > probe.MaxDurationSeconds {
+	if n := strings.Count(CompletePlaylist(1e9, 1e-6, "", ""), "#EXTINF:"); n > probe.MaxDurationSeconds {
 		t.Errorf("a tiny segment listed %d entries", n)
+	}
+}
+
+// A Roku's playlist (ADR 0125): MPEG-TS segments named .ts, and no init
+// segment, since TS carries its own tables in every segment.
+func TestCompletePlaylistForMPEGTS(t *testing.T) {
+	p := CompletePlaylist(12, 6, "/x/", probe.SegmentsMPEGTS)
+	if strings.Contains(p, "EXT-X-MAP") || strings.Contains(p, "init.mp4") {
+		t.Errorf("TS playlist names an init segment:\n%s", p)
+	}
+	if !strings.Contains(p, "/x/seg00000.ts\n") || !strings.Contains(p, "/x/seg00001.ts\n") {
+		t.Errorf("TS playlist does not list .ts segments:\n%s", p)
+	}
+	if strings.Contains(p, ".m4s") {
+		t.Errorf("TS playlist lists fMP4 segments:\n%s", p)
 	}
 }

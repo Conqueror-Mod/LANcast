@@ -48,7 +48,7 @@ func TestRewritePlaylist(t *testing.T) {
 // Segment names arrive in URLs and become filesystem paths, so only the exact
 // shapes ffmpeg produces are allowed.
 func TestValidSegmentName(t *testing.T) {
-	good := []string{"init.mp4", "seg00000.m4s", "seg00001.m4s", "seg99999.m4s"}
+	good := []string{"init.mp4", "seg00000.m4s", "seg00001.m4s", "seg99999.m4s", "seg00000.ts", "seg00042.ts"}
 	for _, n := range good {
 		if !validSegmentName(n) {
 			t.Errorf("validSegmentName(%q) = false, want true", n)
@@ -59,6 +59,7 @@ func TestValidSegmentName(t *testing.T) {
 		"", "seg.m4s", "seg00000.mp4", "index.m3u8",
 		"../seg00000.m4s", "..\\init.mp4", "seg00000.m4s/../../etc",
 		"segABCDE.m4s", "seg000000000.m4s", "/etc/passwd",
+		"seg.ts", "segABCDE.ts", "../seg00000.ts", "init.ts",
 	}
 	for _, n := range bad {
 		if validSegmentName(n) {

@@ -1434,7 +1434,7 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * The same transcode as an HLS playlist with fMP4 segments
+         * The same transcode as an HLS playlist with fMP4 segments (MPEG-TS for `roku`)
          * @description For clients that speak HLS natively. Segment URLs point back at `GET /api/stream/{id}/hls/{session}/{name}`.
          *
          *     **When video is encoded the playlist is complete from the first response** — every remaining segment listed, `VOD`, closed with `#EXT-X-ENDLIST` — and segments not yet produced are waited for when requested. A copied video track keeps ffmpeg's own `EVENT` playlist; the response waits up to twenty seconds for it to finish and serves it closed with `#EXT-X-ENDLIST` when it does, growing otherwise. `X-LANcast-Playlist` says which; an engine can play one and refuse the other.
@@ -7532,6 +7532,11 @@ export interface components {
             source_width?: number;
             source_height?: number;
             source_frame_rate?: number;
+            /**
+             * @description The HLS segment format, **absent for fragmented MP4**, which every profile but one gets. `mpegts` for the `roku` profile (ADR 0125): a Roku plays the picture of fMP4 segments that carry audio and video together and none of the sound. A TS playlist has no `EXT-X-MAP`, and its segments are `segNNNNN.ts`, served as `video/mp2t`. Never present on direct play, which has no segments.
+             * @enum {string}
+             */
+            segments?: "mpegts";
         };
         PlaybackDecision: {
             /** Format: int64 */
@@ -10902,6 +10907,7 @@ export interface components {
          *     - `browser` (default): h264, vp8, vp9, av1 · aac, mp3, opus, vorbis, flac, pcm_s16le, pcm_u8 · mp4, webm, mov, mp3, flac, ogg, wav
          *     - `safari`: adds hevc and ac3/eac3/alac/pcm_s24le, drops Ogg — matching what Apple ships decoders for
          *     - `tv`: the widest — hevc, vp9, mpeg2video · dts, truehd · matroska, mpegts and the bare audio containers
+         *     - `roku`: the LANcast Roku app (ADR 0125) — h264, mpeg2video · aac, mp3, ac3, eac3, flac, alac, pcm_s16le, pcm_u8 · mp4, mov, mpegts, mp3, flac, wav, aac. H.264 is held to **level 4.1**, worked out from frame size and rate: a frame above it is not direct-played, and an encode is scaled to fit. HLS goes out as **MPEG-TS segments** (see `segments` on the decision). HEVC and Matroska are claimed with `can`, not assumed
          *
          *     **`browser` excludes HEVC deliberately.** Chrome's support is conditional on hardware and Firefox has none, so claiming it for an unidentified client trades a cheap remux for an unexplained failure. Clients that know better say so with `can`.
          *
@@ -12999,6 +13005,7 @@ export interface operations {
                  *     - `browser` (default): h264, vp8, vp9, av1 · aac, mp3, opus, vorbis, flac, pcm_s16le, pcm_u8 · mp4, webm, mov, mp3, flac, ogg, wav
                  *     - `safari`: adds hevc and ac3/eac3/alac/pcm_s24le, drops Ogg — matching what Apple ships decoders for
                  *     - `tv`: the widest — hevc, vp9, mpeg2video · dts, truehd · matroska, mpegts and the bare audio containers
+                 *     - `roku`: the LANcast Roku app (ADR 0125) — h264, mpeg2video · aac, mp3, ac3, eac3, flac, alac, pcm_s16le, pcm_u8 · mp4, mov, mpegts, mp3, flac, wav, aac. H.264 is held to **level 4.1**, worked out from frame size and rate: a frame above it is not direct-played, and an encode is scaled to fit. HLS goes out as **MPEG-TS segments** (see `segments` on the decision). HEVC and Matroska are claimed with `can`, not assumed
                  *
                  *     **`browser` excludes HEVC deliberately.** Chrome's support is conditional on hardware and Firefox has none, so claiming it for an unidentified client trades a cheap remux for an unexplained failure. Clients that know better say so with `can`.
                  *
@@ -13568,6 +13575,7 @@ export interface operations {
                  *     - `browser` (default): h264, vp8, vp9, av1 · aac, mp3, opus, vorbis, flac, pcm_s16le, pcm_u8 · mp4, webm, mov, mp3, flac, ogg, wav
                  *     - `safari`: adds hevc and ac3/eac3/alac/pcm_s24le, drops Ogg — matching what Apple ships decoders for
                  *     - `tv`: the widest — hevc, vp9, mpeg2video · dts, truehd · matroska, mpegts and the bare audio containers
+                 *     - `roku`: the LANcast Roku app (ADR 0125) — h264, mpeg2video · aac, mp3, ac3, eac3, flac, alac, pcm_s16le, pcm_u8 · mp4, mov, mpegts, mp3, flac, wav, aac. H.264 is held to **level 4.1**, worked out from frame size and rate: a frame above it is not direct-played, and an encode is scaled to fit. HLS goes out as **MPEG-TS segments** (see `segments` on the decision). HEVC and Matroska are claimed with `can`, not assumed
                  *
                  *     **`browser` excludes HEVC deliberately.** Chrome's support is conditional on hardware and Firefox has none, so claiming it for an unidentified client trades a cheap remux for an unexplained failure. Clients that know better say so with `can`.
                  *
@@ -13716,6 +13724,7 @@ export interface operations {
                  *     - `browser` (default): h264, vp8, vp9, av1 · aac, mp3, opus, vorbis, flac, pcm_s16le, pcm_u8 · mp4, webm, mov, mp3, flac, ogg, wav
                  *     - `safari`: adds hevc and ac3/eac3/alac/pcm_s24le, drops Ogg — matching what Apple ships decoders for
                  *     - `tv`: the widest — hevc, vp9, mpeg2video · dts, truehd · matroska, mpegts and the bare audio containers
+                 *     - `roku`: the LANcast Roku app (ADR 0125) — h264, mpeg2video · aac, mp3, ac3, eac3, flac, alac, pcm_s16le, pcm_u8 · mp4, mov, mpegts, mp3, flac, wav, aac. H.264 is held to **level 4.1**, worked out from frame size and rate: a frame above it is not direct-played, and an encode is scaled to fit. HLS goes out as **MPEG-TS segments** (see `segments` on the decision). HEVC and Matroska are claimed with `can`, not assumed
                  *
                  *     **`browser` excludes HEVC deliberately.** Chrome's support is conditional on hardware and Firefox has none, so claiming it for an unidentified client trades a cheap remux for an unexplained failure. Clients that know better say so with `can`.
                  *

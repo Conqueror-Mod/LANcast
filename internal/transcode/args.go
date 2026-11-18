@@ -944,13 +944,28 @@ func Args(o Options) []string {
 			"-f", "hls",
 			"-hls_time", strconv.Itoa(SegmentSeconds),
 			"-hls_playlist_type", playlistType,
-			"-hls_segment_type", "fmp4",
+		)
+		/*
+		 * MPEG-TS for the one client that cannot hear fMP4 (ADR 0125): a Roku
+		 * plays the picture of segments that carry audio and video together,
+		 * and none of the sound. No init file in TS; each segment carries its
+		 * own tables. ffmpeg inserts the Annex B filter a copied H.264 or HEVC
+		 * track needs for TS by itself.
+		 */
+		if o.Decision.Segments == probe.SegmentsMPEGTS {
+			a = append(a, "-hls_segment_type", "mpegts")
+		} else {
+			a = append(a,
+				"-hls_segment_type", "fmp4",
+				"-hls_fmp4_init_filename", "init.mp4",
+			)
+		}
+		a = append(a,
 			// independent_segments tells the player each segment can be
 			// decoded alone, which is what makes seeking work.
 			"-hls_flags", "independent_segments",
 			"-hls_list_size", "0",
-			"-hls_fmp4_init_filename", "init.mp4",
-			"-hls_segment_filename", o.OutputDir+"/seg%05d.m4s",
+			"-hls_segment_filename", o.OutputDir+"/seg%05d"+SegmentExt(o.Decision.Segments),
 			o.OutputDir+"/index.m3u8",
 		)
 	default:
