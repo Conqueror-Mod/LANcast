@@ -2861,6 +2861,51 @@ export function useRevokeAPIKey() {
 }
 
 /*
+ * Pairing a TV by code (ADR 0125). The TV shows the code; this side looks it
+ * up, shows what it would approve, and approves it with the password.
+ *
+ * Both are mutations, not queries: each is something a person does by
+ * pressing a button with a code they typed, and a lookup cached under a code
+ * would go on showing a device that has since been decided or expired.
+ */
+export type PendingPairing = {
+  code: string;
+  name: string;
+  device: string;
+  address: string;
+  created_at: number;
+  expires_at: number;
+};
+
+export function useLookupPairing() {
+  return useMutation({
+    mutationFn: (code: string) =>
+      apiGet<PendingPairing>(
+        `/api/devices/pair/${encodeURIComponent(code.trim())}`,
+      ),
+  });
+}
+
+/*
+ * No invalidation of the key list, and that is not an omission: the key is
+ * made when the TV next polls, seconds after this, not by this request. The
+ * list's own poll (apiKeysPollMs) is what shows it.
+ */
+export function useDecidePairing() {
+  return useMutation({
+    mutationFn: (args: {
+      code: string;
+      approve: boolean;
+      current_password?: string;
+    }) =>
+      apiPost<PendingPairing & { approved: boolean }>(
+        "/api/devices/pair/approve",
+        args,
+      ),
+  });
+}
+
+/*
  * Tags and favourites (ADR 0062).
  *
  * Both are private to the signed-in account. There is no account parameter

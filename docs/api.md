@@ -83,8 +83,10 @@ Every endpoint requires a session cookie except `GET /api/health`,
 `POST /api/auth/login/two-factor`,
 `POST /api/auth/passkey/login/options`, `POST /api/auth/passkey/login`,
 `GET /api/identity/proof` (which answers only a caller who already names this
-server's fingerprint — see [Server identity](#server-identity)), and the
-web assets. Unauthenticated calls return `401 unauthorized`.
+server's fingerprint — see [Server identity](#server-identity)), the three
+routes a TV uses before it has a key (`POST /api/devices/pair`,
+`POST /api/devices/pair/poll`, `GET /api/devices/pair/certificate` — see
+[Pairing a TV](#pairing-a-tv)), and the web assets. Unauthenticated calls return `401 unauthorized`.
 
 While no account exists the API is open — but the server binds `127.0.0.1`
 only, so it is reachable solely from the machine it runs on. In that state a
@@ -6657,6 +6659,115 @@ yours — the ownership is part of the query rather than a check in the handler,
 so the database refuses it however the handler is later rewritten.
 
 The key stops authenticating immediately; there is no cache to wait out.
+
+## Pairing a TV
+
+A TV signs in without anybody typing a key or a password on it
+([ADR 0125](adr/0125-a-tv-pairs-by-code.md)). It shows an eight-character
+code; a signed-in person types the code at `/pair` in the web client; the TV
+receives an [API key](#api-keys) belonging to that person. Written for the
+Roku app, and not limited to it: anything that can show eight characters and
+hash a certificate can pair.
+
+**The code is computed, not issued.** Both ends derive it from a nonce the
+server chose and the certificate the TV's connection was served:
+
+```
+code = base32( SHA-256( "LANcast pairing v1" || 0x00 || nonce || certDER ) )[:8]
+```
+
+`certDER` is the leaf certificate, DER. `base32` is **Crockford's alphabet**,
+`0123456789ABCDEFGHJKMNPQRSTVWXYZ`, taking the hash's first 40 bits most
+significant first. A machine in the middle serves the TV its own
+certificate, so the TV shows a code the server never filed, and the approval
+fails as an unknown code. Shown as two groups of four (`7KQ2-M9XD`); when it
+is typed, case, spaces and dashes are ignored, `O` is read as `0` and `I` or
+`L` as `1`.
+
+**The order a TV does this in is part of the defence.**
+
+1. `GET /api/devices/pair/certificate` over a connection it cannot yet
+   verify, and keep the certificate.
+2. Every later request, the start and every poll, **pinned to that
+   certificate**. If the TV did not pin, a relay that passed the real
+   certificate through would let the TV compute the right code and then
+   read the key out of the poll.
+3. `POST /api/devices/pair`, compute the code, show it.
+4. `POST /api/devices/pair/poll` every `interval` seconds until `200` or
+   `410`.
+
+On the server's public name, whose certificate is from a public CA, the TV
+verifies with its own CA bundle rather than pinning; the code is bound all the
+same.
+
+Pairing needs HTTPS: a server with no password binds loopback and speaks plain
+HTTP, and these routes answer `409` there, because there is no network for a
+TV to be on.
+
+### `GET /api/devices/pair/certificate`
+
+No session. The leaf certificate this connection was served, as PEM
+(`application/x-pem-file`): what the TV hashes into its code and then pins.
+
+### `POST /api/devices/pair`
+
+No session. `{ "name": "Living room", "device": "Roku" }`. `name` is required
+(trimmed, at most 64 bytes); `device` is optional (at most 32, default `TV`)
+and names the key with `name`: `Roku: Living room`.
+
+```json
+{ "pairing": "q3Vf…", "nonce": "5u0Y…==", "expires_in": 600, "interval": 5 }
+```
+
+`pairing` is the token the TV polls with; `nonce` is base64 and goes into the
+code. A pairing lasts ten minutes and is held **in memory only**: nothing
+about one survives a restart.
+
+`429` past ten starts from one address in ten minutes; `503` when 32 pairings
+are already waiting. Both because this route needs no session and is the
+cheapest thing on the server to flood.
+
+### `POST /api/devices/pair/poll`
+
+No session. `{ "pairing": "q3Vf…" }`.
+
+- `202` `{ "status": "waiting" }` until somebody decides;
+- `200` once approved, **exactly once**:
+  `{ "key": "hn3K…", "key_id": "9f3c…", "user": { "id": "u_3f9", "name": "…" } }`;
+- `410 gone` once it is refused, expired, or already collected;
+- `429` with `Retry-After` for a poll sooner than `interval`.
+
+The key is made at this moment, not at the approval, so an approval nobody
+collects leaves no key behind. It is an ordinary API key of the approver's:
+hashed at rest, listed by `GET /api/keys` and revoked by
+`DELETE /api/keys/{id}`, and never an admin route whoever owns it.
+
+### `GET /api/devices/pair/{code}`
+
+What the person is about to approve: the device's name, kind, the address it
+asked from, and when. Requires a **session**; an API key is refused with `403`,
+so a paired TV cannot pair another.
+
+```json
+{ "code": "7KQ2-M9XD", "name": "Living room", "device": "Roku",
+  "address": "192.0.2.40", "created_at": 1795000000, "expires_at": 1795000600 }
+```
+
+`404` for a code with no device waiting, which is also what a code computed
+from an impostor's certificate gets. `429` past ten codes that match nothing
+from one address in ten minutes.
+
+### `POST /api/devices/pair/approve`
+
+`{ "code": "7KQ2-M9XD", "approve": true, "current_password": "…" }`. Requires
+a session, origin-checked like every write. **Approving needs the account's
+password**, as `POST /api/keys` does: it ends in a key, and a key outlives
+every session, so a session somebody left open must not be enough to give a
+TV the account. A missing or wrong password is `403`, on the sign-in throttle
+and the per-account wait. Refusing (`"approve": false`) needs no password.
+
+Answers the pairing as `GET` does, with `"approved": true|false`. A code is
+decided once: `404` for one already decided, expired, or never filed.
 
 ## Webhooks
 

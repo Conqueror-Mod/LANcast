@@ -1296,6 +1296,11 @@ func run(ctx context.Context, addr, dataDir string, log *slog.Logger) error {
 			publicCert = pcm
 		}
 
+		// A TV's pairing code is bound to the certificate its connection was
+		// served (ADR 0125 §2), so the pairing routes ask the same chooser
+		// the listener does, public certificate and all.
+		apiSrv.SetCertificateChooser(tlsConfig.GetCertificate)
+
 		// Peers arrive on this same port and are told apart by an ALPN marker
 		// in the ClientHello, which no browser sends (internal/peer). They are
 		// answered with the identity certificate and are required to present

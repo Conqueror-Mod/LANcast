@@ -26,6 +26,7 @@ import (
 	"lancast/internal/config"
 	"lancast/internal/coverart"
 	"lancast/internal/crashlog"
+	"lancast/internal/devicepair"
 	"lancast/internal/enrich"
 	"lancast/internal/events"
 	"lancast/internal/faces"
@@ -264,6 +265,16 @@ type Server struct {
 	// accountWait slows guessing at one account from many addresses; throttle
 	// only sees one address at a time.
 	accountWait *auth.AccountBackoff
+	// pairing is TVs waiting for somebody to type their code (ADR 0125),
+	// in memory only (devicepair.go). pairStarts limits starting one per
+	// address; pairGuesses limits codes typed that match nothing.
+	pairing     *devicepair.Book
+	pairStarts  *auth.Throttle
+	pairGuesses *auth.Throttle
+	// servedLeaf is the certificate a request's connection was served, which
+	// a TV's pairing code is bound to. Set by SetCertificateChooser; tests
+	// replace it, since their server speaks plain HTTP.
+	servedLeaf func(*http.Request) ([]byte, error)
 	// publicCert is the opt-in public certificate (ADR 0081); nil on a
 	// loopback-only server. Set by SetPublicCert after TLS is prepared.
 	publicCert PublicCertManager
@@ -415,6 +426,9 @@ func New(d Deps) *Server {
 		lanBound: d.LANBound, restartWidens: d.RestartWidens,
 		throttle:          auth.NewThrottle(),
 		accountWait:       auth.NewAccountBackoff(),
+		pairing:           devicepair.NewBook(),
+		pairStarts:        newPairThrottle(),
+		pairGuesses:       newPairThrottle(),
 		passkeyChallenges: passkey.NewChallenges(),
 		tfBook:            newTwoFactorBook(),
 		crashes:           crashlog.New(d.DataDir, Version),
@@ -573,6 +587,13 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("PUT /api/items/{id}/watchlist", s.addToWatchlist)
 	mux.HandleFunc("DELETE /api/items/{id}/watchlist", s.removeFromWatchlist)
 
+	// A TV pairing by code (ADR 0125). Start, poll and the certificate need
+	// no session (isPublicPath); looking up and deciding a code do.
+	mux.HandleFunc("POST /api/devices/pair", s.pairStart)
+	mux.HandleFunc("POST /api/devices/pair/poll", s.pairPoll)
+	mux.HandleFunc("GET /api/devices/pair/certificate", s.pairCertificate)
+	mux.HandleFunc("GET /api/devices/pair/{code}", s.pairLookup)
+	mux.HandleFunc("POST /api/devices/pair/approve", s.pairApprove)
 	mux.HandleFunc("GET /api/keys", s.listAPIKeys)
 	mux.HandleFunc("POST /api/keys", s.createAPIKey)
 	mux.HandleFunc("DELETE /api/keys/{id}", s.deleteAPIKey)

@@ -4847,6 +4847,106 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/devices/pair": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * A TV asks to pair
+         * @description No session (ADR 0125). The TV derives the eight-character code it shows from `nonce` and the certificate this connection was served: `base32(SHA-256("LANcast pairing v1" || 0x00 || nonce || certDER))[:8]` in Crockford's alphabet. It must already be pinned to the certificate it read from `GET /devices/pair/certificate`. Held in memory for ten minutes.
+         */
+        post: operations["startPairing"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/devices/pair/poll": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * A TV asks whether it has been approved
+         * @description No session. `202` until somebody decides, the key **exactly once** on `200`, then `410`. The key is an ordinary API key of the approver's (ADR 0061), made at this moment so an approval nobody collects leaves no key behind.
+         */
+        post: operations["pollPairing"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/devices/pair/certificate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The certificate this connection was served
+         * @description No session. PEM. What a pairing TV hashes into its code and then pins (ADR 0125 §2).
+         */
+        get: operations["pairingCertificate"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/devices/pair/{code}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * What a code would approve
+         * @description Requires a **session**; an API key is refused with `403`, so a paired TV cannot pair another. Case, spaces and dashes in the code are ignored, and `O`, `I`, `L` are read as `0`, `1`, `1`.
+         */
+        get: operations["lookupPairing"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/devices/pair/approve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Approve or refuse a device
+         * @description Requires a **session**, and approving requires the account's **password**, as minting a key does (ADR 0061, amended 2026-11-16): a key outlives every session. Refusing needs no password. A code is decided once.
+         */
+        post: operations["decidePairing"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/tags": {
         parameters: {
             query?: never;
@@ -19320,6 +19420,302 @@ export interface operations {
                 };
             };
             404: components["responses"]["NotFound"];
+        };
+    };
+    startPairing: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @description Shown to the person approving. Trimmed, at most 64 bytes. */
+                    name: string;
+                    /** @description The kind of device, default `TV`. The key is named `<device>: <name>`. */
+                    device?: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Filed. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @description The token the TV polls with. */
+                        pairing: string;
+                        /**
+                         * Format: byte
+                         * @description Base64; goes into the code.
+                         */
+                        nonce: string;
+                        /** @description Seconds. */
+                        expires_in: number;
+                        /** @description Seconds between polls, at least. */
+                        interval: number;
+                    };
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            /** @description `conflict` — not an HTTPS connection; a server with no password speaks plain HTTP on loopback only. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description `too_many_requests` — ten starts from this address in ten minutes. */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description `unavailable` — 32 pairings are already waiting. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    pollPairing: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    pairing: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Approved: the key, for the only time. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @description Present as `Authorization: Bearer`. */
+                        key: string;
+                        key_id: string;
+                        user: {
+                            id: string;
+                            name: string;
+                        };
+                    };
+                };
+            };
+            /** @description Nobody has decided yet. */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @enum {string} */
+                        status: "waiting";
+                    };
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            /** @description `gone` — refused, expired, or already collected. Start again. */
+            410: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description `too_many_requests` — sooner than `interval`; see `Retry-After`. */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    pairingCertificate: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The leaf certificate. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/x-pem-file": string;
+                };
+            };
+            /** @description `conflict` — not an HTTPS connection. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    lookupPairing: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                code: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The device waiting. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @description As shown on the TV, in two groups of four. */
+                        code: string;
+                        name: string;
+                        /** @description The kind of device, which prefixes the key's name. */
+                        device: string;
+                        /** @description The address the device asked from. */
+                        address: string;
+                        /** Format: int64 */
+                        created_at: number;
+                        /** Format: int64 */
+                        expires_at: number;
+                    };
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            /** @description `forbidden` — the caller authenticated with an API key. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description `not_found` — no device is waiting with that code, which is also what a code computed from an impostor's certificate gets. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description `too_many_requests` — ten codes that matched nothing from this address in ten minutes. */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    decidePairing: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    code: string;
+                    approve: boolean;
+                    /** @description Required to approve. */
+                    current_password?: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Decided. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @description As shown on the TV, in two groups of four. */
+                        code: string;
+                        name: string;
+                        /** @description The kind of device, which prefixes the key's name. */
+                        device: string;
+                        /** @description The address the device asked from. */
+                        address: string;
+                        /** Format: int64 */
+                        created_at: number;
+                        /** Format: int64 */
+                        expires_at: number;
+                        approved: boolean;
+                    };
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            /** @description `forbidden` — an API key, or the password is missing or wrong. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description `not_found` — no device is waiting with that code. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description `too_many_requests` — too many password attempts, or too many codes that matched nothing. */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
         };
     };
     listTags: {
