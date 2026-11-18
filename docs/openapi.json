@@ -11184,6 +11184,476 @@
         }
       }
     },
+    "/devices/pair": {
+      "post": {
+        "operationId": "startPairing",
+        "tags": [
+          "keys"
+        ],
+        "security": [],
+        "summary": "A TV asks to pair",
+        "description": "No session (ADR 0125). The TV derives the eight-character code it shows from `nonce` and the certificate this connection was served: `base32(SHA-256(\"LANcast pairing v1\" || 0x00 || nonce || certDER))[:8]` in Crockford's alphabet. It must already be pinned to the certificate it read from `GET /devices/pair/certificate`. Held in memory for ten minutes.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "name"
+                ],
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "description": "Shown to the person approving. Trimmed, at most 64 bytes."
+                  },
+                  "device": {
+                    "type": "string",
+                    "description": "The kind of device, default `TV`. The key is named `<device>: <name>`."
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Filed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "pairing",
+                    "nonce",
+                    "expires_in",
+                    "interval"
+                  ],
+                  "properties": {
+                    "pairing": {
+                      "type": "string",
+                      "description": "The token the TV polls with."
+                    },
+                    "nonce": {
+                      "type": "string",
+                      "format": "byte",
+                      "description": "Base64; goes into the code."
+                    },
+                    "expires_in": {
+                      "type": "integer",
+                      "description": "Seconds."
+                    },
+                    "interval": {
+                      "type": "integer",
+                      "description": "Seconds between polls, at least."
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "409": {
+            "description": "`conflict` — not an HTTPS connection; a server with no password speaks plain HTTP on loopback only.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`too_many_requests` — ten starts from this address in ten minutes.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "`unavailable` — 32 pairings are already waiting.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/devices/pair/poll": {
+      "post": {
+        "operationId": "pollPairing",
+        "tags": [
+          "keys"
+        ],
+        "security": [],
+        "summary": "A TV asks whether it has been approved",
+        "description": "No session. `202` until somebody decides, the key **exactly once** on `200`, then `410`. The key is an ordinary API key of the approver's (ADR 0061), made at this moment so an approval nobody collects leaves no key behind.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "pairing"
+                ],
+                "properties": {
+                  "pairing": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Approved: the key, for the only time.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "key",
+                    "key_id",
+                    "user"
+                  ],
+                  "properties": {
+                    "key": {
+                      "type": "string",
+                      "description": "Present as `Authorization: Bearer`."
+                    },
+                    "key_id": {
+                      "type": "string"
+                    },
+                    "user": {
+                      "type": "object",
+                      "required": [
+                        "id",
+                        "name"
+                      ],
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "name": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "202": {
+            "description": "Nobody has decided yet.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "status"
+                  ],
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "waiting"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "410": {
+            "description": "`gone` — refused, expired, or already collected. Start again.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`too_many_requests` — sooner than `interval`; see `Retry-After`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/devices/pair/certificate": {
+      "get": {
+        "operationId": "pairingCertificate",
+        "tags": [
+          "keys"
+        ],
+        "security": [],
+        "summary": "The certificate this connection was served",
+        "description": "No session. PEM. What a pairing TV hashes into its code and then pins (ADR 0125 §2).",
+        "responses": {
+          "200": {
+            "description": "The leaf certificate.",
+            "content": {
+              "application/x-pem-file": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`conflict` — not an HTTPS connection.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/devices/pair/{code}": {
+      "get": {
+        "operationId": "lookupPairing",
+        "tags": [
+          "keys"
+        ],
+        "summary": "What a code would approve",
+        "description": "Requires a **session**; an API key is refused with `403`, so a paired TV cannot pair another. Case, spaces and dashes in the code are ignored, and `O`, `I`, `L` are read as `0`, `1`, `1`.",
+        "parameters": [
+          {
+            "name": "code",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The device waiting.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "code",
+                    "name",
+                    "device",
+                    "address",
+                    "created_at",
+                    "expires_at"
+                  ],
+                  "properties": {
+                    "code": {
+                      "type": "string",
+                      "description": "As shown on the TV, in two groups of four."
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "device": {
+                      "type": "string",
+                      "description": "The kind of device, which prefixes the key's name."
+                    },
+                    "address": {
+                      "type": "string",
+                      "description": "The address the device asked from."
+                    },
+                    "created_at": {
+                      "type": "integer",
+                      "format": "int64"
+                    },
+                    "expires_at": {
+                      "type": "integer",
+                      "format": "int64"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "description": "`forbidden` — the caller authenticated with an API key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found` — no device is waiting with that code, which is also what a code computed from an impostor's certificate gets.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`too_many_requests` — ten codes that matched nothing from this address in ten minutes.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/devices/pair/approve": {
+      "post": {
+        "operationId": "decidePairing",
+        "tags": [
+          "keys"
+        ],
+        "summary": "Approve or refuse a device",
+        "description": "Requires a **session**, and approving requires the account's **password**, as minting a key does (ADR 0061, amended 2026-11-16): a key outlives every session. Refusing needs no password. A code is decided once.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "code",
+                  "approve"
+                ],
+                "properties": {
+                  "code": {
+                    "type": "string"
+                  },
+                  "approve": {
+                    "type": "boolean"
+                  },
+                  "current_password": {
+                    "type": "string",
+                    "description": "Required to approve."
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Decided.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "code",
+                    "name",
+                    "device",
+                    "address",
+                    "created_at",
+                    "expires_at",
+                    "approved"
+                  ],
+                  "properties": {
+                    "code": {
+                      "type": "string",
+                      "description": "As shown on the TV, in two groups of four."
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "device": {
+                      "type": "string",
+                      "description": "The kind of device, which prefixes the key's name."
+                    },
+                    "address": {
+                      "type": "string",
+                      "description": "The address the device asked from."
+                    },
+                    "created_at": {
+                      "type": "integer",
+                      "format": "int64"
+                    },
+                    "expires_at": {
+                      "type": "integer",
+                      "format": "int64"
+                    },
+                    "approved": {
+                      "type": "boolean"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "description": "`forbidden` — an API key, or the password is missing or wrong.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found` — no device is waiting with that code.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`too_many_requests` — too many password attempts, or too many codes that matched nothing.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/tags": {
       "get": {
         "operationId": "listTags",

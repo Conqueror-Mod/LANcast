@@ -1,5 +1,6 @@
 import { AuthorizedDevices } from "@/components/AuthorizedDevices";
 import { useState } from "react";
+import { Link } from "react-router";
 import {
   useChangePassword,
   useAPIKeys,
@@ -104,6 +105,10 @@ function APIKeysPanel() {
         For a script, a command line, or another program that talks to this
         server — so it never needs your password. A key acts as you, except that
         it can never change server settings and can never manage keys.
+      </p>
+      <p className="set-row__sub">
+        A TV showing a code gets its key from{" "}
+        <Link to="/pair">Pair a device</Link>, and it is listed here.
       </p>
 
       <form

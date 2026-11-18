@@ -1,6 +1,7 @@
 # ADR 0125 — A TV pairs by code, and a Roku is sent segments it can hear
 
-Date: 2026-11-18 · Status: **accepted** 2026-11-18
+Date: 2026-11-18 · Status: **accepted** 2026-11-18 · **amended** 2026-11-18
+(two corrections found building §1–2; see the end)
 
 The plan is [roku-plan.md](../roku-plan.md), step 1. Step 0's spikes ran on a
 Roku TV on 2026-11-17, and their results are recorded in the plan. This ADR
@@ -245,3 +246,23 @@ takes, and a Roku app is not a reason to take it for them.
 - **Making the segment format a query parameter.** It belongs to the device,
   and a parameter is one more thing for every client to get right.
 - **A LANcast-specific SSDP announcement for the app.** See ADR 0086.
+
+## Amendments
+
+**2026-11-18, building §1–2.** Two things the text above got wrong, corrected
+here rather than edited in place so the original reasoning stays readable.
+
+1. **The TV pins before it pairs, not after.** As written, the TV reads the
+   certificate unverified and pins it once paired. A machine in the middle
+   that *relays* `/pair/certificate` from the real server would then let the
+   TV compute the right code, and read the key out of the unpinned poll. So
+   the TV pins the certificate it read for every request from then on, the
+   pairing start and every poll included. A relay then has to present the
+   real certificate, which it cannot without the real key, and an impostor
+   that serves its own gets a code the server never filed. The binding was
+   always meant to cover this; the order is what makes it.
+2. **The alphabet is Crockford's base32.** There are only 31 letters and
+   digits once 0, O, 1, I and L are all removed, so "32 with none of them"
+   cannot be built. Crockford's answer is used instead: show 0–9 and A–Z
+   without I, L, O and U, and read a typed O as 0 and I or L as 1. Nothing
+   shown is ambiguous and nothing a person types for it is refused.

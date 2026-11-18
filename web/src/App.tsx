@@ -36,6 +36,7 @@ import { MiniPlayer } from "@/components/MiniPlayer";
 import { PlaybackProvider } from "@/playback/PlaybackProvider";
 import { RemotePlayerHost } from "@/components/RemotePlayerHost";
 import { Devices } from "@/screens/Devices";
+import { Pair } from "@/screens/Pair";
 import { TogetherProvider } from "@/playback/TogetherProvider";
 import { BookProvider } from "@/playback/BookPlayer";
 import { BookBar } from "@/playback/BookBar";
@@ -161,6 +162,7 @@ export function App() {
           <Route path="/live" element={<LiveRoute />} />
           <Route path="/people" element={<People />} />
           <Route path="/devices" element={<Devices />} />
+          <Route path="/pair" element={<Pair />} />
           <Route path="/settings" element={<Settings />} />
           <Route path="/join" element={<JoinWhileSignedIn name={auth.user?.name ?? ""} />} />
           <Route
