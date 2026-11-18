@@ -101,7 +101,7 @@ In all three, seeking works, but playback **stays paused after a seek** until Pl
 
 What this means: DLNA is a stopgap at best, not a substitute for the app. It cannot transcode or choose a track, and it loses the sound even on a file whose codecs the TV says it decodes. The silent AAC-in-MKV file is still unexplained. Before the `roku` profile marks MKV as direct-playable, play that file directly in the sideloaded app; until that passes, treat MKV as remux.
 
-**1. ADR** — the Roku app, device pairing and the `roku` profile, decided with step 0's results in hand. It also covers where the app lives: proposed is `clients/roku/` in this repository, so an API change and the client that needs it land in one PR.
+**1. ADR** — [ADR 0125](adr/0125-a-tv-pairs-by-code.md), proposed 2026-11-18: the Roku app, device pairing and the `roku` profile, decided with step 0's results in hand. It also covers where the app lives: proposed is `clients/roku/` in this repository, so an API change and the client that needs it land in one PR.
 
 **2. Server: pairing routes, the `roku` profile, and the approval screen.** Go tests for the flow (expiry, single use, rate limit) and for the profile's decisions, written in the `decide_test.go` style: one test per codec and container, with its reason.
 
