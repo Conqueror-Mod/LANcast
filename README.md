@@ -1,314 +1,333 @@
-# LANcast
+<div align="center">
 
-A self-hosted media server and library service. Plex's streamlined
-functionality, Kodi's customizability and versatility, and neither one's
-compromises.
+<img src="assets/LANcast_text.png" alt="LANcast — your gateway to everything on your LAN" width="560">
 
-> **Status: v1.0.1 · stable since 1.0.** Point it at a folder and it
-> scans, identifies, and plays — direct play, remux, or transcode, with working
-> seek and resume and hardware encoding. Films, TV, **music**, **pictures**,
-> **comics** and **audiobooks** are all first-class. Real metadata, artwork, ratings, subtitles,
-> playlists, multi-user accounts with per-account library and rating limits,
-> invite links, HTTPS, passkeys, two-factor sign-in, a sandboxed plugin
-> runtime, a native desktop window, servers that pair with each other, films and music sent
-> between your own devices, and a
-> server that can update itself. Corrections you make are locked and survive
-> rescans.
->
-> [docs/roadmap.md](docs/roadmap.md) is the honest ledger: what is left, and
-> what was *not* looked at before it shipped. Every release before 1.0 is in
-> [docs/history.md](docs/history.md).
+**Your own media server. Films, TV, music, photos, comics, audiobooks and retro games —
+on your hardware, under your control, with nothing phoning home.**
 
-**Runs on:** Windows 10 and 11 (x64), as an app with its own window and as a
-Windows service; Linux on amd64, as a systemd service you reach from a browser.
-A Linux arm64 build (Raspberry Pi and similar) is published too, and is *built,
-not run*: it is cross-compiled for every release, and nobody has run it on an
-arm64 machine yet. There is no macOS build. Installing is
-**[docs/install.md](docs/install.md)**; what LANcast sends beyond your network
-is **[docs/privacy.md](docs/privacy.md)**.
+[![Latest release](https://img.shields.io/github/v/release/Conqueror-Mod/LANcast?label=release&color=d4a017)](https://github.com/Conqueror-Mod/LANcast/releases/latest)
+[![License: AGPL-3.0](https://img.shields.io/badge/license-AGPL--3.0-blue)](LICENSE)
+![Windows 10/11](https://img.shields.io/badge/Windows-10%20%7C%2011-0078d4)
+![Linux](https://img.shields.io/badge/Linux-amd64-333)
 
-## Why
+[**Download**](https://github.com/Conqueror-Mod/LANcast/releases/latest) ·
+[Install guide](docs/install.md) ·
+[Using LANcast](#using-lancast) ·
+[Security](docs/security.md) ·
+[Privacy](docs/privacy.md)
 
-Kodi had the right bones — everything was extensible — but never the sustained
-support to stay usable. Plex arrived cleaner and better made, then began moving
-capabilities that used to be free behind a paywall and a mandatory cloud
-account. Both directions cost you the same thing: control over your own library.
+</div>
 
-LANcast is an attempt to get that back, without pretending the two approaches
-are opposites. Plex's polish came from one opinionated pipeline. Kodi's power
-came from everything being a plugin. You can have both, if the core stays small
-and honest and the extension surface is a real contract rather than an
-afterthought.
+> **Status: v1.0.1 · stable since 1.0.** Point it at a folder and it scans,
+> identifies and plays — direct play, remux or transcode, with working seek,
+> resume and hardware encoding. Every release before 1.0 is in
+> [docs/history.md](docs/history.md); [docs/roadmap.md](docs/roadmap.md) is the
+> honest ledger of what is left and what was *not* looked at before it shipped.
+
+<p align="center">
+  <img src="docs/screenshots/home.jpg" alt="The LANcast home screen: a film to continue, a Continue panel and friends">
+</p>
+
+---
+
+## What LANcast is
+
+Plex's streamlined polish, Kodi's customizability, and neither one's
+compromises. Kodi had the right bones — everything was extensible — but never
+the sustained support to stay usable. Plex arrived cleaner and better made, then
+began moving free features behind a paywall and a mandatory cloud account.
+Both directions cost you the same thing: control over your own library.
+
+LANcast is one small program. Install it on the PC that holds your media, point
+it at your folders, and every device in the house — and any friend you invite —
+gets a fast, good-looking library that plays almost anything. No subscription,
+no account with anybody, and no relay you rent.
+
+## Highlights
+
+### 🎬 Films and TV that look after themselves
+- **Collections build themselves.** Films are grouped into their collections
+  from the metadata, and a collection shows the films you *don't* own yet.
+- **Intros and credits are skipped for you** — found by listening to and
+  looking at the episodes themselves, not looked up in a database.
+- **Your fixes stick.** Correct a title, poster or match and that field is
+  locked: no refresh, rescan or merge ever touches it again.
+- Up next cards, a suggestion when the film ends, chapters, scrub-bar previews,
+  extras found beside the film, an optional pre-roll, and a watchlist.
+- Plays almost everything directly. The desktop app plays through libmpv;
+  everywhere else the server decides direct play, remux or transcode and
+  **tells you why**. Hardware encoding (NVENC, Quick Sync, AMF) is chosen by a
+  real test encode, not a capability list.
+
+<p align="center">
+  <img src="docs/screenshots/collections.jpg" alt="A movie library's collections, grouped automatically" width="49%">
+  <img src="docs/screenshots/collection.jpg" alt="A collection page with its films in order" width="49%">
+</p>
+<p align="center">
+  <img src="docs/screenshots/film.jpg" alt="A film's page with ratings, content rating, Fix match and Play on" width="80%">
+</p>
+
+### 🍿 Watch Together, across the internet
+- **Synchronised rooms** — pause, seek and play together, on one server.
+- **Pair with a friend's LANcast** to see what they're watching and join them.
+  Only the host needs to be reachable; streaming to guests is capped by the host.
+- **Play on another device** — send a film or an album from your phone to the
+  TV-room PC, and drive it from where you sit.
+- **Invite links** that create one account, once.
+
+### 🎵 Music, done properly
+- **Visualizers** — Spectrum, Scope, Tunnel, Spiral, Smoke, Bloom, Drift, and
+  full **MilkDrop presets** with their shaders.
+- Gapless playback, crossfades between albums, synced lyrics, a five-band EQ,
+  night mode, and loudness evened out from your files' ReplayGain.
+- Album pages with a real track list, artist pages, genres, MusicBrainz album
+  grouping, and a mini-player that follows you around the app.
+
+<p align="center">
+  <img src="docs/screenshots/now-playing.jpg" alt="Now Playing with a MilkDrop visualizer and the album queue" width="80%">
+</p>
+
+### 🕹️ Retro games with RetroAchievements
+- Drop in your ROMs: NES, SNES, Nintendo 64, Game Boy / Color / Advance,
+  Master System, Genesis and PlayStation, **identified by hash**.
+- Play in the desktop app **or in a browser**. The server keeps your saves and
+  save states, so you can stop on one device and carry on on another.
+- **Connect your own RetroAchievements account** and earn achievements as you
+  play, with pop-ups in the game.
+- PC games installed on the machine show up in the same hub and launch from it.
+
+<p align="center">
+  <img src="docs/screenshots/retro-games.jpg" alt="A retro games library with box art, ratings and console filters" width="80%">
+</p>
+
+### 📸 Photos, 📖 comics and 🎧 audiobooks
+- **Photos:** a timeline by capture date, people grouped by face, **search by
+  what's in a picture**, places from GPS (off by default), duplicate and
+  near-copy finding, and camera RAW files.
+- **Comics:** `.cbz`, `.cb7` and `.pdf`, read a page at a time, left-to-right or
+  manga order, with your place kept.
+- **Audiobooks:** a book player with chapters, speed and a sleep timer.
+
+### 👥 Built for a household
+- Accounts for everyone, each with their own watch state, history and profile.
+  Viewing is **private by default** and shared only if you opt in.
+- Keep a library from a member, or set the highest content rating they may see.
+- **Passkeys and two-factor sign-in** for anyone who wants them, and a list of
+  signed-in devices you can sign out.
+- DLNA for the old TV that only speaks that.
+
+### 🛠️ Runs itself
+- **Updates itself** from Settings — checked, verified and swapped in on restart.
+- A live dashboard of the last two days, scheduled backups with restore,
+  webhooks, Prometheus metrics, and **Report an issue**, which sends nothing
+  until you press Send.
+- A sandboxed **plugin runtime** (WebAssembly, deny-by-default) for anyone who
+  wants to extend it — see [docs/writing-a-plugin.md](docs/writing-a-plugin.md).
+
+## Quick start
+
+### Windows (recommended)
+
+1. Download **`LANcast-Setup-<version>.exe`** from the
+   [latest release](https://github.com/Conqueror-Mod/LANcast/releases/latest)
+   and run it.
+2. Leave **Run as a Windows service** ticked if other devices should be able to
+   watch while nobody is signed in to the PC. Untick it if you only watch on
+   this PC.
+3. Open **LANcast** from the Start menu. Create your account — the first one is
+   the admin — and leave **fetch ffmpeg** ticked.
+4. **Restart the server** so it listens on your network: in an Administrator
+   PowerShell run `Restart-Service lancastd`, or without the service, choose
+   **Exit** from the tray icon and open LANcast again.
+5. Go to **Settings › Server › Libraries**, add a library, pick what kind of
+   media it holds, point it at the folder, and scan.
+
+That's it. Other devices on your network open `https://<this-pc>:8080`.
+
+### Linux (amd64)
+
+```bash
+sudo apt install ffmpeg
+tar -xzf LANcast_<version>_linux_amd64.tar.gz
+sudo install -m 755 lancast /usr/local/bin/lancast
+sudo lancast service install
+```
+
+The service starts on port 8080 and listens on `127.0.0.1` until an account
+exists. From the computer you're sitting at, tunnel in and create it:
+
+```bash
+ssh -L 8080:127.0.0.1:8080 you@your-server
+```
+
+Open <http://localhost:8080>, create the account, then
+`sudo lancast service restart` and add your libraries.
+
+Full detail — the archive install, the data-directory rule that matters most,
+ffmpeg for the service, backups and getting back in when locked out — is in
+**[docs/install.md](docs/install.md)**.
+
+| Platform | Status |
+|---|---|
+| Windows 10 and 11, x64 | Supported: the app, its own window, and the service |
+| Linux amd64 | Supported: a systemd service, used from any browser |
+| Linux arm64 (Raspberry Pi and similar) | *Built, not run* — published every release, not yet run on an arm64 machine. Reports welcome |
+| macOS | Not built |
+
+## Using LANcast
+
+**Watching on other devices.** Any browser on your network works —
+`https://<server>:8080`. LANcast makes its own certificate, so a browser warns
+the first time until you trust it; the Windows app pins it and never warns.
+On a phone, add the page to your home screen for an app-like window.
+
+**Fixing a wrong match.** Open the title and choose **Fix match**, or edit any
+field directly. Whatever you change is locked for good.
+
+**Inviting a friend.** **Settings › Server › Users & access › + Invite a
+friend** makes a link that creates one account, once. From there you can limit
+which libraries they see and the highest rating they may watch.
+
+**Watching together.** Press the **Watch together** button in the player to
+open a room. Everyone else on your server sees it on the **People** page and
+joins from there. To watch with a friend who runs their own LANcast, pair the two
+servers under **Settings › Server › Other servers** — or from **Pair with a
+friend** on the home page — and you'll see what each other is watching.
+
+**Sending to another screen.** In the player, choose **Play on another
+device** and pick any LANcast window signed in as you.
+
+**Music and visualizers.** Open **Now Playing** from the mini-player and choose
+a visualizer. Upload MilkDrop presets under **Settings › Server ›
+Visualizers**; tune the EQ, crossfade and loudness under **Settings › This
+device › Music & Now Playing**.
+
+**Retro games and achievements.** Add a library of type **Retro games** pointed
+at your ROMs. Connect RetroAchievements under **Settings › Your account › Connected
+accounts**. Cores are fetched as needed; every core, its licence and its source
+is listed in [docs/cores.md](docs/cores.md).
+
+**Reaching it from outside.** Off by default, and your decision. The simplest
+safe route is a VPN such as Tailscale or WireGuard. If you'd rather expose it,
+give it a public name and LANcast can request a publicly trusted certificate for
+it under **Settings › Server › Remote access**. Read
+[docs/security.md](docs/security.md) first — never port-forward a bare
+self-signed server.
+
+**Something wrong?** **Settings › Status › Troubleshooting** shows the server
+log, and **Report an issue** builds a report you can read before anything is
+sent.
 
 ## Principles
 
 These are load-bearing. Every design decision in `docs/` traces back to one.
 
-**Server owns truth.** Scanning, metadata, transcoding, users, and playback
-state all live server-side. Headless, API-first.
+- **Server owns truth.** Scanning, metadata, transcoding, users and playback
+  state all live server-side. Headless, API-first.
+- **Clients are thin.** One documented HTTP API ([docs/api.md](docs/api.md),
+  [OpenAPI](docs/openapi.json)), so a third-party TV or mobile client is a
+  first-class possibility rather than a fork.
+- **Everything interesting is a provider.** Metadata, artwork, subtitles and
+  scanners sit behind stable interfaces.
+- **No phone-home.** Nothing needs the internet for the server to work, and it
+  does nothing on the network you did not ask for.
+  [docs/privacy.md](docs/privacy.md) lists everything it does reach, including
+  the two things on by default, and what triggers each.
 
-**Clients are thin.** One documented HTTP API, so a third-party TV or mobile
-client is a first-class possibility rather than a fork.
+## Metadata and ratings
 
-**Everything interesting is a provider.** Metadata scrapers, artwork,
-subtitles, scanners — and eventually what counts as a library type — sit behind
-stable interfaces. Kodi's real win was that TV shows weren't hardcoded.
+**Nothing to sign up for.** A release carries its own
+[TMDB](https://www.themoviedb.org) key for posters, synopses, cast and artwork,
+and its own [OpenSubtitles](https://www.opensubtitles.com) key for subtitle
+search ([ADR 0110](docs/adr/0110-lancast-carries-its-own-provider-keys.md)).
 
-**No phone-home.** Local-first, LAN-first. Nothing is required to reach the
-internet for the server to work, and the server does not do network things you
-did not ask for ([docs/privacy.md](docs/privacy.md) lists everything it does reach,
-including the two things on by default, and what triggers each). Remote access is opt-in and self-owned (WireGuard, Tailscale,
-your own reverse proxy, or a public name whose certificate LANcast requests only
-once you turn it on) — never a relay you rent.
+**Your own key always wins** — enter one under **Settings › Server ›
+Metadata**. For TMDB use the **API Key (v3 auth)**, the 32-character hex value,
+not the v4 Read Access Token. Keys are stored `0600` outside the database and
+are never readable back through the API.
 
-## What it does
+**Or turn the built-in keys off.** LANcast then falls back to filenames and
+Kodi-style `.nfo` sidecars and contacts neither service. A build from source
+carries no built-in keys and behaves this way until you enter one.
 
-**Libraries.** Movies, TV shows, music, pictures, comics and games, all on one
-media table with no per-type schema
-([ADR 0002](docs/adr/0002-one-wide-media-item-table.md),
-[ADR 0024](docs/adr/0024-music-libraries.md),
-[ADR 0028](docs/adr/0028-pictures-library.md)). A library can span several
-roots. Scanning marks missing files, never deletes them, and an unchanged
-library rescans in seconds.
+**Ratings (optional).** Add a free [OMDb](https://www.omdbapi.com/apikey.aspx)
+key of your own to show Rotten Tomatoes, Metacritic and IMDb scores beside the
+TMDB rating. Nothing is fetched until you do, and use of the key is subject to
+[OMDb's terms](https://www.omdbapi.com/legal.htm).
 
-**Metadata that stays corrected.** TMDB and Kodi-style `.nfo` sidecars behind
-one provider contract, with confidence scoring, a review queue, and a match
-score you can read. Edit a field and it locks: no refresh, rescan, or merge
-touches it again ([ADR 0008](docs/adr/0008-field-level-locking.md)).
-Collections fill themselves from the provider and show the films you don't
-have yet ([ADR 0093](docs/adr/0093-a-collection-knows-its-missing-films.md)).
+> This product uses the TMDB API but is not endorsed or certified by
+> [TMDB](https://www.themoviedb.org).
 
-**Playback anywhere.** ffprobe decides direct play, remux, or transcode *and
-states its reason* ([ADR 0012](docs/adr/0012-probe-before-transcode.md)).
-Hardware encoding (NVENC, Quick Sync, AMF) is chosen by a real test
-encode rather than a capability list, and falls back to the CPU. Clients declare what they decode, and the
-server widens the profile rather than re-encoding what the machine could have
-played. The desktop window plays through libmpv, so most files never need
-converting at all ([ADR 0067](docs/adr/0067-the-desktop-client-plays-through-libmpv.md)).
+## Security in brief
 
-**Watching, the details.** Intros and credits are found by listening and
-looking, then skipped for you
-([ADR 0055](docs/adr/0055-an-intro-is-what-every-episode-shares.md),
-[ADR 0083](docs/adr/0083-an-intro-skips-itself.md)); an Up next card and a
-suggestion after the film. Chapters and a picture over the scrub bar
-([ADR 0105](docs/adr/0105-a-preview-is-a-keyframe-every-ten-seconds.md)),
-extras found beside the film
-([ADR 0098](docs/adr/0098-extras-are-found-not-imported.md)), an optional
-pre-roll clip ([ADR 0099](docs/adr/0099-a-preroll-plays-before-a-film-from-the-start.md)),
-a watchlist, optimized copies for weak devices, and DLNA for the television
-that only speaks that ([ADR 0086](docs/adr/0086-a-tv-browses-as-somebody.md)).
-
-**Music, properly.** Album view with a numbered track list, gapless playback
-and crossfades between albums, a docked mini-player that survives leaving the
-page, synced lyrics, night mode and an equaliser, visualizers including
-MilkDrop presets ([ADR 0091](docs/adr/0091-milkdrop-presets.md)), and loudness
-evened out from the ReplayGain your tagger wrote
-([ADR 0108](docs/adr/0108-music-is-levelled-by-its-own-replaygain.md)).
-Embedded tags are the authority for a track, because the file carries the
-answer.
-
-**Pictures.** A timeline by capture date, people found by face
-([ADR 0052](docs/adr/0052-face-grouping-runs-in-a-native-sidecar.md)), search
-by what is in a photo
-([ADR 0060](docs/adr/0060-semantic-photo-search-is-a-second-model-in-the-sidecar.md)),
-places from GPS, off by default
-([ADR 0078](docs/adr/0078-a-place-is-the-town-a-photo-was-taken-in.md)),
-duplicates and near copies, and camera RAW files shown from the camera's own
-picture ([ADR 0107](docs/adr/0107-a-raw-photo-shows-the-cameras-own-jpeg.md)).
-
-**Comics.** `.cbz`, `.cb7` and `.pdf`, read a page at a time, with your place
-kept ([ADR 0101](docs/adr/0101-a-comic-is-read-out-of-its-archive.md),
-[ADR 0102](docs/adr/0102-a-pdf-comic-is-its-pictures.md)).
-
-**Games.** Retro games identified by hash and played in the desktop window or a
-browser, with saves and save states kept by the server
-([ADR 0073](docs/adr/0073-a-retro-game-is-a-file-the-server-owns.md),
-[ADR 0077](docs/adr/0077-a-browser-can-play-a-game.md)), achievements from your
-own RetroAchievements account
-([ADR 0090](docs/adr/0090-retroachievements-are-yours-to-connect.md)), and the
-PC games installed on the machine, launched from the same hub
-([ADR 0066](docs/adr/0066-a-game-belongs-to-the-machine-it-is-installed-on.md)).
-
-**Playlists.** `.m3u` files on disk seed playlists and are not the playlists —
-once a human edits the membership, no rescan may undo it
-([ADR 0030](docs/adr/0030-playlists-and-m3u.md)).
-
-**Live TV** *(off in 1.0)*. M3U channel sources with an EPG, for people who
-already have a stream to point at
-([ADR 0013](docs/adr/0013-transcode-pipeline.md),
-[ADR 0036](docs/adr/0036-epg.md)). It is built but not finished, so it is
-**turned off** and appears on no screen: the menus leave it out and its routes
-answer `409 live_tv_off`. Nothing is deleted. Adding `"live_tv": true` to
-`config.json` in the data directory and restarting brings it back as it was,
-unsupported; further work on it is parked until after 1.0.
-
-**People.** Multi-user accounts with admin and member roles, per-user watch
-state, profile pages with real history and totals, and viewing that is private
-by default and shared only by an explicit opt-in
-([ADR 0035](docs/adr/0035-who-may-see-whose-viewing.md)). An administrator can
-keep a library from a member and set the content rating a member may not exceed
-([ADR 0084](docs/adr/0084-a-library-can-be-kept-from-an-account.md)), and
-everybody can see and sign out the devices signed in as them. A friend joins
-through a link that works once
-([ADR 0104](docs/adr/0104-a-friend-is-invited-by-a-link-that-works-once.md)),
-and anyone can add passkeys or a two-factor code
-([ADR 0100](docs/adr/0100-a-code-after-the-password-for-whoever-wants-one.md)).
-
-**Watch Together.** Synchronised rooms on one server, and paired servers that
-can see each other's presence and admit remote guests under a host-set cap
-([ADR 0044](docs/adr/0044-server-identity-and-peering.md) through
-[ADR 0047](docs/adr/0047-remote-streaming-is-capped-by-the-host.md)). Only the host
-needs to be reachable: a friend's server says who is there by itself
-([ADR 0103](docs/adr/0103-a-friend-who-cannot-be-reached-says-who-is-there.md)).
-
-**Plugins.** Signed `.lcplugin` bundles running as WebAssembly under wazero,
-deny-by-default capabilities, and a two-step install that grants them
-explicitly ([ADR 0020](docs/adr/0020-plugin-isolation-boundary.md),
-[ADR 0021](docs/adr/0021-plugin-distribution-and-trust.md)). Writing one is
-[docs/writing-a-plugin.md](docs/writing-a-plugin.md), which is honest about the
-two things a third party still cannot do.
-
-**Running it.** A dashboard of the last two days
-([ADR 0106](docs/adr/0106-the-dashboard-remembers-two-days.md)), metrics for
-Prometheus ([ADR 0096](docs/adr/0096-metrics-have-their-own-key.md)),
-webhooks ([ADR 0097](docs/adr/0097-a-webhook-goes-where-the-owner-points-it.md)),
-trusted reverse proxies (the last three *checked with simulated clients*; see
-[What is not proven](#what-is-not-proven)),
-scheduled backups with restore from Settings
-([ADR 0058](docs/adr/0058-a-backup-is-the-database.md)), live updates to every
-open screen ([ADR 0079](docs/adr/0079-the-server-says-when-something-changed.md)),
-and **Report an issue**, a form whose report leaves the server only when you
-press Send ([ADR 0109](docs/adr/0109-a-report-goes-only-when-sent.md)).
-
-**Its own window.** On Windows, `LANcast` opens a WebView2 window rather than
-handing a URL to a browser — which is what lets it pin the server's certificate
-instead of showing you a warning it cannot resolve
-([ADR 0023](docs/adr/0023-native-desktop-client.md)). On Linux there is no
-window: the server is reached from a browser on any device.
+- **No account, no network.** Until the first account exists the server
+  listens on `127.0.0.1` only — its API can browse the filesystem, so an open
+  port with no password would be arbitrary read access.
+- **HTTPS on the network.** Once it binds the network it serves HTTPS, with
+  your certificate or one it makes. The Windows app pins that key.
+- **Server-side sessions.** Changing a password signs out *every* session,
+  including your own. CSRF is defended twice: `SameSite=Strict` and an
+  `Origin` check.
+- **Outside access is off by default** — see [Using LANcast](#using-lancast)
+  and [docs/security.md](docs/security.md).
 
 ## What is not proven
 
 1.0 is a promise that everything built has been seen working, or is named here
-as not having been. These are named:
+as not having been:
 
 - **Trusted reverse proxies, Prometheus metrics and Home Assistant webhooks**
-  are *checked with simulated clients*: the proxy headers and the metrics were
-  exercised with `curl`, and the webhooks with a local receiver, on the
-  installed service. None has been run behind a real Caddy or nginx, scraped by
-  a real Prometheus, or received by a real Home Assistant.
+  were *checked with simulated clients* (`curl` and a local receiver, on the
+  installed service), not behind a real Caddy or nginx, a real Prometheus or a
+  real Home Assistant.
 - **Theater output** (HDR and audio passthrough to a receiver) is *parked*
   until the hardware to test it is to hand. Frame-rate matching and uncomposed
   video, which it builds on, shipped and are in use.
-- **Live TV** is *off by default* (above).
-- **Linux arm64** is *built, not run* (above). Linux amd64 is supported.
+- **Live TV** is built but unfinished, so it is **off** and on no screen; its
+  routes answer `409 live_tv_off`. Adding `"live_tv": true` to `config.json` in
+  the data directory brings it back as it was, unsupported.
+- **Linux arm64** is *built, not run*.
 
-The full list of what each release did and did not look at is the roadmap's
-ledger, [docs/roadmap.md](docs/roadmap.md).
+The full record of what each release did and did not look at is
+[docs/roadmap.md](docs/roadmap.md).
 
-## Requirements
+## Building from source
 
-- **Nothing at all to *run* a release.** To build from source: Go (`go.mod`
-  pins the toolchain, currently Go 1.26.11, and any Go from 1.21 on fetches it
-  for you). Node 24 only if you change the client in `web/`.
-- **ffmpeg** — needed for probing and conversion. On Windows you do not have to
-  install it yourself: setup offers to fetch a pinned, checksum-verified build as
-  a ticked option on the form you already submit, and Settings › Transcoding has
-  the same button
-  ([ADR 0043](docs/adr/0043-media-tools-are-fetched-not-bundled.md),
-  [ADR 0048](docs/adr/0048-media-tools-install-themselves-on-first-run.md)).
-  On Linux, install it from your distribution (`sudo apt install ffmpeg`).
-  Without it LANcast still runs and serves direct-play files, and says so
-  plainly rather than failing. The Windows service runs ffmpeg only from a
-  folder only administrators can change; [docs/install.md](docs/install.md#ffmpeg)
-  explains what that means for an ffmpeg you installed yourself.
+<details>
+<summary><b>Requirements, build and run</b></summary>
 
-SQLite is *not* a requirement — LANcast uses a pure-Go driver, so there is no
-cgo and no C toolchain needed on any platform. See
-[ADR 0001](docs/adr/0001-go-and-pure-go-sqlite.md).
-
-## Build and run
+- **Go** — `go.mod` pins the toolchain (currently Go 1.26.11); any Go from 1.21
+  on fetches it for you.
+- **Node 24** — only if you change the client in `web/`.
+- **ffmpeg** — for probing and conversion. Without it LANcast still runs and
+  serves direct-play files, and says so plainly.
+- **No C toolchain.** SQLite is a pure-Go driver, so there is no cgo on any
+  platform ([ADR 0001](docs/adr/0001-go-and-pure-go-sqlite.md)).
 
 ```bash
 go test ./... && go run ./cmd/lancast serve -addr :8080
 ```
 
-Then open <http://localhost:8080> on the same machine and create the first
-account. Until that account exists the server listens on `127.0.0.1` only (see
-[Security](#security)); restart it afterwards and other devices can reach it,
-over HTTPS. Then, under Settings › Libraries, add a library pointing at a
-folder of media and scan it.
-
 | Flag | Default | Meaning |
 |---|---|---|
 | `-addr` | `:8080` | Listen address |
-| `-data` | your per-user config folder: `%APPDATA%\LANcast` on Windows, `~/.config/LANcast` on Linux | Where `lancast.db`, `config.json` and the logs live |
+| `-data` | `%APPDATA%\LANcast` on Windows, `~/.config/LANcast` on Linux | Where `lancast.db`, `config.json` and the logs live |
 | `-v` | off | Verbose logging |
 
-Build the one LANcast executable (the app, and the server as `LANcast serve`):
+Build the one LANcast executable — the app, and the server as `LANcast serve`
+([ADR 0080](docs/adr/0080-one-executable-two-roles.md)):
 
 ```bash
 ./build.sh
 ```
 
-The client UI is a React + TypeScript app in `web/`, built by Vite and committed
-into `internal/web/dist` so a built server is genuinely one file. After changing
-it, run `npm --prefix web test` and `npm --prefix web run build`, and commit the
-rebuilt `dist`.
+The client is React + TypeScript in `web/`, built by Vite and committed into
+`internal/web/dist` so a built server is genuinely one file. After changing it,
+run `npm --prefix web test` and `npm --prefix web run build`, and commit the
+rebuilt `dist`. Before calling anything done, all three of `go test ./...`,
+`go build ./...` and `npm --prefix web test` must pass.
 
-### Metadata
-
-**Nothing to sign up for.** A release comes with its own
-[TMDB](https://www.themoviedb.org) key, for posters, synopses, cast and artwork,
-and its own [OpenSubtitles](https://www.opensubtitles.com) key, for subtitle
-search ([ADR 0110](docs/adr/0110-lancast-carries-its-own-provider-keys.md)).
-Settings › Metadata says which key each one is using.
-
-**Your own key always wins.** Enter one under Settings and it is used instead.
-For TMDB, use the **API Key (v3 auth)**, the 32-character hex value; the API Read
-Access Token beside it is a v4 bearer JWT and will be rejected. An optional
-opensubtitles.com login raises how many subtitles you can download a day. Keys
-and the login are stored `0600` outside the database and are never readable
-back through the API.
-
-**You can turn the built-in keys off.** With *Use LANcast's built-in keys* off
-and no key of your own, LANcast falls back to filenames and Kodi-style `.nfo`
-sidecars, contacts neither service, and never reports the missing key as an
-error. That is the no-phone-home principle being real rather than decorative.
-A build from source carries no built-in keys and behaves this way until you
-enter one.
-
-> This product uses the TMDB API but is not endorsed or certified by
-> [TMDB](https://www.themoviedb.org). Attribution is a condition of their free
-> tier and is also shown in Settings › About.
-
-### Ratings
-
-Optional. Add a free [OMDb](https://www.omdbapi.com/apikey.aspx) key under
-Settings to show **Rotten Tomatoes, Metacritic, and IMDb** scores on the detail
-page, alongside the TMDB rating.
-
-The key is **your own OMDb account**, not something LANcast supplies: nothing is
-fetched until you enter one, the key is stored `0600` outside the database and is
-never readable back through the API, and clearing it turns the feature off again.
-LANcast is a client pointed at your OMDb subscription — it does not redistribute
-ratings data. Use of the key is subject to
-[OMDb's terms](https://www.omdbapi.com/legal.htm); the free tier is intended for
-personal, non-commercial use, and each score is shown labelled with its source.
-
-## Install a release
-
-Releases ship one executable — `LANcast.exe` on Windows, `lancast` on Linux —
-with no runtime to install. Opened, it is the app, with its window and tray
-icon; installed as a service, the same file is the server
-([ADR 0080](docs/adr/0080-one-executable-two-roles.md)). On Windows the
-installer adds a shortcut and asks whether to run the server as a service; on
-Linux it runs as a systemd service. Full steps, including the one
-data-directory rule that matters most and getting ffmpeg to the service, are in
-**[docs/install.md](docs/install.md)**.
-
-The server can check for, download, verify, and stage an update that swaps
-itself in on the way down. It swaps `LANcast.exe` and the libraries beside it;
-a change to the installer itself needs the installer.
+</details>
 
 ## Documentation
 
@@ -322,40 +341,12 @@ a change to the installer itself needs the installer.
 | [docs/security.md](docs/security.md) | What is protected, what is not — **read before exposing it** |
 | [docs/privacy.md](docs/privacy.md) | Everything LANcast sends beyond your network, to whom, and when |
 | [docs/cores.md](docs/cores.md) | Every emulator core, its licence and its source |
+| [docs/writing-a-plugin.md](docs/writing-a-plugin.md) | Building a plugin, and the two things a third party still cannot do |
 | [docs/roadmap.md](docs/roadmap.md) | Every release, every area's status, and what each pass taught |
 | [docs/adr/](docs/adr/) | 125 decision records — why things are the way they are |
 
 The `*-plan.md` files in `docs/` are the plans particular areas were built
-from. They are kept as written rather than revised, so they record what was
-expected at the time; the roadmap and the ADRs record what actually happened.
-
-## Security
-
-LANcast is guarded by accounts — the first, created on first run, is an admin;
-others can be members who browse and play but cannot manage libraries, settings,
-or users.
-
-**Until the first account exists, it listens on `127.0.0.1` only** — reachable
-from the machine it runs on, and nowhere else. The API exposes filesystem
-browsing and library creation at arbitrary paths, so an open port with no
-password is arbitrary read access. Create the account, restart, and it binds the
-network so other devices can reach it.
-
-**Once it binds the network, it serves HTTPS.** Point it at a certificate you
-already have (Settings › Server › Network) or let LANcast generate a self-signed
-one — either way the password and session cookie are encrypted on the LAN. A
-self-signed cert shows a browser warning until you trust it; the LANcast window
-pins the key instead and does not.
-
-**Reaching it from outside is your decision, and off by default.** The simplest
-safe route is still a VPN that puts your device on the LAN (Tailscale,
-WireGuard). If you do expose it, give it a public name: LANcast can then request
-a publicly trusted certificate for that name — only when an administrator turns
-it on ([ADR 0081](docs/adr/0081-a-public-name-can-earn-a-public-certificate.md))
-— and accounts can add passkeys
-([ADR 0082](docs/adr/0082-a-passkey-belongs-to-the-public-name.md)). A bare
-self-signed certificate cannot prove the server's identity to the public
-internet, so do not port-forward one. See [docs/security.md](docs/security.md).
+from, kept as written; the roadmap and the ADRs record what actually happened.
 
 ## License
 
@@ -365,20 +356,16 @@ internet, so do not port-forward one. See [docs/security.md](docs/security.md).
 You may run it, study it, change it and share it. If you distribute a modified
 version — **or run one as a service other people use over a network** — you must
 offer those people the source of your version under the same terms. That last
-clause is why this is the Affero GPL rather than the ordinary GPL: a media
-server can be run for other people without ever being *distributed*, and plain
-GPL would not reach it.
+clause is why this is the Affero GPL: a media server can be run for other people
+without ever being *distributed*, and plain GPL would not reach it.
 
 **A commercial licence is available** for anyone who wants to build on LANcast
 without those obligations — see [COMMERCIAL.md](COMMERCIAL.md).
 
 *Releases up to and including v0.8.44 were published under the MIT licence and
-remain available under it. The change applies to work after that; it does not
-retract anything already released.*
+remain available under it.*
 
-Third-party components keep their own licences — see [NOTICE](NOTICE).
-
-Vendored third-party code keeps its own license and notices; see
+Third-party components keep their own licences — see [NOTICE](NOTICE),
 [internal/webview2/LICENSE](internal/webview2/LICENSE),
-[internal/webview2/PROVENANCE.md](internal/webview2/PROVENANCE.md), and
+[internal/webview2/PROVENANCE.md](internal/webview2/PROVENANCE.md) and
 [web/vendor/hls.js/LICENSE](web/vendor/hls.js/LICENSE).
