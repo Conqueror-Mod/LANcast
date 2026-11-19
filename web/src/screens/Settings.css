@@ -943,6 +943,65 @@ pre.set-network__pin {
 .pair .settings__section {
   max-width: 640px;
 }
+
+/* Pair a device in Settings › Security: a button, as the TV promises. */
+.set-pair {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-bottom: 18px;
+}
+.set-pair .set-row__sub {
+  flex: 1 1 260px;
+  margin: 0;
+}
+a.set-btn {
+  display: inline-block;
+  text-decoration: none;
+}
+.set-pair__btn {
+  flex-shrink: 0;
+}
+
+/* The answer, said large. Never gold (design.md): a result is not focus. */
+.pair__result {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  margin: 8px 0 14px;
+}
+.pair__mark {
+  flex-shrink: 0;
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-size: 28px;
+  color: var(--text-primary);
+  background: var(--space-raised);
+  border: 1px solid var(--text-secondary);
+}
+.pair__result--refused .pair__mark {
+  background: rgba(166, 88, 76, 0.16);
+  border-color: #a6584c;
+}
+.pair__heading {
+  margin: 0;
+  font-size: 28px;
+  color: var(--text-primary);
+}
+.pair__device {
+  margin: 2px 0 0;
+  font-size: 16px;
+  color: var(--text-secondary);
+}
+.pair__actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 14px;
+}
 .pair__code {
   font-family: var(--font-mono, ui-monospace, monospace);
   letter-spacing: 0.15em;

@@ -48,21 +48,45 @@ export function Pair() {
       </div>
 
       {done ? (
-        <section className="settings__section" aria-live="polite">
+        <section className="settings__section pair__done" aria-live="polite">
+          {/*
+            The answer is the point of the screen, so it is said large. Not in
+            gold: gold means where you are, and a result is not a place.
+          */}
+          <div
+            className={
+              "pair__result" + (done.approved ? "" : " pair__result--refused")
+            }
+          >
+            <span className="pair__mark" aria-hidden="true">
+              {done.approved ? "✓" : "✕"}
+            </span>
+            <div>
+              <h2 className="pair__heading">
+                {done.approved ? "Paired" : "Refused"}
+              </h2>
+              <p className="pair__device">{done.name}</p>
+            </div>
+          </div>
           {done.approved ? (
             <p className="set-row__sub">
-              “{done.name}” is paired and signs in as you in a moment. Its key
-              is listed under <Link to="/settings">Settings</Link> › Security ›
-              API keys, where revoking it signs the device out.
+              The TV signs in as you within a few seconds. Its key is listed
+              under <Link to="/settings">Settings</Link> › Security › API keys,
+              where revoking it signs the TV out.
             </p>
           ) : (
             <p className="set-row__sub">
-              “{done.name}” was refused. It will say so and can ask again.
+              The TV will say so, and can show a new code to ask again.
             </p>
           )}
-          <button className="set-btn" onClick={restart}>
-            Pair another
-          </button>
+          <div className="pair__actions">
+            <button className="set-btn" onClick={restart}>
+              Pair another
+            </button>
+            <Link className="set-btn" to="/settings">
+              Back to Settings
+            </Link>
+          </div>
         </section>
       ) : pending ? (
         <section className="settings__section">

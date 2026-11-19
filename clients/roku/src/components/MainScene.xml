@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<!-- Which screen is showing: the address, pairing, or home. -->
+<component name="MainScene" extends="Scene">
+  <script type="text/brightscript" uri="pkg:/source/pairing.brs" />
+  <script type="text/brightscript" uri="pkg:/source/store.brs" />
+  <script type="text/brightscript" uri="pkg:/source/address.brs" />
+  <script type="text/brightscript" uri="MainScene.brs" />
+  <children>
+    <Rectangle id="bg" width="1920" height="1080" color="0x070B18FF" />
+    <Group id="holder" />
+  </children>
+</component>

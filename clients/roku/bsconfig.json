@@ -1,0 +1,10 @@
+{
+  "rootDir": "src",
+  "files": ["manifest", "source/**/*", "components/**/*", "images/**/*"],
+  "stagingDir": "out/staging",
+  "outFile": "out/lancast-roku.zip",
+  "createPackage": true,
+  "retainStagingDir": false,
+  "diagnosticFilters": [],
+  "emitDefinitions": false
+}

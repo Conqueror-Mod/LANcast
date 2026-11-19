@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<!-- Signed in: who, where, and the libraries. Browsing them is the next step. -->
+<component name="HomeScreen" extends="Group">
+  <interface>
+    <field id="userName" type="string" onChange="showWho" />
+    <field id="server" type="string" onChange="showWho" />
+    <field id="libraries" type="array" onChange="showLibraries" />
+    <field id="message" type="string" onChange="showMessage" />
+    <field id="signOut" type="boolean" alwaysNotify="true" />
+    <field id="changeServer" type="boolean" alwaysNotify="true" />
+  </interface>
+  <script type="text/brightscript" uri="HomeScreen.brs" />
+  <children>
+    <Label translation="[160,110]" width="1600" color="0xF2F5FBFF" font="font:LargeBoldSystemFont" text="LANcast" />
+    <Label id="who" translation="[160,200]" width="1600" color="0xC3CBE2FF" font="font:MediumSystemFont" />
+    <MarkupGrid id="grid" translation="[160,320]" itemComponentName="LibraryTile"
+      numColumns="4" numRows="2" itemSize="[380,180]" itemSpacing="[40,40]"
+      drawFocusFeedback="false" vertFocusAnimationStyle="fixedFocusWrap" />
+    <Label id="status" translation="[160,780]" width="1600" wrap="true" color="0xF2F5FBFF" font="font:MediumSystemFont" text="Loading your libraries…" />
+    <FocusButton id="signout" translation="[160,880]" width="460" text="Sign out of this TV" />
+    <FocusButton id="change" translation="[660,880]" width="460" text="Change server" />
+  </children>
+</component>

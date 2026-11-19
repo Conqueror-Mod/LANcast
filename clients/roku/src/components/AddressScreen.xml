@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<!-- Where the server is. Typed once; remembered after that. -->
+<component name="AddressScreen" extends="Group">
+  <interface>
+    <field id="server" type="string" />
+    <field id="message" type="string" onChange="showMessage" />
+    <field id="busy" type="boolean" onChange="showBusy" />
+    <field id="submitted" type="string" alwaysNotify="true" />
+  </interface>
+  <script type="text/brightscript" uri="AddressScreen.brs" />
+  <children>
+    <Label translation="[160,150]" width="1600" color="0xF2F5FBFF" font="font:LargeBoldSystemFont" text="Connect to your LANcast server" />
+    <Label translation="[160,260]" width="1400" wrap="true" color="0xC3CBE2FF" font="font:MediumSystemFont"
+      text="Type the address you use for LANcast on this network, such as 192.168.1.20 or 192.168.1.20:8080, or its public name, such as media.example.com." />
+    <FocusButton id="enter" translation="[160,470]" width="520" text="Enter the address" />
+    <Label id="status" translation="[160,620]" width="1500" wrap="true" color="0xF2F5FBFF" font="font:MediumSystemFont" />
+  </children>
+</component>
