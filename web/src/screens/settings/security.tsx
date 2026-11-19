@@ -100,15 +100,26 @@ function APIKeysPanel() {
 
   return (
     <>
+      <span className="set-sublabel">TVs</span>
+      {/*
+        A real button, because the TV tells people to look for one: a link set
+        in a sentence read as a sentence, and it was not found.
+      */}
+      <div className="set-pair">
+        <p className="set-row__sub">
+          A TV that shows a code signs in here. Its key is then listed below,
+          where revoking it signs the TV out.
+        </p>
+        <Link className="set-btn set-pair__btn" to="/pair">
+          Pair a device
+        </Link>
+      </div>
+
       <span className="set-sublabel">API keys</span>
       <p className="set-row__sub">
         For a script, a command line, or another program that talks to this
         server — so it never needs your password. A key acts as you, except that
         it can never change server settings and can never manage keys.
-      </p>
-      <p className="set-row__sub">
-        A TV showing a code gets its key from{" "}
-        <Link to="/pair">Pair a device</Link>, and it is listed here.
       </p>
 
       <form

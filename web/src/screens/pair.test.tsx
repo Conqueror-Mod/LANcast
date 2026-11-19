@@ -152,7 +152,8 @@ describe("pairing a device", () => {
       approve: true,
       current_password: "a long enough password",
     });
-    expect(text()).toContain("is paired");
+    expect(text()).toContain("Paired");
+    expect(text()).toContain("signs in as you");
   });
 
   it("refuses without a password", async () => {
@@ -167,7 +168,8 @@ describe("pairing a device", () => {
       code: "7KQ2-M9XD",
       approve: false,
     });
-    expect(text()).toContain("was refused");
+    expect(text()).toContain("Refused");
+    expect(text()).toContain("show a new code");
   });
 
   it("says so when no device is waiting with the code", async () => {
