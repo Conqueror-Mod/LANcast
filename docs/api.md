@@ -3444,6 +3444,13 @@ and it differs from the others in two ways that are not codec lists:
   are `segNNNNN.ts` and are served as `video/mp2t`. TS cannot carry FLAC,
   Opus or ALAC, so a remux for `roku` re-encodes those to AAC. Every other
   profile keeps fMP4.
+- **A copied Matroska film is listed whole at once.** A Roku abandons a
+  playlist request after about thirty seconds, and a copied video track used
+  to be listed only once the remux had finished. For `roku` the server reads
+  the file's keyframe index and lists every segment straight away
+  (`X-LANcast-Playlist: complete`); a segment asked for before it is written
+  is waited for. A resume starts at the keyframe at or before `t`. A file
+  with no readable index is listed as before.
 
 HEVC and Matroska are not in its floor. The app asks the device and claims
 `hevc`, `hevc10` and (once proven) `matroska` with `?can=`, like any client.
