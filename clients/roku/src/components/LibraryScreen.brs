@@ -75,6 +75,24 @@ sub onMoved()
 end sub
 
 sub onChosen()
-    it = m.items[m.grid.itemSelected]
+    m.chosen = m.grid.itemSelected
+    it = m.items[m.chosen]
     if it <> invalid then m.top.open = it
+end sub
+
+' Back from playing: the title that was opened may now be Watched, Started,
+' or have fewer episodes left, so its tile is asked for again.
+sub onRefresh()
+    if m.chosen = invalid or m.chosen >= m.items.count() then return
+    m.refreshing = m.chosen
+    m.refreshTask = ApiGet("/api/items/" + m.items[m.chosen].id.toStr(), "onRefreshed")
+end sub
+
+sub onRefreshed(e as object)
+    r = ApiAnswer(e)
+    if r.code <> 200 or type(r.data) <> "roAssociativeArray" then return
+    i = m.refreshing
+    m.items[i] = r.data
+    c = m.content.getChild(i)
+    if c <> invalid then c.description = TileLine(r.data)
 end sub

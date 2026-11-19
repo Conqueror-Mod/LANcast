@@ -7,6 +7,10 @@
 <component name="ItemScreen" extends="Group">
   <interface>
     <field id="item" type="assocarray" onChange="load" />
+    <!-- { item, at (ms, or -1 to resume), queue (a show's episodes, for Up Next) } -->
+    <field id="play" type="assocarray" alwaysNotify="true" />
+    <!-- Set when the player closes: what was watched has changed. -->
+    <field id="refresh" type="boolean" alwaysNotify="true" onChange="onRefresh" />
   </interface>
   <script type="text/brightscript" uri="pkg:/source/api.brs" />
   <script type="text/brightscript" uri="pkg:/source/format.brs" />
@@ -24,7 +28,7 @@
     <FocusButton id="play" translation="[440,600]" width="460" text="Play" visible="false" />
     <FocusButton id="restart" translation="[940,600]" width="460" text="Play from the start" visible="false" />
 
-    <MarkupList id="seasons" translation="[96,600]" itemComponentName="SeasonRow"
+    <MarkupList id="seasons" translation="[96,600]" itemComponentName="ChoiceRow"
       itemSize="[300,72]" itemSpacing="[0,14]" numRows="5"
       drawFocusFeedback="false" vertFocusAnimationStyle="floatingFocus" visible="false" />
     <MarkupList id="episodes" translation="[440,600]" itemComponentName="EpisodeRow"

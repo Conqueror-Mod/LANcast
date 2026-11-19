@@ -4,6 +4,7 @@
   <interface>
     <field id="library" type="assocarray" onChange="load" />
     <field id="open" type="assocarray" alwaysNotify="true" />
+    <field id="refresh" type="boolean" alwaysNotify="true" onChange="onRefresh" />
   </interface>
   <script type="text/brightscript" uri="pkg:/source/api.brs" />
   <script type="text/brightscript" uri="pkg:/source/format.brs" />

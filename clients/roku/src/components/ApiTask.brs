@@ -3,11 +3,11 @@ sub init()
 end sub
 
 sub work()
-    r = HttpRequest("GET", m.top.url, "", { public: m.top.public, pemPath: m.top.pemPath, key: m.top.key })
+    r = HttpRequest(m.top.method, m.top.url, m.top.body, { public: m.top.public, pemPath: m.top.pemPath, key: m.top.key })
     data = invalid
     detail = ""
-    if r.code = 200 then
-        data = ParseJson(r.body)
+    if r.code >= 200 and r.code < 300 then
+        if r.body <> "" then data = ParseJson(r.body)
     else
         detail = ErrorText(r)
     end if

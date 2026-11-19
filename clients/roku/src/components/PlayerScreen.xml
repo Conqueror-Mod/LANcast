@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<!--
+  The player: Roku's own Video node and its controls, with LANcast's pieces
+  over it — Skip intro and Skip credits, Up Next, and an audio and subtitle
+  menu on the options (*) key. Gold only on what you are on (design.md).
+-->
+<component name="PlayerScreen" extends="Group">
+  <interface>
+    <!-- { item, at (ms, or -1 to resume), queue (optional, for Up Next) } -->
+    <field id="start" type="assocarray" onChange="onStart" />
+    <field id="done" type="boolean" alwaysNotify="true" />
+  </interface>
+  <script type="text/brightscript" uri="pkg:/source/api.brs" />
+  <script type="text/brightscript" uri="pkg:/source/format.brs" />
+  <script type="text/brightscript" uri="pkg:/source/caps.brs" />
+  <script type="text/brightscript" uri="PlayerScreen.brs" />
+  <children>
+    <Rectangle width="1920" height="1080" color="0x000000FF" />
+    <Video id="video" width="1920" height="1080" />
+
+    <Label id="status" translation="[160,480]" width="1600" wrap="true" horizAlign="center" color="0xF2F5FBFF" font="font:MediumSystemFont" />
+
+    <FocusButton id="skip" translation="[1380,860]" width="420" text="Skip intro" visible="false" />
+
+    <Group id="card" translation="[1060,780]" visible="false">
+      <Rectangle width="760" height="190" color="0x0A0F22E6" />
+      <Label id="cardHead" translation="[32,22]" width="420" color="0x8F99B5FF" font="font:SmallSystemFont" />
+      <Label id="cardTitle" translation="[32,66]" width="420" color="0xF2F5FBFF" font="font:MediumBoldSystemFont" />
+      <Label id="cardSub" translation="[32,118]" width="420" color="0xC3CBE2FF" font="font:SmallSystemFont" />
+      <FocusButton id="nextNow" translation="[480,52]" width="250" height="88" text="Play now" />
+    </Group>
+
+    <Group id="menu" translation="[1200,120]" visible="false">
+      <Rectangle translation="[-32,-32]" width="680" height="880" color="0x070B18E6" />
+      <Label translation="[0,-8]" width="620" color="0xF2F5FBFF" font="font:MediumBoldSystemFont" text="Audio and subtitles" />
+      <MarkupList id="choices" translation="[0,60]" itemComponentName="ChoiceRow"
+        itemSize="[620,72]" itemSpacing="[0,12]" numRows="9"
+        drawFocusFeedback="false" vertFocusAnimationStyle="floatingFocus" />
+    </Group>
+  </children>
+</component>

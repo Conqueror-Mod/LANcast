@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<!--
+  One row in a list of choices: a show's seasons, or the player's audio and
+  subtitle menu. The current choice is bold white; gold is only on the row you
+  are on (design.md). Sized by its list's itemSize.
+-->
+<component name="ChoiceRow" extends="Group">
+  <interface>
+    <field id="itemContent" type="node" onChange="show" />
+    <field id="width" type="float" onChange="layout" />
+    <field id="height" type="float" onChange="layout" />
+    <field id="focusPercent" type="float" onChange="paint" />
+    <field id="listHasFocus" type="boolean" onChange="paint" />
+  </interface>
+  <script type="text/brightscript" uri="ChoiceRow.brs" />
+  <children>
+    <Rectangle id="halo" translation="[-8,-8]" color="0xC6A35AFF" opacity="0" />
+    <Rectangle id="ring" color="0xC6A35AFF" opacity="0.2" />
+    <Rectangle id="fill" translation="[3,3]" color="0x0A0F22FF" />
+    <Label id="label" translation="[24,0]" vertAlign="center" font="font:SmallSystemFont" color="0xC3CBE2FF" />
+  </children>
+</component>

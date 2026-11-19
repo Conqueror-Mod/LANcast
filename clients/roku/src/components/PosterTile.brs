@@ -14,6 +14,13 @@ sub show()
     m.title.text = c.title
     m.sub.text = c.description
     m.poster.uri = c.HDPosterUrl
+    ' A tile's line changes after playing (Started, Watched): redraw it then.
+    c.observeFieldScoped("description", "onLine")
+end sub
+
+sub onLine()
+    c = m.top.itemContent
+    if c <> invalid then m.sub.text = c.description
 end sub
 
 ' Gold follows focus only while the grid itself has it.
