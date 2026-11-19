@@ -450,6 +450,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/items/{id}/previews.bif": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The scrub-bar previews as one Roku BIF file
+         * @description The sheets cut into one JPEG per interval, up to the file's duration, in Roku's BIF trick-play format. With t, frames start at the first at or after t seconds and are stamped from there, matching an HLS conversion begun at t.
+         */
+        get: operations["getItemPreviewBif"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/items/{id}/book": {
         parameters: {
             query?: never;
@@ -11804,6 +11824,34 @@ export interface operations {
                     "image/jpeg": string;
                 };
             };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    getItemPreviewBif: {
+        parameters: {
+            query?: {
+                /** @description Whole seconds to start from and count from. */
+                t?: number;
+            };
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The BIF. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/octet-stream": string;
+                };
+            };
+            400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             404: components["responses"]["NotFound"];
         };

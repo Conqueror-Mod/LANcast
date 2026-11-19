@@ -156,6 +156,12 @@ sub play(atMs as dynamic)
         c.streamFormat = "hls"
     end if
     c.SubtitleTracks = subtitleTracks()
+    ' Trick-play thumbnails, cut from the scrub-bar previews and counted from
+    ' where this stream's clock starts. A 404 (previews off) just means none.
+    bif = base + "/api/items/" + id + "/previews.bif"
+    if m.offset > 0 then bif = bif + "?t=" + m.offset.toStr()
+    c.HDBifUrl = bif
+    c.FHDBifUrl = bif
 
     m.video.content = c
     m.video.control = "play"

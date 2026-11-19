@@ -1,6 +1,9 @@
 package api
 
 import (
+	"bytes"
+	"image"
+	"image/jpeg"
 	"net/http"
 	"os"
 	"strconv"
@@ -100,4 +103,45 @@ func (s *Server) itemPreviewSheet(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "private, max-age=0, must-revalidate")
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 	http.ServeContent(w, r, "", fi.ModTime(), f)
+}
+
+// itemPreviewBIF answers GET /api/items/{id}/previews.bif: the same frames
+// as one Roku BIF file, for the TV player's trick play. ?t= (seconds) counts
+// the timestamps from there, as an HLS conversion begun at t counts its own.
+func (s *Server) itemPreviewBIF(w http.ResponseWriter, r *http.Request) {
+	var fromMS int64
+	if v := r.URL.Query().Get("t"); v != "" {
+		sec, err := strconv.ParseInt(v, 10, 64)
+		if err != nil || sec < 0 {
+			writeError(w, http.StatusBadRequest, "bad_request", "t must be whole seconds, 0 or more")
+			return
+		}
+		fromMS = sec * 1000
+	}
+	it, m := s.previewsFor(w, r)
+	if m == nil {
+		return
+	}
+	var durationMS int64
+	if it.DurationMS != nil {
+		durationMS = *it.DurationMS
+	}
+	var buf bytes.Buffer
+	err := preview.WriteBIF(&buf, m, durationMS, fromMS, func(n int) (image.Image, error) {
+		f, err := os.Open(preview.SheetPath(s.previewsDir, it.ID, n))
+		if err != nil {
+			return nil, err
+		}
+		defer f.Close()
+		return jpeg.Decode(f)
+	})
+	if err != nil {
+		s.log.Warn("preview bif", "item", it.ID, "err", err)
+		writeError(w, http.StatusNotFound, "not_found", "no previews for this item")
+		return
+	}
+	w.Header().Set("Content-Type", "application/octet-stream")
+	w.Header().Set("Cache-Control", "private, max-age=0, must-revalidate")
+	w.Header().Set("X-Content-Type-Options", "nosniff")
+	w.Write(buf.Bytes())
 }

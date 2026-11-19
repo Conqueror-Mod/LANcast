@@ -865,6 +865,7 @@ func (s *Server) Handler() http.Handler {
 	// Scrub-bar previews (ADR 0105).
 	mux.HandleFunc("GET /api/items/{id}/previews", s.itemPreviews)
 	mux.HandleFunc("GET /api/items/{id}/previews/{n}", s.itemPreviewSheet)
+	mux.HandleFunc("GET /api/items/{id}/previews.bif", s.itemPreviewBIF)
 
 	/*
 	 * Browsing a share, asked for by the friend's own server rather than by

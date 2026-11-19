@@ -1,7 +1,11 @@
 package api
 
 import (
+	"bytes"
 	"context"
+	"encoding/binary"
+	"image"
+	"image/jpeg"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -150,5 +154,60 @@ func TestAnOpenedFilmWithoutPreviewsIsQueued(t *testing.T) {
 	placePreviews(t, h, id, 1)
 	if c, _ := code(); c != http.StatusOK || len(wanted) != 1 {
 		t.Fatalf("once made: %d, wanted %v", c, wanted)
+	}
+}
+
+// The BIF is the sheets cut into frames, counted from ?t= when given, and is
+// kept from an account the title is kept from, like every preview route.
+func TestPreviewsAsABIF(t *testing.T) {
+	h := newHarness(t)
+	h.secure(t, "a long enough password")
+	h.srvAPI.previewsDir = t.TempDir()
+	id := h.addFile(t, "film.mkv", []byte("a film"))
+	if err := h.st.SaveProbe(context.Background(), id, store.ProbeResult{DurationMS: 125_000}); err != nil {
+		t.Fatal(err)
+	}
+	placePreviews(t, h, id, 1)
+	var sheet bytes.Buffer
+	jpeg.Encode(&sheet, image.NewGray(image.Rect(0, 0, 2400, 1360)), nil)
+	os.WriteFile(preview.SheetPath(h.srvAPI.previewsDir, id, 0), sheet.Bytes(), 0o644)
+
+	get := func(q string) (int, []byte) {
+		resp := h.authed(t, "GET", "/api/items/"+itoa(id)+"/previews.bif"+q, nil)
+		defer resp.Body.Close()
+		raw, _ := io.ReadAll(resp.Body)
+		return resp.StatusCode, raw
+	}
+	frames := func(raw []byte) (n int, first uint32) {
+		return int(binary.LittleEndian.Uint32(raw[12:])), binary.LittleEndian.Uint32(raw[64:])
+	}
+
+	// 125 s: frames at 0 … 120 s.
+	code, raw := get("")
+	if code != http.StatusOK || string(raw[1:4]) != "BIF" {
+		t.Fatalf("bif: %d %q", code, raw[:min(len(raw), 8)])
+	}
+	if n, first := frames(raw); n != 13 || first != 0 {
+		t.Fatalf("whole film: %d frames from %d s", n, first)
+	}
+	// From 45 s: frames at 50 … 120 s, stamped from 5 s.
+	if _, raw := get("?t=45"); true {
+		if n, first := frames(raw); n != 8 || first != 5 {
+			t.Fatalf("from 45 s: %d frames from %d s", n, first)
+		}
+	}
+	for _, bad := range []string{"?t=-1", "?t=x", "?t=1.5"} {
+		if code, _ := get(bad); code != http.StatusBadRequest {
+			t.Errorf("%s: %d", bad, code)
+		}
+	}
+
+	m := h.member(t, "kid", "a long enough password")
+	resp := h.authed(t, "PATCH", "/api/users/"+m.id, map[string]any{"max_content_rating": "PG"})
+	resp.Body.Close()
+	resp = h.asUser(t, m, "GET", "/api/items/"+itoa(id)+"/previews.bif", nil)
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusNotFound {
+		t.Errorf("as a limited account: %d", resp.StatusCode)
 	}
 }

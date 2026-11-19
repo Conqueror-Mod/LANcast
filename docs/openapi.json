@@ -814,6 +814,24 @@
         }
       }
     },
+    "/items/{id}/previews.bif": {
+      "get": {
+        "operationId": "getItemPreviewBif",
+        "tags": ["playback"],
+        "summary": "The scrub-bar previews as one Roku BIF file",
+        "description": "The sheets cut into one JPEG per interval, up to the file's duration, in Roku's BIF trick-play format. With t, frames start at the first at or after t seconds and are stamped from there, matching an HLS conversion begun at t.",
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "integer", "format": "int64" } },
+          { "name": "t", "in": "query", "required": false, "description": "Whole seconds to start from and count from.", "schema": { "type": "integer", "minimum": 0 } }
+        ],
+        "responses": {
+          "200": { "description": "The BIF.", "content": { "application/octet-stream": { "schema": { "type": "string", "format": "binary" } } } },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "404": { "$ref": "#/components/responses/NotFound" }
+        }
+      }
+    },
     "/items/{id}/book": {
       "get": {
         "operationId": "bookInfo",
