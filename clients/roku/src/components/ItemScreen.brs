@@ -60,6 +60,11 @@ end sub
 
 sub paint(it as object)
     m.title.text = it.title
+    ' The lines under the title follow it, so a one-line title leaves no gap.
+    below = 90 + m.title.boundingRect().height + 20
+    m.meta.translation = [440, below]
+    m.genres.translation = [440, below + 54]
+    m.overview.translation = [440, below + 106]
     m.meta.text = MetaLine(it)
     m.genres.text = GenresLine(it)
     if it.overview <> invalid then m.synopsis = it.overview

@@ -41,9 +41,9 @@ function ClockText(ms as dynamic) as string
     h = Int(s / 3600)
     mm = Int((s - h * 3600) / 60)
     ss = s - h * 3600 - mm * 60
-    t = Right("0" + mm.toStr(), 2) + ":" + Right("0" + ss.toStr(), 2)
-    if h > 0 then t = h.toStr() + ":" + t
-    return t
+    ' 8:20 under an hour, 1:08:20 over it: minutes are padded only after hours.
+    if h > 0 then return h.toStr() + ":" + Right("0" + mm.toStr(), 2) + ":" + Right("0" + ss.toStr(), 2)
+    return mm.toStr() + ":" + Right("0" + ss.toStr(), 2)
 end function
 
 ' TileLine is the small line under a poster: the year, and where you are with it.
