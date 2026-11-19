@@ -24,6 +24,10 @@ on your hardware, under your control, with nothing phoning home.**
 > [docs/history.md](docs/history.md); [docs/roadmap.md](docs/roadmap.md) is the
 > honest ledger of what is left and what was *not* looked at before it shipped.
 
+<p align="center">
+  <img src="docs/screenshots/home.jpg" alt="The LANcast home screen: a film to continue, a Continue panel and friends">
+</p>
+
 ---
 
 ## What LANcast is
@@ -55,6 +59,14 @@ no account with anybody, and no relay you rent.
   **tells you why**. Hardware encoding (NVENC, Quick Sync, AMF) is chosen by a
   real test encode, not a capability list.
 
+<p align="center">
+  <img src="docs/screenshots/collections.jpg" alt="A movie library's collections, grouped automatically" width="49%">
+  <img src="docs/screenshots/collection.jpg" alt="A collection page with its films in order" width="49%">
+</p>
+<p align="center">
+  <img src="docs/screenshots/film.jpg" alt="A film's page with ratings, content rating, Fix match and Play on" width="80%">
+</p>
+
 ### 🍿 Watch Together, across the internet
 - **Synchronised rooms** — pause, seek and play together, on one server.
 - **Pair with a friend's LANcast** to see what they're watching and join them.
@@ -71,6 +83,10 @@ no account with anybody, and no relay you rent.
 - Album pages with a real track list, artist pages, genres, MusicBrainz album
   grouping, and a mini-player that follows you around the app.
 
+<p align="center">
+  <img src="docs/screenshots/now-playing.jpg" alt="Now Playing with a MilkDrop visualizer and the album queue" width="80%">
+</p>
+
 ### 🕹️ Retro games with RetroAchievements
 - Drop in your ROMs: NES, SNES, Nintendo 64, Game Boy / Color / Advance,
   Master System, Genesis and PlayStation, **identified by hash**.
@@ -79,6 +95,10 @@ no account with anybody, and no relay you rent.
 - **Connect your own RetroAchievements account** and earn achievements as you
   play, with pop-ups in the game.
 - PC games installed on the machine show up in the same hub and launch from it.
+
+<p align="center">
+  <img src="docs/screenshots/retro-games.jpg" alt="A retro games library with box art, ratings and console filters" width="80%">
+</p>
 
 ### 📸 Photos, 📖 comics and 🎧 audiobooks
 - **Photos:** a timeline by capture date, people grouped by face, **search by
