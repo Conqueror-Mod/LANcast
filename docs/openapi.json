@@ -3665,7 +3665,7 @@
         "tags": [
           "playback"
         ],
-        "summary": "The same transcode as an HLS playlist with fMP4 segments",
+        "summary": "The same transcode as an HLS playlist with fMP4 segments (MPEG-TS for `roku`)",
         "description": "For clients that speak HLS natively. Segment URLs point back at `GET /api/stream/{id}/hls/{session}/{name}`.\n\n**When video is encoded the playlist is complete from the first response** — every remaining segment listed, `VOD`, closed with `#EXT-X-ENDLIST` — and segments not yet produced are waited for when requested. A copied video track keeps ffmpeg's own `EVENT` playlist; the response waits up to twenty seconds for it to finish and serves it closed with `#EXT-X-ENDLIST` when it does, growing otherwise. `X-LANcast-Playlist` says which; an engine can play one and refuse the other.\n\n**This is not the hls.js path.** hls.js is vendored for live channels only, behind a setting that is off by default; the file path does not touch it.",
         "parameters": [
           {
@@ -16585,7 +16585,7 @@
         "name": "profile",
         "in": "query",
         "required": false,
-        "description": "What the client can play. **Unknown or absent falls back to `browser`** — guessing generously for a client the server cannot identify is how black rectangles happen.\n\n- `browser` (default): h264, vp8, vp9, av1 · aac, mp3, opus, vorbis, flac, pcm_s16le, pcm_u8 · mp4, webm, mov, mp3, flac, ogg, wav\n- `safari`: adds hevc and ac3/eac3/alac/pcm_s24le, drops Ogg — matching what Apple ships decoders for\n- `tv`: the widest — hevc, vp9, mpeg2video · dts, truehd · matroska, mpegts and the bare audio containers\n\n**`browser` excludes HEVC deliberately.** Chrome's support is conditional on hardware and Firefox has none, so claiming it for an unidentified client trades a cheap remux for an unexplained failure. Clients that know better say so with `can`.\n\nThe bare audio containers exist for music, where the container *is* the codec: an `.mp3` probes as container `mp3`, a `.flac` as `flac`, an `.m4a` as `mov`. Without them every track fails the container check and rewraps into MP4 — and because MP4 cannot carry FLAC, a lossless file would be re-encoded to AAC to deliver a format the client already plays natively.\n\n`native` is a client that decodes with FFmpeg itself (the desktop client, ADR 0067): no codec lists, because it plays whatever the probe could read. A server quality ceiling still applies to it — that is policy about what leaves the server, not a claim about the client.",
+        "description": "What the client can play. **Unknown or absent falls back to `browser`** — guessing generously for a client the server cannot identify is how black rectangles happen.\n\n- `browser` (default): h264, vp8, vp9, av1 · aac, mp3, opus, vorbis, flac, pcm_s16le, pcm_u8 · mp4, webm, mov, mp3, flac, ogg, wav\n- `safari`: adds hevc and ac3/eac3/alac/pcm_s24le, drops Ogg — matching what Apple ships decoders for\n- `tv`: the widest — hevc, vp9, mpeg2video · dts, truehd · matroska, mpegts and the bare audio containers\n- `roku`: the LANcast Roku app (ADR 0125) — h264, mpeg2video · aac, mp3, ac3, eac3, flac, alac, pcm_s16le, pcm_u8 · mp4, mov, mpegts, mp3, flac, wav, aac. H.264 is held to **level 4.1**, worked out from frame size and rate: a frame above it is not direct-played, and an encode is scaled to fit. HLS goes out as **MPEG-TS segments** (see `segments` on the decision). HEVC and Matroska are claimed with `can`, not assumed\n\n**`browser` excludes HEVC deliberately.** Chrome's support is conditional on hardware and Firefox has none, so claiming it for an unidentified client trades a cheap remux for an unexplained failure. Clients that know better say so with `can`.\n\nThe bare audio containers exist for music, where the container *is* the codec: an `.mp3` probes as container `mp3`, a `.flac` as `flac`, an `.m4a` as `mov`. Without them every track fails the container check and rewraps into MP4 — and because MP4 cannot carry FLAC, a lossless file would be re-encoded to AAC to deliver a format the client already plays natively.\n\n`native` is a client that decodes with FFmpeg itself (the desktop client, ADR 0067): no codec lists, because it plays whatever the probe could read. A server quality ceiling still applies to it — that is policy about what leaves the server, not a claim about the client.",
         "schema": {
           "type": "string",
           "default": "browser"
@@ -18017,6 +18017,13 @@
           },
           "source_frame_rate": {
             "type": "number"
+          },
+          "segments": {
+            "type": "string",
+            "enum": [
+              "mpegts"
+            ],
+            "description": "The HLS segment format, **absent for fragmented MP4**, which every profile but one gets. `mpegts` for the `roku` profile (ADR 0125): a Roku plays the picture of fMP4 segments that carry audio and video together and none of the sound. A TS playlist has no `EXT-X-MAP`, and its segments are `segNNNNN.ts`, served as `video/mp2t`. Never present on direct play, which has no segments."
           }
         }
       },

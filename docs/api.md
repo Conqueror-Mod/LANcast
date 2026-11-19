@@ -3409,6 +3409,7 @@ black rectangles happen.
 | `browser` (default) | h264, vp8, vp9, av1 | aac, mp3, opus, vorbis, flac, pcm_s16le, pcm_u8 | mp4, webm, mov, mp3, flac, ogg, wav |
 | `safari` | h264, hevc, av1 | aac, mp3, ac3, eac3, flac, opus, alac, pcm_s16le, pcm_s24le, pcm_u8 | mp4, mov, mp3, flac, wav |
 | `tv` | h264, hevc, vp9, av1, mpeg2video | aac, mp3, opus, vorbis, flac, alac, ac3, eac3, dts, truehd, pcm_s16le, pcm_s24le, pcm_u8 | mp4, matroska, webm, mov, mpegts, mp3, flac, ogg, wav, aac |
+| `roku` | h264 (to level 4.1), mpeg2video | aac, mp3, ac3, eac3, flac, alac, pcm_s16le, pcm_u8 | mp4, mov, mpegts, mp3, flac, wav, aac |
 | `native` | anything | anything | anything |
 
 `native` is a client that decodes with FFmpeg itself — LANcast's desktop
@@ -3427,6 +3428,32 @@ above the ceiling is converted like any other — and the answer comes back
 hardware and Firefox has none, so claiming it for an unidentified client trades
 a cheap remux for an unexplained failure. Clients that know better say so — with
 `?can=`.
+
+`roku` is the LANcast Roku app ([ADR 0125](adr/0125-a-tv-pairs-by-code.md)),
+and it differs from the others in two ways that are not codec lists:
+
+- **H.264 is held to level 4.1.** A Roku decodes H.264 High at 4.1 and refuses
+  5.1. The level is worked out from the frame's size and rate, not read from
+  the file's own tag, so it needs no re-probe. A frame above it, such as 1080p
+  at 60 or anything 4K, is not direct-played, and the encode is scaled to the
+  tallest frame of the same shape that fits (764 lines for 1080p60, 1080 for
+  4K at 24). An unmeasured frame is let through.
+- **Its HLS is MPEG-TS, not fMP4.** A Roku plays the picture of fMP4 segments
+  carrying audio and video together and none of the sound. The decision says
+  `"segments": "mpegts"`; the playlist then has no `EXT-X-MAP`, its segments
+  are `segNNNNN.ts` and are served as `video/mp2t`. TS cannot carry FLAC,
+  Opus or ALAC, so a remux for `roku` re-encodes those to AAC. Every other
+  profile keeps fMP4.
+- **A copied Matroska film is listed whole at once.** A Roku abandons a
+  playlist request after about thirty seconds, and a copied video track used
+  to be listed only once the remux had finished. For `roku` the server reads
+  the file's keyframe index and lists every segment straight away
+  (`X-LANcast-Playlist: complete`); a segment asked for before it is written
+  is waited for. A resume starts at the keyframe at or before `t`. A file
+  with no readable index is listed as before.
+
+HEVC and Matroska are not in its floor. The app asks the device and claims
+`hevc`, `hevc10` and (once proven) `matroska` with `?can=`, like any client.
 
 #### `?can=` — what this client can also play
 
@@ -4529,7 +4556,8 @@ working" from "sessions are leaking".
 
 ### `GET /api/stream/{id}/hls/index.m3u8`
 
-The same transcode as an HLS playlist with fMP4 segments, for clients that
+The same transcode as an HLS playlist with fMP4 segments (MPEG-TS under
+the `roku` profile, ADR 0125), for clients that
 speak HLS. Takes the same `?t=`, `?audio=` and `?profile=` parameters. Segment
 URLs point back at `GET /api/stream/{id}/hls/{session}/{name}`.
 

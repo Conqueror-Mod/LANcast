@@ -85,13 +85,26 @@ func (s *Server) hlsPlaylist(w http.ResponseWriter, r *http.Request) {
 		duration = float64(*it.DurationMS) / 1000
 	}
 	startAt := s.startAt(r, it)
-	sess, err := s.trans.EnsureHLS(r.Context(), it.ID, s.streamOwner(r), transcode.Options{
-		Input:    it.Path,
-		Decision: t.decision,
-		StartAt:  startAt,
-		Duration: duration,
+	/*
+	 * A Roku's copied film is listed from its keyframe index (keyframelisting.go),
+	 * and then where the copy starts is decided here: just past its keyframe, so
+	 * both inputs land on it and the cuts are the ones listed. That also places
+	 * the audio's start, which is otherwise found by asking ffprobe (ADR 0072).
+	 */
+	listing, listed := keyframeListingFor(it.Path, t.decision, startAt, duration)
+	var audioStart float64
+	if listed {
+		startAt, audioStart = listing.seek, listing.seek
+	} else {
 		// See the progressive path above, and ADR 0072.
-		AudioStartAt: s.audioStartFor(r, it.Path, t.decision, startAt),
+		audioStart = s.audioStartFor(r, it.Path, t.decision, startAt)
+	}
+	sess, err := s.trans.EnsureHLS(r.Context(), it.ID, s.streamOwner(r), transcode.Options{
+		Input:        it.Path,
+		Decision:     t.decision,
+		StartAt:      startAt,
+		Duration:     duration,
+		AudioStartAt: audioStart,
 		AudioIndex:   t.audioIndex,
 	})
 	if err != nil {
@@ -110,10 +123,20 @@ func (s *Server) hlsPlaylist(w http.ResponseWriter, r *http.Request) {
 	}
 
 	prefix := playlistPrefix(r, it.ID, sess.ID)
+	if listed && !sess.Complete() {
+		if body, ok := transcode.KeyframePlaylist(listing.cuts, duration, prefix, t.decision.Segments); ok {
+			s.log.Info("hls playlist listed from the file's keyframe index",
+				"item", it.ID, "session", sess.ID, "segments", len(listing.cuts),
+				"start", listing.seek)
+			s.checkKeyframeListing(sess, it.ID, len(listing.cuts))
+			writePlaylist(w, true, body)
+			return
+		}
+	}
 	var body string
 	complete := sess.Complete()
 	if complete {
-		body = transcode.CompletePlaylist(sess.MediaSeconds, sess.SegmentLength, prefix)
+		body = transcode.CompletePlaylist(sess.MediaSeconds, sess.SegmentLength, prefix, sess.Segments)
 	} else {
 		/*
 		 * A copied video track cannot be listed in advance, but a remux is fast
@@ -295,6 +318,8 @@ func (s *Server) serveHLSSegment(w http.ResponseWriter, r *http.Request, mayRead
 
 	if strings.HasSuffix(name, ".mp4") {
 		w.Header().Set("Content-Type", "video/mp4")
+	} else if strings.HasSuffix(name, ".ts") {
+		w.Header().Set("Content-Type", "video/mp2t")
 	} else {
 		w.Header().Set("Content-Type", "video/iso.segment")
 	}
@@ -548,10 +573,14 @@ func validSegmentName(name string) bool {
 	if name == "init.mp4" {
 		return true
 	}
-	if !strings.HasPrefix(name, "seg") || !strings.HasSuffix(name, ".m4s") {
+	ext := ".m4s"
+	if strings.HasSuffix(name, ".ts") {
+		ext = ".ts" // MPEG-TS segments, for a Roku (ADR 0125)
+	}
+	if !strings.HasPrefix(name, "seg") || !strings.HasSuffix(name, ext) {
 		return false
 	}
-	digits := strings.TrimSuffix(strings.TrimPrefix(name, "seg"), ".m4s")
+	digits := strings.TrimSuffix(strings.TrimPrefix(name, "seg"), ext)
 	if digits == "" || len(digits) > 8 {
 		return false
 	}

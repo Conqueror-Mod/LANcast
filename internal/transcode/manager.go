@@ -687,6 +687,7 @@ func (m *Manager) EnsureHLS(ctx context.Context, itemID int64, owner string, o O
 	s.ID, s.ItemID, s.Owner = id, itemID, owner
 	s.work = want
 	s.MediaSeconds, s.SegmentLength, _ = completeFor(o)
+	s.Segments = o.Decision.Segments
 
 	m.mu.Lock()
 	m.sessions[id] = s
@@ -701,6 +702,7 @@ func (m *Manager) EnsureHLS(ctx context.Context, itemID int64, owner string, o O
 		"audio_start_at", o.AudioStartAt,
 		"video", o.Decision.VideoAction, "audio", o.Decision.AudioAction,
 		"playlist", playlist, "segment_seconds", s.SegmentLength,
+		"segments", SegmentExt(s.Segments),
 		"reason", o.Decision.Reason)
 
 	return s, nil

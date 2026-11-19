@@ -1,7 +1,8 @@
 # ADR 0125 — A TV pairs by code, and a Roku is sent segments it can hear
 
 Date: 2026-11-18 · Status: **accepted** 2026-11-18 · **amended** 2026-11-18
-(two corrections found building §1–2; see the end)
+(two corrections found building §1–2, and the step-2 test on the TV; see
+the end)
 
 The plan is [roku-plan.md](../roku-plan.md), step 1. Step 0's spikes ran on a
 Roku TV on 2026-11-17, and their results are recorded in the plan. This ADR
@@ -266,3 +267,24 @@ here rather than edited in place so the original reasoning stays readable.
    cannot be built. Crockford's answer is used instead: show 0–9 and A–Z
    without I, L, O and U, and read a typed O as 0 and I or L as 1. Nothing
    shown is ambiguous and nothing a person types for it is refused.
+
+**2026-11-18, the step-2 test on the TV.** The condition above is met.
+Main 10 HEVC with Dolby audio, remuxed into TS segments (`video=copy
+audio=copy`), played on the TV with synced sound and seeked cleanly, on
+two films. HEVC is granted over HLS as decided.
+
+3. **A copied film is listed from its keyframe index.** The same test
+   showed the TV abandons a playlist request after about thirty seconds
+   (29.5 s, 30.4 s and 30.5 s in a row) and asks again, while the server
+   held a copied film's playlist until the remux finished, sixty seconds
+   or more. One film took four tries; another gave up and stayed black.
+   For `roku`, the server now reads the Matroska file's own keyframe
+   index (Cues) and lists every segment at once, as it already did for an
+   encode, and waits for each segment when it is asked for. Where ffmpeg
+   cuts was checked against ffmpeg itself on real films, from the start
+   and from resumes, with the audio copied and converted: every count and
+   length matched. A resume seeks a fifth of a second past its keyframe,
+   because ffmpeg seeks a B-frame film's inputs about 0.13 s early and
+   otherwise landed the audio on the keyframe before, which moved every
+   cut. A file with no readable index is listed as before. Every other
+   profile is unchanged.

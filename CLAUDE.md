@@ -26,6 +26,7 @@ internal/artwork/  content-addressed image cache
 internal/auth/     password hashing, server-side sessions
 internal/contain/  is this path inside that folder, links followed (ADR 0094)
 internal/probe/    ffprobe wrapper + direct-play/remux/transcode decision
+internal/matroska/ a Matroska file's keyframe index, read without ffmpeg (fuzzed)
 internal/transcode/ ffmpeg pipeline: segmented file output and the live path
 internal/mpv/      libmpv via syscall: the desktop's own player (ADR 0067)
 internal/displaymode/ the player's screen follows the film's frame rate, and goes back

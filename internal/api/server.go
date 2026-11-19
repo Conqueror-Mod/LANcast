@@ -235,6 +235,9 @@ type Server struct {
 	toolsAt        *mediatools.Locator
 	relaunch       func() error
 	trans          *transcode.Manager
+	// listingChecked holds the sessions whose keyframe listing has been
+	// compared with what ffmpeg wrote (checkKeyframeListing), so it is once.
+	listingChecked sync.Map
 	updates        *update.Checker
 	tasks          *tasks.Board
 	subs           *subtitle.Extractor

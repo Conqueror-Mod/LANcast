@@ -1147,3 +1147,35 @@ func TestFileOutputIsOneFinishedMP4(t *testing.T) {
 		t.Errorf("the output path is not last:\n%s", a)
 	}
 }
+
+// A Roku is sent MPEG-TS segments (ADR 0125): the segment type, .ts names,
+// and no fMP4 init file. Every other decision keeps fMP4.
+func TestHLSOutputForMPEGTS(t *testing.T) {
+	d := fullDecision()
+	d.Segments = probe.SegmentsMPEGTS
+	args := Args(Options{Input: "in.mkv", Output: HLS, Decision: d, OutputDir: "/tmp/x"})
+	if !hasSequence(args, "-hls_segment_type", "mpegts") {
+		t.Error("segments are not MPEG-TS")
+	}
+	if argValue(args, "-hls_segment_filename") != "/tmp/x/seg%05d.ts" {
+		t.Errorf("segment path = %q", argValue(args, "-hls_segment_filename"))
+	}
+	for _, a := range args {
+		if a == "-hls_fmp4_init_filename" {
+			t.Error("a TS output names an fMP4 init file")
+		}
+	}
+	if args[len(args)-1] != "/tmp/x/index.m3u8" {
+		t.Errorf("playlist path = %q", args[len(args)-1])
+	}
+}
+
+// Two requests that differ only in segment format are different work: a TS
+// request must never be handed an fMP4 session, or the reverse.
+func TestSegmentFormatIsPartOfTheWork(t *testing.T) {
+	ts := fullDecision()
+	ts.Segments = probe.SegmentsMPEGTS
+	if workFor(Options{Decision: fullDecision()}) == workFor(Options{Decision: ts}) {
+		t.Error("fMP4 and TS sessions share a work key")
+	}
+}
