@@ -118,6 +118,25 @@ What this means: DLNA is a stopgap at best, not a substitute for the app. It can
 - the server restarted mid-film;
 - the TV's key revoked mid-session.
 
+### Step 6 results (2026-11-19, app build 10, the server from main at 2839418f swapped into the installed service)
+
+All eight checks pass:
+
+- **Direct:** 21 Jump Street and 2012.
+- **Remux:** 28 Years Later.
+- **Transcode** (DTS re-encoded to AAC): Army of Darkness and 2 Fast 2 Furious. 2 Fast 2 Furious went black on the spike before #1178.
+- **Up Next.**
+- **Subtitles on a show.**
+- **Server restart mid-film.**
+- **Key revoke, then re-pairing.**
+
+Two faults were found and fixed on the way:
+
+- **Server restarted mid-film.** Roku reports a stream it gives up on as `finished`, so the app marked the film watched, and the next Play started at 0:00. The app now trusts a finish only within a minute of the end. Otherwise it keeps the last place it was really playing and says the stream stopped.
+- **Key revoked during playback.** A progress save never read its answer, and a refused HLS segment only looked like a playback error. Both now reach the 401 handling, and the TV goes to pairing.
+
+Still owed: 21 Jump Street's 24p judder on direct play, and switching the audio track on a title with more than one.
+
 **7. Distribution.** Sideloading (developer mode) covers Chris's own TVs and needs nothing from Roku. Anyone else needs the app published through Roku's developer program, which means certification and a review. Roku has also changed how unlisted or "beta" apps work more than once, so check the current rules when this step comes. Decide here whether a public listing is worth it.
 
 ## Build and test
