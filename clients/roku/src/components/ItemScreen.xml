@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<!--
+  A film's or a show's page (design.md, Detail): the fanart faint behind
+  everything, the poster on the left, title, meta line and synopsis on the
+  right. A film has its play buttons; a show has its seasons and episodes.
+-->
+<component name="ItemScreen" extends="Group">
+  <interface>
+    <field id="item" type="assocarray" onChange="load" />
+  </interface>
+  <script type="text/brightscript" uri="pkg:/source/api.brs" />
+  <script type="text/brightscript" uri="pkg:/source/format.brs" />
+  <script type="text/brightscript" uri="ItemScreen.brs" />
+  <children>
+    <Poster id="backdrop" width="1920" height="1080" loadDisplayMode="scaleToZoom" loadWidth="1920" loadHeight="1080" opacity="0.35" />
+    <Rectangle width="1920" height="1080" color="0x070B18FF" opacity="0.7" />
+    <Rectangle translation="[96,96]" width="300" height="450" color="0x0A0F22FF" />
+    <Poster id="poster" translation="[96,96]" width="300" height="450" loadDisplayMode="scaleToZoom" loadWidth="300" loadHeight="450" />
+    <Label id="title" translation="[440,90]" width="1380" maxLines="2" wrap="true" color="0xF2F5FBFF" font="font:LargeBoldSystemFont" />
+    <Label id="meta" translation="[440,230]" width="1380" color="0xC3CBE2FF" font="font:MediumSystemFont" />
+    <Label id="genres" translation="[440,284]" width="1380" color="0x8F99B5FF" font="font:SmallSystemFont" />
+    <Label id="overview" translation="[440,336]" width="1380" maxLines="4" wrap="true" color="0xC3CBE2FF" font="font:SmallSystemFont" />
+
+    <FocusButton id="play" translation="[440,600]" width="460" text="Play" visible="false" />
+    <FocusButton id="restart" translation="[940,600]" width="460" text="Play from the start" visible="false" />
+
+    <MarkupList id="seasons" translation="[96,600]" itemComponentName="SeasonRow"
+      itemSize="[300,72]" itemSpacing="[0,14]" numRows="5"
+      drawFocusFeedback="false" vertFocusAnimationStyle="floatingFocus" visible="false" />
+    <MarkupList id="episodes" translation="[440,600]" itemComponentName="EpisodeRow"
+      itemSize="[1380,120]" itemSpacing="[0,18]" numRows="3"
+      drawFocusFeedback="false" vertFocusAnimationStyle="floatingFocus" visible="false" />
+
+    <Label id="status" translation="[440,1010]" width="1380" color="0xF2F5FBFF" font="font:SmallSystemFont" />
+  </children>
+</component>

@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8" ?>
-<!-- Signed in: who, where, and the libraries. Browsing them is the next step. -->
+<!-- Signed in: who, where, and the libraries. Choosing one opens it. -->
 <component name="HomeScreen" extends="Group">
   <interface>
     <field id="userName" type="string" onChange="showWho" />
@@ -8,6 +8,7 @@
     <field id="message" type="string" onChange="showMessage" />
     <field id="signOut" type="boolean" alwaysNotify="true" />
     <field id="changeServer" type="boolean" alwaysNotify="true" />
+    <field id="openLibrary" type="assocarray" alwaysNotify="true" />
   </interface>
   <script type="text/brightscript" uri="HomeScreen.brs" />
   <children>

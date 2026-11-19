@@ -51,7 +51,7 @@ end sub
 
 sub onLibrary()
     lib = m.top.libraries[m.grid.itemSelected]
-    if lib <> invalid then m.status.text = lib.name + ": browsing comes in the next build."
+    if lib <> invalid then m.top.openLibrary = lib
 end sub
 
 sub onSignOut()

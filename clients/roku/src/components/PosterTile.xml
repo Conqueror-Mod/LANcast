@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<!--
+  One title in a library grid: its poster, its name, and a small neutral line
+  (year, watched). The gold edge is where you are and nothing else.
+-->
+<component name="PosterTile" extends="Group">
+  <interface>
+    <field id="itemContent" type="node" onChange="show" />
+    <field id="width" type="float" />
+    <field id="height" type="float" />
+    <field id="focusPercent" type="float" onChange="onFocus" />
+    <field id="gridHasFocus" type="boolean" onChange="onFocus" />
+  </interface>
+  <script type="text/brightscript" uri="PosterTile.brs" />
+  <children>
+    <Rectangle id="halo" translation="[-8,-8]" width="236" height="346" color="0xC6A35AFF" opacity="0" />
+    <Rectangle id="ring" width="220" height="330" color="0xC6A35AFF" opacity="0.2" />
+    <Rectangle translation="[3,3]" width="214" height="324" color="0x0A0F22FF" />
+    <!-- The title stands in until the picture arrives, or when there is none. -->
+    <Label id="stand" translation="[16,16]" width="182" height="292" wrap="true" horizAlign="center" vertAlign="center" color="0xC3CBE2FF" font="font:SmallSystemFont" />
+    <Poster id="poster" translation="[3,3]" width="214" height="324" loadDisplayMode="scaleToZoom" loadWidth="214" loadHeight="324" />
+    <Label id="title" translation="[0,342]" width="220" color="0xC3CBE2FF" font="font:SmallBoldSystemFont" />
+    <Label id="sub" translation="[0,374]" width="220" color="0x8F99B5FF" font="font:SmallestSystemFont" />
+  </children>
+</component>

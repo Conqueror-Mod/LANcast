@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<!--
+  One season in a show's list. The season whose episodes are showing is in
+  bold white; gold is only on the row you are on (design.md).
+-->
+<component name="SeasonRow" extends="Group">
+  <interface>
+    <field id="itemContent" type="node" onChange="show" />
+    <field id="width" type="float" />
+    <field id="height" type="float" />
+    <field id="focusPercent" type="float" onChange="paint" />
+    <field id="listHasFocus" type="boolean" onChange="paint" />
+  </interface>
+  <script type="text/brightscript" uri="SeasonRow.brs" />
+  <children>
+    <Rectangle id="halo" translation="[-8,-8]" width="316" height="88" color="0xC6A35AFF" opacity="0" />
+    <Rectangle id="ring" width="300" height="72" color="0xC6A35AFF" opacity="0.2" />
+    <Rectangle translation="[3,3]" width="294" height="66" color="0x0A0F22FF" />
+    <Label id="label" translation="[24,0]" width="252" height="72" vertAlign="center" font="font:SmallSystemFont" color="0xC3CBE2FF" />
+  </children>
+</component>
