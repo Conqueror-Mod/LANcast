@@ -217,6 +217,9 @@ sub onState()
         detail = m.video.errorMsg
         if m.video.errorStr <> invalid and m.video.errorStr <> "" then detail = detail + " (" + m.video.errorStr + ")"
         fail("This did not play: " + detail)
+        ' A revoked key looks like any other failed segment from here. Ask the
+        ' server once, so a 401 reaches MainScene and the TV goes to pairing.
+        m.probe = ApiSend("GET", "/api/items/" + m.item.id.toStr(), invalid, "onAnswered")
     else if s = "finished" then
         finished()
     end if
@@ -233,10 +236,17 @@ end sub
 
 sub saveProgress(posMs as dynamic, watched as boolean)
     if m.item = invalid then return
-    t = ApiSend("PUT", "/api/items/" + m.item.id.toStr() + "/progress", { position_ms: posMs, watched: watched }, "")
+    t = ApiSend("PUT", "/api/items/" + m.item.id.toStr() + "/progress", { position_ms: posMs, watched: watched }, "onAnswered")
     ' Held so the request is not collected before it is sent.
     m.saves.push(t)
     if m.saves.count() > 4 then m.saves.shift()
+end sub
+
+' onAnswered stops the picture when the key has been revoked; ApiAnswer then
+' tells MainScene, which forgets the key and shows pairing.
+sub onAnswered(e as object)
+    if e.getData().code = 401 then stopStream()
+    ApiAnswer(e)
 end sub
 
 ' ---- skip intro and credits --------------------------------------------
