@@ -29,7 +29,7 @@ sub work()
         return
     end if
     m.top.code = code
-    m.top.state = "waiting"
+    m.top.outcome = "waiting"
 
     interval = 5
     if start.interval <> invalid and start.interval > interval then interval = start.interval
@@ -72,7 +72,7 @@ sub work()
     finish("refused", "This code has expired.")
 end sub
 
-sub finish(state as string, message as string)
+sub finish(outcome as string, message as string)
     m.top.message = message
-    m.top.state = state
+    m.top.outcome = outcome
 end sub

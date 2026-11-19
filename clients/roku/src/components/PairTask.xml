@@ -8,7 +8,9 @@
     <field id="name" type="string" />
     <field id="cancel" type="boolean" alwaysNotify="true" />
     <field id="code" type="string" />
-    <field id="state" type="string" />
+    <!-- Not "state": a Task already has one (init/run/stop/done), and a field
+         of that name here was overwritten by it, so "approved" never arrived. -->
+    <field id="outcome" type="string" />
     <field id="message" type="string" />
     <field id="result" type="assocarray" />
   </interface>

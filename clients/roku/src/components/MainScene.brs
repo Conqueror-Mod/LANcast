@@ -86,7 +86,7 @@ sub startPair(note as string)
     t.pem = s.pem
     t.name = deviceName()
     t.observeField("code", "onPairCode")
-    t.observeField("state", "onPairState")
+    t.observeField("outcome", "onPairOutcome")
     t.observeField("message", "onPairMessage")
     t.control = "run"
     m.pair = t
@@ -117,15 +117,15 @@ sub onPairMessage()
     if m.pair <> invalid and m.pair.message <> "" then m.screen.message = m.pair.message
 end sub
 
-sub onPairState()
+sub onPairOutcome()
     t = m.pair
     if t = invalid then return
-    if t.state = "approved" then
+    if t.outcome = "approved" then
         r = t.result
         StoreWrite({ key: r.key, keyId: r.keyId, userName: r.userName })
         m.pair = invalid
         showHome()
-    else if t.state = "refused" or t.state = "error" then
+    else if t.outcome = "refused" or t.outcome = "error" then
         m.screen.code = ""
         m.screen.message = t.message + " Choose Get a new code to try again."
         m.pair = invalid
