@@ -53,6 +53,7 @@ sub begin(item as object, at as dynamic)
     stopStream()
     m.item = item
     m.at = at
+    m.lastMs = -1
     m.audio = -1
     m.subUrl = ""
     m.detail = invalid
@@ -221,6 +222,7 @@ sub onState()
         ' server once, so a 401 reaches MainScene and the TV goes to pairing.
         m.probe = ApiSend("GET", "/api/items/" + m.item.id.toStr(), invalid, "onAnswered")
     else if s = "finished" then
+        if endedEarly() then return
         finished()
     end if
 end sub
@@ -230,6 +232,7 @@ sub onTick()
     m.ticks = m.ticks + 1
     if m.ticks mod 5 = 0 then saveProgress(positionMs(), false)
     atMs = positionMs()
+    m.lastMs = atMs
     markers(atMs)
     upNext(atMs)
 end sub
@@ -520,6 +523,18 @@ sub fail(message as string)
     m.status.text = message + " Press Back to return."
     m.status.visible = true
 end sub
+
+' endedEarly is true when Roku says "finished" far from the end: the server
+' restarted or the stream broke, and the player gave up. Marking that watched
+' would send the next Play back to 0:00, so keep the place and say so.
+function endedEarly() as boolean
+    if m.detail = invalid or m.detail.duration_ms = invalid or m.lastMs < 0 then return false
+    if m.detail.duration_ms - m.lastMs <= 60000 then return false
+    saveProgress(m.lastMs, false)
+    stopStream()
+    fail("The stream stopped at " + ClockText(m.lastMs) + ". Your place is kept.")
+    return true
+end function
 
 sub finished()
     if m.ended then return
