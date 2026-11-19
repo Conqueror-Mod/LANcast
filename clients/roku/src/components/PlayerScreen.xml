@@ -2,7 +2,7 @@
 <!--
   The player: Roku's own Video node and its controls, with LANcast's pieces
   over it — Skip intro and Skip credits, Up Next, and an audio and subtitle
-  menu on the options (*) key. Gold only on what you are on (design.md).
+  menu on the Down key. Gold only on what you are on (design.md).
 -->
 <component name="PlayerScreen" extends="Group">
   <interface>

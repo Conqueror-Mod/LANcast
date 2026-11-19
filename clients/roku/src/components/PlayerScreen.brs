@@ -556,10 +556,6 @@ function onKeyEvent(key as string, press as boolean) as boolean
         leave()
         return true
     end if
-    if key = "options" then
-        openMenu()
-        return true
-    end if
     ' Any other key while a prompt holds focus puts it away and leaves the
     ' picture to the remote: a skip you did not want, or an Up Next you did not.
     if m.skip.visible and m.skip.hasFocus() then
@@ -569,6 +565,12 @@ function onKeyEvent(key as string, press as boolean) as boolean
     end if
     if m.card.visible and m.nextNow.hasFocus() then
         hideCard(true)
+        return true
+    end if
+    ' Down opens the menu. The Video node keeps * (options) for Roku's own
+    ' caption menu and never passes it up, which the TV proved on build 7.
+    if key = "down" or key = "options" then
+        openMenu()
         return true
     end if
     return false
