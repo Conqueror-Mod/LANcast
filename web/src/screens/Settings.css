@@ -938,3 +938,13 @@ pre.set-network__pin {
 .set-user__pic {
   margin-right: 12px;
 }
+
+/* Pair a device (ADR 0125): the code a TV shows, typed as it is shown. */
+.pair .settings__section {
+  max-width: 640px;
+}
+.pair__code {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+}

@@ -53,7 +53,11 @@ func isPublicPath(p string) bool {
 		// A server proving its identity to a desktop client that is deciding
 		// whether to trust a new certificate (ADR 0124). Answers only a
 		// caller who already names this server's fingerprint.
-		"/api/identity/proof":
+		"/api/identity/proof",
+		// A TV pairing by code (ADR 0125): it has no credential until a
+		// signed-in person approves it. Rate-limited and capped in the
+		// handlers (pairing.go). Looking up and approving a code are not here.
+		"/api/devices/pair", "/api/devices/pair/poll", "/api/devices/pair/certificate":
 		return true
 	}
 	if isFederationPath(p) {
