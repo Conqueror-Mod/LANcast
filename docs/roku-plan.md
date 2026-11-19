@@ -1,6 +1,6 @@
 # Roku app — plan
 
-**Status: proposed, 2026-11-17; step 0b and 0c run the same day.** The first item on the 1.x roadmap. Nothing here is built, and nothing gets built until step 0's spikes have run on a real Roku.
+**Status: steps 0–6 built and proven on the TV (2026-11-19); step 7 decided: aim for the Roku Channel Store.** The first item on the 1.x roadmap.
 
 ## What it is
 
@@ -138,6 +138,57 @@ Two faults were found and fixed on the way:
 Still owed: 21 Jump Street's 24p judder on direct play, and switching the audio track on a title with more than one.
 
 **7. Distribution.** Sideloading (developer mode) covers Chris's own TVs and needs nothing from Roku. Anyone else needs the app published through Roku's developer program, which means certification and a review. Roku has also changed how unlisted or "beta" apps work more than once, so check the current rules when this step comes. Decide here whether a public listing is worth it.
+
+### Step 7 decision (2026-11-19): aim for the Roku Channel Store
+
+**The rules as checked on 2026-11-19.** Roku removed private, uncertified apps some years ago. Three ways are left:
+
+- **Sideloading** needs nothing from Roku. A TV holds one sideloaded app, and it never expires.
+- **A beta channel** installs from a private link with no review. It takes up to 20 testers per channel and 10 channels per account. **It is deleted, and disabled on every TV, 120 days after it was created.** Good for a friend test, but no way to ship.
+- **A public listing** passes certification on every submission.
+
+Self-hosted servers do get listed: Jellyfin and Emby are both in the store.
+
+Chosen: the store. Sideloading stays the way to develop, and a beta channel is the way to test with friends before each submission.
+
+**The certification criteria that bite** ([criteria](https://developer.roku.com/docs/developer-program/certification/certification.md), [Spring 2026 update](https://blog.roku.com/developer/channel-certification-criteria-updates-april-2026)). Re-read the current list when each item starts, because Roku revises it twice a year.
+
+1. **Trick-play thumbnails** for anything over 15 minutes ([trick mode](https://developer.roku.com/docs/developer-program/media-playback/trick-mode/trick-mode.md)), as BIF or as HLS image playlists. LANcast already makes scrub-bar preview sheets (ADR 0105). The work is a server route that serves them in a form Roku reads. BIF covers direct play and HLS with one format. It is an API change, so it goes in `docs/api.md` and `docs/openapi.json` with a test. Previews are off by default (`scrub_previews`), so the app has to play normally without them.
+2. **Deep linking** for every media type (5.1). The app is launched with `contentId` and `mediaType`, or receives them while running through `roInput`, and goes straight to the item. **Direct to Play** for voice commands (5.2): "play X" starts playback with no page in between. `contentId` is the LANcast item id.
+3. **Instant Resume** (US, required from 2026-10-01): the app comes back where it was after the TV switches away.
+4. **Performance:** time to launch, time to first frame, and remote response. Measure them on the TV against Roku's published budget before submitting. Pairing and the first Home load are the slow parts to watch.
+5. **The rest of the checklist:** artwork (icons and splash at Roku's sizes), a non-zero version, captions (done), and Back always leaving cleanly.
+
+**Reviewer access, the real cost.** A reviewer needs something to sign in to. The plan:
+
+- A **reviewer account** on the public server (`thelighthouse.dynv6.net`, a real certificate).
+- It is limited by ADR 0084's hidden libraries to **one demo library** of openly licensed films, for example the Blender Foundation's CC-BY films. None of the private library is shown.
+- It is not an administrator.
+- The submission notes give the server address and the account's password for the web page where the TV's code is approved.
+- The reviewer account is deleted or disabled between reviews. It is the one standing public login this step creates, so it is kept as small as possible.
+
+Before submitting, check that the demo library shows every path (direct, remux, transcode), subtitles, markers and Up Next.
+
+**What is Chris's alone:**
+
+- the Roku developer account, which needs his identity and agreement to Roku's terms;
+- the store listing's text and artwork;
+- a privacy statement URL: LANcast collects nothing (no phone-home), and the statement says so;
+- choosing and loading the demo films;
+- pressing Submit.
+
+**Order:**
+
+1. trick-play thumbnails (server + app);
+2. deep linking and Direct to Play;
+3. Instant Resume;
+4. a performance pass on the TV;
+5. artwork and the listing;
+6. the demo library and reviewer account;
+7. a beta channel round with a friend's TV;
+8. submit.
+
+Items 1–4 are code and can be proven on the sideloaded app the way steps 3–6 were.
 
 ## Build and test
 
