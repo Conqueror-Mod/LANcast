@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<!-- A film or show library as a poster grid, paged in as you move down it. -->
+<component name="LibraryScreen" extends="Group">
+  <interface>
+    <field id="library" type="assocarray" onChange="load" />
+    <field id="open" type="assocarray" alwaysNotify="true" />
+  </interface>
+  <script type="text/brightscript" uri="pkg:/source/api.brs" />
+  <script type="text/brightscript" uri="pkg:/source/format.brs" />
+  <script type="text/brightscript" uri="LibraryScreen.brs" />
+  <children>
+    <Label id="title" translation="[96,56]" width="1300" color="0xF2F5FBFF" font="font:LargeBoldSystemFont" />
+    <Label id="count" translation="[96,136]" width="1300" color="0xC3CBE2FF" font="font:SmallSystemFont" />
+    <MarkupGrid id="grid" translation="[96,200]" itemComponentName="PosterTile"
+      numColumns="7" numRows="2" itemSize="[220,400]" itemSpacing="[36,36]"
+      drawFocusFeedback="false" vertFocusAnimationStyle="floatingFocus" />
+    <Label id="status" translation="[96,480]" width="1600" wrap="true" color="0xF2F5FBFF" font="font:MediumSystemFont" />
+  </children>
+</component>

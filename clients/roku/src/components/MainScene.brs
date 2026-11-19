@@ -3,6 +3,10 @@
 
 sub init()
     m.holder = m.top.findNode("holder")
+    m.stack = []
+    ' The connection every signed-in screen reads (source/api.brs).
+    m.global.addFields({ lcBase: "", lcPublic: false, lcPemPath: "", lcKey: "", lcSignedOut: false })
+    m.global.observeField("lcSignedOut", "onSignedOut")
     m.check = PairingSelfCheck()
     print "LANcast pairing self-check: "; m.check.ok; " "; m.check.code; " "; m.check.digest
     route()
@@ -23,9 +27,30 @@ sub swap(screen as object)
     stopPairing()
     m.holder.removeChildrenIndex(m.holder.getChildCount(), 0)
     m.holder.appendChild(screen)
+    m.stack = [screen]
     m.screen = screen
     screen.setFocus(true)
 end sub
+
+' push opens a screen over the current one; Back returns to it as it was.
+sub push(screen as object)
+    m.screen.visible = false
+    m.holder.appendChild(screen)
+    m.stack.push(screen)
+    m.screen = screen
+    screen.setFocus(true)
+end sub
+
+function onKeyEvent(key as string, press as boolean) as boolean
+    if press and key = "back" and m.stack.count() > 1 then
+        m.holder.removeChild(m.stack.pop())
+        m.screen = m.stack.peek()
+        m.screen.visible = true
+        m.screen.setFocus(true)
+        return true
+    end if
+    return false
+end function
 
 ' ---- address -----------------------------------------------------------
 
@@ -151,7 +176,9 @@ sub showHome()
     screen.userName = s.userName
     screen.observeField("signOut", "onSignOut")
     screen.observeField("changeServer", "onChangeServer")
+    screen.observeField("openLibrary", "onOpenLibrary")
     swap(screen)
+    connect(s)
 
     t = CreateObject("roSGNode", "ApiTask")
     t.url = s.server + "/api/libraries"
@@ -161,6 +188,48 @@ sub showHome()
     t.observeField("response", "onLibraries")
     t.control = "run"
     m.api = t
+end sub
+
+' connect sets the connection the signed-in screens share, and the scene's
+' HTTP agent, which every Poster without one of its own fetches through: the
+' same pin and the same key as the API requests, so artwork needs nothing else.
+sub connect(s as object)
+    g = m.global
+    g.lcBase = s.server
+    g.lcPublic = s.public = "1"
+    g.lcPemPath = ""
+    agent = m.top.getHttpAgent()
+    if s.public = "1" then
+        agent.SetCertificatesFile("common:/certs/ca-bundle.crt")
+    else
+        g.lcPemPath = PinPath(s.pem)
+        agent.SetCertificatesFile(g.lcPemPath)
+    end if
+    agent.InitClientCertificates()
+    agent.SetHeaders({ Authorization: "Bearer " + s.key })
+    g.lcKey = s.key
+end sub
+
+sub onOpenLibrary()
+    screen = CreateObject("roSGNode", "LibraryScreen")
+    screen.observeField("open", "onOpenItem")
+    screen.library = m.screen.openLibrary
+    push(screen)
+end sub
+
+sub onOpenItem()
+    screen = CreateObject("roSGNode", "ItemScreen")
+    screen.item = m.screen.open
+    push(screen)
+end sub
+
+' A request anywhere answered 401: the key was revoked in Settings.
+sub onSignedOut()
+    if not m.global.lcSignedOut then return
+    m.global.lcSignedOut = false
+    if StoreRead().key = "" then return
+    StoreForgetKey()
+    startPair("This TV was signed out in LANcast. Pair it again to carry on.")
 end sub
 
 sub onLibraries()
