@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<!-- One library on the home screen. Gold edge only on the focused tile. -->
+<component name="LibraryTile" extends="Group">
+  <interface>
+    <field id="itemContent" type="node" onChange="show" />
+    <field id="width" type="float" onChange="layout" />
+    <field id="height" type="float" onChange="layout" />
+    <field id="focusPercent" type="float" onChange="onFocus" />
+    <field id="gridHasFocus" type="boolean" onChange="onFocus" />
+  </interface>
+  <script type="text/brightscript" uri="LibraryTile.brs" />
+  <children>
+    <Rectangle id="halo" color="0xC6A35AFF" opacity="0" />
+    <Rectangle id="ring" color="0xC6A35AFF" opacity="0.2" />
+    <Rectangle id="fill" color="0x0A0F22FF" />
+    <Label id="title" color="0xF2F5FBFF" font="font:MediumBoldSystemFont" translation="[28,40]" />
+    <Label id="sub" color="0xC3CBE2FF" font="font:SmallSystemFont" translation="[28,100]" />
+  </children>
+</component>

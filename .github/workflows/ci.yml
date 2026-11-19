@@ -288,6 +288,29 @@ jobs:
             exit 1
           fi
 
+  # The Roku app (ADR 0125 §4): BrightScript and SceneGraph, compiled and
+  # linted by BrighterScript, which fails on any error. It checks names,
+  # scopes and component wiring; behaviour on the TV is proven on the TV.
+  roku:
+    name: Roku
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: web/.nvmrc
+          cache: npm
+          cache-dependency-path: clients/roku/package-lock.json
+
+      - name: install
+        run: npm ci
+        working-directory: clients/roku
+
+      - name: compile and lint
+        run: npx bsc --create-package false
+        working-directory: clients/roku
+
   # The installer is only built on a tag, so until now nothing checked it until a
   # release was already being cut. That is how a shortcut shipped carrying the
   # literal text "$%ProgramData%\LANcast": the script compiled cleanly and simply

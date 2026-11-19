@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<!-- One signed-in GET against the paired server. -->
+<component name="ApiTask" extends="Task">
+  <interface>
+    <field id="url" type="string" />
+    <field id="public" type="boolean" />
+    <field id="pemPath" type="string" />
+    <field id="key" type="string" />
+    <field id="response" type="assocarray" />
+  </interface>
+  <script type="text/brightscript" uri="pkg:/source/http.brs" />
+  <script type="text/brightscript" uri="ApiTask.brs" />
+</component>

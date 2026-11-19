@@ -1,0 +1,12 @@
+{
+  "name": "lancast-roku",
+  "private": true,
+  "description": "LANcast for Roku (ADR 0125). BrightScript and SceneGraph, compiled by BrighterScript.",
+  "scripts": {
+    "build": "bsc",
+    "lint": "bsc --create-package false"
+  },
+  "devDependencies": {
+    "brighterscript": "0.73.8"
+  }
+}

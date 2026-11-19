@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<!-- Asks to pair, shows the code, and polls until somebody answers. -->
+<component name="PairTask" extends="Task">
+  <interface>
+    <field id="base" type="string" />
+    <field id="public" type="boolean" />
+    <field id="pem" type="string" />
+    <field id="name" type="string" />
+    <field id="cancel" type="boolean" alwaysNotify="true" />
+    <field id="code" type="string" />
+    <field id="state" type="string" />
+    <field id="message" type="string" />
+    <field id="result" type="assocarray" />
+  </interface>
+  <script type="text/brightscript" uri="pkg:/source/http.brs" />
+  <script type="text/brightscript" uri="pkg:/source/pairing.brs" />
+  <script type="text/brightscript" uri="PairTask.brs" />
+</component>
