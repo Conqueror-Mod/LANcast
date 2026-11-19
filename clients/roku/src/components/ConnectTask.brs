@@ -19,8 +19,10 @@ sub work()
         m.top.result = { ok: true, public: false, pem: r.body }
         return
     end if
-    if r.code = 404 then
-        m.top.result = { ok: false, error: "That server does not offer TV pairing. Update LANcast and try again." }
+    ' A LANcast from before TV pairing answers the route as a signed-in one
+    ' (401, "sign in to continue") or not at all (404). Say what that means.
+    if r.code = 401 or r.code = 404 then
+        m.top.result = { ok: false, error: "The LANcast server at " + m.top.base + " is too old to pair a TV. Update LANcast and try again." }
         return
     end if
     m.top.result = { ok: false, error: "Could not reach a LANcast server at " + m.top.base + " (" + ErrorText(r) + ")." }
