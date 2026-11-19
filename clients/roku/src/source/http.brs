@@ -46,8 +46,10 @@ end function
 ' ErrorText is what a failed request should say on screen.
 function ErrorText(r as object) as string
     if r.code > 0 then
+        ' Only an object can carry an error: a successful answer may be an array,
+        ' and reading .error off an array stops the app.
         j = ParseJson(r.body)
-        if j <> invalid and j.error <> invalid and j.error.message <> invalid then return j.error.message
+        if type(j) = "roAssociativeArray" and type(j.error) = "roAssociativeArray" and j.error.message <> invalid then return j.error.message
         return "the server answered " + r.code.toStr()
     end if
     if r.error <> invalid and r.error <> "" then return r.error
