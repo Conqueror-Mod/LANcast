@@ -5,13 +5,21 @@
 ' ApiGet starts one GET and calls handler (a sub taking the field event) with
 ' its response. Keep the returned task: a task nothing holds is collected.
 function ApiGet(path as string, handler as string) as object
+    return ApiSend("GET", path, invalid, handler)
+end function
+
+' ApiSend is ApiGet with a method and, for PUT and POST, a body sent as JSON.
+' handler may be "" when nobody needs the answer.
+function ApiSend(method as string, path as string, body as dynamic, handler as string) as object
     g = m.global
     t = CreateObject("roSGNode", "ApiTask")
+    t.method = method
+    if body <> invalid then t.body = FormatJson(body)
     t.url = g.lcBase + path
     t.public = g.lcPublic
     t.pemPath = g.lcPemPath
     t.key = g.lcKey
-    t.observeField("response", handler)
+    if handler <> "" then t.observeField("response", handler)
     t.control = "run"
     return t
 end function

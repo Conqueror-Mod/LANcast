@@ -1,5 +1,6 @@
 ' A film shows Play (and Resume when started); a show lists its seasons and,
-' beside them, the episodes of the one you are on. Playing is step 5.
+' beside them, the episodes of the one you are on. Choosing either asks
+' MainScene for the player.
 
 sub init()
     m.backdrop = m.top.findNode("backdrop")
@@ -18,12 +19,13 @@ sub init()
     m.episodeItems = []
     m.shownSeason = -1
     m.synopsis = ""
-    m.play.observeField("selected", "onPlay")
-    m.restart.observeField("selected", "onPlay")
+    m.allEpisodes = []
+    m.play.observeField("selected", "onPlayFilm")
+    m.restart.observeField("selected", "onRestartFilm")
     m.seasons.observeField("itemFocused", "onSeasonFocused")
     m.seasons.observeField("itemSelected", "onSeasonSelected")
     m.episodes.observeField("itemFocused", "onEpisodeFocused")
-    m.episodes.observeField("itemSelected", "onPlay")
+    m.episodes.observeField("itemSelected", "onPlayEpisode")
     m.top.observeField("focusedChild", "onFocus")
 end sub
 
@@ -51,6 +53,7 @@ sub load()
     if m.isShow then
         m.status.text = "Loading episodes…"
         m.childTask = ApiGet("/api/items?parent_id=" + it.id.toStr() + "&limit=500", "onChildren")
+        m.allTask = ApiGet("/api/items/" + it.id.toStr() + "/episodes", "onAllEpisodes")
     else
         m.play.visible = true
         resumeButtons(it)
@@ -211,8 +214,42 @@ end sub
 
 ' ---- both --------------------------------------------------------------
 
-sub onPlay()
-    m.status.text = "Playing comes in the next build."
+sub onPlayFilm()
+    m.top.play = { item: m.top.item, at: -1 }
+end sub
+
+sub onRestartFilm()
+    m.top.play = { item: m.top.item, at: 0 }
+end sub
+
+sub onPlayEpisode()
+    ep = m.episodeItems[m.episodes.itemSelected]
+    if ep = invalid then return
+    m.top.play = { item: ep, at: -1, queue: m.allEpisodes }
+end sub
+
+' The show's episodes in playing order (GET /api/items/{id}/episodes), which
+' is what Up Next walks: seasons are folders, the order is the show's.
+sub onAllEpisodes(e as object)
+    r = ApiAnswer(e)
+    if r.code <> 200 or type(r.data) <> "roAssociativeArray" then return
+    if type(r.data.episodes) = "roArray" then m.allEpisodes = r.data.episodes
+end sub
+
+' Back from the player: Resume, watched marks and the episode to land on have
+' all moved, so ask again rather than show what was true before.
+sub onRefresh()
+    it = m.top.item
+    m.detailTask = ApiGet("/api/items/" + it.id.toStr(), "onDetail")
+    if not m.isShow then return
+    m.allTask = ApiGet("/api/items/" + it.id.toStr() + "/episodes", "onAllEpisodes")
+    if m.seasonItems.count() > 0 then
+        i = m.shownSeason
+        m.shownSeason = -1
+        showSeason(i)
+    else
+        m.childTask = ApiGet("/api/items?parent_id=" + it.id.toStr() + "&limit=500", "onChildren")
+    end if
 end sub
 
 function onKeyEvent(key as string, press as boolean) as boolean

@@ -1,8 +1,10 @@
 <?xml version="1.0" encoding="utf-8" ?>
-<!-- One signed-in GET against the paired server. -->
+<!-- One signed-in request against the paired server: a GET unless method says otherwise. -->
 <component name="ApiTask" extends="Task">
   <interface>
     <field id="url" type="string" />
+    <field id="method" type="string" value="GET" />
+    <field id="body" type="string" />
     <field id="public" type="boolean" />
     <field id="pemPath" type="string" />
     <field id="key" type="string" />

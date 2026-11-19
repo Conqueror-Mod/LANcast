@@ -41,12 +41,17 @@ sub push(screen as object)
     screen.setFocus(true)
 end sub
 
+sub pop()
+    if m.stack.count() <= 1 then return
+    m.holder.removeChild(m.stack.pop())
+    m.screen = m.stack.peek()
+    m.screen.visible = true
+    m.screen.setFocus(true)
+end sub
+
 function onKeyEvent(key as string, press as boolean) as boolean
     if press and key = "back" and m.stack.count() > 1 then
-        m.holder.removeChild(m.stack.pop())
-        m.screen = m.stack.peek()
-        m.screen.visible = true
-        m.screen.setFocus(true)
+        pop()
         return true
     end if
     return false
@@ -219,8 +224,25 @@ end sub
 
 sub onOpenItem()
     screen = CreateObject("roSGNode", "ItemScreen")
+    screen.observeField("play", "onPlay")
     screen.item = m.screen.open
     push(screen)
+end sub
+
+sub onPlay()
+    screen = CreateObject("roSGNode", "PlayerScreen")
+    screen.observeField("done", "onPlayerDone")
+    push(screen)
+    screen.start = m.stack[m.stack.count() - 2].play
+end sub
+
+' Back from the player: every screen under it shows play state that may now
+' be stale (CLAUDE.md: a write that changes a list must invalidate it).
+sub onPlayerDone()
+    pop()
+    for each screen in m.stack
+        if screen.hasField("refresh") then screen.refresh = true
+    end for
 end sub
 
 ' A request anywhere answered 401: the key was revoked in Settings.
