@@ -122,6 +122,13 @@ export function App() {
             path="/peers/:fingerprint/library/:library/in/:parent"
             element={<PeerLibrary />}
           />
+          {/* Their collections, in one place, as a movie library's own
+              Collections button gives the household. The browse grid leaves
+              them out so its count is a count of films. */}
+          <Route
+            path="/peers/:fingerprint/library/:library/collections"
+            element={<PeerLibrary view="collections" />}
+          />
           <Route
             path="/peers/:fingerprint/item/:item"
             element={<PeerPlayer />}

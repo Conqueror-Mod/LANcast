@@ -21,23 +21,34 @@
 }
 
 /*
- * Download, where a friend's share allows it. Quiet at rest like the rest of
- * the header: the same bordered button as Download again on the Downloads
- * page, gold only on focus (docs/design.md).
+ * The header is a row: the title on the left, More Options at the right, so
+ * nothing sits between the title and the film. Wraps on a narrow screen.
  */
-.peer-player__download {
-  display: inline-block;
-  margin-top: 8px;
+.peer-player__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  column-gap: 16px;
+}
+
+.peer-player__head > .peer-player__back {
+  flex-basis: 100%;
+}
+
+.peer-player__more {
+  margin-left: auto;
   padding: 5px 12px;
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: var(--radius-tile);
+  background: none;
   color: var(--text-secondary);
+  font: inherit;
   font-size: 12px;
-  text-decoration: none;
+  cursor: pointer;
 }
 
-.peer-player__download:hover,
-.peer-player__download:focus-visible {
+.peer-player__more:hover,
+.peer-player__more:focus-visible {
   border-color: var(--gold);
   outline: none;
 }

@@ -111,3 +111,28 @@ export function downloadedAt(
 export function downloadURL(itemId: number): string {
   return `/api/items/${itemId}/download`;
 }
+
+/*
+ * Start a download from a friend's server and record it.
+ *
+ * An anchor with the download attribute, clicked: the window's own download
+ * manager takes it and the page stays where it is. Proven in a real WebView2
+ * window, like location.href; an anchor also never looks like leaving the
+ * page to anything listening for that.
+ */
+export function startPeerDownload(
+  fingerprint: string,
+  itemId: number,
+  title: string,
+  record: (r: Receipt) => void,
+): void {
+  const r: Receipt = { itemId, title, filename: "", peer: fingerprint, at: Date.now() };
+  record(r);
+  const a = document.createElement("a");
+  a.href = receiptURL(r);
+  a.download = "";
+  a.rel = "noopener";
+  document.body.append(a);
+  a.click();
+  a.remove();
+}

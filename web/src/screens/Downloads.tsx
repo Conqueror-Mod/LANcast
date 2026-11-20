@@ -67,7 +67,11 @@ export function Downloads() {
               )}
               {/* The filename the server proposed, so this list can be read
                   beside a Downloads folder and matched to it. */}
-              <span className="downloads__file">{r.filename}</span>
+              {/* Absent for a friend's file: their server names it, and
+                  repeating the title here only said it twice. */}
+              {r.filename && (
+                <span className="downloads__file">{r.filename}</span>
+              )}
             </div>
 
             <span className="downloads__when">
@@ -77,7 +81,7 @@ export function Downloads() {
             <a
               className="downloads__again"
               href={receiptURL(r)}
-              download={r.filename}
+              download={r.filename || ""}
             >
               Download again
             </a>

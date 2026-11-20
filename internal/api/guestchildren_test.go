@@ -198,13 +198,40 @@ func TestAGuestSeesAndOpensASharedCollection(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	top := guestIDs(t, f, token, "library="+itoa(f.h.lib.ID))
-	found := false
-	for _, id := range top {
-		found = found || id == coll
+	has := func(ids []int64, want int64) bool {
+		for _, id := range ids {
+			if id == want {
+				return true
+			}
+		}
+		return false
 	}
-	if !found {
-		t.Fatalf("the collection is missing from a friend's top level: %v", top)
+	lib := "library=" + itoa(f.h.lib.ID)
+
+	// Not in the browse grid, so the total counts films, as the household's
+	// own grid does: a friend's read 1,440 over a library of 1,253.
+	var grid struct {
+		Items []struct {
+			ID int64 `json:"id"`
+		} `json:"items"`
+		Total int `json:"total"`
+	}
+	decode(t, f.asGuest(t, token, http.MethodGet, "/api/guest/items?"+lib), &grid)
+	if grid.Total != len(members) {
+		t.Errorf("grid total = %d, want %d films and no collection", grid.Total, len(members))
+	}
+	for _, it := range grid.Items {
+		if it.ID == coll {
+			t.Error("a collection is in a friend's browse grid")
+		}
+	}
+	// Listed on their own, which is the friend's Collections view.
+	if got := guestIDs(t, f, token, lib+"&kind=collection"); len(got) != 1 || got[0] != coll {
+		t.Errorf("kind=collection = %v, want only %d", got, coll)
+	}
+	// And found by name.
+	if !has(guestIDs(t, f, token, lib+"&q=Saga"), coll) {
+		t.Error("a search for the collection's name does not find it")
 	}
 
 	inside := guestIDs(t, f, token, "library="+itoa(f.h.lib.ID)+"&parent="+itoa(coll))
@@ -255,5 +282,40 @@ func TestAGuestCannotOpenACollectionInAnUnsharedLibrary(t *testing.T) {
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusNotFound {
 		t.Errorf("a collection from an unshared library: status %d, want 404", resp.StatusCode)
+	}
+}
+
+// Release order, not the alphabet: "28 Weeks Later" (2007) after "28 Days
+// Later" (2002) happens to agree with both, so the films here disagree.
+func TestAGuestsCollectionIsInReleaseOrder(t *testing.T) {
+	f := newRedeemFixture(t)
+	token := guestToken(t, f)
+	ctx := context.Background()
+	peer := identity.Normalize(f.georgia.Fingerprint())
+	coll, _, err := f.h.st.EnsureCollection(ctx, f.h.lib.ID, "tmdb", "c2", "Order Collection", "order collection")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var want []int64
+	for _, c := range []struct {
+		name string
+		year int
+	}{{"zebra.mkv", 1999}, {"apple.mkv", 2004}, {"mango.mkv", 2010}} {
+		id := f.h.addFile(t, c.name, []byte("f"))
+		y := c.year
+		if err := f.h.st.UpdateItemMetadata(ctx, id, store.ItemMetadata{Year: &y}); err != nil {
+			t.Fatal(err)
+		}
+		if err := f.h.st.AddToCollection(ctx, id, coll, 0); err != nil {
+			t.Fatal(err)
+		}
+		want = append(want, id)
+	}
+	if err := f.h.st.ShareLibrary(ctx, peer, f.h.lib.ID, "", time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	got := guestIDs(t, f, token, "library="+itoa(f.h.lib.ID)+"&parent="+itoa(coll))
+	if len(got) != 3 || got[0] != want[0] || got[1] != want[1] || got[2] != want[2] {
+		t.Errorf("collection order = %v, want release order %v", got, want)
 	}
 }

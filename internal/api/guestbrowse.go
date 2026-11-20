@@ -43,6 +43,10 @@ type guestLibrary struct {
 	ID   int64  `json:"id"`
 	Name string `json:"name"`
 	Kind string `json:"kind"`
+	// Downloads is whether this share lets the friend keep files as well as
+	// watch them, so their tiles can offer Download. A hint: the download
+	// route asks again for itself.
+	Downloads bool `json:"downloads"`
 }
 
 /*
@@ -86,7 +90,9 @@ func (s *Server) writeSharedLibraries(w http.ResponseWriter, r *http.Request, pe
 			// somebody else's server; it is simply not there.
 			continue
 		}
-		out = append(out, guestLibrary{ID: l.ID, Name: l.Name, Kind: l.Kind})
+		// A lookup that fails costs the hint, not the listing.
+		downloads, _ := s.st.ShareAllowsDownloads(r.Context(), peerFP, l.ID)
+		out = append(out, guestLibrary{ID: l.ID, Name: l.Name, Kind: l.Kind, Downloads: downloads})
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"libraries": out})
 }
@@ -210,12 +216,17 @@ func (s *Server) writeSharedItems(w http.ResponseWriter, r *http.Request, peerFP
 		 * own list, it groups through a table of its own, and nothing here
 		 * opens one, so the tile would be a dead end.
 		 *
-		 * Collections are listed. They were left out on the same reasoning
-		 * until a friend reported that the host's collections were missing
-		 * from their shared library: a franchise is part of how a library is
-		 * organised, not a private list, and `parent` now opens one.
+		 * Collections are left out of the browse grid too, as they are from
+		 * the household's own (exclude_kind=collection), so the total counts
+		 * films rather than films plus franchises: a friend's grid read
+		 * "1,440" over a library of 1,253. They are listed on their own with
+		 * kind=collection, which is the friend's Collections view, and a
+		 * search still finds them by name.
 		 */
 		f.ExcludeKinds = []string{"playlist"}
+		if f.Query == "" {
+			f.ExcludeKinds = append(f.ExcludeKinds, "collection")
+		}
 	}
 
 	items, total, err := s.st.ListItems(r.Context(), f)

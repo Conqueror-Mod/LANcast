@@ -4,6 +4,8 @@ import { ApiFailure } from "@/api/client";
 import { usePeerLibraries, usePeerItems } from "@/api/hooks";
 import { PosterTile } from "@/components/PosterTile";
 import { peerArtworkURL } from "@/playback/peerSource";
+import { useDownloads, startPeerDownload } from "@/lib/downloads";
+import type { MenuAction } from "@/components/Menu";
 import type { Item } from "@/api/types";
 import "./PeerLibrary.css";
 
@@ -46,7 +48,8 @@ type Opened = { title?: string; kind?: string };
  * it is for the two never to share a code path that could be taught to
  * concatenate.
  */
-export function PeerLibrary() {
+export function PeerLibrary({ view }: { view?: "collections" } = {}) {
+  const collectionsView = view === "collections";
   const { fingerprint = "", library = "", parent = "" } = useParams();
   const libraryID = Number(library);
   // Inside one of their containers, or at the top of the library.
@@ -56,6 +59,7 @@ export function PeerLibrary() {
   const [query, setQuery] = useState("");
 
   const libs = usePeerLibraries(fingerprint);
+  const [, recordDownload] = useDownloads();
   const items = usePeerItems(
     fingerprint,
     libraryID,
@@ -65,11 +69,18 @@ export function PeerLibrary() {
     // An album in the order the record plays; everything else as the server
     // orders it, which puts seasons and episodes in number order.
     opened.kind === "album" ? "track" : "",
+    collectionsView ? "collection" : "",
   );
 
   const here = libs.data?.libraries.find((l) => l.id === libraryID);
   // The heading: the container when inside one, else the library.
-  const heading = parentID ? (opened.title ?? "Shared library") : here?.name;
+  const heading = parentID
+    ? (opened.title ?? "Shared library")
+    : collectionsView
+      ? `${here?.name ?? "Shared library"}: Collections`
+      : here?.name;
+  // A level below the library: back goes up rather than out to People.
+  const inside = parentID > 0 || collectionsView;
 
   /*
    * A server that is not answering is said plainly, and said as a fact about
@@ -93,7 +104,7 @@ export function PeerLibrary() {
     const refused = err?.code === "peer_refused";
     return (
       <div className="peer-lib">
-        <PeerLibraryHeader name={heading} inside={parentID > 0} />
+        <PeerLibraryHeader name={heading} inside={inside} />
         <p className="peer-lib__away">
           {refused
             ? "This is not shared with you any more. Their server answered; it is what they chose."
@@ -103,13 +114,48 @@ export function PeerLibrary() {
     );
   }
 
+  const open = (item: Item) =>
+    isPeerContainer(item)
+      ? navigate(
+          `/peers/${encodeURIComponent(fingerprint)}/library/${libraryID}/in/${item.id}`,
+          {
+            state: {
+              title: item.title,
+              kind: item.kind,
+            } satisfies Opened,
+          },
+        )
+      : navigate(`/peers/${encodeURIComponent(fingerprint)}/item/${item.id}`, {
+          state: { title: item.title },
+        });
+
+  /*
+   * Right-click, as on the household's own tiles. Open or play, and Download
+   * where their share allows it: a container has no file of its own. The
+   * share's switch comes with the library listing, so no tile asks their
+   * server anything until somebody chooses.
+   */
+  const tileActions = (item: Item): MenuAction[] => {
+    const out: MenuAction[] = [
+      { label: isPeerContainer(item) ? "Open" : "Play", onSelect: () => open(item) },
+    ];
+    if (here?.downloads && !isPeerContainer(item)) {
+      out.push({
+        label: "Download",
+        onSelect: () =>
+          startPeerDownload(fingerprint, item.id, item.title, recordDownload),
+      });
+    }
+    return out;
+  };
+
   const pages = items.data?.pages ?? [];
   const list = pages.flatMap((p) => p.items);
   const total = pages[0]?.total ?? 0;
 
   return (
     <div className="peer-lib">
-      <PeerLibraryHeader name={heading} inside={parentID > 0} />
+      <PeerLibraryHeader name={heading} inside={inside} />
 
       <div className="peer-lib__tools">
         {!parentID && (
@@ -121,6 +167,24 @@ export function PeerLibrary() {
             onChange={(e) => setQuery(e.target.value)}
             aria-label="Search this library"
           />
+        )}
+        {/*
+          Their collections in one place, for a movie library, as the
+          household's own library has. The grid leaves them out so its count
+          is a count of films.
+        */}
+        {!parentID && !collectionsView && here?.kind === "movie" && (
+          <button
+            type="button"
+            className="peer-lib__more-button"
+            onClick={() =>
+              navigate(
+                `/peers/${encodeURIComponent(fingerprint)}/library/${libraryID}/collections`,
+              )
+            }
+          >
+            Collections
+          </button>
         )}
         {items.data && (
           /*
@@ -178,22 +242,8 @@ export function PeerLibrary() {
             posterURL={(it) =>
               peerArtworkURL(fingerprint, it.id, it.artwork?.poster)
             }
-            onOpen={() =>
-              isPeerContainer(item)
-                ? navigate(
-                    `/peers/${encodeURIComponent(fingerprint)}/library/${libraryID}/in/${item.id}`,
-                    {
-                      state: {
-                        title: item.title,
-                        kind: item.kind,
-                      } satisfies Opened,
-                    },
-                  )
-                : navigate(
-                    `/peers/${encodeURIComponent(fingerprint)}/item/${item.id}`,
-                    { state: { title: item.title } },
-                  )
-            }
+            onOpen={() => open(item)}
+            actions={tileActions}
           />
         ))}
       </div>
