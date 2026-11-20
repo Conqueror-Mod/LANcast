@@ -1821,6 +1821,10 @@ func (s *Store) ListItems(ctx context.Context, f ItemFilter) ([]Item, int, error
 		order = ` ORDER BY year DESC, sort_title`
 	case "added":
 		order = ` ORDER BY added_at DESC, sort_title`
+	case "release":
+		// Oldest first, undated last: a franchise in the order it is watched,
+		// the rule CollectionMembers follows for the household's own page.
+		order = ` ORDER BY year IS NULL, year, sort_title`
 	case "rating":
 		// Highest rated first; unrated rows sink to the bottom rather than
 		// sorting as if they were zero-rated.
@@ -3117,6 +3121,19 @@ func (s *Store) RemoveFromCollection(ctx context.Context, itemID, collectionID i
 		return fmt.Errorf("remove item %d from collection %d: %w", itemID, collectionID, err)
 	}
 	return nil
+}
+
+// ItemIsKind reports whether an item exists and is of the given kind. A
+// missing item is simply false: the caller has already decided whether the
+// id may be seen at all.
+func (s *Store) ItemIsKind(ctx context.Context, itemID int64, kind string) (bool, error) {
+	var n int
+	err := s.db.QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM media_item WHERE id = ? AND kind = ?`, itemID, kind).Scan(&n)
+	if err != nil {
+		return false, fmt.Errorf("item kind: %w", err)
+	}
+	return n > 0, nil
 }
 
 // CollectionMembers returns a collection's members in their curated order.

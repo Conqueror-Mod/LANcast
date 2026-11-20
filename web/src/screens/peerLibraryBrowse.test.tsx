@@ -55,6 +55,12 @@ beforeEach(() => {
           total: 1,
         });
       }
+      if (url.includes("parent=80")) {
+        return json({
+          items: [{ id: 801, title: "Part One", kind: "movie", library_id: 4, artwork: {} }],
+          total: 1,
+        });
+      }
       if (url.includes("parent=70")) {
         return json({
           items: [{ id: 701, title: "Track One", kind: "track", library_id: 4, artwork: {} }],
@@ -66,8 +72,9 @@ beforeEach(() => {
           { id: 50, title: "A Show", kind: "show", library_id: 4, artwork: {} },
           { id: 70, title: "A Record", kind: "album", library_id: 4, artwork: {} },
           { id: 60, title: "A Film", kind: "movie", library_id: 4, artwork: {} },
+          { id: 80, title: "A Saga", kind: "collection", library_id: 4, artwork: {} },
         ],
-        total: 3,
+        total: 4,
       });
     }),
   );
@@ -136,6 +143,20 @@ describe("a friend's library", () => {
     await act(async () => tile("A Record").click());
     await settle();
     expect(gets.some((u) => u.includes("parent=70") && u.includes("sort=track"))).toBe(true);
+  });
+
+  // Reported from a real pairing: the host's collections were missing from a
+  // friend's shared library. A collection opens as its films, which play.
+  it("opens a collection as its films", async () => {
+    await render();
+    await act(async () => tile("A Saga").click());
+    await settle();
+    expect(path).toBe(`/peers/${FP}/library/4/in/80`);
+    expect(host.querySelector("h1")?.textContent).toBe("A Saga");
+    expect(host.textContent).toContain("Part One");
+
+    await act(async () => tile("Part One").click());
+    expect(path).toBe(`/peers/${FP}/item/801`);
   });
 
   it("still plays a film straight from the library", async () => {

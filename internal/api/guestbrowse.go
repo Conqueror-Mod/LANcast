@@ -181,17 +181,41 @@ func (s *Server) writeSharedItems(w http.ResponseWriter, r *http.Request, peerFP
 			writeError(w, http.StatusNotFound, "not_found", "no such item")
 			return
 		}
-		f.ParentID = &parentID
 		f.TopLevel = false
+		/*
+		 * A collection's members live in item_collection, not under
+		 * parent_id (ADR 0017), so opening one is a membership filter rather
+		 * than a parent one. Scope and the ceiling above still apply to every
+		 * member: a franchise that reaches into a library this peer was not
+		 * given lists only the films it was, and a film above the share's
+		 * limit stays out however it is reached. Release order, which is how
+		 * the household's own collection page reads.
+		 */
+		isCollection, err := s.st.ItemIsKind(r.Context(), parentID, "collection")
+		if err != nil {
+			s.writeInternal(w, err, "parent kind")
+			return
+		}
+		if isCollection {
+			f.CollectionIDs = []int64{parentID}
+			if f.Sort == "" {
+				f.Sort = "release"
+			}
+		} else {
+			f.ParentID = &parentID
+		}
 	} else if f.TopLevel {
 		/*
-		 * No collections or playlists among a friend's top level. Both group
-		 * through tables of their own rather than parent_id, so there is
-		 * nothing `parent` could open inside one, and the tile would be a dead
-		 * end; their members are all listed on their own anyway. The browse
-		 * grid here leaves them out for the same reason.
+		 * No playlists among a friend's top level. A playlist is a person's
+		 * own list, it groups through a table of its own, and nothing here
+		 * opens one, so the tile would be a dead end.
+		 *
+		 * Collections are listed. They were left out on the same reasoning
+		 * until a friend reported that the host's collections were missing
+		 * from their shared library: a franchise is part of how a library is
+		 * organised, not a private list, and `parent` now opens one.
 		 */
-		f.ExcludeKinds = []string{"collection", "playlist"}
+		f.ExcludeKinds = []string{"playlist"}
 	}
 
 	items, total, err := s.st.ListItems(r.Context(), f)
