@@ -112,9 +112,8 @@ func TestAGuestCannotOpenAShowInAnUnsharedLibrary(t *testing.T) {
 	}
 }
 
-// No playlists or collections among a friend's top level: they group through
-// tables of their own, so there is nothing inside one to open, and every
-// member is listed anyway.
+// No playlists among a friend's top level: a playlist is a person's own list,
+// and nothing on a friend's screen opens one.
 func TestAGuestsTopLevelLeavesOutPlaylists(t *testing.T) {
 	f := newRedeemFixture(t)
 	token := guestToken(t, f)
@@ -143,5 +142,118 @@ func TestAGuestsTopLevelLeavesOutPlaylists(t *testing.T) {
 	}
 	if seen[list] {
 		t.Error("a playlist was offered to a friend, with nothing inside it they could open")
+	}
+}
+
+/*
+ * A friend sees the host's collections and can open one.
+ *
+ * Reported from a real pairing: the host's franchises were missing from the
+ * friend's view of a shared film library. They were left out on purpose,
+ * because nothing could open one; `parent` now does, through the membership
+ * table, under the same scope and ceiling as everything else.
+ */
+func seedSharedCollection(t *testing.T, h *harness) (coll int64, members []int64) {
+	t.Helper()
+	ctx := context.Background()
+	coll, _, err := h.st.EnsureCollection(ctx, h.lib.ID, "tmdb", "c1", "Saga Collection", "saga collection")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i, name := range []string{"saga-1.mkv", "saga-2.mkv"} {
+		id := h.addFile(t, name, []byte("f"))
+		year := 2001 + i
+		if err := h.st.UpdateItemMetadata(ctx, id, store.ItemMetadata{Year: &year}); err != nil {
+			t.Fatal(err)
+		}
+		if err := h.st.AddToCollection(ctx, id, coll, 0); err != nil {
+			t.Fatal(err)
+		}
+		members = append(members, id)
+	}
+	return coll, members
+}
+
+func guestIDs(t *testing.T, f redeemFixture, token, query string) []int64 {
+	t.Helper()
+	var got struct {
+		Items []struct {
+			ID int64 `json:"id"`
+		} `json:"items"`
+	}
+	decode(t, f.asGuest(t, token, http.MethodGet, "/api/guest/items?"+query), &got)
+	out := make([]int64, 0, len(got.Items))
+	for _, it := range got.Items {
+		out = append(out, it.ID)
+	}
+	return out
+}
+
+func TestAGuestSeesAndOpensASharedCollection(t *testing.T) {
+	f := newRedeemFixture(t)
+	token := guestToken(t, f)
+	peer := identity.Normalize(f.georgia.Fingerprint())
+	coll, members := seedSharedCollection(t, f.h)
+	if err := f.h.st.ShareLibrary(context.Background(), peer, f.h.lib.ID, "", time.Now()); err != nil {
+		t.Fatal(err)
+	}
+
+	top := guestIDs(t, f, token, "library="+itoa(f.h.lib.ID))
+	found := false
+	for _, id := range top {
+		found = found || id == coll
+	}
+	if !found {
+		t.Fatalf("the collection is missing from a friend's top level: %v", top)
+	}
+
+	inside := guestIDs(t, f, token, "library="+itoa(f.h.lib.ID)+"&parent="+itoa(coll))
+	if len(inside) != 2 || inside[0] != members[0] || inside[1] != members[1] {
+		t.Errorf("inside the collection = %v, want %v in release order", inside, members)
+	}
+}
+
+// A member above the share's ceiling stays out, reached through a collection
+// or not.
+func TestAGuestsCollectionKeepsTheCeiling(t *testing.T) {
+	f := newRedeemFixture(t)
+	token := guestToken(t, f)
+	ctx := context.Background()
+	peer := identity.Normalize(f.georgia.Fingerprint())
+	coll, members := seedSharedCollection(t, f.h)
+	for i, r := range []string{"PG", "R"} {
+		r := r
+		if err := f.h.st.UpdateItemMetadata(ctx, members[i], store.ItemMetadata{ContentRating: &r}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := f.h.st.ShareLibrary(ctx, peer, f.h.lib.ID, "PG", time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	inside := guestIDs(t, f, token, "library="+itoa(f.h.lib.ID)+"&parent="+itoa(coll))
+	if len(inside) != 1 || inside[0] != members[0] {
+		t.Errorf("inside a collection under a PG share = %v, want only %d", inside, members[0])
+	}
+}
+
+// A collection in a library that was not shared is a 404, like any container.
+func TestAGuestCannotOpenACollectionInAnUnsharedLibrary(t *testing.T) {
+	f := newRedeemFixture(t)
+	token := guestToken(t, f)
+	ctx := context.Background()
+	peer := identity.Normalize(f.georgia.Fingerprint())
+	coll, _ := seedSharedCollection(t, f.h)
+	shared, err := f.h.st.CreateLibrary(ctx, "Shared", "movie", t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := f.h.st.ShareLibrary(ctx, peer, shared.ID, "", time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	resp := f.asGuest(t, token, http.MethodGet,
+		"/api/guest/items?library="+itoa(shared.ID)+"&parent="+itoa(coll))
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusNotFound {
+		t.Errorf("a collection from an unshared library: status %d, want 404", resp.StatusCode)
 	}
 }

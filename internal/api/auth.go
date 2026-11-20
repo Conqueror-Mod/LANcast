@@ -89,6 +89,7 @@ var peerAuthenticated = []string{
 	"/api/federation/libraries",
 	"/api/federation/items",
 	"/api/federation/stream",
+	"/api/federation/download",
 	"/api/federation/playback",
 	"/api/federation/transcode",
 	"/api/federation/hls/{item}/index.m3u8",

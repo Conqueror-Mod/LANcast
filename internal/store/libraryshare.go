@@ -44,6 +44,9 @@ type LibraryShare struct {
 	// carries no certificate ignores it entirely (ADR 0071 §6).
 	Ceiling  string `json:"ceiling"`
 	SharedAt int64  `json:"shared_at"`
+	// Downloads is whether the friend may take a file away as well as watch
+	// it. Off unless the host turns it on, per share.
+	Downloads bool `json:"downloads"`
 }
 
 /*
@@ -95,7 +98,7 @@ func (s *Store) UnshareLibrary(ctx context.Context, fingerprint string, libraryI
 // SharesTo lists what one peer has been granted, for the host's own screen.
 func (s *Store) SharesTo(ctx context.Context, fingerprint string) ([]LibraryShare, error) {
 	rows, err := s.db.QueryContext(ctx, `
-		SELECT fingerprint, library_id, ceiling, shared_at
+		SELECT fingerprint, library_id, ceiling, shared_at, COALESCE(downloads, 0)
 		FROM library_share WHERE fingerprint = ?
 		ORDER BY library_id`, fingerprint)
 	if err != nil {
@@ -106,7 +109,7 @@ func (s *Store) SharesTo(ctx context.Context, fingerprint string) ([]LibraryShar
 	var out []LibraryShare
 	for rows.Next() {
 		var sh LibraryShare
-		if err := rows.Scan(&sh.Fingerprint, &sh.LibraryID, &sh.Ceiling, &sh.SharedAt); err != nil {
+		if err := rows.Scan(&sh.Fingerprint, &sh.LibraryID, &sh.Ceiling, &sh.SharedAt, &sh.Downloads); err != nil {
 			return nil, fmt.Errorf("scan share: %w", err)
 		}
 		out = append(out, sh)
@@ -223,4 +226,73 @@ func (s *Store) UnratedInShare(ctx context.Context, libraryID int64) (unrated, t
 		return 0, 0, fmt.Errorf("count unrated in library %d: %w", libraryID, err)
 	}
 	return int(u.Int64), total, nil
+}
+
+/*
+ * SetShareDownloads turns downloading on or off for one existing share.
+ *
+ * Its own call rather than a ShareLibrary argument, so that re-saving a
+ * share's ceiling can never switch downloads back off, or on, by leaving a
+ * field out. A share that does not exist answers ErrNotShared: there is
+ * nothing to allow downloading from.
+ */
+func (s *Store) SetShareDownloads(ctx context.Context, fingerprint string, libraryID int64, on bool) error {
+	v := 0
+	if on {
+		v = 1
+	}
+	res, err := s.db.ExecContext(ctx,
+		`UPDATE library_share SET downloads = ? WHERE fingerprint = ? AND library_id = ?`,
+		v, fingerprint, libraryID)
+	if err != nil {
+		return fmt.Errorf("share downloads for %s on library %d: %w", fingerprint, libraryID, err)
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return ErrNotShared
+	}
+	s.announce(ChangePeers)
+	return nil
+}
+
+// ShareAllowsDownloads reports whether this peer may download from this
+// library. False for a library that is not shared, and for a retro library
+// whatever the row says, for the reason SharedLibraries gives.
+func (s *Store) ShareAllowsDownloads(ctx context.Context, fingerprint string, libraryID int64) (bool, error) {
+	var on int
+	err := s.db.QueryRowContext(ctx,
+		`SELECT COALESCE(ls.downloads, 0) FROM library_share ls
+		   JOIN library l ON l.id = ls.library_id
+		  WHERE ls.fingerprint = ? AND ls.library_id = ? AND l.kind != 'retro'`,
+		fingerprint, libraryID).Scan(&on)
+	if errors.Is(err, sql.ErrNoRows) {
+		return false, nil
+	}
+	if err != nil {
+		return false, fmt.Errorf("share downloads for %s on library %d: %w", fingerprint, libraryID, err)
+	}
+	return on == 1, nil
+}
+
+/*
+ * MayDownload is MayPlay with one more condition: the share the item is in
+ * allows downloading.
+ *
+ * MayPlay first, so the ceiling and the scope are the same answer they are
+ * for watching, and a download can never reach further than a stream. Then
+ * the item's own library's switch. Fails closed throughout.
+ */
+func (s *Store) MayDownload(ctx context.Context, fingerprint string, itemID int64) (bool, error) {
+	ok, err := s.MayPlay(ctx, Friend(fingerprint), itemID)
+	if err != nil || !ok {
+		return false, err
+	}
+	var libraryID int64
+	if err := s.db.QueryRowContext(ctx,
+		`SELECT library_id FROM media_item WHERE id = ?`, itemID).Scan(&libraryID); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return false, nil
+		}
+		return false, fmt.Errorf("item library: %w", err)
+	}
+	return s.ShareAllowsDownloads(ctx, fingerprint, libraryID)
 }

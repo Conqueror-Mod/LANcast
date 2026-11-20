@@ -20,6 +20,28 @@
   flex-shrink: 0;
 }
 
+/*
+ * Download, where a friend's share allows it. Quiet at rest like the rest of
+ * the header: the same bordered button as Download again on the Downloads
+ * page, gold only on focus (docs/design.md).
+ */
+.peer-player__download {
+  display: inline-block;
+  margin-top: 8px;
+  padding: 5px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: var(--radius-tile);
+  color: var(--text-secondary);
+  font-size: 12px;
+  text-decoration: none;
+}
+
+.peer-player__download:hover,
+.peer-player__download:focus-visible {
+  border-color: var(--gold);
+  outline: none;
+}
+
 .peer-player__back {
   display: inline-block;
   font-size: 0.85em;

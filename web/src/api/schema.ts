@@ -5752,6 +5752,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/federation/download": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Download a shared item, for a paired server
+         * @description **Peer-to-peer.** Authenticated by the mutual-TLS pin. The original file as an attachment, as `GET /api/items/{id}/download` hands it to the household (ADR 0071, amended 2026-11-20).
+         *
+         *     Watching and downloading are separate grants. Permission is `store.MayDownload`: `MayPlay` with a **Friend** principal — the share's library and limit, failing closed — and then the share's **download switch**, off unless the host turned it on. There is no Watch Together exception: being in a room lets you watch a film with somebody, not keep it.
+         *
+         *     A refusal is **404**, indistinguishable from an item that does not exist. Range requests are honoured.
+         */
+        get: operations["federationDownload"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/federation/playback": {
         parameters: {
             query?: never;
@@ -6164,6 +6188,33 @@ export interface paths {
          *     The bytes are copied rather than buffered and the Range header goes both ways, so a viewer dragging the scrubber here produces the same partial request there. Holding the file first would turn a seek into a wait for a whole film.
          */
         get: operations["peerStream"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/peers/{fingerprint}/download": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The peer's fingerprint, in either the canonical or the grouped form. */
+                fingerprint: components["parameters"]["PeerFingerprint"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Download something from a paired server
+         * @description Asked of the paired server's `GET /api/federation/download` and passed through, as `peerStream` is. Whether the file may be downloaded is the far server's decision; this server checks only that the caller is signed in and that the fingerprint names a peer.
+         *
+         *     The filename is rebuilt here rather than forwarded: the far server's proposed name is read, sanitised again and written into this server's own `Content-Disposition`. The type is always `application/octet-stream`.
+         *
+         *     **404** when that server does not offer the download.
+         */
+        get: operations["peerDownload"];
         put?: never;
         post?: never;
         delete?: never;
@@ -10083,6 +10134,8 @@ export interface components {
         ShareRequest: {
             /** @description Age limit for this share, empty for none. Refused on a library whose contents carry no certificate. */
             ceiling?: string;
+            /** @description Whether the friend may download from this share as well as watch it. Absent leaves the switch as it was, so saving a limit never changes it. Off on a new share. */
+            downloads?: boolean;
         };
         SharedLibrary: {
             /** Format: int64 */
@@ -10100,6 +10153,8 @@ export interface components {
             shared_at?: number;
             /** @description False where no certificate exists and never will. The UI must say so rather than offer an inert control. */
             supports_ceiling: boolean;
+            /** @description Whether this peer may download from the share as well as watch it. Off unless the host turned it on. */
+            downloads: boolean;
             /** @description Items a limit would hide for being unrated. */
             unrated: number;
             /** @description Items a limit could apply to. */
@@ -20862,6 +20917,38 @@ export interface operations {
             404: components["responses"]["NotFound"];
         };
     };
+    federationDownload: {
+        parameters: {
+            query: {
+                /** @description The item to download. */
+                item: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The file, as an attachment. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description A requested byte range */
+            206: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
     federationPlayback: {
         parameters: {
             query: {
@@ -21099,6 +21186,8 @@ export interface operations {
                         audio?: components["schemas"]["MediaStream"][];
                         /** @description Where the intro and the credits are, so a friend's player can skip them. Absent when nothing has been detected. */
                         markers?: components["schemas"]["Marker"][];
+                        /** @description True when the share this item is in lets the friend download it as well as watch it (ADR 0071, amended 2026-11-20), so their client offers Download only where it will be answered. A hint: the download route asks again. Absent otherwise. */
+                        downloadable?: boolean;
                     };
                 };
             };
@@ -21490,6 +21579,49 @@ export interface operations {
             };
         };
     };
+    peerDownload: {
+        parameters: {
+            query: {
+                /** @description The item on their server. */
+                item: number;
+            };
+            header?: never;
+            path: {
+                /** @description The peer's fingerprint, in either the canonical or the grouped form. */
+                fingerprint: components["parameters"]["PeerFingerprint"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The file, as an attachment. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description A requested byte range */
+            206: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            /** @description That server is not answering, or could not send the file */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
     peerPlayback: {
         parameters: {
             query: {
@@ -21784,6 +21916,8 @@ export interface operations {
                         audio?: components["schemas"]["MediaStream"][];
                         /** @description Where the intro and the credits are, so a friend's player can skip them. Absent when nothing has been detected. */
                         markers?: components["schemas"]["Marker"][];
+                        /** @description True when the share this item is in lets the friend download it as well as watch it (ADR 0071, amended 2026-11-20), so their client offers Download only where it will be answered. A hint: the download route asks again. Absent otherwise. */
+                        downloadable?: boolean;
                     };
                 };
             };

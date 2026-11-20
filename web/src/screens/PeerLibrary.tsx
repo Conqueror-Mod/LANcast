@@ -10,9 +10,9 @@ import "./PeerLibrary.css";
 /*
  * Kinds that hold other items under them, and so open as a list rather than
  * as a player: a show's seasons, a season's episodes, an artist's albums, an
- * album's tracks, a folder of photographs. A friend's TV and music libraries
- * were walls of these that could only be "played", and a show has nothing to
- * play.
+ * album's tracks, a folder of photographs, a collection's films. A friend's TV
+ * and music libraries were walls of these that could only be "played", and a
+ * show has nothing to play.
  */
 const CONTAINER_KINDS = new Set([
   "show",
@@ -21,6 +21,7 @@ const CONTAINER_KINDS = new Set([
   "album",
   "gallery",
   "serial",
+  "collection",
 ]);
 
 export function isPeerContainer(item: Pick<Item, "kind">): boolean {
