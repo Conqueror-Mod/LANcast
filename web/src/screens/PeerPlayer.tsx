@@ -7,9 +7,9 @@ import { activeCues, parseVTT, type Cue } from "@/playback/nativeTracks";
 import { filePath, isUnsupportedSource } from "@/playback/fileTransport";
 import { seeksInPlace } from "@/playback/inPlaceSeek";
 import { mediaCapability, HLS_MIME } from "@/lib/liveTransport";
-import { useDownloads } from "@/lib/downloads";
+import { useDownloads, startPeerDownload } from "@/lib/downloads";
+import { PointMenu, type MenuAction, type MenuPoint } from "@/components/Menu";
 import {
-  peerDownloadURL,
   peerItemURL,
   peerPlaybackURL,
   peerSourceURL,
@@ -752,29 +752,25 @@ export function PeerPlayer() {
           {title ?? "Something on their server"}
         </h1>
         {/*
-         * Download, where their share allows it. A plain link with the
-         * download attribute, through this server (their server cannot be
-         * reached from here): the window hands it to its download manager
-         * and the film keeps playing. The receipt is recorded with the
-         * server it came from, so the Downloads page opens the right item.
+         * More Options, at the right of the header rather than under the
+         * title, where a Download link sat in the way of the film. The same
+         * menu the tiles open on right-click.
          */}
         {info.data?.downloadable && (
-          <a
-            className="peer-player__download"
-            href={peerDownloadURL(fingerprint, itemID)}
-            download
-            onClick={() =>
-              recordDownload({
-                itemId: itemID,
-                title: title ?? "Something on their server",
-                filename: title ?? "",
-                peer: fingerprint,
-                at: Date.now(),
-              })
-            }
-          >
-            Download
-          </a>
+          <PeerMoreOptions
+            actions={[
+              {
+                label: "Download",
+                onSelect: () =>
+                  startPeerDownload(
+                    fingerprint,
+                    itemID,
+                    title ?? "Something on their server",
+                    recordDownload,
+                  ),
+              },
+            ]}
+          />
         )}
       </header>
 
@@ -939,4 +935,28 @@ function PeerPlayerNote({
  */
 function resume(el: HTMLMediaElement) {
   void Promise.resolve(el.play()).catch(() => {});
+}
+
+// The player's More Options: a button that opens the shared menu.
+function PeerMoreOptions({ actions }: { actions: MenuAction[] }) {
+  const [at, setAt] = useState<MenuPoint | null>(null);
+  return (
+    <>
+      <button
+        type="button"
+        className="peer-player__more"
+        aria-haspopup="menu"
+        aria-expanded={at !== null}
+        onClick={(e) => {
+          const r = e.currentTarget.getBoundingClientRect();
+          setAt({ x: r.left, y: r.bottom + 4 });
+        }}
+      >
+        More Options
+      </button>
+      {at && (
+        <PointMenu at={at} actions={actions} autoFocus onClose={() => setAt(null)} />
+      )}
+    </>
+  );
 }

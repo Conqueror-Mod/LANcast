@@ -233,16 +233,33 @@ describe("the peer player", () => {
   it("offers Download only where their share allows it", async () => {
     mockServer({ method: "direct" });
     await render(<PeerLibrary />, `/peers/${FP}/item/42`);
-    expect(host.querySelector("a.peer-player__download")).toBeNull();
+    expect(host.querySelector(".peer-player__more")).toBeNull();
 
     act(() => root.unmount());
     root = createRoot(host);
     mockServer({ method: "direct", downloadable: true });
     await render(<PeerLibrary />, `/peers/${FP}/item/42`);
-    const link = host.querySelector<HTMLAnchorElement>("a.peer-player__download");
-    expect(link, "no Download link").toBeTruthy();
-    expect(link!.getAttribute("href")).toBe(`/api/peers/${FP}/download?item=42`);
-    expect(link!.hasAttribute("download")).toBe(true);
+
+    // Out of the way of the film: More Options, not a link under the title.
+    const more = host.querySelector<HTMLButtonElement>(".peer-player__more");
+    expect(more, "no More Options").toBeTruthy();
+    await act(async () => more!.click());
+
+    const item = [...document.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')].find(
+      (b) => b.textContent === "Download",
+    );
+    expect(item, "no Download in the menu").toBeTruthy();
+
+    const hrefs: string[] = [];
+    const click = vi
+      .spyOn(HTMLAnchorElement.prototype, "click")
+      .mockImplementation(function (this: HTMLAnchorElement) {
+        hrefs.push(this.getAttribute("href") ?? "");
+      });
+    await act(async () => item!.click());
+    click.mockRestore();
+    // Through this server, never our own /api/items route.
+    expect(hrefs).toEqual([`/api/peers/${FP}/download?item=42`]);
   });
 
   /*

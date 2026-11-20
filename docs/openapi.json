@@ -24414,6 +24414,10 @@
           },
           "kind": {
             "type": "string"
+          },
+          "downloads": {
+            "type": "boolean",
+            "description": "Whether this share lets the caller download files as well as watch them (ADR 0071, amended 2026-11-20). Absent from servers older than 1.0.3, which read as no. A hint: the download route asks again."
           }
         }
       },

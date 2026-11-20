@@ -10168,6 +10168,8 @@ export interface components {
             id: number;
             name: string;
             kind: string;
+            /** @description Whether this share lets the caller download files as well as watch them (ADR 0071, amended 2026-11-20). Absent from servers older than 1.0.3, which read as no. A hint: the download route asks again. */
+            downloads?: boolean;
         };
         GuestLibraries: {
             libraries: components["schemas"]["GuestLibrary"][];
