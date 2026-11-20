@@ -770,6 +770,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/peers/{fingerprint}/libraries", s.peerLibraries)
 	mux.HandleFunc("GET /api/peers/{fingerprint}/items", s.peerItems)
 	mux.HandleFunc("GET /api/peers/{fingerprint}/stream", s.peerStream)
+	// Taking a file away, where their share allows it (frienddownload.go).
+	mux.HandleFunc("GET /api/peers/{fingerprint}/download", s.peerDownload)
 
 	/*
 	 * Playing what they shared (ADR 0071 §5). This server asks theirs and
@@ -874,6 +876,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/federation/libraries", s.federationLibraries)
 	mux.HandleFunc("GET /api/federation/items", s.federationItems)
 	mux.HandleFunc("GET /api/federation/stream", s.federationStream)
+	mux.HandleFunc("GET /api/federation/download", s.federationDownload)
 
 	/*
 	 * The rest of playback, for a friend's server (ADR 0071 §5).

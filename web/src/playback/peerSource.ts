@@ -146,6 +146,14 @@ export function peerWatchingURL(fingerprint: string, item: number): string {
   return `${base(fingerprint)}/watching?item=${item}`;
 }
 
+/**
+ * One of their files, as an attachment, where their share allows downloading
+ * (ADR 0071, amended 2026-11-20). Their server decides; this one passes it on.
+ */
+export function peerDownloadURL(fingerprint: string, item: number): string {
+  return `${base(fingerprint)}/download?item=${item}`;
+}
+
 /** What a peer says about one of their items: its name, and how long it is. */
 export function peerItemURL(fingerprint: string, item: number): string {
   return `${base(fingerprint)}/item/${item}`;

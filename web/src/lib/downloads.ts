@@ -44,7 +44,30 @@ export interface Receipt {
   detail?: string;
   bytes?: number;
   at: number;
+  /**
+   * The paired server the file came from, by fingerprint, for a download
+   * from a friend's share. Absent for this server's own. An id from another
+   * server names a different item here, so the two are never confused.
+   */
+  peer?: string;
 }
+
+/** Where a receipt's title opens, on this server or on the friend's. */
+export function receiptLink(r: Receipt): string {
+  return r.peer
+    ? `/peers/${encodeURIComponent(r.peer)}/item/${r.itemId}`
+    : `/item/${r.itemId}`;
+}
+
+/** Where a receipt's file is asked for again. */
+export function receiptURL(r: Receipt): string {
+  return r.peer
+    ? `/api/peers/${encodeURIComponent(r.peer)}/download?item=${r.itemId}`
+    : downloadURL(r.itemId);
+}
+
+const sameItem = (a: Receipt, b: Receipt) =>
+  a.itemId === b.itemId && (a.peer ?? "") === (b.peer ?? "");
 
 // Enough that the answer to "did I get this already" is reliable, few enough
 // that the list stays a page rather than an archive.
@@ -60,7 +83,7 @@ const LIMIT = 200;
  * tested directly.
  */
 export function recordReceipt(list: Receipt[], r: Receipt): Receipt[] {
-  return [r, ...list.filter((x) => x.itemId !== r.itemId)].slice(0, LIMIT);
+  return [r, ...list.filter((x) => !sameItem(x, r))].slice(0, LIMIT);
 }
 
 // Until the server has said who is signed in, nobody's list is shown and
@@ -79,8 +102,9 @@ export function downloadedAt(
   itemId: number,
   userId?: string | null,
 ): number | undefined {
+  // This server's own items only: a friend's item 7 is not our item 7.
   return readDevice<Receipt[]>(downloadsKey(userId), []).find(
-    (r) => r.itemId === itemId,
+    (r) => r.itemId === itemId && !r.peer,
   )?.at;
 }
 

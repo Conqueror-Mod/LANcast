@@ -29,6 +29,7 @@ const FILMS = {
   kind: "movie",
   shared: false,
   ceiling: "",
+  downloads: false,
   supports_ceiling: true,
   unrated: 10,
   total: 1212,
@@ -39,6 +40,7 @@ const MUSIC = {
   kind: "music",
   shared: false,
   ceiling: "",
+  downloads: false,
   supports_ceiling: false,
   unrated: 0,
   total: 0,
@@ -227,6 +229,25 @@ describe("peer shares", () => {
 
     expect(writes[0].method).toBe("PUT");
     expect(writes[0].body).toEqual({ ceiling: "PG-13" });
+  });
+
+  // Watching and keeping are separate grants: the switch sends downloads and
+  // keeps the share's limit as it was.
+  it("lets the host allow downloads on a share, keeping its limit", async () => {
+    libraries = [{ ...FILMS, shared: true, ceiling: "PG-13" }];
+    await render();
+    await open();
+
+    const box = [...host.querySelectorAll<HTMLLabelElement>("label")]
+      .find((l) => (l.textContent ?? "").includes("Allow downloads"))
+      ?.querySelector("input") as HTMLInputElement;
+    expect(box).toBeTruthy();
+    expect(box.checked).toBe(false);
+
+    await act(async () => box.click());
+
+    expect(writes[0].method).toBe("PUT");
+    expect(writes[0].body).toEqual({ ceiling: "PG-13", downloads: true });
   });
 
   /*

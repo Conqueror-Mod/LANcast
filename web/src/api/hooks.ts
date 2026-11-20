@@ -5376,7 +5376,8 @@ export function usePeerShares(fingerprint: string, enabled: boolean) {
 }
 
 /*
- * Share a library, or change its limit.
+ * Share a library, or change its limit, or whether the friend may download
+ * from it.
  *
  * Invalidates this peer's shares and nothing else. What a *friend* can see
  * changes, but nothing on this server's own screens does — the host's own
@@ -5385,11 +5386,20 @@ export function usePeerShares(fingerprint: string, enabled: boolean) {
 export function useSetPeerShare(fingerprint: string) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ library, ceiling }: { library: number; ceiling: string }) =>
+    mutationFn: ({
+      library,
+      ceiling,
+      downloads,
+    }: {
+      library: number;
+      ceiling: string;
+      /** Left out, the server keeps the switch where it was. */
+      downloads?: boolean;
+    }) =>
       apiSend(
         `/api/peers/${encodeURIComponent(fingerprint)}/shares/${library}`,
         "PUT",
-        { ceiling },
+        downloads === undefined ? { ceiling } : { ceiling, downloads },
       ),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ["peer-shares", fingerprint] });

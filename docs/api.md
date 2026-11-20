@@ -301,11 +301,12 @@ bring. `Cache-Control: no-store`.
 | `GET /api/peers/invite` | `{invite, fingerprint, fingerprint_display, name, addrs}` — this server's own invite, to hand out. **Admin** |
 | `DELETE /api/peers/{fingerprint}` | Un-pairs. **Admin** |
 | `GET /api/peers/{fingerprint}/shares` | `{libraries: [...]}` — every library, whether this peer may see it, its limit, and what a limit would cost. **Admin** |
-| `PUT /api/peers/{fingerprint}/shares/{library}` | `{ceiling}` — shares a library, or changes its limit. **Admin** |
+| `PUT /api/peers/{fingerprint}/shares/{library}` | `{ceiling, downloads?}` — shares a library, or changes its limit. `downloads` turns on or off whether the friend may download from it as well as watch; absent leaves it as it was, and a new share starts with it off. **Admin** |
 | `DELETE /api/peers/{fingerprint}/shares/{library}` | Stops sharing, from the peer's next request. **Admin** |
 | `GET /api/peers/{fingerprint}/libraries` | What that server shared with us. Asked of them and passed through |
 | `GET /api/peers/{fingerprint}/items` | `?library=&…` → browse or search one of their shared libraries; `parent=` opens one of their shows, seasons, artists or albums |
 | `GET /api/peers/{fingerprint}/stream` | `?item=` → the file, fetched from them and passed through, Range and all |
+| `GET /api/peers/{fingerprint}/download` | `?item=` → the original file as an attachment, where their share allows downloading. The filename is re-sanitised here and written into this server's own header; the type is always `application/octet-stream`. `404` when they do not offer it |
 | `GET /api/peers/{fingerprint}/playback` | `?item=` → how **they** would deliver it. Their decision; this server holds neither the file nor the probe |
 | `GET /api/peers/{fingerprint}/transcode` | `?item=` → a converted stream, encoded on their CPU |
 | `GET /api/peers/{fingerprint}/hls/{item}/index.m3u8` | Their playlist, with its segment URLs rewritten to point back here |
@@ -435,13 +436,14 @@ are, and every later capability is granted separately.
 | `GET /api/federation/libraries` | **Peer-to-peer.** The libraries shared with the calling server |
 | `GET /api/federation/items` | **Peer-to-peer.** `?library=&kind=&q=&sort=&parent=&limit=&offset=` → browse or search one shared library, under that share's limit; `parent` opens one container, as on `/api/guest/items` |
 | `GET /api/federation/stream` | **Peer-to-peer.** `?item=` → the file itself, with Range support, if that item is in a shared library and under its limit |
+| `GET /api/federation/download` | **Peer-to-peer.** `?item=` → the original file as an attachment, if the item may be streamed **and** its share's download switch is on (ADR 0071, amended 2026-11-20). No Watch Together exception. A refusal is `404` |
 | `GET /api/federation/playback` | **Peer-to-peer.** `?item=` → how that item would be delivered. Decided here, by the server that holds the file and probed it |
 | `GET /api/federation/transcode` | **Peer-to-peer.** `?item=` → a progressive fragmented MP4. The encode runs on the host's CPU, because the file is there |
 | `GET /api/federation/hls/{item}/index.m3u8` | **Peer-to-peer.** An HLS playlist whose segment URLs name the federation routes, not this server's own — see below |
 | `GET /api/federation/hls/{item}/{session}/{name}` | **Peer-to-peer.** One segment, named by that playlist |
 | `GET /api/federation/subtitles` | **Peer-to-peer.** `?item=` → the tracks that item already has. Searching a provider is not reachable this way |
 | `GET /api/federation/subtitles/{item}/{key}` | **Peer-to-peer.** One track, as WebVTT |
-| `GET /api/federation/item/{item}` | **Peer-to-peer.** An item's name, its length, what may be said somebody is watching, and the file's `audio` tracks and `markers` (intro, credits) when known. All computed here, by the server that owns it. A track is chosen with `audio=` on the playback routes |
+| `GET /api/federation/item/{item}` | **Peer-to-peer.** An item's name, its length, what may be said somebody is watching, and the file's `audio` tracks and `markers` (intro, credits) when known, and `downloadable: true` where the share allows downloading it. All computed here, by the server that owns it. A track is chosen with `audio=` on the playback routes |
 | `GET /api/federation/artwork/{item}/{hash}` | **Peer-to-peer.** One image belonging to that item. The item is named because **a hash is not an item** — see below |
 
 Presence is a **third disclosure category** and no existing opt-in widens into

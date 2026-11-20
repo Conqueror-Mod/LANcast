@@ -6,7 +6,7 @@ import (
 )
 
 // CurrentSchemaVersion is the revision this build expects.
-const CurrentSchemaVersion = 97
+const CurrentSchemaVersion = 98
 
 // migration is one forward step. There are deliberately no down migrations:
 // rolling a media library's schema backwards loses data that a rescan cannot
@@ -257,6 +257,10 @@ var migrations = []migration{
 	{version: 97, sql: `UPDATE media_item SET probed_at = NULL
 		WHERE kind = 'movie' AND provider IS NOT NULL AND missing = 0 AND path IS NOT NULL
 		  AND duration_ms > 0 AND duration_ms % 60000 = 0`},
+	// Whether a friend may download from a share as well as watch it (ADR
+	// 0071, amended 2026-11-20). Null is off: a share made before this asked
+	// for watching and nothing more, and must not start handing out files.
+	{version: 98, columns: []column{{"library_share", "downloads", "INTEGER"}}},
 }
 
 // migrate brings the database up to CurrentSchemaVersion.

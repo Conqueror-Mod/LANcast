@@ -47,6 +47,9 @@ type sharedLibrary struct {
 	// when SupportsCeiling is false.
 	Ceiling  string `json:"ceiling"`
 	SharedAt int64  `json:"shared_at,omitempty"`
+	// Downloads is whether this friend may take files away from the share as
+	// well as watch them. Off unless the host turns it on.
+	Downloads bool `json:"downloads"`
 	/*
 	 * SupportsCeiling is false for a library whose contents carry no
 	 * certificate and never will — music and pictures (ADR 0071 §6).
@@ -116,6 +119,7 @@ func (s *Server) listShares(w http.ResponseWriter, r *http.Request) {
 		}
 		if sh, ok := granted[l.ID]; ok {
 			row.Shared, row.Ceiling, row.SharedAt = true, sh.Ceiling, sh.SharedAt
+			row.Downloads = sh.Downloads
 		}
 		if row.SupportsCeiling {
 			// Counted for every video library, shared or not: the host needs
@@ -142,6 +146,10 @@ func (s *Server) putShare(w http.ResponseWriter, r *http.Request) {
 
 	var body struct {
 		Ceiling string `json:"ceiling"`
+		// Downloads, when present, turns downloading on or off for this
+		// share. Absent leaves it as it was, so saving a ceiling never
+		// changes it.
+		Downloads *bool `json:"downloads"`
 	}
 	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<12)).Decode(&body); err != nil {
 		writeError(w, http.StatusBadRequest, "bad_request", "could not read the request")
@@ -199,8 +207,14 @@ func (s *Server) putShare(w http.ResponseWriter, r *http.Request) {
 		s.writeInternal(w, err, "share library")
 		return
 	}
+	if body.Downloads != nil {
+		if err := s.st.SetShareDownloads(r.Context(), fingerprint, libraryID, *body.Downloads); err != nil {
+			s.writeInternal(w, err, "share downloads")
+			return
+		}
+	}
 	s.log.Info("library shared with a peer", "peer", fingerprint, "library", libraryID,
-		"name", l.Name, "ceiling", body.Ceiling)
+		"name", l.Name, "ceiling", body.Ceiling, "downloads", body.Downloads)
 	w.WriteHeader(http.StatusNoContent)
 }
 

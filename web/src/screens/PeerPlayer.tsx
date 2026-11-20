@@ -7,7 +7,9 @@ import { activeCues, parseVTT, type Cue } from "@/playback/nativeTracks";
 import { filePath, isUnsupportedSource } from "@/playback/fileTransport";
 import { seeksInPlace } from "@/playback/inPlaceSeek";
 import { mediaCapability, HLS_MIME } from "@/lib/liveTransport";
+import { useDownloads } from "@/lib/downloads";
 import {
+  peerDownloadURL,
   peerItemURL,
   peerPlaybackURL,
   peerSourceURL,
@@ -78,6 +80,7 @@ export function PeerPlayer() {
    * be, because the same answer carries **how long the film is**, without which
    * a converted stream has a scrubber with no scale.
    */
+  const [, recordDownload] = useDownloads();
   const info = useQuery({
     queryKey: ["peer-item", fingerprint, itemID, member],
     enabled: fingerprint !== "" && itemID > 0,
@@ -91,6 +94,8 @@ export function PeerPlayer() {
         // new enough to say (docs/api.md, /api/peers/{fingerprint}/item).
         audio?: MediaStream[];
         markers?: Marker[];
+        // Their share lets this household keep the file as well as watch it.
+        downloadable?: boolean;
       }>(
         asMember(peerItemURL(fingerprint, itemID), member),
         signal,
@@ -746,6 +751,31 @@ export function PeerPlayer() {
         <h1 className="peer-player__title">
           {title ?? "Something on their server"}
         </h1>
+        {/*
+         * Download, where their share allows it. A plain link with the
+         * download attribute, through this server (their server cannot be
+         * reached from here): the window hands it to its download manager
+         * and the film keeps playing. The receipt is recorded with the
+         * server it came from, so the Downloads page opens the right item.
+         */}
+        {info.data?.downloadable && (
+          <a
+            className="peer-player__download"
+            href={peerDownloadURL(fingerprint, itemID)}
+            download
+            onClick={() =>
+              recordDownload({
+                itemId: itemID,
+                title: title ?? "Something on their server",
+                filename: title ?? "",
+                peer: fingerprint,
+                at: Date.now(),
+              })
+            }
+          >
+            Download
+          </a>
+        )}
       </header>
 
       {/*

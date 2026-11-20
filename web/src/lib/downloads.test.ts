@@ -6,6 +6,8 @@ import {
   downloadURL,
   downloadedAt,
   recordReceipt,
+  receiptLink,
+  receiptURL,
   type Receipt,
 } from "./downloads";
 
@@ -45,6 +47,23 @@ describe("download receipts", () => {
     list = recordReceipt(list, receipt(1, "Arrival"));
     expect(list).toHaveLength(2);
     expect(list[0].itemId).toBe(1);
+  });
+
+  // A friend's item 1 is not our item 1: both keep their own receipt, and
+  // each opens and downloads from the server it came from.
+  it("keeps a friend's download apart from this server's own", () => {
+    const FP = "BBBB4G6XEG33AUPJU7LGSTT4N74U6D4B";
+    let list: Receipt[] = [];
+    list = recordReceipt(list, receipt(1, "Ours"));
+    list = recordReceipt(list, { ...receipt(1, "Theirs"), peer: FP });
+    expect(list).toHaveLength(2);
+    expect(receiptLink(list[0])).toBe(`/peers/${FP}/item/1`);
+    expect(receiptURL(list[0])).toBe(`/api/peers/${FP}/download?item=1`);
+    expect(receiptLink(list[1])).toBe("/item/1");
+    expect(receiptURL(list[1])).toBe(downloadURL(1));
+
+    writeDevice<Receipt[]>(DOWNLOADS_KEY, [{ ...receipt(3, "Theirs"), peer: FP }]);
+    expect(downloadedAt(3)).toBeUndefined();
   });
 
   it("is a device setting, so it survives a reload", () => {

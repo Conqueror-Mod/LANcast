@@ -44,6 +44,8 @@ function mockServer(opts: {
   /** The file's audio tracks and markers, as a newer peer reports them. */
   audio?: unknown[];
   markers?: unknown[];
+  /** Their share lets this household download the file. */
+  downloadable?: boolean;
 }) {
   vi.stubGlobal(
     "fetch",
@@ -79,6 +81,7 @@ function mockServer(opts: {
         if (opts.positionMs) info.position_ms = opts.positionMs;
         if (opts.audio) info.audio = opts.audio;
         if (opts.markers) info.markers = opts.markers;
+        if (opts.downloadable) info.downloadable = true;
         return json(info);
       }
       if (url.includes("/items")) {
@@ -223,6 +226,23 @@ describe("the peer player", () => {
     const video = host.querySelector("video");
     expect(video, "no media element").toBeTruthy();
     expect(video!.getAttribute("src")).toBe(`/api/peers/${FP}/stream?item=42`);
+  });
+
+  // Download only where their share allows it, through this server, never
+  // from our own /api/items route, where the id names a different film.
+  it("offers Download only where their share allows it", async () => {
+    mockServer({ method: "direct" });
+    await render(<PeerLibrary />, `/peers/${FP}/item/42`);
+    expect(host.querySelector("a.peer-player__download")).toBeNull();
+
+    act(() => root.unmount());
+    root = createRoot(host);
+    mockServer({ method: "direct", downloadable: true });
+    await render(<PeerLibrary />, `/peers/${FP}/item/42`);
+    const link = host.querySelector<HTMLAnchorElement>("a.peer-player__download");
+    expect(link, "no Download link").toBeTruthy();
+    expect(link!.getAttribute("href")).toBe(`/api/peers/${FP}/download?item=42`);
+    expect(link!.hasAttribute("download")).toBe(true);
   });
 
   /*

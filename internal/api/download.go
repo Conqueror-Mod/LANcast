@@ -39,6 +39,17 @@ func (s *Server) download(w http.ResponseWriter, r *http.Request) {
 	if s.notFoundOr(w, err, "get item", "no such item") {
 		return
 	}
+	s.serveDownload(w, r, it)
+}
+
+/*
+ * serveDownload hands over one item's original file as an attachment. The
+ * caller has already decided the item may be downloaded; this is the part a
+ * household member's download and a friend's (federationDownload) share, so
+ * the containment check and the filename are the same in both.
+ */
+func (s *Server) serveDownload(w http.ResponseWriter, r *http.Request, it *store.Item) {
+	id := it.ID
 	if it.Path == "" {
 		writeError(w, http.StatusNotFound, "not_found", "item has no file to download")
 		return
@@ -65,17 +76,22 @@ func (s *Server) download(w http.ResponseWriter, r *http.Request) {
 	}
 
 	name := downloadName(it, filepath.Ext(path))
-	// Both forms: the plain one for anything old or strict, the RFC 5987 one
-	// carrying the characters the plain one cannot. Browsers prefer filename*
-	// where they understand it, which is where an accented title survives.
-	w.Header().Set("Content-Disposition", fmt.Sprintf(
-		"attachment; filename=%q; filename*=UTF-8''%s",
-		asciiFold(name), urlEncodePath(name),
-	))
+	setAttachment(w, name)
 	// Named so a Range request can still resume an interrupted transfer —
 	// ServeContent handles that, and a nine-gigabyte file is exactly the case
 	// where resuming matters.
 	http.ServeContent(w, r, name, info.ModTime(), f)
+}
+
+// setAttachment names the file a response is to be saved as. Both forms: the
+// plain one for anything old or strict, the RFC 5987 one carrying the
+// characters the plain one cannot. Browsers prefer filename* where they
+// understand it, which is where an accented title survives.
+func setAttachment(w http.ResponseWriter, name string) {
+	w.Header().Set("Content-Disposition", fmt.Sprintf(
+		"attachment; filename=%q; filename*=UTF-8''%s",
+		asciiFold(name), urlEncodePath(name),
+	))
 }
 
 // downloadName builds the filename the browser will save under: what the item

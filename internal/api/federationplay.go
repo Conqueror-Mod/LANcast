@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"lancast/internal/store"
 )
@@ -177,6 +178,14 @@ func withStreamOwner(ctx context.Context, owner string) context.Context {
 	return context.WithValue(ctx, streamOwnerKey, owner)
 }
 
+// peerFromOwner recovers the fingerprint federationPlay put on the context,
+// for a handler that needs to know which friend is asking.
+func peerFromOwner(ctx context.Context) (string, bool) {
+	owner, _ := ctx.Value(streamOwnerKey).(string)
+	fp, ok := strings.CutPrefix(owner, "peer:")
+	return fp, ok && fp != ""
+}
+
 func withPlaylistPrefix(ctx context.Context, prefix string) context.Context {
 	return context.WithValue(ctx, playlistPrefixKey, prefix)
 }
@@ -291,6 +300,16 @@ func (s *Server) federationItem(w http.ResponseWriter, r *http.Request) {
 		s.log.Warn("federation item: markers", "item", id, "error", err)
 	} else if len(markers) > 0 {
 		out["markers"] = markers
+	}
+	/*
+	 * Whether the friend may take this file away, so their client offers
+	 * Download only where /api/federation/download will answer. A hint, not
+	 * the permission: that route asks MayDownload again for itself.
+	 */
+	if fp, ok := peerFromOwner(r.Context()); ok {
+		if may, err := s.st.MayDownload(r.Context(), fp, id); err == nil && may && it.Path != "" {
+			out["downloadable"] = true
+		}
 	}
 	writeJSON(w, http.StatusOK, out)
 }

@@ -494,3 +494,38 @@ for good reasons that apply again here.
 
 Somebody wants a friend to write something to the host's server (§4), or a
 second sharing shape is wanted that a library cannot express (§1).
+
+## Amendment, 2026-11-20: downloading is a second switch on a share
+
+A friend reported two things on a real pairing: the host's collections were
+missing from the shared film library, and their app had a Downloads page with
+nothing on a host's titles to put in it.
+
+**Collections** were left out of a friend's top level because `parent` could
+only open a parent_id container, and a collection groups through
+`item_collection`. That is now followed for a collection, so the tile opens.
+It needs no decision: the members are narrowed by the same library scope and
+ceiling as every other listing, so a franchise that reaches into an unshared
+library lists only what was shared.
+
+**Downloading** does need one, and the host made it. A share was a grant to
+*watch*. Keeping the file is a different act. It leaves the house for good,
+it cannot be taken back by un-sharing, and the host may not want it. So:
+
+- Each share carries a `downloads` switch, **off** on a new share and on every
+  share made before this amendment (a nullable column, read as off).
+- `store.MayDownload` is `MayPlay` with a Friend principal and then the
+  switch. A download never reaches further than a stream: the same scope, the
+  same ceiling, the same 404 for everything refused.
+- There is **no Watch Together exception**. A room lets you watch a film with
+  somebody, not keep it.
+- The friend's server relays the file through `GET /api/peers/{fp}/download`,
+  as it relays streams. It re-sanitises the filename and writes its own
+  `Content-Disposition` rather than forwarding the host's header.
+- `GET /api/federation/item/{item}` says `downloadable: true` where the switch
+  is on, so the friend's client offers Download only where it will be
+  answered. The download route asks again for itself.
+
+Rejected: a server-wide "friends may download" setting. A host who shares
+films with one household and music with another should be able to decide per
+share, which is the unit §1 chose for everything else.

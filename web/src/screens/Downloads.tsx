@@ -1,5 +1,5 @@
 import { Link } from "react-router";
-import { useDownloads, downloadURL } from "@/lib/downloads";
+import { useDownloads, receiptLink, receiptURL } from "@/lib/downloads";
 import "./Downloads.css";
 
 /*
@@ -57,9 +57,9 @@ export function Downloads() {
       {list.length > 0 && (
       <div className="downloads__list">
         {list.map((r) => (
-          <div className="downloads__row" key={r.itemId}>
+          <div className="downloads__row" key={`${r.peer ?? ""}:${r.itemId}`}>
             <div className="downloads__what">
-              <Link className="downloads__title" to={`/item/${r.itemId}`}>
+              <Link className="downloads__title" to={receiptLink(r)}>
                 {r.title}
               </Link>
               {r.detail && (
@@ -76,7 +76,7 @@ export function Downloads() {
 
             <a
               className="downloads__again"
-              href={downloadURL(r.itemId)}
+              href={receiptURL(r)}
               download={r.filename}
             >
               Download again

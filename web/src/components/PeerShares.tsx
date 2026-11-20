@@ -184,6 +184,26 @@ function ShareRow({
               Nothing here carries an age rating, so a limit would do nothing.
             </p>
           )}
+          {/*
+           * Watching and keeping are separate grants (ADR 0071, amended
+           * 2026-11-20). Off on a new share: a friend asked to watch, and the
+           * host decides separately whether files may leave the house.
+           */}
+          <label className="peer-shares__limit-label">
+            <input
+              type="checkbox"
+              checked={library.downloads}
+              disabled={busy}
+              onChange={(e) =>
+                share.mutate({
+                  library: library.id,
+                  ceiling: library.ceiling,
+                  downloads: e.target.checked,
+                })
+              }
+            />
+            Allow downloads
+          </label>
         </div>
       )}
     </div>
