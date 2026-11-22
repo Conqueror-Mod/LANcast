@@ -1343,8 +1343,9 @@ no certificate to test. An item the caller cannot open is `404`.
 
 What to watch after a film, for the page it ends on: `{items, total}`, decorated
 like any listing. First, when there is one, the film after this one in its
-collection: the first in release order that you have not watched, counted from
-this film rather than from watch state, and the only item carrying
+collection: the one directly after this film in release order, whether or not
+you have watched it before (only the rating limit and hidden libraries skip a
+film), counted from this film rather than from watch state, and the only item carrying
 `continues_from` (the collection, and this film as `after_id`). Then up to three
 similar films from the same library, best match first: unwatched, sharing a
 genre, the director or one of the first five billed actors, and never in a
