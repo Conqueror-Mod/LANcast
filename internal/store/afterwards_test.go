@@ -83,13 +83,14 @@ func TestTheNextFilmAfterThisOne(t *testing.T) {
 		t.Fatalf("continues_from = %+v", next.ContinuesFrom)
 	}
 
-	// A film already watched is stepped over, forward only.
+	// The next film is the next film, seen before or not. Rewatching Rush
+	// Hour offered Rush Hour 3 because 2 had been watched years earlier.
 	if err := l.st.SaveProgress(ctx, l.two, "local", 0, true); err != nil {
 		t.Fatal(err)
 	}
 	next, _ = l.st.NextAfterInCollection(ctx, l.one, "local")
-	if next == nil || next.ID != l.three {
-		t.Fatalf("film 2 watched: %+v; want film 3", next)
+	if next == nil || next.ID != l.two {
+		t.Fatalf("film 2 watched before: %+v; want film 2 still", next)
 	}
 
 	// The last film has nothing after it, and does not wrap to the first.

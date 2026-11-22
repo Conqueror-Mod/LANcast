@@ -27,10 +27,20 @@ import (
  * the same library, and every suggestion can say what it shares.
  */
 
-// NextAfterInCollection is the first film after itemID, in release order, in a
-// collection that holds it, that this account has not watched and may see. It
-// carries ContinuesFrom naming the collection and the film it follows. nil when
-// the film is the last of its collection, or in none.
+/*
+ * NextAfterInCollection is the film directly after itemID, in release order,
+ * in a collection that holds it, that this account may see. It carries
+ * ContinuesFrom naming the collection and the film it follows. nil when the
+ * film is the last of its collection, or in none.
+ *
+ * Watched or not. This used to step over every later film already watched,
+ * the collection queue's own rule, and the page it feeds is a different
+ * question: "what comes after the film you just watched". Rewatching Rush
+ * Hour offered Rush Hour 3, because 2 had been seen years before, and 2 Fast
+ * 2 Furious went the same way (reported 2026-11-20). The next film is the
+ * next film. Only the rating limit and hidden libraries skip one, because a
+ * film this account may not see is not there to offer.
+ */
 func (s *Store) NextAfterInCollection(ctx context.Context, itemID int64, userID string) (*Item, error) {
 	film, err := s.GetItem(ctx, itemID, userID)
 	if err != nil {
@@ -66,11 +76,6 @@ func (s *Store) NextAfterInCollection(ctx context.Context, itemID int64, userID 
 			}
 			if err != nil {
 				return nil, fmt.Errorf("next after in collection: %w", err)
-			}
-			// Skipping a film already watched is the collection's own rule
-			// (nextInSequence): forward only, and never back over one seen.
-			if it.Progress != nil && it.Progress.Watched {
-				continue
 			}
 			it.ContinuesFrom = &Continuation{
 				CollectionID: c.ID, CollectionTitle: c.Title,
