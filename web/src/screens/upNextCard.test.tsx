@@ -196,6 +196,29 @@ describe("up next", () => {
     expect(seeked).toEqual([1317]);
   });
 
+  /*
+   * A playing episode reports its position four times a second, and every
+   * report re-renders the player. The count has to survive that: a second that
+   * is restarted on each report never ends, so the card read "Playing in 10"
+   * for ever and nothing rolled on (reported 2026-11-22).
+   */
+  it("keeps counting while the episode keeps reporting its position", async () => {
+    await render([7, 8]);
+    await at(1250);
+    const el = host.querySelector("video") as HTMLVideoElement;
+    let t = 1250;
+    for (let i = 0; i < UP_NEXT_SECONDS * 4; i++) {
+      await act(async () => {
+        vi.advanceTimersByTime(250);
+        t += 0.25;
+        el.currentTime = t;
+        seeked.pop(); // the playhead moving, not a seek
+        el.dispatchEvent(new Event("timeupdate"));
+      });
+    }
+    expect(seeked).toEqual([1317]);
+  });
+
   it("plays now when asked", async () => {
     await render([7, 8]);
     await at(1250);
