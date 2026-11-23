@@ -28,6 +28,20 @@ Go dependencies (see go.mod for exact versions):
   github.com/godbus/dbus/v5           BSD 2-Clause
   github.com/google/uuid              BSD 3-Clause
   github.com/remyoudompheng/bigfft    BSD 3-Clause
+  github.com/fxamacker/cbor/v2        MIT (passkeys)
+  github.com/x448/float16             MIT (passkeys)
+
+In the face worker (lancast-faces.exe) only:
+
+  github.com/yalue/onnxruntime_go     MIT
+
+The web client, bundled into the server and served from it:
+
+  react, react-dom, scheduler         MIT
+  react-router (and its cookie,       MIT
+  set-cookie-parser)
+  @tanstack/react-query,              MIT
+  @tanstack/query-core
 
 In the desktop client only, to unpack the emulator cores it fetches:
 
@@ -107,6 +121,20 @@ Not bundled, and deliberately so:
                                       user's machine on request (ADR 0048).
                                       They are not linked into LANcast and are
                                       not redistributed with it.
+  ONNX Runtime (Microsoft)            MIT. Fetched from nuget.org, pinned by
+                                      digest, only when somebody installs
+                                      face grouping or photo search.
+  Face models (OpenCV Zoo):           Fetched on the same request, pinned to
+    YuNet face detection              a commit and a digest (ADR 0052).
+                                      MIT
+    SFace face recognition            Apache License 2.0
+  CLIP ViT-B/32 (OpenCLIP, LAION-2B   MIT. Fetched only when somebody installs
+  weights, Immich's ONNX export)      photo search (ADR 0060), pinned to a
+                                      commit and a digest.
+
+                                      Each licence is shown before its
+                                      download starts, and none of these is
+                                      redistributed with LANcast.
   Emulator cores (mGBA, Mesen, bsnes, GPL-2.0, GPL-3.0 or MPL-2.0 each.
   BlastEm, Gearsystem,                LANcast downloads them from libretro's
   Mupen64Plus-Next, SwanStation)      RetroArch stable release onto the

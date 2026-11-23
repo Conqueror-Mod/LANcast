@@ -181,6 +181,12 @@ ffmpeg for the service, backups and getting back in when locked out — is in
 the first time until you trust it; the Windows app pins it and never warns.
 On a phone, add the page to your home screen for an app-like window.
 
+**Watching on a Roku.** There is a Roku app in
+[clients/roku](clients/roku/README.md). For now you install it by sideloading
+(developer mode), and a Channel Store listing is planned. Type in your server's
+address once, then approve the code the TV shows under **Settings › Security ›
+Pair a device**.
+
 **Fixing a wrong match.** Open the title and choose **Fix match**, or edit any
 field directly. Whatever you change is locked for good.
 
@@ -342,6 +348,9 @@ rebuilt `dist`. Before calling anything done, all three of `go test ./...`,
 | [docs/privacy.md](docs/privacy.md) | Everything LANcast sends beyond your network, to whom, and when |
 | [docs/cores.md](docs/cores.md) | Every emulator core, its licence and its source |
 | [docs/writing-a-plugin.md](docs/writing-a-plugin.md) | Building a plugin, and the two things a third party still cannot do |
+| [clients/roku](clients/roku/README.md) | The Roku app: building, sideloading and pairing it |
+| [CONTRIBUTING.md](CONTRIBUTING.md) | Reporting bugs, and why code needs a CLA first |
+| [SECURITY.md](SECURITY.md) | Reporting a vulnerability privately |
 | [docs/roadmap.md](docs/roadmap.md) | Every release, every area's status, and what each pass taught |
 | [docs/adr/](docs/adr/) | 125 decision records — why things are the way they are |
 
@@ -364,6 +373,9 @@ without those obligations — see [COMMERCIAL.md](COMMERCIAL.md).
 
 *Releases up to and including v0.8.44 were published under the MIT licence and
 remain available under it.*
+
+Contributions of code need a contributor licence agreement before they can be
+merged — see [CONTRIBUTING.md](CONTRIBUTING.md).
 
 Third-party components keep their own licences — see [NOTICE](NOTICE),
 [internal/webview2/LICENSE](internal/webview2/LICENSE),
