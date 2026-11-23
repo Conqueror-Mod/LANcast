@@ -213,6 +213,42 @@ describe("the page leaving the screen over a native film", () => {
     expect(asks.at(-1)?.[0]).toBe(false);
   }, 10_000);
 
+  /*
+   * Escape, woken, is Back. The controller resolves Escape on `document`, and
+   * the woken key used to be fired at `window`, which `document` never hears:
+   * after the controls faded Escape only brought them back, and leaving
+   * fullscreen took a second press.
+   */
+  it("takes Back for an Escape that woke it", async () => {
+    setPrefs({ matchRate: true });
+    const toggle = vi.fn(async () => false);
+    (window as { lancastToggleFullscreen?: () => Promise<boolean> }).lancastToggleFullscreen = toggle;
+    try {
+      await openHeld();
+      await report(false, 0.1);
+      await settle(2700);
+      expect(pb.fullscreen).toBe(true);
+      expect(asks.at(-1)).toEqual([true, ""]);
+
+      const keys: string[] = [];
+      const onKey = (e: KeyboardEvent) => keys.push(e.key);
+      window.addEventListener("keydown", onKey);
+      try {
+        await act(async () => window.__lancastNativeWake?.({ key: "Escape", code: "Escape", shiftKey: false }));
+        await settle(30);
+      } finally {
+        window.removeEventListener("keydown", onKey);
+      }
+
+      expect(toggle).toHaveBeenCalledTimes(1);
+      expect(pb.fullscreen).toBe(false);
+      // Still reaches the player's own handler, and only once.
+      expect(keys).toEqual(["Escape"]);
+    } finally {
+      delete (window as { lancastToggleFullscreen?: unknown }).lancastToggleFullscreen;
+    }
+  }, 10_000);
+
   it("gives the page back to the window on leaving the player", async () => {
     await openHeld();
     await report(false, 0.1);

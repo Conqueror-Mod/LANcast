@@ -61,6 +61,23 @@ describe("nativeWake", () => {
     expect(seen[0].code).toBe("Space");
   });
 
+  it("hands the key over the way a real one arrives, through the document", () => {
+    // The app resolves Escape (Back) on `document`; a key fired at `window`
+    // never reaches it.
+    const onDoc = vi.fn();
+    const onWin = vi.fn();
+    document.addEventListener("keydown", onDoc);
+    window.addEventListener("keydown", onWin);
+    try {
+      nativeWake(() => {}, { key: "Escape", code: "Escape", shiftKey: false });
+    } finally {
+      document.removeEventListener("keydown", onDoc);
+      window.removeEventListener("keydown", onWin);
+    }
+    expect(onDoc).toHaveBeenCalledTimes(1);
+    expect(onWin).toHaveBeenCalledTimes(1);
+  });
+
   it("only wakes for a mouse move or a key it could not name", () => {
     const onKey = vi.fn();
     const wake = vi.fn();
