@@ -28,6 +28,7 @@ let root: Root;
 let seeked: number[];
 let pb: ReturnType<typeof usePlayback>;
 let kind = "episode";
+let marked = true;
 
 function Probe() {
   pb = usePlayback();
@@ -56,7 +57,7 @@ function item(id: number) {
     11: ["Underage Drinking", 4],
   };
   const [title, episode] = titles[id] ?? titles[7];
-  return { ...base, id, title, season: 1, episode, markers };
+  return { ...base, id, title, season: 1, episode, markers: marked ? markers : [] };
 }
 
 beforeEach(() => {
@@ -66,6 +67,7 @@ beforeEach(() => {
   vi.useFakeTimers({ shouldAdvanceTime: true });
   seeked = [];
   kind = "episode";
+  marked = true;
   host = document.createElement("div");
   document.body.append(host);
   root = createRoot(host);
@@ -289,6 +291,23 @@ describe("up next", () => {
     await at(1250);
     expect(card()).toBeNull();
     expect(button("Skip credits")).toBeDefined();
+  });
+
+  /*
+   * No credits marker: the card comes up for the last seconds instead, timed so
+   * its count runs out where the roll-on lands. Ash vs Evil Dead's first finale
+   * had no marker and offered nothing (2026-11-22).
+   */
+  it("comes up for the last seconds of an episode with no credits marker", async () => {
+    marked = false;
+    await render([7, 8]);
+    await at(1250);
+    expect(card()).toBeNull();
+    expect(button("Skip credits")).toBeUndefined();
+    await at(1307);
+    expect(card()?.textContent).toContain("S01E02");
+    await wait(UP_NEXT_SECONDS);
+    expect(seeked).toEqual([1317]);
   });
 
   it("does not appear on a film", async () => {

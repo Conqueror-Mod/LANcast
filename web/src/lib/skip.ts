@@ -140,12 +140,14 @@ export function skipTarget(
  * Without a known duration there is no end to skip to and no window to check
  * the marker against, so there is no offer.
  */
-function creditsSkip(
+/** Where a credits marker says the credits start, if it is believed: a source
+ *  trusted for this kind, inside the window above. null otherwise. */
+function acceptedCreditsStart(
   m: Marker,
-  positionSeconds: number,
   durationSeconds: number,
   itemKind: string | undefined,
-): SkipTarget | null {
+): number | null {
+  if (m.kind !== "credits") return null;
   const trusted =
     m.source === GATED_CREDITS ||
     (itemKind === "episode" &&
@@ -155,6 +157,48 @@ function creditsSkip(
   const start = m.start_ms / 1000;
   const share = start / durationSeconds;
   if (share < CREDITS_FROM || share >= CREDITS_UNTIL) return null;
+  return start;
+}
+
+/*
+ * Up Next on an episode with no credits marker to go on.
+ *
+ * The card used to need one, so an episode the detector found no credits in
+ * never offered what came next: four of Ash vs Evil Dead's first season,
+ * finale included (reported 2026-11-22). Without a marker there is no telling
+ * where the credits begin, so the card comes up for the last stretch instead:
+ * long enough for its count (UP_NEXT_SECONDS, 10) to run out at the lead a
+ * roll-on stops short of the end by, so nothing of the episode is cut away.
+ * An episode with a marker the player believes keeps the marker's timing.
+ */
+export const UNMARKED_UP_NEXT_SECONDS = 10 + CREDITS_LEAD_SECONDS;
+
+export function upNextWithoutMarker(
+  markers: Marker[] | undefined,
+  positionSeconds: number,
+  durationSeconds: number,
+  itemKind: string | undefined,
+): boolean {
+  if (itemKind !== "episode") return false;
+  if (!Number.isFinite(positionSeconds)) return false;
+  if (!Number.isFinite(durationSeconds) || durationSeconds <= UNMARKED_UP_NEXT_SECONDS) return false;
+  if ((markers ?? []).some((m) => acceptedCreditsStart(m, durationSeconds, itemKind) !== null)) {
+    return false;
+  }
+  return (
+    positionSeconds >= durationSeconds - UNMARKED_UP_NEXT_SECONDS &&
+    positionSeconds < durationSeconds - CREDITS_LEAD_SECONDS
+  );
+}
+
+function creditsSkip(
+  m: Marker,
+  positionSeconds: number,
+  durationSeconds: number,
+  itemKind: string | undefined,
+): SkipTarget | null {
+  const start = acceptedCreditsStart(m, durationSeconds, itemKind);
+  if (start === null) return null;
   const to = durationSeconds - CREDITS_LEAD_SECONDS;
   if (positionSeconds >= start && positionSeconds < to) {
     return { kind: "credits", atSeconds: to };

@@ -31,8 +31,8 @@ export function EpisodeList({
   queue,
 }: {
   episodes: Item[];
-  /** Playing an episode queues the rest of the season from it, so a season
-   *  keeps playing after the row that was pressed. */
+  /** What playing an episode queues: this season and the rest of the show
+   *  after it (lib/seasonQueue.ts), so a season finale rolls on. */
   queue: number[];
 }) {
   const setWatched = useSetWatchedByID();

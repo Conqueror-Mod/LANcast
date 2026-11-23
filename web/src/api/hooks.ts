@@ -3739,6 +3739,21 @@ export function useArtistTracks(artistID: number, enabled: boolean) {
   });
 }
 
+/*
+ * Every episode of a show, in playing order (GET /api/items/{id}/episodes), for
+ * a season page's queue to run on into the next season.
+ *
+ * Under ["children", id] for the reason useArtistTracks gives: removing an
+ * episode invalidates ["children"], and a key beside it would not be reached.
+ */
+export function useShowEpisodes(showID: number | null) {
+  return useQuery({
+    queryKey: ["children", showID ?? 0, "show-episodes"],
+    queryFn: () => fetchShowEpisodes(showID ?? 0),
+    enabled: showID != null && showID > 0,
+  });
+}
+
 export async function fetchShowEpisodes(showID: number): Promise<Item[]> {
   const res = await apiGet<{ episodes: Item[] }>(
     `/api/items/${showID}/episodes`,
