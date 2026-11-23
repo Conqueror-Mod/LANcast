@@ -85,3 +85,27 @@ func TestKeyForNamesThePlayersKeys(t *testing.T) {
 		}
 	}
 }
+
+/*
+ * The arrows reach the wake while the overlay is hidden.
+ *
+ * The message loop hands every message to IsDialogMessage first, which keeps
+ * the arrows, Tab, Enter and Escape as dialog navigation unless the focused
+ * window answers WM_GETDLGCODE for them. With the overlay hidden for idle the
+ * focused window is the main one, so seek and volume did nothing a few
+ * seconds into a film: reported on 1.0.5 as the player's keys going to
+ * sleep, and reproduced in a live window, where K and Space woke the page and
+ * the arrows, Enter and Escape never arrived.
+ */
+func TestTheHiddenOverlayWindowClaimsEveryKey(t *testing.T) {
+	w := &webview{idleHidden: true}
+	r, done := w.idleMessage(wmGetDlgCode, 0)
+	if !done || r != dlgcWantAllKeys {
+		t.Fatalf("WM_GETDLGCODE while hidden = (%#x, %v), want (%#x, true)", r, done, dlgcWantAllKeys)
+	}
+	// Overlay up: the page has the keyboard, and the main window is left alone.
+	w.idleHidden = false
+	if _, done := w.idleMessage(wmGetDlgCode, 0); done {
+		t.Fatal("WM_GETDLGCODE was answered with the overlay showing")
+	}
+}
