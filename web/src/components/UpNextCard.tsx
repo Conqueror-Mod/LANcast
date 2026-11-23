@@ -48,6 +48,16 @@ export function UpNextCard({ nextID, counting, onTimeout, onPlayNow, onCancel }:
   // Fired once per card. Without it a re-render at zero — a pause and resume,
   // a refetch of the next item — would roll on a second time.
   const fired = useRef(false);
+  /*
+   * Reached through a ref, not listed as a dependency. The caller's callback
+   * is rebuilt on every position report, four times a second while playing,
+   * and with it in the deps each report cleared the pending second and started
+   * a new one: the count sat at 10 for ever and nothing rolled on (2026-11-22).
+   */
+  const onTimeoutRef = useRef(onTimeout);
+  useEffect(() => {
+    onTimeoutRef.current = onTimeout;
+  }, [onTimeout]);
 
   useEffect(() => {
     setLeft(UP_NEXT_SECONDS);
@@ -58,12 +68,12 @@ export function UpNextCard({ nextID, counting, onTimeout, onPlayNow, onCancel }:
     if (!counting || fired.current) return;
     if (left <= 0) {
       fired.current = true;
-      onTimeout();
+      onTimeoutRef.current();
       return;
     }
     const t = window.setTimeout(() => setLeft((n) => n - 1), 1000);
     return () => window.clearTimeout(t);
-  }, [counting, left, onTimeout]);
+  }, [counting, left]);
 
   const code = next ? episodeCode(next) : null;
   return (
