@@ -42,6 +42,9 @@ const (
 	vkShift      = 0x10
 	vkControl    = 0x11
 	vkMenu       = 0x12 // Alt
+
+	wmGetDlgCode    = 0x0087
+	dlgcWantAllKeys = 0x0004
 )
 
 // SetOverlayIdle records whether the page has anything to show over the film,
@@ -136,6 +139,20 @@ func (w *webview) idleMessage(msg, wp uintptr) (uintptr, bool) {
 		return 0, false
 	}
 	switch msg {
+	case wmGetDlgCode:
+		/*
+		 * Every key, including the ones a dialog would keep for itself.
+		 *
+		 * The message loop (Run) passes each message through IsDialogMessage
+		 * first, and that treats the arrows, Tab, Enter and Escape as moving
+		 * between a dialog's controls unless the focused window claims them
+		 * here. With the overlay hidden the focused window is this one, so
+		 * those keys were taken as navigation and never arrived as
+		 * WM_KEYDOWN: letters and Space woke the page, while the arrows -
+		 * seek and volume - did nothing at all, and the controls seemed to
+		 * have gone to sleep a few seconds after they faded.
+		 */
+		return dlgcWantAllKeys, true
 	case wmKeyDown, wmSysKeyDown:
 		var key *wakeKey
 		if k, ok := keyFor(uint32(wp), keyHeld(vkShift), keyHeld(vkControl) || keyHeld(vkMenu)); ok {
