@@ -18,6 +18,7 @@ import {
   usePlaylistEntries,
   useDeletePlaylist,
   fetchShowEpisodes,
+  useShowEpisodes,
   fetchShowContinue,
   useShowStanding,
   useSetWatchedByID,
@@ -28,6 +29,7 @@ import {
 import { resumeSeconds } from "@/playback/resumePoint";
 import { offersShuffle, playAllLabel } from "@/lib/playAll";
 import { continueQueue } from "@/lib/continueQueue";
+import { seasonQueue } from "@/lib/seasonQueue";
 import { showContinueTarget } from "@/lib/continueShow";
 import { artworkURL } from "@/api/client";
 import { CastRow } from "./CastRow";
@@ -489,6 +491,10 @@ export function Detail() {
 
 
   const { data: item, isLoading, isError } = useItem(itemID);
+  // A season's queue runs on into the next season (lib/seasonQueue.ts).
+  const { data: showEpisodes } = useShowEpisodes(
+    item?.kind === "season" ? item.parent_id : null,
+  );
   const [pinnedID, setPinnedHero] = usePinnedHero();
   const [, setHeroMode] = useHeroMode();
   const pinned = pinnedID === itemID;
@@ -1490,7 +1496,10 @@ export function Detail() {
                */
               <EpisodeList
                 episodes={playableChildren}
-                queue={playableChildren.map((c) => c.id)}
+                queue={seasonQueue(
+                  playableChildren.map((c) => c.id),
+                  showEpisodes?.map((e) => e.id),
+                )}
               />
             ) : isAlbum || isPlaylist ? (
               // A playlist is a numbered list for the same reason a record is,

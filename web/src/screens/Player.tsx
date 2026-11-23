@@ -43,7 +43,13 @@ import {
   StopGlyph,
 } from "@/components/PlayerGlyphs";
 import { usePlayback, useFullSurface } from "@/playback/PlaybackProvider";
-import { AUTO_SKIP_IDLE, autoSkipStep, skipTarget, type AutoSkipState } from "@/lib/skip";
+import {
+  AUTO_SKIP_IDLE,
+  autoSkipStep,
+  skipTarget,
+  upNextWithoutMarker,
+  type AutoSkipState,
+} from "@/lib/skip";
 import { fetchPreroll, useChapters, usePlaybackPrefs, usePreviews } from "@/api/hooks";
 import { PrerollOverlay } from "@/components/PrerollOverlay";
 import { nextChapterStart, previousChapterStart, type ChapterMark } from "@/lib/chapters";
@@ -668,7 +674,9 @@ export function Player() {
    * it. Both appear at the same moment and offer the same way out of the
    * credits, and two controls doing one job in the corner of a picture is one
    * too many. Cancelling it hands the corner back to Skip credits, for this
-   * episode only — the next one asks again.
+   * episode only — the next one asks again. An episode with no credits marker
+   * it believes gets the card for its last seconds instead (upNextWithoutMarker),
+   * and cancelling that leaves the corner empty.
    */
   const [upNextCancelled, setUpNextCancelled] = useState<number | null>(null);
 
@@ -708,7 +716,8 @@ export function Player() {
   }, [introSkipped]);
   const showIntroSkipped = introSkipped != null && introSkipped.itemID === pb.itemID;
   const showUpNext =
-    skip?.kind === "credits" &&
+    (skip?.kind === "credits" ||
+      upNextWithoutMarker(item?.markers, pb.displayTime, pb.totalDuration, item?.kind)) &&
     item?.kind === "episode" &&
     pb.nextItemID != null &&
     upNextCancelled !== pb.itemID;
