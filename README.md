@@ -18,7 +18,7 @@ on your hardware, under your control, with nothing phoning home.**
 
 </div>
 
-> **Status: v1.0.5 · stable since 1.0.** Point it at a folder and it scans,
+> **Status: v1.0.6 · stable since 1.0.** Point it at a folder and it scans,
 > identifies and plays — direct play, remux or transcode, with working seek,
 > resume and hardware encoding. Every release before 1.0 is in
 > [docs/history.md](docs/history.md); [docs/roadmap.md](docs/roadmap.md) is the
