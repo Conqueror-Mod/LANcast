@@ -59,10 +59,17 @@ export interface WakeKey {
 
 /**
  * What the window calls when a key or a move over the picture brings the
- * overlay back. The controls show, and a key is then handed to the player's
- * own keydown handler, so Space pauses rather than only waking.
+ * overlay back. The controls show, and a key is then handed on as a real one
+ * would arrive, so Space pauses rather than only waking.
+ *
+ * Fired at the focused element, not at `window`. A real key starts there and
+ * bubbles through `document` to `window`, and the app resolves Escape (Back)
+ * on `document`; fired at `window` it reached the player's own handler and
+ * nothing else, so a woken Escape only brought the controls back.
  */
 export function nativeWake(wake: () => void, key: WakeKey | null | undefined): void {
   wake();
-  if (key) window.dispatchEvent(new KeyboardEvent("keydown", { ...key, bubbles: true }));
+  if (!key) return;
+  const target: EventTarget = document.activeElement ?? document;
+  target.dispatchEvent(new KeyboardEvent("keydown", { ...key, bubbles: true, cancelable: true }));
 }
