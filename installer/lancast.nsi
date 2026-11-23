@@ -355,6 +355,12 @@ Section "LANcast"
   !endif
   File "..\README.md"
   File "..\LICENSE"
+  ; NOTICE carries the attribution Apache-2.0 section 4(d) asks to travel with
+  ; every copy, and COMMERCIAL.md is the offer NOTICE points at. The release
+  ; archives were fixed to ship both long ago (.goreleaser.yaml); the installer
+  ; went without them until after 1.0.5.
+  File "..\NOTICE"
+  File "..\COMMERCIAL.md"
 
   ; Register the server as a service pinned to the machine-wide data dir, and
   ; start it — when that was the choice (ServicePage). `service install`
@@ -432,6 +438,8 @@ Section "Uninstall"
   Delete "$INSTDIR\rcheevos-LICENSE.txt"
   Delete "$INSTDIR\README.md"
   Delete "$INSTDIR\LICENSE"
+  Delete "$INSTDIR\NOTICE"
+  Delete "$INSTDIR\COMMERCIAL.md"
   Delete "$INSTDIR\uninstall.exe"
   ; The window mode keeps a browser profile — cookies, cache, local storage —
   ; under the user's config directory, not here. Left in place on uninstall,
